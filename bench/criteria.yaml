@@ -1,0 +1,194 @@
+# Critères d'acceptation du banc, forme lisible par machine de bench/README.md §3–§4.
+# STATUT : gelé le 2026-10-30, avant tout passage du service. Toute modification est un commit dédié,
+# motivé, antérieur à la mesure qu'elle concerne (README §2).
+# Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
+# `bloquant: false` est rapporté sans refuser.
+# Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
+# (calibration : réglage et non-régression ; tenue_a_l_ecart : jugement unique par incrément).
+version: 1
+increment: mvp
+statut: gele
+references:
+  readme: "bench/README.md §3 (définitions), §4 (seuils)"
+  manifest: bench/manifest.yaml
+
+decisions:   # de l'utilisateur, 2026-10-30
+  - id: e2_bloquant
+    decision: "E2 indicatif (suivi en non-régression) ; seul E2b (ne pas dégrader vs MNT brut) est bloquant"
+  - id: traces_enregistrees
+    decision: "Les traces perso sont recalées sur la route (Stadia Maps trace_attributes) avant d'entrer dans le service ; l'altitude est comparée au baro transporté sur la géométrie recalée (README §2.1)"
+  - id: bornes_entree
+    decision: "Bornes 200 km / 16 000 points sur l'ENTRÉE seulement ; une trace plus longue est découpée par l'outil de banc en tronçons ≤ 200 km (perso-06) ; la sortie n'est pas bornée"
+  - id: reference_r3
+    decision: "Vérité du revêtement = réponse trace_attributes de Stadia Maps sur les traces recalées ; réponses hors git, régénérables"
+
+preparation:
+  recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}
+  decoupage: {max_km: 200, max_points: 16000, cas: [perso-06]}
+
+criteres:
+  - id: E1
+    metrique: "Erreur d'altitude hors ouvrage vs baro, après décalage global et retrait de tendance > 5 km"
+    cas: {manifest: perso, groupes: [dplus, plaine]}
+    terrain: france
+    agregation: par_trace
+    seuils:
+      - {strate: plaine, rmse_m_max: 1.5, p95_m_max: 4.0}
+      - {strate: dplus, rmse_m_max: 3.0, p95_m_max: 8.0}
+    passe_si: toutes_les_traces
+    bloquant: true
+
+  - id: E2
+    metrique: "D+ service (preset dem) / D+ baro (preset barometric), passages mixtes masqués"
+    cas: {manifest: perso, groupes: [dplus, plaine, ouvrage]}
+    terrain: france
+    agregation: par_trace
+    seuils:
+      - {ratio_min: 0.90, ratio_max: 1.20, portee: chaque_trace}
+      - {ratio_median_min: 0.95, ratio_median_max: 1.12, portee: chaque_groupe}
+    passe_si: tous
+    bloquant: false   # indicatif : mesuré, suivi en non-régression (baseline.json)
+
+  - id: E2b
+    metrique: "Ne pas dégrader le D+ par rapport au MNT brut"
+    definition: >-
+      Pour chaque groupe g : médiane_g |ln(D+ service / D+ baro)| ≤ médiane_g |ln(D+ MNT brut / D+ baro)|.
+      D+ MNT brut : MNT RGE ALTI lu par l'outil de banc tous les 5 m sur la géométrie recalée, sans
+      correction d'ouvrage ni lissage, avec le preset dem du service (hystérésis 3 m, fenêtre 30 m).
+      D+ baro : preset barometric (2 m, 15 m) sur le baro transporté. Mêmes tronçons masqués partout.
+    cas: {manifest: perso, groupes: [dplus, plaine, ouvrage]}
+    terrain: france
+    agregation: mediane_par_groupe
+    seuils:
+      - {ecart_log_service_max: ecart_log_mnt_brut}
+    passe_si: tous_les_groupes
+    bloquant: true
+
+  - id: E3
+    metrique: "Erreur d'altitude sur tablier de pont tagué (milieu et max sur l'emprise)"
+    cas: {manifest: [ouvrages, perso], types: [bridge]}
+    reference: {priorite: [baro_corrige_local, mns_mediane_25m], note: "mns = cohérence seulement"}
+    terrain: france
+    agregation: par_pont
+    seuils:
+      - {strate: pont_court, longueur_m_max: 300, milieu_abs_m_max: 2.0, max_abs_m_max: 3.0}
+      - {strate: grand_pont, longueur_m_min: 300, milieu_abs_m_max: 2.0, max_abs_m_max: 5.0}
+    passe_si: {part_min: 0.90}
+    bloquant: true
+
+  - id: E3_hors_france
+    metrique: "Erreur d'altitude sur tablier hors LiDAR (pont interpolé)"
+    cas: {manifest: [ouvrages, perso], types: [bridge]}
+    terrain: hors_france
+    agregation: par_pont
+    seuils: []
+    passe_si: rapporte
+    bloquant: false
+
+  - id: E4
+    metrique: "Erreur max vs droite entre portails ; D+ fictif dans le tunnel"
+    cas: {manifest: [ouvrages, vcyclist], types: [tunnel]}
+    terrain: france
+    agregation: par_tunnel
+    seuils:
+      - {max_abs_m_max: 5.0, dplus_fictif_m_max: 5.0}
+    passe_si: {part_min: 0.857}   # 6/7
+    bloquant: true
+
+  - id: E5
+    metrique: "|service − MNT| au croisement d'un passage sous un pont"
+    cas: {manifest: [ouvrages, perso], types: [passage_sous_pont]}
+    agregation: par_croisement
+    seuils:
+      - {abs_m_max: 1.0}
+    passe_si: tous
+    bloquant: true
+
+  - id: S1
+    metrique: "Rappel en longueur des ponts/tunnels tagués OSM"
+    cas: {manifest: [ouvrages, vcyclist]}
+    agregation: longueur_totale
+    seuils:
+      - {rappel_min: 0.95}
+    passe_si: tous
+    bloquant: true
+
+  - id: S2
+    metrique: "Faux positifs d'ouvrage"
+    cas: {manifest: [vcyclist_temoins_negatifs, perso]}
+    agregation: longueur_totale
+    seuils:
+      - {ouvrages_fictifs_max: 0, part_longueur_max: 0.005}
+    passe_si: tous
+    bloquant: true
+
+  - id: S3
+    metrique: "Ouvrage non tagué (stn-acces-nord) : altitude au milieu, rapportée"
+    cas: {manifest: [ouvrages, perso], ids: [stn-acces-nord]}
+    seuils: []
+    passe_si: rapporte
+    bloquant: false
+
+  - id: R1
+    metrique: "Accord de classe de revêtement vs Stadia (total et hors inconnu Stadia)"
+    cas: {manifest: osm_surface}
+    agregation: par_parcours
+    seuils:
+      - {accord_min: 0.85, accord_hors_inconnu_min: 0.85}
+    passe_si: tous
+    bloquant: true
+
+  - id: R2
+    metrique: "Accord revêtu / non revêtu vs Stadia"
+    cas: {manifest: osm_surface}
+    agregation: par_parcours
+    seuils:
+      - {accord_min: 0.97}
+    passe_si: tous
+    bloquant: true
+
+  - id: R3
+    metrique: "Accord du revêtement vs Stadia Maps trace_attributes (edge.surface), en longueur, même table de classes que R1"
+    cas: {manifest: perso, groupes: [dplus, plaine, ouvrage, hors_france]}
+    reference: {source: "Stadia Maps trace_attributes", fichiers: "private/recales/<id>.surface.csv (hors git)"}
+    agregation: par_trace
+    seuils:
+      - {accord_classe_min: 0.85, accord_revetu_non_revetu_min: 0.97}
+    passe_si: tous
+    bloquant: true
+
+  - id: M1
+    metrique: "Appariement : part non appariée et part unknown, en longueur"
+    cas: {manifest: [osm_surface, perso, vcyclist]}
+    agregation: par_parcours
+    seuils:
+      - {non_apparie_max: 0.01, unknown_max: 0.02}
+    passe_si: tous
+    bloquant: true
+
+  - id: L1
+    metrique: "Latence à froid, requête de 100 km, caches vidés (live)"
+    cas: {manifest: perso, dist_km: [90, 130]}
+    agregation: p95_sur_5_essais
+    seuils:
+      - {terrain: france, p95_s_max: 20}
+      - {terrain: hors_france, p95_s_max: 5}
+    passe_si: tous
+    bloquant: false   # dépend du réseau et des API publiques
+
+  - id: L2
+    metrique: "Latence à chaud, même requête rejouée"
+    cas: {manifest: perso, dist_km: [90, 130]}
+    agregation: p95_sur_20_essais
+    seuils:
+      - {p95_ms_max: 500}
+    passe_si: tous
+    bloquant: true
+
+  - id: Q1
+    metrique: "Rejet des négatifs par qualify_baro.py"
+    cas: {manifest: perso, groupes: [negatif]}
+    seuils:
+      - {fiables_max: 0}
+    passe_si: tous
+    bloquant: true
