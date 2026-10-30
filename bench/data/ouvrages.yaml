@@ -1,0 +1,979 @@
+# Corpus d'ouvrages de référence — banc qualité osm-route-details
+# Généré le 2026-10-30 à partir de requêtes Overpass (overpass-api.de, base OSM du 2026-10-30)
+# et de l'API altimétrie IGN Géoplateforme (data.geopf.fr). Voir rapport pour la liste des requêtes.
+# Coordonnées WGS84 (lat, lon). Longueurs = somme géodésique (haversine) des ways de `osm.chain`.
+# `milieu` = point à mi-longueur curviligne de la chaîne (pour une chaîne discontinue, trous inclus).
+# Altitudes en mètres, référentiel vertical renvoyé par l'API IGN (NGF-IGN69 en métropole).
+# null = pas de donnée (-99999 renvoyé par l'API : hors emprise).
+version: 1
+date_constitution: "2026-10-30"
+sources:
+  osm: {api: "https://overpass-api.de/api/interpreter", licence: "ODbL 1.0"}
+  ign_alti: {api: "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json", licence: "Etalab 2.0 (Licence Ouverte)",
+             ressources_utilisees: [ign_rge_alti_wld, ign_lidar_hd_mnx_multi_wld],
+             liste_ressources: "https://data.geopf.fr/altimetrie/resources (GET, 200) ; /altimetrie/1.0/calcul/resources renvoie 405"}
+methode_reference_defaut: >-
+  IGN altimétrie REST elevation.json, une requête par lot de ≤30 points séparés par |, ≤ 2 req/s.
+  (1) resource=ign_rge_alti_wld&zonly=true → `rge_alti_mnt` (MNT RGE ALTI, sol nu).
+  (2) resource=ign_lidar_hd_mnx_multi_wld&zonly=false&measures=true → `lidar_mnt`, `lidar_mns`, `lidar_mnh`
+  (LiDAR HD 50 cm sans interpolation, mesures « France Métropolitaine »). Points : culées/portails A et B
+  = extrémités de la chaîne OSM, milieu = mi-longueur. Le MNS est la surface la plus haute vue par le
+  LiDAR (tablier, mais aussi garde-corps, véhicules, végétation, falaise en surplomb) : c'est un indice
+  de hauteur, pas une vérité terrain de la chaussée. Pour un tunnel, le MNT au milieu est le relief
+  au-dessus, pas la chaussée.
+ouvrages:
+  - id: stn-pont
+    nom: "Pont de Saint-Nazaire (partie taguée bridge)"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Grand pont bombé (haubané), tablier ~60 m au-dessus de la Loire ; correction MNS sur ~2,3 km"
+    osm:
+      chain: [234973995, 234973999, 273034480]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        234973995: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "suspension", "cycleway": "lane", "highway": "primary", "layer": "1", "name": "Pont de Saint-Nazaire", "ref": "D 213"}
+        234973999: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "suspension", "cycleway": "lane", "highway": "primary", "layer": "1", "name": "Pont de Saint-Nazaire", "ref": "D 213"}
+        273034480: {"bicycle": "yes", "bridge": "yes", "highway": "primary", "layer": "1", "name": "Pont de Saint-Nazaire", "ref": "D 213"}
+    longueur_m: 2300
+    milieu: {lat: 47.279257, lon: -2.166043}
+    points: {A: [47.269286, -2.162121], milieu: [47.279257, -2.166043], B: [47.288347, -2.173294]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 7.47, "lidar_mnt": 6.83, "lidar_mns": 8.25, "lidar_mnh": 1.42}
+        milieu: {"rge_alti_mnt": 0.05, "lidar_mnt": -2.18, "lidar_mns": 33.49, "lidar_mnh": 35.68}
+        B: {"rge_alti_mnt": -0.45, "lidar_mnt": -1.22, "lidar_mns": 50.9, "lidar_mnh": 52.12}
+      mapterhorn_z13_milieu: "z13=200"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test1 « D 213; Pont de Saint-Nazaire » (tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "OSM porte bridge:structure=suspension alors que l'ouvrage est un pont à haubans (erreur de tag probable, non corrigée ici). La partie nord (ways 273034481, 47405821) n'a pas de tag bridge : voir stn-acces-nord."
+    observations_reference: "MNS au milieu 33,5 m, à l'extrémité nord de la partie taguée 50,9 m (MNT ≈ 0) : le point haut du tablier n'est pas au milieu de la partie taguée."
+  - id: stn-acces-nord
+    nom: "Pont de Saint-Nazaire — viaduc d'accès nord sans tag bridge"
+    type: "bridge (non tagué)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ouvrage mal tagué : ways nommées « Pont de Saint-Nazaire », highway=primary, sans bridge=* ni layer"
+    osm:
+      chain: [273034481, 47405821]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        273034481: {"bicycle": "yes", "highway": "primary", "name": "Pont de Saint-Nazaire", "ref": "D 213"}
+        47405821: {"bicycle": "yes", "cycleway": "lane", "highway": "primary", "name": "Pont de Saint-Nazaire", "ref": "D 213"}
+    longueur_m: 1057
+    milieu: {lat: 47.292679, lon: -2.176150}
+    points: {A: [47.288347, -2.173294], milieu: [47.292679, -2.17615], B: [47.297233, -2.178145]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": -0.45, "lidar_mnt": -1.22, "lidar_mns": 50.9, "lidar_mnh": 52.12}
+        milieu: {"rge_alti_mnt": 3.18, "lidar_mnt": 3.07, "lidar_mns": 22.8, "lidar_mnh": 19.73}
+        B: {"rge_alti_mnt": 6.99, "lidar_mnt": 7.02, "lidar_mns": 7.13, "lidar_mnh": 0.11}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test1 : le span « tablier » de vcyclist s'étend jusqu'au bout nord de 47405821 ; ligne « missed » D 213 voisine"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Longueur taguée (≈2,30 km) + non taguée (≈1,06 km) ≈ 3,36 km, cohérent avec la longueur totale publiée de l'ouvrage (3 356 m, connaissance générale, non vérifiée ici). Le MNH LiDAR au milieu sert d'indice (voir reference)."
+    observations_reference: "MNH LiDAR au milieu de la partie non taguée = 19,7 m (MNS 22,8 / MNT 3,1) : structure élevée au-dessus du sol, ce qui confirme l'absence de tag bridge."
+  - id: normandie
+    nom: "Pont de Normandie (sens nord)"
+    type: "bridge"
+    region: "Seine-Maritime / Calvados (FR)"
+    cas_teste: "Grand pont bombé haubané, cyclable (bicycle=yes sur N 1029)"
+    osm:
+      chain: [1052637888, 175399633, 1052637886]
+      ways_associees: [1052637887, 175405231, 1052637885, 220122726]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        1052637888: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        175399633: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        1052637886: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        1052637887: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "motor_vehicle": "yes", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        175405231: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        1052637885: {"bicycle": "yes", "bridge": "yes", "bridge:structure": "cable-stayed", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+        220122726: {"bicycle": "yes", "bridge": "yes", "embankment": "yes", "highway": "trunk", "layer": "1", "name": "Pont de Normandie", "oneway": "yes", "ref": "N 1029"}
+    longueur_m: 2151
+    milieu: {lat: 49.433094, lon: 0.273956}
+    points: {A: [49.423462, 0.27528], milieu: [49.433094, 0.273956], B: [49.442727, 0.272631]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 21.57, "lidar_mnt": 21.41, "lidar_mns": 21.41, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -3.44, "lidar_mnt": -3.3, "lidar_mns": 66.34, "lidar_mnh": 69.64}
+        B: {"rge_alti_mnt": 7.28, "lidar_mnt": 10.26, "lidar_mns": 10.26, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Sens sud : 1052637887, 175405231, 1052637885. Way 220122726 porte à la fois bridge=yes et embankment=yes (incohérence de tags)."
+  - id: chevire
+    nom: "Pont de Cheviré (périphérique extérieur)"
+    type: "bridge (viaduct)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Grand pont bombé, NON cyclable (bicycle=no) : sert surtout de pont au-dessus des voies cyclables (voir chevire-dessous)"
+    osm:
+      chain: [293742437, 714716507]
+      ways_associees: [28200548, 293742439, 379199964, 714763395]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        293742437: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Extérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        714716507: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Extérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        28200548: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Intérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        293742439: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Intérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        379199964: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Intérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        714763395: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Intérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+    longueur_m: 1678
+    milieu: {lat: 47.191562, lon: -1.613636}
+    points: {A: [47.198713, -1.616171], milieu: [47.191562, -1.613636], B: [47.184018, -1.613734]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 27.94, "lidar_mnt": 26.72, "lidar_mns": 29.05, "lidar_mnh": 2.33}
+        milieu: {"rge_alti_mnt": 6.03, "lidar_mnt": 6.13, "lidar_mns": 58.88, "lidar_mnh": 52.75}
+        B: {"rge_alti_mnt": 10.0, "lidar_mnt": 10.09, "lidar_mns": 10.09, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "bridge=viaduct. Sens intérieur : 379199964, 28200548, 714763395, 293742439."
+  - id: chevire-dessous
+    nom: "Piste cyclable sous le pont de Cheviré (rive nord)"
+    type: "passage sous pont"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Passage SOUS un grand pont : la route du parcours est au sol, le tablier passe ~au-dessus. Piège : ne pas lire le MNS au point de croisement"
+    osm:
+      chain: [627113110]
+      ways_associees: [293742437, 49145819]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        627113110: {"highway": "cycleway"}
+        293742437: {"bicycle": "no", "bridge": "viaduct", "highway": "trunk", "layer": "1", "motor_vehicle": "designated", "name": "Périphérique Extérieur - Pont de Cheviré", "oneway": "yes", "ref": "N 844"}
+        49145819: {"bicycle": "designated", "highway": "path"}
+    longueur_m: 168
+    milieu: {lat: 47.194782, lon: -1.614261}
+    points: {croisement: [47.194753, -1.613702], A_voie_dessous: [47.1946, -1.615314], B_voie_dessous: [47.194722, -1.61315]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        croisement: {"rge_alti_mnt": 6.93, "lidar_mnt": 6.94, "lidar_mns": 56.97, "lidar_mnh": 50.02}
+        A_voie_dessous: {"rge_alti_mnt": 6.77, "lidar_mnt": 6.85, "lidar_mns": 6.85, "lidar_mnh": 0.0}
+        B_voie_dessous: {"rge_alti_mnt": 6.78, "lidar_mnt": 6.79, "lidar_mns": 6.79, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Croisement géométrique sans nœud commun calculé sur la géométrie Overpass. Autre passage sous le même pont : path bicycle=designated 49145819 (rive sud, ~47.18434,-1.61374)."
+    observations_reference: "Au croisement : MNT 6,9 m (piste au sol) vs MNS 57,0 m (tablier) ; une lecture MNS naïve fausse l'altitude de ~50 m."
+  - id: rotonde-dessus
+    nom: "Pont de la Rotonde (Nantes)"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Passage supérieur ordinaire : pont routier (layer=2) au-dessus d'une rue (Allée Baco) et de la voie ferrée Tours–Saint-Nazaire"
+    osm:
+      chain: [121552274]
+      ways_associees: [142312988]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        121552274: {"bridge": "yes", "highway": "secondary", "layer": "2", "name": "Pont de la Rotonde", "oneway": "yes"}
+        142312988: {"bridge": "yes", "cycleway": "no", "highway": "secondary", "layer": "2", "name": "Pont de la Rotonde", "oneway": "yes"}
+    longueur_m: 121
+    milieu: {lat: 47.215397, lon: -1.546601}
+    points: {A: [47.215777, -1.547168], milieu: [47.215397, -1.546601], B: [47.214924, -1.546208]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 12.56, "lidar_mnt": 12.54, "lidar_mns": 12.54, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 7.83, "lidar_mnt": 7.81, "lidar_mns": 10.36, "lidar_mnh": 2.56}
+        B: {"rge_alti_mnt": 9.88, "lidar_mnt": 9.85, "lidar_mns": 9.85, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 « Pont de la Rotonde » (interpolation linéaire)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Deux ways à sens unique (121552274, 142312988)."
+  - id: rotonde-dessous
+    nom: "Allée Baco sous le pont de la Rotonde"
+    type: "passage sous pont"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Passage SOUS un pont ordinaire en ville (cycleway=lane sur la rue du dessous)"
+    osm:
+      chain: [26198061]
+      ways_associees: [121552274, 142312988, 329129924]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        26198061: {"cycleway": "lane", "highway": "residential", "name": "Allée Baco", "oneway": "no"}
+        121552274: {"bridge": "yes", "highway": "secondary", "layer": "2", "name": "Pont de la Rotonde", "oneway": "yes"}
+        142312988: {"bridge": "yes", "cycleway": "no", "highway": "secondary", "layer": "2", "name": "Pont de la Rotonde", "oneway": "yes"}
+        329129924: {"highway": "cycleway"}
+    longueur_m: 30
+    milieu: {lat: 47.215434, lon: -1.546567}
+    points: {croisement: [47.215412, -1.546615], A_voie_dessous: [47.215498, -1.546392], B_voie_dessous: [47.215354, -1.546728]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        croisement: {"rge_alti_mnt": 7.83, "lidar_mnt": 7.84, "lidar_mns": 14.18, "lidar_mnh": 6.34}
+        A_voie_dessous: {"rge_alti_mnt": 7.99, "lidar_mnt": 7.82, "lidar_mns": 7.82, "lidar_mnh": 0.0}
+        B_voie_dessous: {"rge_alti_mnt": 7.71, "lidar_mnt": 7.68, "lidar_mns": 7.68, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Autre voie dessous : cycleway 329129924."
+    observations_reference: "Au croisement : MNT 7,8 m vs MNS 14,2 m."
+  - id: re-pont
+    nom: "Pont de l'Île de Ré (piste cyclable)"
+    type: "bridge"
+    region: "Charente-Maritime (FR)"
+    cas_teste: "Long pont bombé côtier, piste séparée ; littoral (risque de repli GLO-30 à vérifier)"
+    osm:
+      chain: [181326612]
+      ways_associees: [181327164, 181327591]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        181326612: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Pont de l'Île de Ré", "oneway": "no"}
+        181327164: {"bridge": "viaduct", "cycleway": "separate", "highway": "secondary", "layer": "1", "name": "Pont de l'Île de Ré", "ref": "D 735"}
+        181327591: {"bicycle": "no", "bridge": "yes", "highway": "footway", "layer": "1", "motor_vehicle": "no", "name": "Pont de l'Île de Ré"}
+    longueur_m: 2949
+    milieu: {lat: 46.171592, lon: -1.240429}
+    points: {A: [46.175685, -1.222286], milieu: [46.171592, -1.240429], B: [46.16402, -1.256067]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 11.02, "lidar_mnt": 11.17, "lidar_mns": 11.17, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": null, "lidar_mnt": 1.02, "lidar_mns": 39.77, "lidar_mnh": 38.75}
+        B: {"rge_alti_mnt": 9.78, "lidar_mnt": 9.99, "lidar_mns": 9.99, "lidar_mnh": 0.0}
+      mapterhorn_z13_milieu: "z13=200"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Route D 735 : 181327164 (bridge=viaduct), trottoir 181327591."
+    observations_reference: "RGE ALTI renvoie -99999 au milieu (mer hors emprise) ; LiDAR HD MNT 1,0 / MNS 39,8 m."
+  - id: re-depart-sur-pont
+    nom: "Trace démarrant au sommet du pont de l'Île de Ré"
+    type: "bridge (départ sur l'ouvrage)"
+    region: "Charente-Maritime (FR)"
+    cas_teste: "Trace qui commence sur un pont : premier point au milieu du tablier, pas de culée d'entrée côté départ"
+    osm:
+      chain: [181326612]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        181326612: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Pont de l'Île de Ré", "oneway": "no"}
+    longueur_m: 2949
+    milieu: {lat: 46.171592, lon: -1.240429}
+    points: {depart_sur_tablier: [46.171592, -1.240429], B: [46.16402, -1.256067]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        depart_sur_tablier: {"rge_alti_mnt": null, "lidar_mnt": 1.02, "lidar_mns": 39.77, "lidar_mnh": 38.75}
+        B: {"rge_alti_mnt": 9.78, "lidar_mnt": 9.99, "lidar_mns": 9.99, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Scénario synthétique : couper la trace au milieu de 181326612 (point « milieu » ci-dessous) et ne garder que la moitié vers La Rochelle."
+  - id: nantes-bellevue
+    nom: "Pont de Bellevue (piste)"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Pont de Loire long (~480 m), piste cyclable séparée"
+    osm:
+      chain: [25905051]
+      ways_associees: [362043805]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        25905051: {"bridge": "yes", "highway": "cycleway", "layer": "1", "name": "Pont de Bellevue"}
+        362043805: {"bridge": "yes", "highway": "cycleway", "layer": "1"}
+    longueur_m: 484
+    milieu: {lat: 47.232127, lon: -1.472455}
+    points: {A: [47.23354, -1.474889], milieu: [47.232127, -1.472455], B: [47.230739, -1.469993]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 11.86, "lidar_mnt": 12.03, "lidar_mns": 12.03, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.47, "lidar_mnt": 3.35, "lidar_mns": 14.03, "lidar_mnh": 10.68}
+        B: {"rge_alti_mnt": 9.44, "lidar_mnt": 9.29, "lidar_mns": 9.29, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 « Pont de Bellevue » et way 362043805"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: nantes-senghor
+    nom: "Pont Léopold-Sédar-Senghor"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Pont de Loire urbain, voie + piste parallèles"
+    osm:
+      chain: [263350937]
+      ways_associees: [1422135119]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        263350937: {"bridge": "yes", "highway": "tertiary", "layer": "1", "name": "Pont Léopold-Sédar-Senghor"}
+        1422135119: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Pont Léopold-Sédar-Senghor"}
+    longueur_m: 300
+    milieu: {lat: 47.205852, lon: -1.525217}
+    points: {A: [47.206751, -1.5267], milieu: [47.205852, -1.525217], B: [47.204954, -1.523734]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 8.07, "lidar_mnt": 8.06, "lidar_mns": 8.06, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.58, "lidar_mnt": 1.61, "lidar_mns": 12.11, "lidar_mnh": 10.5}
+        B: {"rge_alti_mnt": 6.77, "lidar_mnt": 8.11, "lidar_mns": 8.11, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: nantes-tabarly
+    nom: "Pont Éric Tabarly"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Pont layer=2 au-dessus d'un passage piéton souterrain (footway tunnel 172641357) : deux niveaux sous le tablier"
+    osm:
+      chain: [118354599]
+      ways_associees: [179246916]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        118354599: {"bridge": "yes", "highway": "tertiary", "layer": "2", "name": "Pont Éric Tabarly", "oneway": "yes"}
+        179246916: {"bridge": "yes", "highway": "tertiary", "layer": "2", "name": "Pont Éric Tabarly", "oneway": "yes"}
+    longueur_m: 226
+    milieu: {lat: 47.212410, lon: -1.529065}
+    points: {A: [47.211411, -1.528782], milieu: [47.21241, -1.529065], B: [47.213409, -1.529348]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 6.96, "lidar_mnt": 8.54, "lidar_mns": 8.54, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.58, "lidar_mnt": 1.61, "lidar_mns": 11.31, "lidar_mnh": 9.7}
+        B: {"rge_alti_mnt": 7.55, "lidar_mnt": 10.49, "lidar_mns": 10.49, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: nantes-anne-de-bretagne
+    nom: "Pont Anne-de-Bretagne (en travaux)"
+    type: "bridge (construction)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ouvrage en reconstruction : highway=construction, passerelles provisoires/latérales (footway, cycleway). Le MNS LiDAR peut dater d'avant les travaux"
+    osm:
+      chain: [1544866073]
+      ways_associees: [1287936957, 1287936958, 1418371535]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        1544866073: {"bridge": "yes", "construction": "primary", "highway": "construction", "layer": "1", "name": "Pont Anne de Bretagne"}
+        1287936957: {"bicycle": "no", "bridge": "yes", "highway": "footway"}
+        1287936958: {"bicycle": "dismount", "bridge": "yes", "construction": "path", "highway": "construction"}
+        1418371535: {"bridge": "yes", "highway": "cycleway", "layer": "1"}
+    longueur_m: 151
+    milieu: {lat: 47.208248, lon: -1.566249}
+    points: {A: [47.208771, -1.566879], milieu: [47.208248, -1.566249], B: [47.207668, -1.565724]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 7.15, "lidar_mnt": 7.25, "lidar_mns": 7.25, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 2.29, "lidar_mns": 8.4, "lidar_mnh": 6.11}
+        B: {"rge_alti_mnt": 3.42, "lidar_mnt": 3.56, "lidar_mns": 3.56, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 « way 1287936957; way 1287936958; way 1418371535 »"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Statut OSM à la date de la requête : construction=primary."
+  - id: nantes-pirmil
+    nom: "Pont de Pirmil"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Pont de Loire, rattaché à la série de ponts successifs Rezé–Nantes"
+    osm:
+      chain: [24698601]
+      ways_associees: [332223398]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        24698601: {"bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont de Pirmil"}
+        332223398: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Pont de Pirmil", "oneway": "no"}
+    longueur_m: 222
+    milieu: {lat: 47.199073, lon: -1.543309}
+    points: {A: [47.199978, -1.543931], milieu: [47.199073, -1.543309], B: [47.198169, -1.542688]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 4.4, "lidar_mnt": 6.88, "lidar_mns": 10.26, "lidar_mnh": 3.38}
+        milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.28, "lidar_mns": 12.36, "lidar_mnh": 11.08}
+        B: {"rge_alti_mnt": -0.05, "lidar_mnt": 9.75, "lidar_mns": 10.22, "lidar_mnh": 0.46}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: reze-ponts-successifs
+    nom: "Ponts de Pont-Rousseau / Bataillons FFI puis Pirmil"
+    type: "bridges (successifs)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ponts successifs à ~300 m (Sèvre puis Loire) sur l'axe Rezé–Nantes : deux corrections proches, la rampe entre les deux reste au sol"
+    osm:
+      chain: [148921264]
+      ways_associees: [28115438, 24698601]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        148921264: {"bicycle": "yes", "bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont de Pont-Rousseau", "oneway": "yes"}
+        28115438: {"bicycle": "yes", "bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont des Bataillons FFI", "oneway": "yes"}
+        24698601: {"bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont de Pirmil"}
+    longueur_m: 89
+    milieu: {lat: 47.195171, lon: -1.544424}
+    points: {A: [47.19482, -1.544704], milieu: [47.195171, -1.544424], B: [47.195522, -1.544144], pirmil_extremite_sud: [47.198169, -1.542688], pirmil_milieu: [47.199073, -1.543309]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 8.35, "lidar_mnt": 8.44, "lidar_mns": 8.44, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 1.31, "lidar_mns": 9.17, "lidar_mnh": 7.86}
+        B: {"rge_alti_mnt": 8.47, "lidar_mnt": 8.71, "lidar_mns": 8.71, "lidar_mnh": 0.0}
+        pirmil_extremite_sud: {"rge_alti_mnt": -0.05, "lidar_mnt": 9.75, "lidar_mns": 10.22, "lidar_mnh": 0.46}
+        pirmil_milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.28, "lidar_mns": 12.36, "lidar_mnh": 11.08}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "148921264 et 28115438 sont les deux sens d'un même franchissement de la Sèvre ; 24698601 = Pont de Pirmil."
+  - id: nantes-haudaudine
+    nom: "Pont Haudaudine"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ways contiguës : 209 m + un bout de 3 m au même nom"
+    osm:
+      chain: [141681926, 1512297095]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        141681926: {"bicycle": "yes", "bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont Haudaudine"}
+        1512297095: {"bicycle": "yes", "bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont Haudaudine"}
+    longueur_m: 211
+    milieu: {lat: 47.208328, lon: -1.555310}
+    points: {A: [47.207389, -1.555096], milieu: [47.208328, -1.55531], B: [47.209269, -1.555519]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 8.09, "lidar_mnt": 8.36, "lidar_mns": 8.36, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 2.34, "lidar_mns": 12.49, "lidar_mnh": 10.15}
+        B: {"rge_alti_mnt": 8.51, "lidar_mnt": 8.59, "lidar_mns": 8.59, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: nantes-audibert
+    nom: "Pont Général-Audibert"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ways contiguës + piste séparée ; traversé deux fois dans la trace test2 de vcyclist"
+    osm:
+      chain: [25778038, 26717038]
+      ways_associees: [312779490, 24485925, 285609261]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        25778038: {"bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont Général Audibert", "oneway": "yes"}
+        26717038: {"bridge": "yes", "highway": "secondary", "layer": "1", "name": "Pont Général Audibert", "oneway": "yes"}
+        312779490: {"bridge": "yes", "cycleway": "no", "highway": "secondary", "layer": "1", "name": "Pont Général Audibert", "oneway": "yes"}
+        24485925: {"bridge": "yes", "cycleway": "no", "highway": "secondary", "layer": "1", "name": "Pont Général Audibert", "oneway": "yes"}
+        285609261: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Pont Général Audibert"}
+    longueur_m: 202
+    milieu: {lat: 47.207896, lon: -1.549435}
+    points: {A: [47.207062, -1.548903], milieu: [47.207896, -1.549435], B: [47.208722, -1.549988]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 8.59, "lidar_mnt": 8.39, "lidar_mns": 8.39, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.42, "lidar_mns": 11.54, "lidar_mnh": 10.12}
+        B: {"rge_alti_mnt": 7.59, "lidar_mnt": 7.59, "lidar_mns": 7.59, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (2 lignes, tablier)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: nantes-briand
+    nom: "Pont Aristide-Briand"
+    type: "bridge"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Pont avec passerelles latérales footway bicycle=designated"
+    osm:
+      chain: [141561646]
+      ways_associees: [141561647, 1489503872, 1489503873]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        141561646: {"bicycle": "yes", "bridge": "yes", "highway": "primary", "layer": "1", "name": "Pont Aristide Briand", "oneway": "yes"}
+        141561647: {"bicycle": "yes", "bridge": "yes", "highway": "primary", "layer": "1", "name": "Pont Aristide Briand", "oneway": "yes"}
+        1489503872: {"bicycle": "designated", "bridge": "yes", "highway": "footway", "layer": "1"}
+        1489503873: {"bicycle": "designated", "bridge": "yes", "highway": "footway", "layer": "1"}
+    longueur_m: 273
+    milieu: {lat: 47.209955, lon: -1.541922}
+    points: {A: [47.208889, -1.541029], milieu: [47.209955, -1.541922], B: [47.211025, -1.542801]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 10.8, "lidar_mnt": 10.79, "lidar_mns": 10.79, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": -0.6, "lidar_mnt": 1.52, "lidar_mns": 12.78, "lidar_mnh": 11.26}
+        B: {"rge_alti_mnt": 7.22, "lidar_mnt": 9.93, "lidar_mns": 12.3, "lidar_mnh": 2.37}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test2 (tablier) et ligne « missed » (ways 1489503872/3)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: mauves
+    nom: "Pont de Mauves-sur-Loire (deux ponts séparés par une île)"
+    type: "bridges (contigus)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Ponts contigus en treillis séparés par ~200 m d'île ; ways 1371341883/1371341884 portent bridge:structure=truss SANS bridge=* (mal tagué)"
+    osm:
+      chain: [206173188]
+      ways_associees: [26820089, 884155023, 884155024, 884155019, 884155020, 1371341883, 1371341884]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        206173188: {"bridge": "yes", "bridge:structure": "truss", "highway": "tertiary", "layer": "1", "name": "Pont de Mauves sur Loire", "oneway": "no", "ref": "D 31"}
+        26820089: {"bridge": "yes", "bridge:structure": "truss", "highway": "tertiary", "layer": "1", "name": "Pont de Mauves-sur-Loire", "oneway": "no", "ref": "D 31"}
+        884155023: {"bridge": "yes", "bridge:structure": "truss", "highway": "cycleway", "layer": "1", "name": "Pont de Mauves sur Loire", "oneway": "yes"}
+        884155024: {"bridge": "yes", "bridge:structure": "truss", "highway": "cycleway", "layer": "1", "name": "Pont de Mauves sur Loire", "oneway": "yes"}
+        884155019: {"access": "no", "bridge": "yes", "bridge:structure": "truss", "highway": "cycleway", "layer": "1", "name": "Pont de Mauves-sur-Loire", "oneway": "yes"}
+        884155020: {"bicycle": "dismount", "bridge": "yes", "bridge:structure": "truss", "highway": "cycleway", "layer": "1", "name": "Pont de Mauves-sur-Loire", "oneway": "yes"}
+        1371341883: {"bicycle": "yes", "bridge:structure": "truss", "highway": "cycleway", "name": "Pont de Mauves-sur-Loire", "oneway": "yes"}
+        1371341884: {"bridge:structure": "truss", "highway": "cycleway", "name": "Pont de Mauves-sur-Loire", "oneway": "yes"}
+    longueur_m: 101
+    milieu: {lat: 47.288768, lon: -1.376357}
+    points: {A: [47.288415, -1.375933], milieu: [47.288768, -1.376357], B: [47.289113, -1.376796], pont_nord_A: [47.290827, -1.378913], pont_nord_milieu: [47.29252, -1.380985], pont_nord_B: [47.294212, -1.383058]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 10.56, "lidar_mnt": 10.77, "lidar_mns": 10.77, "lidar_mnh": -0.0}
+        milieu: {"rge_alti_mnt": 2.52, "lidar_mnt": 4.4, "lidar_mns": 11.47, "lidar_mnh": 7.07}
+        B: {"rge_alti_mnt": 11.43, "lidar_mnt": 11.58, "lidar_mns": 11.58, "lidar_mnh": 0.0}
+        pont_nord_A: {"rge_alti_mnt": 9.9, "lidar_mnt": 11.17, "lidar_mns": 11.17, "lidar_mnh": 0.0}
+        pont_nord_milieu: {"rge_alti_mnt": 0.47, "lidar_mnt": 4.6, "lidar_mns": 13.57, "lidar_mnh": 8.97}
+        pont_nord_B: {"rge_alti_mnt": 8.95, "lidar_mnt": 7.95, "lidar_mns": 11.34, "lidar_mnh": 3.39}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test3 (interpolation linéaire) + ligne « missed »"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Pont sud (bras secondaire) 206173188 ≈101 m ; pont nord 26820089 ≈489 m."
+  - id: stn-ecluses
+    nom: "Ponts mobiles du port de Saint-Nazaire (écluse sud, basculant, tournant)"
+    type: "bridges (movable, successifs)"
+    region: "Loire-Atlantique (FR)"
+    cas_teste: "Petits ponts mobiles (bridge=movable) successifs, tablier presque au niveau du quai"
+    osm:
+      chain: [35045070]
+      ways_associees: [34019676, 35007890]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        35045070: {"bridge": "movable", "highway": "residential", "layer": "1", "name": "Pont écluse sud aval"}
+        34019676: {"bicycle": "yes", "bridge": "movable", "highway": "service", "layer": "1", "name": "Pont basculant"}
+        35007890: {"bridge": "movable", "highway": "tertiary", "layer": "1", "name": "Pont Tournant"}
+    longueur_m: 56
+    milieu: {lat: 47.270975, lon: -2.202100}
+    points: {A: [47.271021, -2.202468], milieu: [47.270975, -2.2021], B: [47.270928, -2.201732], pont_basculant_milieu: [47.272636, -2.201657], pont_tournant_milieu: [47.275113, -2.199479]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 4.5, "lidar_mnt": 5.09, "lidar_mns": 5.09, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 3.1, "lidar_mnt": -1.11, "lidar_mns": 5.01, "lidar_mnh": 6.13}
+        B: {"rge_alti_mnt": 4.56, "lidar_mnt": 5.15, "lidar_mns": 5.15, "lidar_mnh": 0.0}
+        pont_basculant_milieu: {"rge_alti_mnt": 3.1, "lidar_mnt": -1.0, "lidar_mns": 4.6, "lidar_mnh": 5.6}
+        pont_tournant_milieu: {"rge_alti_mnt": 0.63, "lidar_mnt": 2.85, "lidar_mns": 4.64, "lidar_mnh": 1.79}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test1 « Pont écluse sud aval » (tablier), Pont basculant et Pont Tournant en « missed »"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: echevis
+    nom: "Le Pont d'Echevis (D 518)"
+    type: "bridge"
+    region: "Drôme / Isère — Vercors (FR)"
+    cas_teste: "Petit pont de gorge (27 m) entre deux balcons rocheux"
+    osm:
+      chain: [4725442]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        4725442: {"bridge": "yes", "highway": "secondary", "layer": "1", "name": "Le Pont d'Echevis", "ref": "D 518"}
+    longueur_m: 27
+    milieu: {lat: 45.039030, lon: 5.376534}
+    points: {A: [45.038952, 5.376404], milieu: [45.03903, 5.376534], B: [45.039101, 5.376672]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 310.63, "lidar_mnt": 310.79, "lidar_mns": 310.79, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 302.1, "lidar_mnt": 302.08, "lidar_mns": 310.77, "lidar_mnh": 8.7}
+        B: {"rge_alti_mnt": 310.25, "lidar_mnt": 310.64, "lidar_mns": 311.05, "lidar_mnh": 0.41}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test4 « Le Pont d'Echevis »"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: petits-goulets
+    nom: "Tunnels des Petits Goulets (D 518)"
+    type: "tunnel (série)"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Série de tunnels courts séparés par des fenêtres à ciel ouvert"
+    osm:
+      chain: [4725432, 4725434, 4725436, 4725438]
+      ways_associees: [4725440]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        4725432: {"highway": "secondary", "name": "Route des Petits Goulets", "ref": "D 518", "tunnel": "yes"}
+        4725434: {"highway": "secondary", "name": "Route des Petits Goulets", "ref": "D 518", "tunnel": "yes"}
+        4725436: {"highway": "secondary", "name": "Route des Petits Goulets", "ref": "D 518", "tunnel": "yes"}
+        4725438: {"highway": "secondary", "name": "Route des Petits Goulets", "ref": "D 518", "tunnel": "yes"}
+        4725440: {"highway": "secondary", "name": "Route des Petits Goulets", "ref": "D 518", "tunnel": "yes"}
+    longueur_m: 203
+    milieu: {lat: 45.046682, lon: 5.350656}
+    points: {A: [45.046617, 5.348913], milieu: [45.046682, 5.350656], B: [45.046551, 5.352432]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 335.59, "lidar_mnt": 336.7, "lidar_mns": 336.7, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 387.81, "lidar_mnt": 385.44, "lidar_mns": 389.62, "lidar_mnh": 4.18}
+        B: {"rge_alti_mnt": 324.94, "lidar_mnt": 324.28, "lidar_mns": 335.98, "lidar_mnh": 11.7}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test4 « Route des Petits Goulets » (tunnel)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Les ways 4725432..4725440 sont des tunnels courts (31 à 64 m) séparés par des tronçons hors tunnel ; la chaîne A→B est donc discontinue (longueur = somme des tunnels)."
+  - id: grands-goulets-tunnel
+    nom: "Tunnel des Grands Goulets (route actuelle D 518)"
+    type: "tunnel"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Tunnel long (~1,7 km) sous relief très marqué, pente entre portails"
+    osm:
+      chain: [25541827]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        25541827: {"highway": "secondary", "layer": "-1", "name": "Tunnel des Grands Goulets", "ref": "D 518", "tunnel": "yes"}
+    longueur_m: 1736
+    milieu: {lat: 45.007362, lon: 5.417438}
+    points: {A: [45.011663, 5.408411], milieu: [45.007362, 5.417438], B: [45.002109, 5.424243]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 604.3, "lidar_mnt": 607.61, "lidar_mns": 607.61, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 805.41, "lidar_mnt": 805.45, "lidar_mns": 805.45, "lidar_mnh": 0.0}
+        B: {"rge_alti_mnt": 681.79, "lidar_mnt": 679.99, "lidar_mns": 679.99, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test4 « Tunnel des Grands Goulets » (undetected)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+    observations_reference: "MNT au milieu 805 m contre ~608 m et ~680 m aux portails : ~160 m de relief au-dessus de la droite entre portails."
+  - id: grands-goulets-ancienne
+    nom: "Ancienne route des Grands Goulets (fermée)"
+    type: "tunnel (série) + bridge"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Ancienne route en encorbellement, nombreux tunnels courts ; access=no, motor_vehicle=no (fermée)"
+    osm:
+      chain: [367762471, 367762470, 367762792]
+      ways_associees: [367762802, 367762798, 367762806, 367762799, 367762791, 367762800, 367762796, 367762797]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        367762471: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762470: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets"}
+        367762792: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762802: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762798: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762806: {"access": "no", "bridge": "yes", "highway": "unclassified", "layer": "1", "motor_vehicle": "no", "name": "Route des Grand Goulets"}
+        367762799: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762791: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762800: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762796: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+        367762797: {"access": "no", "highway": "unclassified", "motor_vehicle": "no", "name": "Route des Grand Goulets", "tunnel": "yes"}
+    longueur_m: 745
+    milieu: {lat: 45.008455, lon: 5.411617}
+    points: {A: [45.010823, 5.408837], milieu: [45.008455, 5.411617], B: [45.007, 5.415631], tunnel_aval_milieu: [45.004441, 5.419366]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 595.33, "lidar_mnt": 593.41, "lidar_mns": 596.97, "lidar_mnh": 3.57}
+        milieu: {"rge_alti_mnt": 625.92, "lidar_mnt": 625.93, "lidar_mns": 625.93, "lidar_mnh": 0.0}
+        B: {"rge_alti_mnt": 658.44, "lidar_mnt": 742.12, "lidar_mns": 746.26, "lidar_mnh": 4.15}
+        tunnel_aval_milieu: {"rge_alti_mnt": 692.57, "lidar_mnt": 692.7, "lidar_mns": 702.67, "lidar_mnh": 9.98}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Route fermée : utile pour tester la détection, pas un parcours à recommander. Chaîne retenue = premier tunnel + tronçon + 2e tunnel (portail amont)."
+  - id: combe-laval
+    nom: "Tunnels du Cirque de Combe Laval (D 76)"
+    type: "tunnel (série)"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Tunnels courts en balcon de falaise ; way 1279044208 tunnel=yes SANS layer"
+    osm:
+      chain: [232213016, 232213012, 1279044208, 232213013]
+      ways_associees: [232213015]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        232213016: {"highway": "tertiary", "layer": "-1", "name": "Cirque de Combe Laval", "ref": "D 76", "tunnel": "yes"}
+        232213012: {"highway": "tertiary", "layer": "-1", "name": "Cirque de Combe Laval", "ref": "D 76", "tunnel": "yes"}
+        1279044208: {"highway": "tertiary", "name": "Cirque de Combe Laval", "ref": "D 76", "tunnel": "yes"}
+        232213013: {"highway": "tertiary", "layer": "-1", "name": "Cirque de Combe Laval", "ref": "D 76", "tunnel": "yes"}
+        232213015: {"highway": "tertiary", "layer": "-1", "name": "Cirque de Combe Laval", "ref": "D 76", "tunnel": "yes"}
+    longueur_m: 83
+    milieu: {lat: 45.000632, lon: 5.332613}
+    points: {A: [45.001812, 5.331851], milieu: [45.000632, 5.332613], B: [44.999615, 5.333857]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 916.33, "lidar_mnt": 930.15, "lidar_mns": 933.28, "lidar_mnh": 3.12}
+        milieu: {"rge_alti_mnt": 907.29, "lidar_mnt": 901.49, "lidar_mns": 909.07, "lidar_mnh": 7.58}
+        B: {"rge_alti_mnt": 983.8, "lidar_mnt": 907.41, "lidar_mns": 993.49, "lidar_mnh": 86.08}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test4 « Cirque de Combe Laval » (tunnel, handled)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Chaîne discontinue (somme des tunnels)."
+    observations_reference: "Portail B : MNT 907 m vs MNS 993 m (falaise en surplomb) ; MNS inutilisable aux portails."
+  - id: moines
+    nom: "Tunnel des Moines (D 76)"
+    type: "tunnel"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Tunnel en col sous relief (~180 m)"
+    osm:
+      chain: [4725455]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        4725455: {"highway": "tertiary", "layer": "-1", "name": "Tunnel des Moines", "ref": "D 76", "tunnel": "yes"}
+    longueur_m: 178
+    milieu: {lat: 44.978555, lon: 5.332499}
+    points: {A: [44.979343, 5.332383], milieu: [44.978555, 5.332499], B: [44.9779, 5.33313]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 984.87, "lidar_mnt": 984.41, "lidar_mns": 1036.88, "lidar_mnh": 52.47}
+        milieu: {"rge_alti_mnt": 1041.88, "lidar_mnt": 1042.09, "lidar_mns": 1058.53, "lidar_mnh": 16.43}
+        B: {"rge_alti_mnt": 1014.06, "lidar_mnt": 998.91, "lidar_mns": 1019.48, "lidar_mnh": 20.57}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "structures.csv test4 « Tunnel des Moines »"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: bourne-arbois
+    nom: "Tunnel d'Arbois — Gorges de la Bourne (D 531)"
+    type: "tunnel"
+    region: "Isère — Vercors (FR)"
+    cas_teste: "Tunnel de gorge (~140 m) ; à proximité une galerie pare-avalanche (tunnel=avalanche_protector, 1391029801)"
+    osm:
+      chain: [261949130]
+      ways_associees: [1391035951, 1391029801]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        261949130: {"bicycle": "yes", "highway": "secondary", "layer": "-1", "motor_vehicle": "yes", "name": "Tunnel d'Arbois", "oneway": "no", "ref": "D 531", "tunnel": "yes"}
+        1391035951: {"highway": "secondary", "name": "Route de Villard-de-Lans", "ref": "D 531", "tunnel": "yes"}
+        1391029801: {"highway": "secondary", "name": "Route de Villard-de-Lans", "ref": "D 531", "tunnel": "avalanche_protector"}
+    longueur_m: 137
+    milieu: {lat: 45.077802, lon: 5.452193}
+    points: {A: [45.077664, 5.451364], milieu: [45.077802, 5.452193], B: [45.077753, 5.453055]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 649.92, "lidar_mnt": 594.89, "lidar_mns": 644.35, "lidar_mnh": 49.47}
+        milieu: {"rge_alti_mnt": 667.7, "lidar_mnt": 645.56, "lidar_mns": 672.75, "lidar_mnh": 27.19}
+        B: {"rge_alti_mnt": 634.32, "lidar_mnt": 608.3, "lidar_mns": 610.44, "lidar_mnh": 2.14}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "tunnels/spans.csv tn08-bourne (way 261949130)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+    observations_reference: "Écarts RGE ALTI / LiDAR MNT de 20 à 55 m aux trois points (A, milieu, B) : zone de falaise, les deux MNT divergent."
+  - id: rousset
+    nom: "Tunnel du Col de Rousset (D 518)"
+    type: "tunnel"
+    region: "Drôme — Vercors (FR)"
+    cas_teste: "Tunnel sous col, ~700 m, relief de ~150-200 m au-dessus"
+    osm:
+      chain: [56415172]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        56415172: {"highway": "secondary", "layer": "-1", "name": "Route du Col de Rousset", "ref": "D 518", "tunnel": "yes"}
+    longueur_m: 703
+    milieu: {lat: 44.839203, lon: 5.401275}
+    points: {A: [44.83811, 5.397101], milieu: [44.839203, 5.401275], B: [44.840359, 5.405425]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 1247.16, "lidar_mnt": 1251.6, "lidar_mns": 1251.6, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 1435.88, "lidar_mnt": 1435.28, "lidar_mns": 1440.57, "lidar_mnh": 5.29}
+        B: {"rge_alti_mnt": 1249.4, "lidar_mnt": 1249.04, "lidar_mns": 1249.04, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "tunnels/spans.csv tt05-rousset (way 56415172)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+    observations_reference: "MNT au milieu ~1435 m contre ~1250 m aux portails."
+  - id: arly-galerie
+    nom: "Galerie pare-avalanche des Gorges de l'Arly (D 1212)"
+    type: "covered (avalanche_protector)"
+    region: "Savoie (FR)"
+    cas_teste: "Ouvrage couvert ouvert latéralement : tunnel=avalanche_protector ; le MNS voit le toit"
+    osm:
+      chain: [236377208]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        236377208: {"highway": "primary", "name": "Route des Gorges", "ref": "D 1212", "tunnel": "avalanche_protector"}
+    longueur_m: 22
+    milieu: {lat: 45.782055, lon: 6.484874}
+    points: {A: [45.782149, 6.484837], milieu: [45.782055, 6.484874], B: [45.781968, 6.484939]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 680.65, "lidar_mnt": 678.8, "lidar_mns": 682.03, "lidar_mnh": 3.23}
+        milieu: {"rge_alti_mnt": 684.96, "lidar_mnt": 685.02, "lidar_mns": 685.02, "lidar_mnh": 0.0}
+        B: {"rge_alti_mnt": 682.18, "lidar_mnt": 677.49, "lidar_mns": 685.75, "lidar_mnh": 8.25}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "tunnels/spans.csv tt08-arly-cliets (way 236377208, gallery)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: croix-rousse
+    nom: "Tunnel modes doux de la Croix-Rousse (Lyon)"
+    type: "tunnel"
+    region: "Rhône (FR)"
+    cas_teste: "Tunnel cyclable long (~1,76 km) sous colline urbaine, layer=-2"
+    osm:
+      chain: [250224690]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        250224690: {"bicycle": "designated", "highway": "path", "layer": "-2", "name": "Tunnel bus-piétons-vélos de la Croix-Rousse", "oneway": "no", "tunnel": "yes"}
+    longueur_m: 1764
+    milieu: {lat: 45.773922, lon: 4.825485}
+    points: {A: [45.774643, 4.814177], milieu: [45.773922, 4.825485], B: [45.772935, 4.836759]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 171.41, "lidar_mnt": 170.68, "lidar_mns": 170.68, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 251.26, "lidar_mnt": 251.29, "lidar_mns": 266.8, "lidar_mnh": 15.51}
+        B: {"rge_alti_mnt": 181.11, "lidar_mnt": 181.2, "lidar_mns": 181.18, "lidar_mnh": -0.02}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "tunnels/spans.csv tt02-croix-rousse (way 250224690)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+    observations_reference: "MNT au milieu ~251 m contre 171/181 m aux portails."
+  - id: voie-verte-24
+    nom: "Voie verte — tunnel éclairé (Dordogne)"
+    type: "tunnel"
+    region: "Dordogne (FR)"
+    cas_teste: "Tunnel ferroviaire reconverti en voie verte (~470 m) ; way 668765879 tunnel=yes SANS layer"
+    osm:
+      chain: [668765888, 668765879]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        668765888: {"highway": "cycleway", "layer": "-1", "motor_vehicle": "no", "tunnel": "yes"}
+        668765879: {"highway": "cycleway", "motor_vehicle": "no", "name": "Voie Verte - Véloroute (en Tunnel Eclairé)", "tunnel": "yes"}
+    longueur_m: 470
+    milieu: {lat: 44.860315, lon: 1.348377}
+    points: {A: [44.858593, 1.346655], milieu: [44.860315, 1.348377], B: [44.862053, 1.350069]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 89.42, "lidar_mnt": 91.82, "lidar_mns": 111.81, "lidar_mnh": 19.99}
+        milieu: {"rge_alti_mnt": 127.39, "lidar_mnt": 126.56, "lidar_mns": 133.44, "lidar_mnh": 6.88}
+        B: {"rge_alti_mnt": 87.89, "lidar_mnt": 87.69, "lidar_mns": 104.03, "lidar_mnh": 16.33}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: "tunnels/spans.csv th08-voie-verte-24 (way 668765888)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "vcyclist ne cite que 668765888 ; la way a été scindée : 668765888 ne fait plus que ~34 m, le reste est 668765879."
+    observations_reference: "MNH 16–20 m aux portails (végétation au-dessus de la tranchée) : utiliser le MNT, pas le MNS."
+  - id: recoumene
+    nom: "Viaduc de la Recoumène (voie verte, Haute-Loire)"
+    type: "bridge (viaduct)"
+    region: "Haute-Loire (FR)"
+    cas_teste: "Viaduc haut cyclable (ancienne voie ferrée, highway=path bicycle=yes, layer=2)"
+    osm:
+      chain: [120289323]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        120289323: {"bicycle": "yes", "bridge": "viaduct", "highway": "path", "layer": "2", "name": "Viaduc de la Recoumène", "ref": "791000"}
+    longueur_m: 272
+    milieu: {lat: 44.930983, lon: 4.017432}
+    points: {A: [44.929772, 4.017621], milieu: [44.930983, 4.017432], B: [44.932049, 4.01662]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 952.45, "lidar_mnt": 952.29, "lidar_mns": 952.29, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 890.63, "lidar_mnt": 888.94, "lidar_mns": 949.71, "lidar_mnh": 60.77}
+        B: {"rge_alti_mnt": 947.36, "lidar_mnt": 947.27, "lidar_mns": 947.27, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Choisi à la place du viaduc de la Souleuvre (il n'en reste que les piles, pas de tablier cyclable : aucune way highway sur le viaduc dans la requête Overpass). Hauteur à lire dans reference (MNS − MNT)."
+    observations_reference: "MNH au milieu 60,8 m (MNS 949,7 / MNT 888,9) : viaduc haut confirmé par le LiDAR."
+  - id: liege-belle-liegeoise
+    nom: "Passerelle La Belle Liégeoise (Liège)"
+    type: "bridge (footbridge)"
+    region: "Liège (BE)"
+    cas_teste: "Pont hors couverture LiDAR HD IGN, très fréquenté à vélo (cycleway bicycle=designated)"
+    osm:
+      chain: [424514422]
+      ways_associees: [404975867, 484422965, 1088016522]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        424514422: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1"}
+        404975867: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1"}
+        484422965: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1"}
+        1088016522: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway"}
+    longueur_m: 173
+    milieu: {lat: 50.628680, lon: 5.575781}
+    points: {A: [50.628296, 5.574715], milieu: [50.62868, 5.575781], B: [50.629062, 5.576852]}
+    reference:
+      methode: "methode_reference_defaut ; l'API IGN renvoie -99999 (hors emprise) sur tous les points → pas de référence IGN. Test de provenance Mapterhorn : HEAD tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+      valeurs: null
+      mapterhorn_z13_milieu: "z13=200"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Le nom n'est porté que par le contour man_made=bridge 1286260289 ; les ways cyclables ne sont pas nommées."
+  - id: venise-liberta
+    nom: "Ponte della Libertà — Ciclabile per Venezia"
+    type: "bridge"
+    region: "Vénétie (IT)"
+    cas_teste: "Pont côtier hors France (lagune), piste cyclable de ~3,7 km ; test du repli Mapterhorn sur GLO-30"
+    osm:
+      chain: [340300416, 821868760, 352352426]
+      ways_associees: [21637465, 201102236]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        340300416: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Ciclabile per Venezia", "oneway": "no"}
+        821868760: {"bicycle": "designated", "bridge": "yes", "highway": "cycleway", "layer": "1", "name": "Ciclabile per Venezia", "oneway": "no"}
+        352352426: {"bridge": "yes", "highway": "cycleway", "layer": "1", "motor_vehicle": "no", "name": "Ciclabile per Venezia", "oneway": "no"}
+        21637465: {"bicycle": "no", "bridge": "yes", "highway": "trunk", "layer": "1", "name": "Ponte della Libertà", "oneway": "yes", "ref": "SR11"}
+        201102236: {"bicycle": "no", "bridge": "yes", "highway": "trunk", "layer": "1", "name": "Ponte della Libertà", "oneway": "yes", "ref": "SR11"}
+    longueur_m: 3669
+    milieu: {lat: 45.453736, lon: 12.298499}
+    points: {A: [45.464058, 12.280152], milieu: [45.453736, 12.298499], B: [45.442632, 12.315048]}
+    reference:
+      methode: "methode_reference_defaut ; l'API IGN renvoie -99999 (hors emprise) sur tous les points → pas de référence IGN. Test de provenance Mapterhorn : HEAD tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+      valeurs: null
+      mapterhorn_z13_milieu: "z13=200"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "La chaussée SR11 (21637465, 201102236) porte bicycle=no ; seule la piste séparée est cyclable."
+  - id: donostia-zurriola
+    nom: "Pont de la Zurriola (Saint-Sébastien)"
+    type: "bridge"
+    region: "Guipuscoa (ES)"
+    cas_teste: "Pont côtier à l'embouchure de l'Urumea, hors France ; pistes séparées (cycleway=separate)"
+    osm:
+      chain: [24276211]
+      ways_associees: [37702912]
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        24276211: {"bridge": "yes", "cycleway": "separate", "highway": "secondary", "layer": "1", "name": "Zurriolako zubia", "oneway": "yes"}
+        37702912: {"bridge": "yes", "cycleway": "separate", "highway": "secondary", "layer": "1", "name": "Zurriolako zubia", "oneway": "yes"}
+    longueur_m: 105
+    milieu: {lat: 43.323530, lon: -1.979987}
+    points: {A: [43.323745, -1.979412], milieu: [43.32353, -1.979987], B: [43.323313, -1.980561]}
+    reference:
+      methode: "methode_reference_defaut ; l'API IGN renvoie -99999 (hors emprise) sur tous les points → pas de référence IGN. Test de provenance Mapterhorn : HEAD tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+      valeurs: null
+      mapterhorn_z13_milieu: "z13=200"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: null
+  - id: krk
+    nom: "Pont de Krk (Krčki most)"
+    type: "bridges (contigus, arcs)"
+    region: "Primorje-Gorski Kotar (HR)"
+    cas_teste: "Pont côtier hors France où Mapterhorn n'a que GLO-30 (tuile z13 en 404) ; deux arcs séparés par l'îlot Sveti Marko"
+    osm:
+      chain: [24025835, 93567081]
+      ways_associees: []
+      verifie: "Overpass, tags+géométrie lus le 2026-10-30"
+      tags:
+        24025835: {"bridge": "yes", "highway": "primary", "layer": "1", "name": "Krčki most", "ref": "D102"}
+        93567081: {"bridge": "yes", "highway": "primary", "layer": "1", "name": "Krčki most", "ref": "D102"}
+    longueur_m: 1333
+    milieu: {lat: 45.246401, lon: 14.569181}
+    points: {A: [45.242297, 14.562083], milieu: [45.246401, 14.569181], B: [45.250761, 14.575959]}
+    reference:
+      methode: "Aucune altitude IGN (hors France, non interrogé). Test de provenance Mapterhorn : HEAD tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+      valeurs: null
+      mapterhorn_z13_milieu: "z13=404 (2 tuiles)"
+      date_mesure: "2026-10-30"
+    renvoi_vcyclist: null
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Accès vélo : aucune balise bicycle sur les ways (highway=primary D102) ; usage cyclable réel non vérifié."

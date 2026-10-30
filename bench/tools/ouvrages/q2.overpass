@@ -1,0 +1,5 @@
+[out:json][timeout:120];
+way(id:121552274,142312988,293742437,714716507,47405821,273034481,234973995,118354599);
+out ids;
+(way(around:3)[highway]; way(around:3)[railway]; way(around:3)[waterway];);
+out tags geom;

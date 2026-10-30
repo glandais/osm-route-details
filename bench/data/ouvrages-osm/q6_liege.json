@@ -1,0 +1,145 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-30T16:20:06Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 404975867,
+  "bounds": {
+    "minlat": 50.6282965,
+    "minlon": 5.5747146,
+    "maxlat": 50.6286447,
+    "maxlon": 5.5753987
+  },
+  "geometry": [
+    { "lat": 50.6282965, "lon": 5.5747146 },
+    { "lat": 50.6283319, "lon": 5.5747581 },
+    { "lat": 50.6286447, "lon": 5.5753987 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "start_date": "2016",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 424514422,
+  "bounds": {
+    "minlat": 50.6282965,
+    "minlon": 5.5747146,
+    "maxlat": 50.6290617,
+    "maxlon": 5.5768517
+  },
+  "geometry": [
+    { "lat": 50.6282965, "lon": 5.5747146 },
+    { "lat": 50.6283110, "lon": 5.5747950 },
+    { "lat": 50.6287025, "lon": 5.5758419 },
+    { "lat": 50.6290617, "lon": 5.5768517 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "start_date": "2016",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 484422965,
+  "bounds": {
+    "minlat": 50.6276259,
+    "minlon": 5.5731576,
+    "maxlat": 50.6278188,
+    "maxlon": 5.5736973
+  },
+  "geometry": [
+    { "lat": 50.6278188, "lon": 5.5736973 },
+    { "lat": 50.6276259, "lon": 5.5731576 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "start_date": "2016",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 573730421,
+  "bounds": {
+    "minlat": 50.6275905,
+    "minlon": 5.5731998,
+    "maxlat": 50.6276274,
+    "maxlon": 5.5733334
+  },
+  "geometry": [
+    { "lat": 50.6275905, "lon": 5.5731998 },
+    { "lat": 50.6276274, "lon": 5.5733334 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "handrail": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "1",
+    "lit": "yes",
+    "ramp": "no",
+    "step_count": "18",
+    "surface": "wood",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 1088016522,
+  "bounds": {
+    "minlat": 50.6269320,
+    "minlon": 5.5732349,
+    "maxlat": 50.6275321,
+    "maxlon": 5.5738505
+  },
+  "geometry": [
+    { "lat": 50.6275321, "lon": 5.5732349 },
+    { "lat": 50.6272011, "lon": 5.5735812 },
+    { "lat": 50.6269320, "lon": 5.5738505 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "start_date": "2016",
+    "surface": "concrete"
+  }
+}
+
+  ]
+}

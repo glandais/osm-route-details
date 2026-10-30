@@ -1,0 +1,95 @@
+{
+    "content": "9 resources for the specified keywords",
+    "resources": [
+        {
+            "_id": "ALTIMETRIE",
+            "title": "LidarHD : MNT et MNS, \u00e0 50 cm",
+            "bbox": {
+                "east": 2.80334964,
+                "north": 51.09371232,
+                "west": -1.57045855,
+                "south": 45.38385774
+            }
+        },
+        {
+            "_id": "IGNF_LIDARHD_MNX_WLD",
+            "title": "LIDAR HD - France enti\u00e8re - produit d\u00e9riv\u00e9es MNT, MNS et MNH",
+            "bbox": {
+                "east": 2.80334964,
+                "north": 51.09371232,
+                "west": -1.57045855,
+                "south": 45.38385774
+            }
+        },
+        {
+            "_id": "ign_lidar_hd_mnt_mono_wld",
+            "title": "IGN - LIDAR HD - MNT - France enti\u00e8re - avec interpolation",
+            "bbox": {
+                "east": 7.6279958746375085,
+                "north": 50.39357929423857,
+                "west": -2.6040058043246,
+                "south": 45.87666894037257
+            }
+        },
+        {
+            "_id": "ign_lidar_hd_mnt_multi_wld",
+            "title": "IGN - LIDAR HD - MNT - France enti\u00e8re - sans interpolation",
+            "bbox": {
+                "east": 55.84420231145464,
+                "north": 50.393567807918885,
+                "west": -2.603994158669566,
+                "south": -21.390939072673053
+            }
+        },
+        {
+            "_id": "ign_lidar_hd_mnx_mono_wld",
+            "title": "IGN - LIDAR HD - MNT, MNS et MNH - France enti\u00e8re - avec interpolation",
+            "bbox": {
+                "east": 7.6279958746375085,
+                "north": 50.39357942424416,
+                "west": -2.604005934324654,
+                "south": 45.876668730372565
+            }
+        },
+        {
+            "_id": "ign_lidar_hd_mnx_multi_wld",
+            "title": "IGN - LIDAR HD - MNT, MNS et MNH - France enti\u00e8re - sans interpolation",
+            "bbox": {
+                "east": 55.84420231145464,
+                "north": 50.39356865399617,
+                "west": -2.603995014334527,
+                "south": -21.390939072673053
+            }
+        },
+        {
+            "_id": "ign_rge_alti_par_territoires",
+            "title": "RGE Alti 1m - France + DOM par territoire - Source et pr\u00e9cision dynamiques",
+            "bbox": {
+                "east": 55.83665387,
+                "north": 51.08898944,
+                "west": -61.80983862,
+                "south": -21.38963076
+            }
+        },
+        {
+            "_id": "ign_rge_alti_wld",
+            "title": "RGE Alti - France enti\u00e8re - m\u00e9tadonn\u00e9es statiques",
+            "bbox": {
+                "east": 45.30431533,
+                "north": 51.10527968,
+                "west": -62.95280769,
+                "south": -13.00780942
+            }
+        },
+        {
+            "_id": "zzz_ressource_test_unitaires",
+            "title": "Ressource alti pour les tests unitaires",
+            "bbox": {
+                "east": 131.26914062,
+                "north": 71.52498305,
+                "west": -61.237869,
+                "south": 11.80185014
+            }
+        }
+    ]
+}

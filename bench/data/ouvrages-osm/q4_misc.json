@@ -1,0 +1,3675 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-30T16:16:03Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 8038825,
+  "bounds": {
+    "minlat": 50.6296662,
+    "minlon": 5.5788573,
+    "maxlat": 50.6297748,
+    "maxlon": 5.5791536
+  },
+  "geometry": [
+    { "lat": 50.6296662, "lon": 5.5788573 },
+    { "lat": 50.6296851, "lon": 5.5789245 },
+    { "lat": 50.6297166, "lon": 5.5790173 },
+    { "lat": 50.6297748, "lon": 5.5791536 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "foot": "no",
+    "highway": "primary",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "ref": "N30",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 8070897,
+  "bounds": {
+    "minlat": 50.6365465,
+    "minlon": 5.5790820,
+    "maxlat": 50.6369378,
+    "maxlon": 5.5794957
+  },
+  "geometry": [
+    { "lat": 50.6365465, "lon": 5.5794957 },
+    { "lat": 50.6367338, "lon": 5.5792968 },
+    { "lat": 50.6369378, "lon": 5.5790820 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bus:lanes:forward": "yes|yes|designated",
+    "highway": "tertiary",
+    "lanes": "5",
+    "lanes:backward": "2",
+    "lanes:forward": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Longdoz",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "ref": "N610b",
+    "sidewalk": "both",
+    "source": "http://fr.wikipedia.org/wiki/Pont_de_Longdoz",
+    "surface": "asphalt",
+    "turn:lanes:backward": "left|through",
+    "turn:lanes:forward": "left|through|through",
+    "wikidata": "Q3397038",
+    "wikimedia_commons": "Category:Pont Longdoz, Liège"
+  }
+},
+{
+  "type": "way",
+  "id": 22715904,
+  "bounds": {
+    "minlat": 43.3207287,
+    "minlon": -1.9788168,
+    "maxlat": 43.3211534,
+    "maxlon": -1.9776742
+  },
+  "geometry": [
+    { "lat": 43.3207287, "lon": -1.9788168 },
+    { "lat": 43.3211170, "lon": -1.9777751 },
+    { "lat": 43.3211386, "lon": -1.9777160 },
+    { "lat": 43.3211534, "lon": -1.9776742 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "separate",
+    "highway": "secondary",
+    "lanes": "4",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "40",
+    "name": "Santa Katalina Zubia",
+    "name:es": "Puente de Santa Catalina",
+    "name:etymology:wikidata": "Q12266990",
+    "name:eu": "Santa Katalina Zubia",
+    "name:fr": "Pont de Santa Katalina",
+    "oneway": "yes",
+    "parking:both": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 24276211,
+  "bounds": {
+    "minlat": 43.3233135,
+    "minlon": -1.9805607,
+    "maxlat": 43.3237454,
+    "maxlon": -1.9794123
+  },
+  "geometry": [
+    { "lat": 43.3237454, "lon": -1.9794123 },
+    { "lat": 43.3237351, "lon": -1.9794402 },
+    { "lat": 43.3233135, "lon": -1.9805607 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "separate",
+    "highway": "secondary",
+    "lanes": "2",
+    "lanes:psv": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxspeed:type": "ES:urban",
+    "name": "Zurriolako zubia",
+    "name:es": "Puente de Zurriola",
+    "name:eu": "Zurriolako zubia",
+    "name:fr": "Pont de Zurriola",
+    "oneway": "yes",
+    "shoulder": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 24276214,
+  "bounds": {
+    "minlat": 43.3208258,
+    "minlon": -1.9788800,
+    "maxlat": 43.3212509,
+    "maxlon": -1.9777397
+  },
+  "geometry": [
+    { "lat": 43.3212509, "lon": -1.9777397 },
+    { "lat": 43.3212354, "lon": -1.9777817 },
+    { "lat": 43.3208258, "lon": -1.9788800 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "separate",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "40",
+    "maxweight:signed": "no",
+    "name": "Santa Katalina Zubia",
+    "name:es": "Puente de Santa Catalina",
+    "name:etymology:wikidata": "Q12266990",
+    "name:eu": "Santa Katalina Zubia",
+    "name:fr": "Pont de Santa Katalina",
+    "oneway": "yes",
+    "parking:both": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 24497798,
+  "bounds": {
+    "minlat": 50.6295512,
+    "minlon": 5.5778862,
+    "maxlat": 50.6295714,
+    "maxlon": 5.5779769
+  },
+  "geometry": [
+    { "lat": 50.6295714, "lon": 5.5778862 },
+    { "lat": 50.6295630, "lon": 5.5779092 },
+    { "lat": 50.6295512, "lon": 5.5779769 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "destination:lanes": "Centre;Luxembourg;Bastogne|Dinant;Marche",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "ref": "N610",
+    "surface": "asphalt",
+    "toll:hgv": "yes",
+    "turn:lanes": "left;through|through"
+  }
+},
+{
+  "type": "way",
+  "id": 24854121,
+  "bounds": {
+    "minlat": 50.6218536,
+    "minlon": 5.5808014,
+    "maxlat": 50.6231448,
+    "maxlon": 5.5810328
+  },
+  "geometry": [
+    { "lat": 50.6218536, "lon": 5.5810328 },
+    { "lat": 50.6229554, "lon": 5.5808700 },
+    { "lat": 50.6230549, "lon": 5.5808357 },
+    { "lat": 50.6231448, "lon": 5.5808014 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Gramme",
+    "oneway": "yes",
+    "parking:both": "no",
+    "ref": "N90",
+    "sidewalk": "no",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 28659882,
+  "bounds": {
+    "minlat": 50.6381584,
+    "minlon": 5.5868693,
+    "maxlat": 50.6381930,
+    "maxlon": 5.5869704
+  },
+  "geometry": [
+    { "lat": 50.6381584, "lon": 5.5869704 },
+    { "lat": 50.6381930, "lon": 5.5868693 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "primary",
+    "lanes": "4",
+    "lanes:backward": "2",
+    "lanes:forward": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont d'Amercœur",
+    "name:etymology:wikidata": "Q2842792",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "ref": "N3",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "toll:hgv": "yes",
+    "turn:lanes:forward": "left|none"
+  }
+},
+{
+  "type": "way",
+  "id": 28694488,
+  "bounds": {
+    "minlat": 50.6249556,
+    "minlon": 5.5632414,
+    "maxlat": 50.6262364,
+    "maxlon": 5.5650194
+  },
+  "geometry": [
+    { "lat": 50.6249556, "lon": 5.5650194 },
+    { "lat": 50.6251275, "lon": 5.5648412 },
+    { "lat": 50.6252204, "lon": 5.5647513 },
+    { "lat": 50.6253174, "lon": 5.5646635 },
+    { "lat": 50.6254656, "lon": 5.5645307 },
+    { "lat": 50.6256767, "lon": 5.5643559 },
+    { "lat": 50.6257915, "lon": 5.5642583 },
+    { "lat": 50.6258407, "lon": 5.5642144 },
+    { "lat": 50.6258848, "lon": 5.5641736 },
+    { "lat": 50.6259185, "lon": 5.5641414 },
+    { "lat": 50.6259526, "lon": 5.5641028 },
+    { "lat": 50.6259806, "lon": 5.5640705 },
+    { "lat": 50.6260100, "lon": 5.5640350 },
+    { "lat": 50.6260529, "lon": 5.5639699 },
+    { "lat": 50.6261014, "lon": 5.5638789 },
+    { "lat": 50.6261371, "lon": 5.5637966 },
+    { "lat": 50.6261641, "lon": 5.5637206 },
+    { "lat": 50.6261871, "lon": 5.5636436 },
+    { "lat": 50.6262029, "lon": 5.5635737 },
+    { "lat": 50.6262203, "lon": 5.5634703 },
+    { "lat": 50.6262272, "lon": 5.5634090 },
+    { "lat": 50.6262321, "lon": 5.5633424 },
+    { "lat": 50.6262364, "lon": 5.5632414 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "foot": "yes",
+    "highway": "service",
+    "lanes": "2",
+    "layer": "3",
+    "lit": "no",
+    "maxweight": "5.5",
+    "name": "Rue Serrurier-Bovy",
+    "sidewalk:both": "separate",
+    "smoothness": "excellent",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 37701262,
+  "bounds": {
+    "minlat": 43.3231570,
+    "minlon": -1.9868789,
+    "maxlat": 43.3232140,
+    "maxlon": -1.9868465
+  },
+  "geometry": [
+    { "lat": 43.3231570, "lon": -1.9868465 },
+    { "lat": 43.3232140, "lon": -1.9868789 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "pedestrian",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Kanpandegi kalea",
+    "name:es": "Calle Campanario",
+    "name:eu": "Kanpandegi kalea",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 37702912,
+  "bounds": {
+    "minlat": 43.3232564,
+    "minlon": -1.9805849,
+    "maxlat": 43.3237070,
+    "maxlon": -1.9793855
+  },
+  "geometry": [
+    { "lat": 43.3232564, "lon": -1.9805849 },
+    { "lat": 43.3236773, "lon": -1.9794648 },
+    { "lat": 43.3236965, "lon": -1.9794142 },
+    { "lat": 43.3237070, "lon": -1.9793855 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "separate",
+    "highway": "secondary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxspeed:type": "ES:urban",
+    "name": "Zurriolako zubia",
+    "name:es": "Puente de Zurriola",
+    "name:eu": "Zurriolako zubia",
+    "name:fr": "Pont de Zurriola",
+    "oneway": "yes",
+    "shoulder": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 42710151,
+  "bounds": {
+    "minlat": 50.6248787,
+    "minlon": 5.5786250,
+    "maxlat": 50.6249894,
+    "maxlon": 5.5797368
+  },
+  "geometry": [
+    { "lat": 50.6249894, "lon": 5.5797368 },
+    { "lat": 50.6248787, "lon": 5.5786250 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "name": "Passerelle Mativa",
+    "old_name": "Pont Hennebique",
+    "segregated": "no",
+    "smoothness": "intermediate",
+    "surface": "paving_stones",
+    "traffic_sign": "BE:F99a",
+    "wikidata": "Q3368270",
+    "wikimedia_commons": "Category:Passerelle Mativa, Liège"
+  }
+},
+{
+  "type": "way",
+  "id": 53097679,
+  "bounds": {
+    "minlat": 50.6296936,
+    "minlon": 5.5817094,
+    "maxlat": 50.6298619,
+    "maxlon": 5.5818181
+  },
+  "geometry": [
+    { "lat": 50.6296936, "lon": 5.5817094 },
+    { "lat": 50.6297100, "lon": 5.5817212 },
+    { "lat": 50.6297860, "lon": 5.5817763 },
+    { "lat": 50.6298619, "lon": 5.5818181 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "lane_markings": "no",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Boulevard Raymond Poincaré",
+    "oneway": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 55690067,
+  "bounds": {
+    "minlat": 50.6219212,
+    "minlon": 5.5807137,
+    "maxlat": 50.6231384,
+    "maxlon": 5.5809332
+  },
+  "geometry": [
+    { "lat": 50.6231384, "lon": 5.5807137 },
+    { "lat": 50.6230728, "lon": 5.5807432 },
+    { "lat": 50.6230160, "lon": 5.5807634 },
+    { "lat": 50.6229659, "lon": 5.5807772 },
+    { "lat": 50.6219212, "lon": 5.5809332 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Gramme",
+    "oneway": "yes",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "parking:both": "no",
+    "ref": "N90",
+    "sidewalk": "no",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 57687923,
+  "bounds": {
+    "minlat": 50.6328362,
+    "minlon": 5.5771306,
+    "maxlat": 50.6328718,
+    "maxlon": 5.5778404
+  },
+  "geometry": [
+    { "lat": 50.6328718, "lon": 5.5778404 },
+    { "lat": 50.6328598, "lon": 5.5776099 },
+    { "lat": 50.6328499, "lon": 5.5774181 },
+    { "lat": 50.6328375, "lon": 5.5771543 },
+    { "lat": 50.6328362, "lon": 5.5771306 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "highway": "residential",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "name": "Pont de Huy",
+    "oneway": "yes",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q3396989"
+  }
+},
+{
+  "type": "way",
+  "id": 79706065,
+  "bounds": {
+    "minlat": 45.4679633,
+    "minlon": 12.2714357,
+    "maxlat": 45.4728700,
+    "maxlon": 12.2804325
+  },
+  "geometry": [
+    { "lat": 45.4679633, "lon": 12.2804325 },
+    { "lat": 45.4681035, "lon": 12.2801055 },
+    { "lat": 45.4683717, "lon": 12.2795137 },
+    { "lat": 45.4684776, "lon": 12.2792896 },
+    { "lat": 45.4685821, "lon": 12.2790687 },
+    { "lat": 45.4687081, "lon": 12.2787965 },
+    { "lat": 45.4687271, "lon": 12.2787866 },
+    { "lat": 45.4687494, "lon": 12.2787937 },
+    { "lat": 45.4687794, "lon": 12.2788015 },
+    { "lat": 45.4688164, "lon": 12.2787985 },
+    { "lat": 45.4688453, "lon": 12.2787861 },
+    { "lat": 45.4688752, "lon": 12.2787618 },
+    { "lat": 45.4688975, "lon": 12.2787326 },
+    { "lat": 45.4689218, "lon": 12.2786776 },
+    { "lat": 45.4689329, "lon": 12.2786102 },
+    { "lat": 45.4689300, "lon": 12.2785550 },
+    { "lat": 45.4689168, "lon": 12.2785029 },
+    { "lat": 45.4688946, "lon": 12.2784639 },
+    { "lat": 45.4688831, "lon": 12.2784200 },
+    { "lat": 45.4688941, "lon": 12.2783742 },
+    { "lat": 45.4690083, "lon": 12.2781323 },
+    { "lat": 45.4692088, "lon": 12.2776820 },
+    { "lat": 45.4698107, "lon": 12.2763764 },
+    { "lat": 45.4700680, "lon": 12.2758061 },
+    { "lat": 45.4705142, "lon": 12.2748491 },
+    { "lat": 45.4707569, "lon": 12.2743162 },
+    { "lat": 45.4709519, "lon": 12.2738859 },
+    { "lat": 45.4710057, "lon": 12.2737707 },
+    { "lat": 45.4710232, "lon": 12.2737725 },
+    { "lat": 45.4710419, "lon": 12.2737820 },
+    { "lat": 45.4710635, "lon": 12.2737881 },
+    { "lat": 45.4710832, "lon": 12.2737894 },
+    { "lat": 45.4711122, "lon": 12.2737843 },
+    { "lat": 45.4711358, "lon": 12.2737733 },
+    { "lat": 45.4711532, "lon": 12.2737607 },
+    { "lat": 45.4711740, "lon": 12.2737390 },
+    { "lat": 45.4711916, "lon": 12.2737128 },
+    { "lat": 45.4712068, "lon": 12.2736791 },
+    { "lat": 45.4712161, "lon": 12.2736464 },
+    { "lat": 45.4712214, "lon": 12.2736111 },
+    { "lat": 45.4712224, "lon": 12.2735791 },
+    { "lat": 45.4712176, "lon": 12.2735338 },
+    { "lat": 45.4712116, "lon": 12.2735086 },
+    { "lat": 45.4712018, "lon": 12.2734812 },
+    { "lat": 45.4711972, "lon": 12.2734518 },
+    { "lat": 45.4712157, "lon": 12.2733944 },
+    { "lat": 45.4712516, "lon": 12.2733411 },
+    { "lat": 45.4713273, "lon": 12.2732438 },
+    { "lat": 45.4714632, "lon": 12.2730589 },
+    { "lat": 45.4716286, "lon": 12.2728383 },
+    { "lat": 45.4717799, "lon": 12.2726483 },
+    { "lat": 45.4718911, "lon": 12.2725153 },
+    { "lat": 45.4720098, "lon": 12.2723688 },
+    { "lat": 45.4721733, "lon": 12.2721792 },
+    { "lat": 45.4723061, "lon": 12.2720263 },
+    { "lat": 45.4724210, "lon": 12.2719078 },
+    { "lat": 45.4725342, "lon": 12.2717886 },
+    { "lat": 45.4726300, "lon": 12.2716909 },
+    { "lat": 45.4727203, "lon": 12.2716008 },
+    { "lat": 45.4728090, "lon": 12.2715043 },
+    { "lat": 45.4728700, "lon": 12.2714357 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "check_date:surface": "2023-05-24",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "lit": "yes",
+    "segregated": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 79710667,
+  "bounds": {
+    "minlat": 45.4679217,
+    "minlon": 12.2804325,
+    "maxlat": 45.4679825,
+    "maxlon": 12.2807723
+  },
+  "geometry": [
+    { "lat": 45.4679217, "lon": 12.2807723 },
+    { "lat": 45.4679587, "lon": 12.2806967 },
+    { "lat": 45.4679766, "lon": 12.2806402 },
+    { "lat": 45.4679825, "lon": 12.2806034 },
+    { "lat": 45.4679822, "lon": 12.2805453 },
+    { "lat": 45.4679733, "lon": 12.2804911 },
+    { "lat": 45.4679578, "lon": 12.2804478 },
+    { "lat": 45.4679633, "lon": 12.2804325 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 95164519,
+  "bounds": {
+    "minlat": 50.6295273,
+    "minlon": 5.5778550,
+    "maxlat": 50.6295512,
+    "maxlon": 5.5779769
+  },
+  "geometry": [
+    { "lat": 50.6295273, "lon": 5.5778550 },
+    { "lat": 50.6295512, "lon": 5.5779769 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "ref": "N30",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 96320830,
+  "bounds": {
+    "minlat": 50.6296439,
+    "minlon": 5.5787830,
+    "maxlat": 50.6297052,
+    "maxlon": 5.5791172
+  },
+  "geometry": [
+    { "lat": 50.6296439, "lon": 5.5787830 },
+    { "lat": 50.6296662, "lon": 5.5788573 },
+    { "lat": 50.6296673, "lon": 5.5789471 },
+    { "lat": 50.6296726, "lon": 5.5789915 },
+    { "lat": 50.6296853, "lon": 5.5790524 },
+    { "lat": 50.6297052, "lon": 5.5791172 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "primary_link",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "ref": "N30",
+    "sidewalk:left": "no",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 109229633,
+  "bounds": {
+    "minlat": 50.6296354,
+    "minlon": 5.5819453,
+    "maxlat": 50.6298048,
+    "maxlon": 5.5820178
+  },
+  "geometry": [
+    { "lat": 50.6296354, "lon": 5.5819453 },
+    { "lat": 50.6296494, "lon": 5.5819532 },
+    { "lat": 50.6298048, "lon": 5.5820178 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Rue Natalis",
+    "oneway": "yes",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "turn:lanes": "left|through"
+  }
+},
+{
+  "type": "way",
+  "id": 109229634,
+  "bounds": {
+    "minlat": 50.6296522,
+    "minlon": 5.5818749,
+    "maxlat": 50.6298286,
+    "maxlon": 5.5819268
+  },
+  "geometry": [
+    { "lat": 50.6298286, "lon": 5.5819268 },
+    { "lat": 50.6296844, "lon": 5.5818805 },
+    { "lat": 50.6296670, "lon": 5.5818749 },
+    { "lat": 50.6296522, "lon": 5.5818812 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Rue Natalis",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "turn:lanes": "left|through"
+  }
+},
+{
+  "type": "way",
+  "id": 156512635,
+  "bounds": {
+    "minlat": 50.6206605,
+    "minlon": 5.5782101,
+    "maxlat": 50.6211533,
+    "maxlon": 5.5806095
+  },
+  "geometry": [
+    { "lat": 50.6206605, "lon": 5.5782101 },
+    { "lat": 50.6211533, "lon": 5.5806095 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "busway": "lane",
+    "cycleway": "share_busway",
+    "destination:backward": "Huy;Centre;Palais des Congrès;Guillemins Gare TGV",
+    "destination:colour:backward": ";white;white;white",
+    "highway": "secondary",
+    "lanes": "4",
+    "lanes:bus": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "name": "Pont de Fragnée",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "parking:both": "no",
+    "ref": "N633",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 313806549,
+  "bounds": {
+    "minlat": 50.6295653,
+    "minlon": 5.5822253,
+    "maxlat": 50.6297132,
+    "maxlon": 5.5823360
+  },
+  "geometry": [
+    { "lat": 50.6297132, "lon": 5.5823360 },
+    { "lat": 50.6295653, "lon": 5.5822253 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Boulevard Raymond Poincaré",
+    "oneway": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 315450593,
+  "bounds": {
+    "minlat": 50.6324514,
+    "minlon": 5.5721605,
+    "maxlat": 50.6326102,
+    "maxlon": 5.5738427
+  },
+  "geometry": [
+    { "lat": 50.6324514, "lon": 5.5738427 },
+    { "lat": 50.6326102, "lon": 5.5721605 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "separate",
+    "highway": "primary",
+    "lanes": "5",
+    "lanes:backward": "2",
+    "lanes:forward": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "name": "Pont du Roi Albert",
+    "name:etymology:wikidata": "Q55008046",
+    "parking:both": "no",
+    "ref": "N30",
+    "shoulder": "no",
+    "sidewalk": "separate",
+    "surface": "asphalt",
+    "turn:lanes:backward": "none|none",
+    "turn:lanes:forward": "left|through|through;right"
+  }
+},
+{
+  "type": "way",
+  "id": 340300416,
+  "bounds": {
+    "minlat": 45.4478277,
+    "minlon": 12.2801520,
+    "maxlat": 45.4640584,
+    "maxlon": 12.3090376
+  },
+  "geometry": [
+    { "lat": 45.4640584, "lon": 12.2801520 },
+    { "lat": 45.4584468, "lon": 12.2901097 },
+    { "lat": 45.4553785, "lon": 12.2955613 },
+    { "lat": 45.4540454, "lon": 12.2979357 },
+    { "lat": 45.4538860, "lon": 12.2982354 },
+    { "lat": 45.4537870, "lon": 12.2984105 },
+    { "lat": 45.4536117, "lon": 12.2987176 },
+    { "lat": 45.4532300, "lon": 12.2993868 },
+    { "lat": 45.4529123, "lon": 12.2999490 },
+    { "lat": 45.4524936, "lon": 12.3006930 },
+    { "lat": 45.4520338, "lon": 12.3015128 },
+    { "lat": 45.4514257, "lon": 12.3026086 },
+    { "lat": 45.4508667, "lon": 12.3035841 },
+    { "lat": 45.4506678, "lon": 12.3039321 },
+    { "lat": 45.4502366, "lon": 12.3047023 },
+    { "lat": 45.4490446, "lon": 12.3068276 },
+    { "lat": 45.4485212, "lon": 12.3077992 },
+    { "lat": 45.4483902, "lon": 12.3080323 },
+    { "lat": 45.4483119, "lon": 12.3081649 },
+    { "lat": 45.4479558, "lon": 12.3088104 },
+    { "lat": 45.4478277, "lon": 12.3090376 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "description": "Ciclopedonale sul vecchio marciapiede del ponte.",
+    "foot": "designated",
+    "highway": "cycleway",
+    "horse": "no",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 351097448,
+  "bounds": {
+    "minlat": 45.7637616,
+    "minlon": 6.0480142,
+    "maxlat": 45.7637928,
+    "maxlon": 6.0481291
+  },
+  "geometry": [
+    { "lat": 45.7637928, "lon": 6.0480142 },
+    { "lat": 45.7637616, "lon": 6.0481291 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "secondary",
+    "layer": "1",
+    "maxspeed": "80",
+    "name": "Route des Bauges",
+    "ref": "D 911",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 352352426,
+  "bounds": {
+    "minlat": 45.4426322,
+    "minlon": 12.3107219,
+    "maxlat": 45.4466393,
+    "maxlon": 12.3150569
+  },
+  "geometry": [
+    { "lat": 45.4466393, "lon": 12.3107219 },
+    { "lat": 45.4464480, "lon": 12.3110403 },
+    { "lat": 45.4460943, "lon": 12.3116659 },
+    { "lat": 45.4455650, "lon": 12.3125940 },
+    { "lat": 45.4450391, "lon": 12.3135415 },
+    { "lat": 45.4448499, "lon": 12.3138835 },
+    { "lat": 45.4447831, "lon": 12.3139914 },
+    { "lat": 45.4446585, "lon": 12.3141691 },
+    { "lat": 45.4445112, "lon": 12.3143367 },
+    { "lat": 45.4443903, "lon": 12.3144601 },
+    { "lat": 45.4442604, "lon": 12.3145775 },
+    { "lat": 45.4439316, "lon": 12.3147954 },
+    { "lat": 45.4437378, "lon": 12.3148940 },
+    { "lat": 45.4435576, "lon": 12.3149590 },
+    { "lat": 45.4433764, "lon": 12.3150080 },
+    { "lat": 45.4431351, "lon": 12.3150348 },
+    { "lat": 45.4429427, "lon": 12.3150475 },
+    { "lat": 45.4428956, "lon": 12.3150294 },
+    { "lat": 45.4428556, "lon": 12.3150086 },
+    { "lat": 45.4428298, "lon": 12.3150039 },
+    { "lat": 45.4428039, "lon": 12.3150060 },
+    { "lat": 45.4427597, "lon": 12.3150221 },
+    { "lat": 45.4427286, "lon": 12.3150395 },
+    { "lat": 45.4427056, "lon": 12.3150509 },
+    { "lat": 45.4426933, "lon": 12.3150569 },
+    { "lat": 45.4426580, "lon": 12.3150556 },
+    { "lat": 45.4426322, "lon": 12.3150482 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "foot": "yes",
+    "handrail": "both",
+    "highway": "cycleway",
+    "horse": "no",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "wood",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 353144502,
+  "bounds": {
+    "minlat": 50.6295868,
+    "minlon": 5.5783430,
+    "maxlat": 50.6296425,
+    "maxlon": 5.5786289
+  },
+  "geometry": [
+    { "lat": 50.6295868, "lon": 5.5783430 },
+    { "lat": 50.6296425, "lon": 5.5786289 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "carriageway_ref": "155",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "ref": "N90",
+    "sidewalk:left": "yes",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 353144503,
+  "bounds": {
+    "minlat": 50.6295512,
+    "minlon": 5.5779769,
+    "maxlat": 50.6295868,
+    "maxlon": 5.5783430
+  },
+  "geometry": [
+    { "lat": 50.6295512, "lon": 5.5779769 },
+    { "lat": 50.6295868, "lon": 5.5783430 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "destination:colour:lanes": "white;white|green;;;white;white|;;white",
+    "destination:lanes": "Centre;Longdoz|Luxembourg;Bastogne;Chênée;Vennes;Fétinne|Dinant;Marche;Belle île",
+    "highway": "primary",
+    "lanes": "3",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "ref": "N30",
+    "sidewalk:left": "yes",
+    "surface": "asphalt",
+    "toll:hgv": "yes",
+    "turn:lanes": "slight_left|through|right"
+  }
+},
+{
+  "type": "way",
+  "id": 368855366,
+  "bounds": {
+    "minlat": 50.6377536,
+    "minlon": 5.5869137,
+    "maxlat": 50.6382556,
+    "maxlon": 5.5878171
+  },
+  "geometry": [
+    { "lat": 50.6380432, "lon": 5.5869137 },
+    { "lat": 50.6381441, "lon": 5.5870089 },
+    { "lat": 50.6382556, "lon": 5.5871120 },
+    { "lat": 50.6379492, "lon": 5.5878171 },
+    { "lat": 50.6378412, "lon": 5.5877121 },
+    { "lat": 50.6377536, "lon": 5.5875905 },
+    { "lat": 50.6380432, "lon": 5.5869137 }
+  ],
+  "tags": {
+    "bridge:structure": "beam",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont d'Amercœur"
+  }
+},
+{
+  "type": "way",
+  "id": 368855367,
+  "bounds": {
+    "minlat": 50.6378412,
+    "minlon": 5.5870089,
+    "maxlat": 50.6381441,
+    "maxlon": 5.5877121
+  },
+  "geometry": [
+    { "lat": 50.6381441, "lon": 5.5870089 },
+    { "lat": 50.6378510, "lon": 5.5876893 },
+    { "lat": 50.6378441, "lon": 5.5877055 },
+    { "lat": 50.6378412, "lon": 5.5877121 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "lane",
+    "highway": "primary",
+    "lanes": "5",
+    "lanes:backward": "2",
+    "lanes:forward": "3",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont d'Amercœur",
+    "name:etymology:wikidata": "Q2842792",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "ref": "N3",
+    "surface": "asphalt",
+    "turn:lanes:backward": "left|none",
+    "turn:lanes:forward": "left|through|right"
+  }
+},
+{
+  "type": "way",
+  "id": 382923052,
+  "bounds": {
+    "minlat": 50.6378130,
+    "minlon": 5.5776443,
+    "maxlat": 50.6378499,
+    "maxlon": 5.5777696
+  },
+  "geometry": [
+    { "lat": 50.6378499, "lon": 5.5776443 },
+    { "lat": 50.6378130, "lon": 5.5777696 }
+  ],
+  "tags": {
+    "bicycle:lanes:forward": "no|no|designated",
+    "bridge": "yes",
+    "bus:lanes:forward": "yes|yes|designated",
+    "change:lanes:forward": "not_left|not_right|no",
+    "cycleway:lane": "pictogram",
+    "cycleway:left": "shared_lane",
+    "cycleway:right": "share_busway",
+    "highway": "tertiary",
+    "lanes": "4",
+    "lanes:backward": "1",
+    "lanes:bus:forward": "1",
+    "lanes:forward": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "name:etymology:wikidata": "Q9696",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "turn:lanes:forward": "through|through|",
+    "wikidata": "Q2351704",
+    "wikimedia_commons": "Category:Pont Kennedy (Liège)",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 442480436,
+  "bounds": {
+    "minlat": 45.4695203,
+    "minlon": 12.2588557,
+    "maxlat": 45.4708753,
+    "maxlon": 12.2637281
+  },
+  "geometry": [
+    { "lat": 45.4707976, "lon": 12.2588557 },
+    { "lat": 45.4708535, "lon": 12.2589317 },
+    { "lat": 45.4708753, "lon": 12.2589613 },
+    { "lat": 45.4708644, "lon": 12.2589947 },
+    { "lat": 45.4706482, "lon": 12.2596740 },
+    { "lat": 45.4704619, "lon": 12.2602775 },
+    { "lat": 45.4704206, "lon": 12.2604706 },
+    { "lat": 45.4703316, "lon": 12.2608381 },
+    { "lat": 45.4701549, "lon": 12.2614667 },
+    { "lat": 45.4697809, "lon": 12.2628224 },
+    { "lat": 45.4695203, "lon": 12.2637281 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "description": "tratto della ciclabile Mestre - Venezia, completata la segnaletica orizzontale è di fatto aperto al transito.",
+    "foot": "no",
+    "highway": "cycleway",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 450247364,
+  "bounds": {
+    "minlat": 45.4403533,
+    "minlon": 12.3060745,
+    "maxlat": 45.4404281,
+    "maxlon": 12.3061336
+  },
+  "geometry": [
+    { "lat": 45.4404281, "lon": 12.3061336 },
+    { "lat": 45.4403588, "lon": 12.3060745 },
+    { "lat": 45.4403533, "lon": 12.3060882 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 450261871,
+  "bounds": {
+    "minlat": 45.4422601,
+    "minlon": 12.3095127,
+    "maxlat": 45.4423135,
+    "maxlon": 12.3095586
+  },
+  "geometry": [
+    { "lat": 45.4423135, "lon": 12.3095586 },
+    { "lat": 45.4422726, "lon": 12.3095234 },
+    { "lat": 45.4422601, "lon": 12.3095127 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "cycleway": "crossing",
+    "foot": "designated",
+    "highway": "cycleway",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 450261877,
+  "bounds": {
+    "minlat": 45.4406645,
+    "minlon": 12.3124862,
+    "maxlat": 45.4413363,
+    "maxlon": 12.3151305
+  },
+  "geometry": [
+    { "lat": 45.4413363, "lon": 12.3151305 },
+    { "lat": 45.4413313, "lon": 12.3150833 },
+    { "lat": 45.4413177, "lon": 12.3150417 },
+    { "lat": 45.4412087, "lon": 12.3149250 },
+    { "lat": 45.4411114, "lon": 12.3147802 },
+    { "lat": 45.4410203, "lon": 12.3146526 },
+    { "lat": 45.4409365, "lon": 12.3144635 },
+    { "lat": 45.4408918, "lon": 12.3143468 },
+    { "lat": 45.4408356, "lon": 12.3141533 },
+    { "lat": 45.4408311, "lon": 12.3141376 },
+    { "lat": 45.4407794, "lon": 12.3138452 },
+    { "lat": 45.4407601, "lon": 12.3136568 },
+    { "lat": 45.4407361, "lon": 12.3133020 },
+    { "lat": 45.4407281, "lon": 12.3132191 },
+    { "lat": 45.4407104, "lon": 12.3131331 },
+    { "lat": 45.4406903, "lon": 12.3130826 },
+    { "lat": 45.4406645, "lon": 12.3130402 },
+    { "lat": 45.4406725, "lon": 12.3130068 },
+    { "lat": 45.4406774, "lon": 12.3129867 },
+    { "lat": 45.4406816, "lon": 12.3129714 },
+    { "lat": 45.4406924, "lon": 12.3129560 },
+    { "lat": 45.4407443, "lon": 12.3128888 },
+    { "lat": 45.4407809, "lon": 12.3128338 },
+    { "lat": 45.4407448, "lon": 12.3127811 },
+    { "lat": 45.4407281, "lon": 12.3127294 },
+    { "lat": 45.4407208, "lon": 12.3126733 },
+    { "lat": 45.4407224, "lon": 12.3126148 },
+    { "lat": 45.4407482, "lon": 12.3125483 },
+    { "lat": 45.4407683, "lon": 12.3125116 },
+    { "lat": 45.4408079, "lon": 12.3124862 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 479313213,
+  "bounds": {
+    "minlat": 45.4423075,
+    "minlon": 12.3081512,
+    "maxlat": 45.4426863,
+    "maxlon": 12.3088129
+  },
+  "geometry": [
+    { "lat": 45.4423075, "lon": 12.3087648 },
+    { "lat": 45.4423624, "lon": 12.3088129 },
+    { "lat": 45.4424087, "lon": 12.3087951 },
+    { "lat": 45.4426159, "lon": 12.3083044 },
+    { "lat": 45.4426437, "lon": 12.3082440 },
+    { "lat": 45.4426863, "lon": 12.3081512 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 479313214,
+  "bounds": {
+    "minlat": 45.4422768,
+    "minlon": 12.3077955,
+    "maxlat": 45.4426863,
+    "maxlon": 12.3081512
+  },
+  "geometry": [
+    { "lat": 45.4422768, "lon": 12.3077955 },
+    { "lat": 45.4426863, "lon": 12.3081512 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "check_date:surface": "2025-09-30",
+    "cycleway:surface": "concrete",
+    "foot": "designated",
+    "footway:surface": "concrete",
+    "highway": "cycleway",
+    "oneway": "no",
+    "segregated": "yes",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 559390061,
+  "bounds": {
+    "minlat": 50.6323464,
+    "minlon": 5.5721353,
+    "maxlat": 50.6327086,
+    "maxlon": 5.5738660
+  },
+  "geometry": [
+    { "lat": 50.6327086, "lon": 5.5721839 },
+    { "lat": 50.6326365, "lon": 5.5729519 },
+    { "lat": 50.6325514, "lon": 5.5738660 },
+    { "lat": 50.6325239, "lon": 5.5738596 },
+    { "lat": 50.6324514, "lon": 5.5738427 },
+    { "lat": 50.6323680, "lon": 5.5738232 },
+    { "lat": 50.6323464, "lon": 5.5738182 },
+    { "lat": 50.6324293, "lon": 5.5729352 },
+    { "lat": 50.6325043, "lon": 5.5721353 },
+    { "lat": 50.6325264, "lon": 5.5721406 },
+    { "lat": 50.6326102, "lon": 5.5721605 },
+    { "lat": 50.6326866, "lon": 5.5721786 },
+    { "lat": 50.6327086, "lon": 5.5721839 }
+  ],
+  "tags": {
+    "bridge:structure": "humpback",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont du Roi Albert",
+    "wikidata": "Q3396449",
+    "wikimedia_commons": "Category:Pont Albert 1er (Liège)",
+    "wikipedia": "fr:Pont Albert Ier"
+  }
+},
+{
+  "type": "way",
+  "id": 566288333,
+  "bounds": {
+    "minlat": 50.6205877,
+    "minlon": 5.5781743,
+    "maxlat": 50.6212272,
+    "maxlon": 5.5806483
+  },
+  "geometry": [
+    { "lat": 50.6205877, "lon": 5.5782458 },
+    { "lat": 50.6206665, "lon": 5.5786419 },
+    { "lat": 50.6207344, "lon": 5.5789831 },
+    { "lat": 50.6207173, "lon": 5.5789919 },
+    { "lat": 50.6207053, "lon": 5.5790057 },
+    { "lat": 50.6207008, "lon": 5.5790280 },
+    { "lat": 50.6207054, "lon": 5.5790503 },
+    { "lat": 50.6207175, "lon": 5.5790640 },
+    { "lat": 50.6207323, "lon": 5.5790639 },
+    { "lat": 50.6207494, "lon": 5.5790551 },
+    { "lat": 50.6208258, "lon": 5.5794218 },
+    { "lat": 50.6209121, "lon": 5.5798358 },
+    { "lat": 50.6208950, "lon": 5.5798446 },
+    { "lat": 50.6208836, "lon": 5.5798578 },
+    { "lat": 50.6208793, "lon": 5.5798790 },
+    { "lat": 50.6208837, "lon": 5.5799001 },
+    { "lat": 50.6208952, "lon": 5.5799131 },
+    { "lat": 50.6209093, "lon": 5.5799131 },
+    { "lat": 50.6209264, "lon": 5.5799042 },
+    { "lat": 50.6209655, "lon": 5.5800994 },
+    { "lat": 50.6210757, "lon": 5.5806483 },
+    { "lat": 50.6210933, "lon": 5.5806395 },
+    { "lat": 50.6211533, "lon": 5.5806095 },
+    { "lat": 50.6212107, "lon": 5.5805809 },
+    { "lat": 50.6212272, "lon": 5.5805727 },
+    { "lat": 50.6211164, "lon": 5.5800244 },
+    { "lat": 50.6210764, "lon": 5.5798261 },
+    { "lat": 50.6210935, "lon": 5.5798172 },
+    { "lat": 50.6211049, "lon": 5.5798040 },
+    { "lat": 50.6211093, "lon": 5.5797827 },
+    { "lat": 50.6211048, "lon": 5.5797615 },
+    { "lat": 50.6210933, "lon": 5.5797484 },
+    { "lat": 50.6210791, "lon": 5.5797485 },
+    { "lat": 50.6210621, "lon": 5.5797573 },
+    { "lat": 50.6209661, "lon": 5.5792968 },
+    { "lat": 50.6209007, "lon": 5.5789831 },
+    { "lat": 50.6209178, "lon": 5.5789742 },
+    { "lat": 50.6209302, "lon": 5.5789599 },
+    { "lat": 50.6209350, "lon": 5.5789368 },
+    { "lat": 50.6209302, "lon": 5.5789137 },
+    { "lat": 50.6209177, "lon": 5.5788995 },
+    { "lat": 50.6209022, "lon": 5.5788996 },
+    { "lat": 50.6208852, "lon": 5.5789084 },
+    { "lat": 50.6208143, "lon": 5.5785576 },
+    { "lat": 50.6207370, "lon": 5.5781743 },
+    { "lat": 50.6207223, "lon": 5.5781813 },
+    { "lat": 50.6206605, "lon": 5.5782101 },
+    { "lat": 50.6206010, "lon": 5.5782394 },
+    { "lat": 50.6205877, "lon": 5.5782458 }
+  ],
+  "tags": {
+    "alt_name": "Pont aux anges",
+    "architect": "Paul Demany",
+    "architect:wikidata": "Q3371036",
+    "architect:wikipedia": "fr:Paul Demany",
+    "bridge:structure": "beam",
+    "bridge:support": "pier",
+    "heritage": "4",
+    "heritage:operator": "clt",
+    "heritage:ref": "62063-CLT-0165-01",
+    "heritage:since": "1994",
+    "heritage:website": "http://lampspw.wallonie.be/dgo4/site_thema/index.php/dossier/view/BC_PAT/62063-CLT-0165-01",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont de Fragnée",
+    "start_date": "1905",
+    "wikidata": "Q2408222",
+    "wikimedia_commons": "Category:Pont de Fragnée (Liège)",
+    "wikipedia": "fr:Pont de Fragnée",
+    "year_of_construction": "1901 - 1904"
+  }
+},
+{
+  "type": "way",
+  "id": 597743868,
+  "bounds": {
+    "minlat": 45.4418629,
+    "minlon": 12.3150519,
+    "maxlat": 45.4425806,
+    "maxlon": 12.3151186
+  },
+  "geometry": [
+    { "lat": 45.4425806, "lon": 12.3150519 },
+    { "lat": 45.4425425, "lon": 12.3150740 },
+    { "lat": 45.4424068, "lon": 12.3150837 },
+    { "lat": 45.4419232, "lon": 12.3151186 },
+    { "lat": 45.4418629, "lon": 12.3150989 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "foot": "no",
+    "handrail": "both",
+    "highway": "cycleway",
+    "horse": "no",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "wood",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597743874,
+  "bounds": {
+    "minlat": 45.4425806,
+    "minlon": 12.3150482,
+    "maxlat": 45.4426322,
+    "maxlon": 12.3150519
+  },
+  "geometry": [
+    { "lat": 45.4426322, "lon": 12.3150482 },
+    { "lat": 45.4425806, "lon": 12.3150519 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "foot": "yes",
+    "handrail": "right",
+    "highway": "cycleway",
+    "horse": "no",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile Mestre - Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "wood",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597743879,
+  "bounds": {
+    "minlat": 45.4418138,
+    "minlon": 12.3150989,
+    "maxlat": 45.4418629,
+    "maxlon": 12.3150993
+  },
+  "geometry": [
+    { "lat": 45.4418629, "lon": 12.3150989 },
+    { "lat": 45.4418138, "lon": 12.3150993 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "handrail": "right",
+    "highway": "cycleway",
+    "horse": "no",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile Mestre - Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "wood",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597743885,
+  "bounds": {
+    "minlat": 45.4414680,
+    "minlon": 12.3149932,
+    "maxlat": 45.4418138,
+    "maxlon": 12.3151270
+  },
+  "geometry": [
+    { "lat": 45.4418138, "lon": 12.3150993 },
+    { "lat": 45.4417709, "lon": 12.3151270 },
+    { "lat": 45.4417182, "lon": 12.3151220 },
+    { "lat": 45.4416260, "lon": 12.3150858 },
+    { "lat": 45.4415552, "lon": 12.3150462 },
+    { "lat": 45.4414859, "lon": 12.3149932 },
+    { "lat": 45.4414680, "lon": 12.3150392 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "yes",
+    "handrail": "both",
+    "highway": "cycleway",
+    "horse": "no",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "wood",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861362,
+  "bounds": {
+    "minlat": 45.4685028,
+    "minlon": 12.2648017,
+    "maxlat": 45.4691784,
+    "maxlon": 12.2657623
+  },
+  "geometry": [
+    { "lat": 45.4691784, "lon": 12.2648205 },
+    { "lat": 45.4691523, "lon": 12.2648017 },
+    { "lat": 45.4691016, "lon": 12.2649688 },
+    { "lat": 45.4690219, "lon": 12.2651287 },
+    { "lat": 45.4689458, "lon": 12.2652430 },
+    { "lat": 45.4688899, "lon": 12.2653116 },
+    { "lat": 45.4687692, "lon": 12.2654452 },
+    { "lat": 45.4686891, "lon": 12.2655151 },
+    { "lat": 45.4685946, "lon": 12.2655726 },
+    { "lat": 45.4685217, "lon": 12.2655919 },
+    { "lat": 45.4685055, "lon": 12.2656186 },
+    { "lat": 45.4685028, "lon": 12.2656931 },
+    { "lat": 45.4685075, "lon": 12.2657623 }
+  ],
+  "tags": {
+    "access": "yes",
+    "bicycle": "designated",
+    "foot": "no",
+    "highway": "cycleway",
+    "horse": "no",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861363,
+  "bounds": {
+    "minlat": 45.4663877,
+    "minlon": 12.2657623,
+    "maxlat": 45.4685120,
+    "maxlon": 12.2673820
+  },
+  "geometry": [
+    { "lat": 45.4685075, "lon": 12.2657623 },
+    { "lat": 45.4685120, "lon": 12.2658379 },
+    { "lat": 45.4682567, "lon": 12.2658857 },
+    { "lat": 45.4682135, "lon": 12.2658985 },
+    { "lat": 45.4680859, "lon": 12.2659249 },
+    { "lat": 45.4680483, "lon": 12.2659331 },
+    { "lat": 45.4673550, "lon": 12.2660501 },
+    { "lat": 45.4670689, "lon": 12.2661186 },
+    { "lat": 45.4666806, "lon": 12.2661929 },
+    { "lat": 45.4666258, "lon": 12.2662692 },
+    { "lat": 45.4665934, "lon": 12.2663212 },
+    { "lat": 45.4665536, "lon": 12.2663736 },
+    { "lat": 45.4665013, "lon": 12.2663975 },
+    { "lat": 45.4664789, "lon": 12.2664230 },
+    { "lat": 45.4664606, "lon": 12.2664562 },
+    { "lat": 45.4664178, "lon": 12.2665798 },
+    { "lat": 45.4663946, "lon": 12.2666781 },
+    { "lat": 45.4663877, "lon": 12.2667725 },
+    { "lat": 45.4663933, "lon": 12.2668657 },
+    { "lat": 45.4664719, "lon": 12.2673564 },
+    { "lat": 45.4664649, "lon": 12.2673777 },
+    { "lat": 45.4664523, "lon": 12.2673820 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "cycleway",
+    "horse": "no",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861364,
+  "bounds": {
+    "minlat": 45.4664202,
+    "minlon": 12.2673820,
+    "maxlat": 45.4664523,
+    "maxlon": 12.2673938
+  },
+  "geometry": [
+    { "lat": 45.4664523, "lon": 12.2673820 },
+    { "lat": 45.4664202, "lon": 12.2673938 }
+  ],
+  "tags": {
+    "bicycle": "dismount",
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "yes",
+    "name": "Ciclabile Mestre-Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861366,
+  "bounds": {
+    "minlat": 45.4663659,
+    "minlon": 12.2674039,
+    "maxlat": 45.4664017,
+    "maxlon": 12.2676481
+  },
+  "geometry": [
+    { "lat": 45.4663854, "lon": 12.2674039 },
+    { "lat": 45.4663726, "lon": 12.2674083 },
+    { "lat": 45.4663659, "lon": 12.2674257 },
+    { "lat": 45.4664017, "lon": 12.2676481 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "yes",
+    "name": "Ciclabileper Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861369,
+  "bounds": {
+    "minlat": 45.4664017,
+    "minlon": 12.2676481,
+    "maxlat": 45.4664153,
+    "maxlon": 12.2678450
+  },
+  "geometry": [
+    { "lat": 45.4664017, "lon": 12.2676481 },
+    { "lat": 45.4664063, "lon": 12.2677489 },
+    { "lat": 45.4664153, "lon": 12.2678450 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "yes",
+    "name": "Ciclabile Mestre-Venezia",
+    "oneway": "no",
+    "path": "crossing",
+    "segregated": "yes",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 597861373,
+  "bounds": {
+    "minlat": 45.4640584,
+    "minlon": 12.2678450,
+    "maxlat": 45.4676465,
+    "maxlon": 12.2801520
+  },
+  "geometry": [
+    { "lat": 45.4664153, "lon": 12.2678450 },
+    { "lat": 45.4664338, "lon": 12.2679720 },
+    { "lat": 45.4664781, "lon": 12.2681401 },
+    { "lat": 45.4664957, "lon": 12.2682504 },
+    { "lat": 45.4665273, "lon": 12.2684517 },
+    { "lat": 45.4666688, "lon": 12.2692765 },
+    { "lat": 45.4667445, "lon": 12.2697108 },
+    { "lat": 45.4667779, "lon": 12.2699321 },
+    { "lat": 45.4668160, "lon": 12.2701339 },
+    { "lat": 45.4668889, "lon": 12.2703599 },
+    { "lat": 45.4669452, "lon": 12.2704760 },
+    { "lat": 45.4670138, "lon": 12.2705839 },
+    { "lat": 45.4671115, "lon": 12.2707156 },
+    { "lat": 45.4671944, "lon": 12.2707894 },
+    { "lat": 45.4672930, "lon": 12.2708585 },
+    { "lat": 45.4674096, "lon": 12.2709184 },
+    { "lat": 45.4674883, "lon": 12.2709874 },
+    { "lat": 45.4675439, "lon": 12.2710652 },
+    { "lat": 45.4675976, "lon": 12.2711805 },
+    { "lat": 45.4676303, "lon": 12.2713215 },
+    { "lat": 45.4676465, "lon": 12.2714378 },
+    { "lat": 45.4676350, "lon": 12.2715287 },
+    { "lat": 45.4676162, "lon": 12.2716462 },
+    { "lat": 45.4675722, "lon": 12.2717447 },
+    { "lat": 45.4675059, "lon": 12.2718593 },
+    { "lat": 45.4674403, "lon": 12.2719744 },
+    { "lat": 45.4672989, "lon": 12.2722351 },
+    { "lat": 45.4669678, "lon": 12.2728184 },
+    { "lat": 45.4668021, "lon": 12.2731151 },
+    { "lat": 45.4666251, "lon": 12.2733895 },
+    { "lat": 45.4665588, "lon": 12.2735194 },
+    { "lat": 45.4662781, "lon": 12.2739439 },
+    { "lat": 45.4661093, "lon": 12.2742698 },
+    { "lat": 45.4660452, "lon": 12.2743458 },
+    { "lat": 45.4660145, "lon": 12.2744368 },
+    { "lat": 45.4659798, "lon": 12.2745129 },
+    { "lat": 45.4659142, "lon": 12.2746367 },
+    { "lat": 45.4657677, "lon": 12.2749443 },
+    { "lat": 45.4656170, "lon": 12.2752868 },
+    { "lat": 45.4654985, "lon": 12.2756351 },
+    { "lat": 45.4654011, "lon": 12.2759399 },
+    { "lat": 45.4653106, "lon": 12.2762469 },
+    { "lat": 45.4652180, "lon": 12.2765867 },
+    { "lat": 45.4651411, "lon": 12.2769420 },
+    { "lat": 45.4650771, "lon": 12.2772968 },
+    { "lat": 45.4650075, "lon": 12.2777279 },
+    { "lat": 45.4649586, "lon": 12.2779894 },
+    { "lat": 45.4648977, "lon": 12.2782386 },
+    { "lat": 45.4648281, "lon": 12.2784826 },
+    { "lat": 45.4647742, "lon": 12.2786513 },
+    { "lat": 45.4647162, "lon": 12.2788086 },
+    { "lat": 45.4645733, "lon": 12.2790982 },
+    { "lat": 45.4644850, "lon": 12.2792675 },
+    { "lat": 45.4644596, "lon": 12.2793058 },
+    { "lat": 45.4644283, "lon": 12.2793426 },
+    { "lat": 45.4643265, "lon": 12.2794258 },
+    { "lat": 45.4643059, "lon": 12.2794482 },
+    { "lat": 45.4642534, "lon": 12.2795485 },
+    { "lat": 45.4642458, "lon": 12.2795975 },
+    { "lat": 45.4642442, "lon": 12.2796829 },
+    { "lat": 45.4642325, "lon": 12.2797131 },
+    { "lat": 45.4641904, "lon": 12.2797963 },
+    { "lat": 45.4641810, "lon": 12.2798369 },
+    { "lat": 45.4641645, "lon": 12.2799146 },
+    { "lat": 45.4641520, "lon": 12.2799505 },
+    { "lat": 45.4641518, "lon": 12.2799542 },
+    { "lat": 45.4640869, "lon": 12.2801000 },
+    { "lat": 45.4640584, "lon": 12.2801520 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 602555570,
+  "bounds": {
+    "minlat": 44.8422574,
+    "minlon": 1.3497096,
+    "maxlat": 44.8422645,
+    "maxlon": 1.3497754
+  },
+  "geometry": [
+    { "lat": 44.8422574, "lon": 1.3497096 },
+    { "lat": 44.8422645, "lon": 1.3497754 }
+  ],
+  "tags": {
+    "highway": "service",
+    "service": "driveway",
+    "tunnel": "building_passage"
+  }
+},
+{
+  "type": "way",
+  "id": 611221620,
+  "bounds": {
+    "minlat": 45.4421491,
+    "minlon": 12.3088785,
+    "maxlat": 45.4423103,
+    "maxlon": 12.3094171
+  },
+  "geometry": [
+    { "lat": 45.4421491, "lon": 12.3094171 },
+    { "lat": 45.4423103, "lon": 12.3090428 },
+    { "lat": 45.4423080, "lon": 12.3089676 },
+    { "lat": 45.4422873, "lon": 12.3089140 },
+    { "lat": 45.4422568, "lon": 12.3088785 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 658131270,
+  "bounds": {
+    "minlat": 45.7645426,
+    "minlon": 6.0484848,
+    "maxlat": 45.7645492,
+    "maxlon": 6.0485899
+  },
+  "geometry": [
+    { "lat": 45.7645492, "lon": 6.0485899 },
+    { "lat": 45.7645426, "lon": 6.0484848 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "path",
+    "layer": "1",
+    "surface": "ground",
+    "width": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 668765879,
+  "bounds": {
+    "minlat": 44.8588301,
+    "minlon": 1.3469309,
+    "maxlat": 44.8620533,
+    "maxlon": 1.3500693
+  },
+  "geometry": [
+    { "lat": 44.8588301, "lon": 1.3469309 },
+    { "lat": 44.8620533, "lon": 1.3500693 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "foot": "yes",
+    "highway": "cycleway",
+    "horse": "no",
+    "lit": "24/7",
+    "loading_gauge": "TSI_GA",
+    "motor_vehicle": "no",
+    "name": "Voie Verte - Véloroute (en Tunnel Eclairé)",
+    "railway": "abandoned",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "tunnel": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 668765888,
+  "bounds": {
+    "minlat": 44.8585928,
+    "minlon": 1.3466551,
+    "maxlat": 44.8588301,
+    "maxlon": 1.3469309
+  },
+  "geometry": [
+    { "lat": 44.8585928, "lon": 1.3466551 },
+    { "lat": 44.8588301, "lon": 1.3469309 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "-1",
+    "loading_gauge": "TSI_GA",
+    "motor_vehicle": "no",
+    "railway": "abandoned",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "tunnel": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 692444486,
+  "bounds": {
+    "minlat": 45.4663854,
+    "minlon": 12.2673938,
+    "maxlat": 45.4664202,
+    "maxlon": 12.2674039
+  },
+  "geometry": [
+    { "lat": 45.4664202, "lon": 12.2673938 },
+    { "lat": 45.4663854, "lon": 12.2674039 }
+  ],
+  "tags": {
+    "bicycle": "dismount",
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "yes",
+    "name": "Ciclabile Mestre-Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 702918038,
+  "bounds": {
+    "minlat": 45.4694384,
+    "minlon": 12.2637281,
+    "maxlat": 45.4695203,
+    "maxlon": 12.2640273
+  },
+  "geometry": [
+    { "lat": 45.4695203, "lon": 12.2637281 },
+    { "lat": 45.4694384, "lon": 12.2640273 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "description": "tratto della ciclabile Mestre - Venezia, completata la segnaletica orizzontale è di fatto aperto al transito.",
+    "foot": "no",
+    "highway": "cycleway",
+    "layer": "1",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 702918039,
+  "bounds": {
+    "minlat": 45.4691784,
+    "minlon": 12.2640273,
+    "maxlat": 45.4694384,
+    "maxlon": 12.2648353
+  },
+  "geometry": [
+    { "lat": 45.4694384, "lon": 12.2640273 },
+    { "lat": 45.4692901, "lon": 12.2645605 },
+    { "lat": 45.4692004, "lon": 12.2648353 },
+    { "lat": 45.4691784, "lon": 12.2648205 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "description": "tratto della ciclabile Mestre - Venezia, completata la segnaletica orizzontale è di fatto aperto al transito.",
+    "foot": "no",
+    "highway": "cycleway",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 780443322,
+  "bounds": {
+    "minlat": 50.6295663,
+    "minlon": 5.5783430,
+    "maxlat": 50.6295868,
+    "maxlon": 5.5786381
+  },
+  "geometry": [
+    { "lat": 50.6295868, "lon": 5.5783430 },
+    { "lat": 50.6295663, "lon": 5.5786381 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "carriageway_ref": "158",
+    "foot": "no",
+    "highway": "primary_link",
+    "lanes": "1",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Quai Mativa",
+    "oneway": "yes",
+    "operator": "Société wallonne de Financement complémentaire des Infrastructures",
+    "owner": "Région wallonne",
+    "ref": "N90",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 794499547,
+  "bounds": {
+    "minlat": 45.4404803,
+    "minlon": 12.3061816,
+    "maxlat": 45.4422768,
+    "maxlon": 12.3077955
+  },
+  "geometry": [
+    { "lat": 45.4422768, "lon": 12.3077955 },
+    { "lat": 45.4422313, "lon": 12.3077560 },
+    { "lat": 45.4422300, "lon": 12.3076738 },
+    { "lat": 45.4420523, "lon": 12.3075284 },
+    { "lat": 45.4419454, "lon": 12.3074410 },
+    { "lat": 45.4416149, "lon": 12.3071538 },
+    { "lat": 45.4412888, "lon": 12.3068643 },
+    { "lat": 45.4408334, "lon": 12.3064673 },
+    { "lat": 45.4404803, "lon": 12.3061816 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "segregated": "yes",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 821868760,
+  "bounds": {
+    "minlat": 45.4466393,
+    "minlon": 12.3089966,
+    "maxlat": 45.4478277,
+    "maxlon": 12.3107219
+  },
+  "geometry": [
+    { "lat": 45.4466393, "lon": 12.3107219 },
+    { "lat": 45.4467810, "lon": 12.3105196 },
+    { "lat": 45.4473039, "lon": 12.3098301 },
+    { "lat": 45.4474469, "lon": 12.3096155 },
+    { "lat": 45.4478030, "lon": 12.3089966 },
+    { "lat": 45.4478277, "lon": 12.3090376 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "no",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 896921131,
+  "bounds": {
+    "minlat": 50.6295868,
+    "minlon": 5.5783430,
+    "maxlat": 50.6296153,
+    "maxlon": 5.5786322
+  },
+  "geometry": [
+    { "lat": 50.6295868, "lon": 5.5783430 },
+    { "lat": 50.6296153, "lon": 5.5786322 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "maxspeed": "50",
+    "name": "Pont des Vennes",
+    "oneway": "yes",
+    "ref": "N30",
+    "surface": "asphalt",
+    "toll:hgv": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 898631457,
+  "bounds": {
+    "minlat": 45.4405253,
+    "minlon": 12.3157274,
+    "maxlat": 45.4407966,
+    "maxlon": 12.3159686
+  },
+  "geometry": [
+    { "lat": 45.4407966, "lon": 12.3157274 },
+    { "lat": 45.4407505, "lon": 12.3157631 },
+    { "lat": 45.4405253, "lon": 12.3159686 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2022-12-20",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "segregated": "no",
+    "surface": "paved",
+    "surface:note": "Pavimentazione in porfido"
+  }
+},
+{
+  "type": "way",
+  "id": 898631472,
+  "bounds": {
+    "minlat": 45.4397051,
+    "minlon": 12.3159686,
+    "maxlat": 45.4405253,
+    "maxlon": 12.3167534
+  },
+  "geometry": [
+    { "lat": 45.4405253, "lon": 12.3159686 },
+    { "lat": 45.4402576, "lon": 12.3162089 },
+    { "lat": 45.4399297, "lon": 12.3165234 },
+    { "lat": 45.4397051, "lon": 12.3167534 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "segregated": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 898914815,
+  "bounds": {
+    "minlat": 45.4407286,
+    "minlon": 12.3155451,
+    "maxlat": 45.4407907,
+    "maxlon": 12.3157117
+  },
+  "geometry": [
+    { "lat": 45.4407907, "lon": 12.3157117 },
+    { "lat": 45.4407852, "lon": 12.3156968 },
+    { "lat": 45.4407837, "lon": 12.3156928 },
+    { "lat": 45.4407464, "lon": 12.3155927 },
+    { "lat": 45.4407437, "lon": 12.3155854 },
+    { "lat": 45.4407286, "lon": 12.3155451 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2022-12-20",
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "cycleway": "crossing",
+    "cycleway:surface": "asphalt",
+    "cycleway:width": "4",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "level": "1",
+    "path": "crossing",
+    "segregated": "yes",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 898980934,
+  "bounds": {
+    "minlat": 45.4414492,
+    "minlon": 12.3150274,
+    "maxlat": 45.4414680,
+    "maxlon": 12.3150392
+  },
+  "geometry": [
+    { "lat": 45.4414680, "lon": 12.3150392 },
+    { "lat": 45.4414545, "lon": 12.3150274 },
+    { "lat": 45.4414492, "lon": 12.3150370 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "handrail": "both",
+    "highway": "cycleway",
+    "horse": "no",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Ciclabile per Venezia",
+    "oneway": "no",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 975900940,
+  "bounds": {
+    "minlat": 44.8421296,
+    "minlon": 1.3503625,
+    "maxlat": 44.8421315,
+    "maxlon": 1.3504326
+  },
+  "geometry": [
+    { "lat": 44.8421315, "lon": 1.3503625 },
+    { "lat": 44.8421296, "lon": 1.3504326 }
+  ],
+  "tags": {
+    "highway": "footway",
+    "layer": "-1",
+    "tunnel": "building_passage"
+  }
+},
+{
+  "type": "way",
+  "id": 981975302,
+  "bounds": {
+    "minlat": 50.6218031,
+    "minlon": 5.5805174,
+    "maxlat": 50.6233080,
+    "maxlon": 5.5810720
+  },
+  "geometry": [
+    { "lat": 50.6218031, "lon": 5.5810720 },
+    { "lat": 50.6219805, "lon": 5.5808457 },
+    { "lat": 50.6229317, "lon": 5.5807054 },
+    { "lat": 50.6230578, "lon": 5.5806692 },
+    { "lat": 50.6231638, "lon": 5.5806197 },
+    { "lat": 50.6233080, "lon": 5.5805174 },
+    { "lat": 50.6230567, "lon": 5.5808759 },
+    { "lat": 50.6229717, "lon": 5.5808995 },
+    { "lat": 50.6228843, "lon": 5.5809168 },
+    { "lat": 50.6226600, "lon": 5.5809501 },
+    { "lat": 50.6218391, "lon": 5.5810670 },
+    { "lat": 50.6218031, "lon": 5.5810720 }
+  ],
+  "tags": {
+    "bridge:structure": "beam",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont Gramme",
+    "official_name": "Pont du Square Gramme sur l'Ourthe"
+  }
+},
+{
+  "type": "way",
+  "id": 981975303,
+  "bounds": {
+    "minlat": 50.6214892,
+    "minlon": 5.5815275,
+    "maxlat": 50.6220495,
+    "maxlon": 5.5823167
+  },
+  "geometry": [
+    { "lat": 50.6219529, "lon": 5.5823167 },
+    { "lat": 50.6220495, "lon": 5.5821378 },
+    { "lat": 50.6215812, "lon": 5.5815275 },
+    { "lat": 50.6214892, "lon": 5.5817119 },
+    { "lat": 50.6219529, "lon": 5.5823167 }
+  ],
+  "tags": {
+    "bridge:structure": "beam",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont de Fétinne"
+  }
+},
+{
+  "type": "way",
+  "id": 981975304,
+  "bounds": {
+    "minlat": 50.6197364,
+    "minlon": 5.5861883,
+    "maxlat": 50.6208892,
+    "maxlon": 5.5867175
+  },
+  "geometry": [
+    { "lat": 50.6208892, "lon": 5.5865237 },
+    { "lat": 50.6208763, "lon": 5.5865696 },
+    { "lat": 50.6208527, "lon": 5.5866533 },
+    { "lat": 50.6208437, "lon": 5.5866853 },
+    { "lat": 50.6208382, "lon": 5.5867047 },
+    { "lat": 50.6208346, "lon": 5.5867175 },
+    { "lat": 50.6197364, "lon": 5.5864032 },
+    { "lat": 50.6197434, "lon": 5.5863788 },
+    { "lat": 50.6197590, "lon": 5.5863242 },
+    { "lat": 50.6197831, "lon": 5.5862398 },
+    { "lat": 50.6197978, "lon": 5.5861883 },
+    { "lat": 50.6208892, "lon": 5.5865237 }
+  ],
+  "tags": {
+    "bridge:structure": "truss",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont de Namur"
+  }
+},
+{
+  "type": "way",
+  "id": 1073238437,
+  "bounds": {
+    "minlat": 45.4407595,
+    "minlon": 12.3151305,
+    "maxlat": 45.4413433,
+    "maxlon": 12.3155082
+  },
+  "geometry": [
+    { "lat": 45.4407595, "lon": 12.3155082 },
+    { "lat": 45.4408507, "lon": 12.3154497 },
+    { "lat": 45.4409756, "lon": 12.3153771 },
+    { "lat": 45.4410171, "lon": 12.3153543 },
+    { "lat": 45.4411914, "lon": 12.3152738 },
+    { "lat": 45.4412851, "lon": 12.3152452 },
+    { "lat": 45.4413099, "lon": 12.3152342 },
+    { "lat": 45.4413262, "lon": 12.3152101 },
+    { "lat": 45.4413335, "lon": 12.3151831 },
+    { "lat": 45.4413363, "lon": 12.3151305 },
+    { "lat": 45.4413433, "lon": 12.3151310 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "segregated": "no",
+    "surface": "sett",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1097568575,
+  "bounds": {
+    "minlat": 45.7659686,
+    "minlon": 6.0531664,
+    "maxlat": 45.7660696,
+    "maxlon": 6.0531985
+  },
+  "geometry": [
+    { "lat": 45.7660696, "lon": 6.0531664 },
+    { "lat": 45.7659686, "lon": 6.0531985 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "path",
+    "horse": "yes",
+    "layer": "1",
+    "surface": "wood",
+    "width": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1097568578,
+  "bounds": {
+    "minlat": 45.7674215,
+    "minlon": 6.0517029,
+    "maxlat": 45.7674450,
+    "maxlon": 6.0517842
+  },
+  "geometry": [
+    { "lat": 45.7674450, "lon": 6.0517029 },
+    { "lat": 45.7674215, "lon": 6.0517842 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "path",
+    "horse": "yes",
+    "layer": "1",
+    "surface": "wood",
+    "width": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1106922444,
+  "bounds": {
+    "minlat": 45.7650335,
+    "minlon": 6.0545461,
+    "maxlat": 45.7651470,
+    "maxlon": 6.0545884
+  },
+  "geometry": [
+    { "lat": 45.7651470, "lon": 6.0545884 },
+    { "lat": 45.7650335, "lon": 6.0545461 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "path",
+    "horse": "yes",
+    "layer": "1",
+    "surface": "wood",
+    "width": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1163990397,
+  "bounds": {
+    "minlat": 45.4404281,
+    "minlon": 12.3061336,
+    "maxlat": 45.4404803,
+    "maxlon": 12.3061816
+  },
+  "geometry": [
+    { "lat": 45.4404281, "lon": 12.3061336 },
+    { "lat": 45.4404803, "lon": 12.3061816 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "yes",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 1167316665,
+  "bounds": {
+    "minlat": 50.6380784,
+    "minlon": 5.5765775,
+    "maxlat": 50.6381584,
+    "maxlon": 5.5767873
+  },
+  "geometry": [
+    { "lat": 50.6380784, "lon": 5.5767873 },
+    { "lat": 50.6381584, "lon": 5.5765775 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "shared_lane",
+    "cycleway:lane": "pictogram",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "oneway": "yes",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1190527114,
+  "bounds": {
+    "minlat": 50.6381584,
+    "minlon": 5.5762620,
+    "maxlat": 50.6382502,
+    "maxlon": 5.5765775
+  },
+  "geometry": [
+    { "lat": 50.6381584, "lon": 5.5765775 },
+    { "lat": 50.6382502, "lon": 5.5762620 }
+  ],
+  "tags": {
+    "bicycle": "use_sidepath",
+    "bridge": "yes",
+    "cycleway": "separate",
+    "destination": "Autres Directions;Huy;Centre",
+    "destination:colour": "green;;white",
+    "destination:symbol": "motorway;;",
+    "highway": "tertiary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "oneway": "yes",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1190527121,
+  "bounds": {
+    "minlat": 50.6379533,
+    "minlon": 5.5767873,
+    "maxlat": 50.6380784,
+    "maxlon": 5.5772609
+  },
+  "geometry": [
+    { "lat": 50.6380784, "lon": 5.5767873 },
+    { "lat": 50.6379533, "lon": 5.5772609 }
+  ],
+  "tags": {
+    "bicycle:lanes:forward": "no|designated",
+    "bridge": "yes",
+    "bus:lanes:forward": "yes|designated",
+    "cycleway:lane": "pictogram",
+    "cycleway:left": "shared_lane",
+    "cycleway:right": "share_busway",
+    "highway": "tertiary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:bus:forward": "1",
+    "lanes:forward": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "oneway": "no",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1190527122,
+  "bounds": {
+    "minlat": 50.6381556,
+    "minlon": 5.5762219,
+    "maxlat": 50.6381902,
+    "maxlon": 5.5763567
+  },
+  "geometry": [
+    { "lat": 50.6381902, "lon": 5.5762219 },
+    { "lat": 50.6381556, "lon": 5.5763567 }
+  ],
+  "tags": {
+    "bicycle:lanes": "use_sidepath|designated",
+    "bridge": "yes",
+    "bus:lanes": "yes|designated",
+    "cycleway": "separate",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "oneway": "yes",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1190527124,
+  "bounds": {
+    "minlat": 50.6376463,
+    "minlon": 5.5761110,
+    "maxlat": 50.6384056,
+    "maxlon": 5.5778537
+  },
+  "geometry": [
+    { "lat": 50.6376470, "lon": 5.5776495 },
+    { "lat": 50.6376463, "lon": 5.5775751 },
+    { "lat": 50.6376850, "lon": 5.5775629 },
+    { "lat": 50.6377255, "lon": 5.5775284 },
+    { "lat": 50.6377550, "lon": 5.5774757 },
+    { "lat": 50.6377976, "lon": 5.5773353 },
+    { "lat": 50.6378923, "lon": 5.5769822 },
+    { "lat": 50.6380227, "lon": 5.5764960 },
+    { "lat": 50.6380300, "lon": 5.5764688 },
+    { "lat": 50.6380539, "lon": 5.5763672 },
+    { "lat": 50.6380662, "lon": 5.5762989 },
+    { "lat": 50.6380677, "lon": 5.5762334 },
+    { "lat": 50.6380532, "lon": 5.5761635 },
+    { "lat": 50.6380261, "lon": 5.5761110 },
+    { "lat": 50.6381050, "lon": 5.5761645 },
+    { "lat": 50.6381584, "lon": 5.5762023 },
+    { "lat": 50.6381902, "lon": 5.5762219 },
+    { "lat": 50.6382502, "lon": 5.5762620 },
+    { "lat": 50.6382738, "lon": 5.5762755 },
+    { "lat": 50.6383076, "lon": 5.5762985 },
+    { "lat": 50.6383243, "lon": 5.5763090 },
+    { "lat": 50.6384056, "lon": 5.5763600 },
+    { "lat": 50.6383595, "lon": 5.5763672 },
+    { "lat": 50.6383208, "lon": 5.5763944 },
+    { "lat": 50.6382877, "lon": 5.5764405 },
+    { "lat": 50.6382504, "lon": 5.5765382 },
+    { "lat": 50.6382212, "lon": 5.5766262 },
+    { "lat": 50.6382180, "lon": 5.5766359 },
+    { "lat": 50.6380873, "lon": 5.5771256 },
+    { "lat": 50.6379941, "lon": 5.5774752 },
+    { "lat": 50.6379835, "lon": 5.5775251 },
+    { "lat": 50.6379687, "lon": 5.5775884 },
+    { "lat": 50.6379568, "lon": 5.5776606 },
+    { "lat": 50.6379561, "lon": 5.5777261 },
+    { "lat": 50.6379694, "lon": 5.5777927 },
+    { "lat": 50.6379293, "lon": 5.5778537 },
+    { "lat": 50.6379069, "lon": 5.5778375 },
+    { "lat": 50.6378130, "lon": 5.5777696 },
+    { "lat": 50.6377383, "lon": 5.5777138 },
+    { "lat": 50.6377018, "lon": 5.5776892 },
+    { "lat": 50.6376470, "lon": 5.5776495 }
+  ],
+  "tags": {
+    "bridge:structure": "humpback",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont Kennedy",
+    "name:etymology:wikidata": "Q9696",
+    "wikidata": "Q2351704",
+    "wikimedia_commons": "Category:Pont Kennedy (Liège)"
+  }
+},
+{
+  "type": "way",
+  "id": 1190591363,
+  "bounds": {
+    "minlat": 50.6378499,
+    "minlon": 5.5772609,
+    "maxlat": 50.6379533,
+    "maxlon": 5.5776443
+  },
+  "geometry": [
+    { "lat": 50.6379533, "lon": 5.5772609 },
+    { "lat": 50.6378499, "lon": 5.5776443 }
+  ],
+  "tags": {
+    "bicycle:lanes:forward": "no|no|designated",
+    "bridge": "yes",
+    "bus:lanes:forward": "yes|yes|designated",
+    "cycleway:lane": "pictogram",
+    "cycleway:left": "shared_lane",
+    "cycleway:right": "share_busway",
+    "highway": "tertiary",
+    "lanes": "4",
+    "lanes:backward": "1",
+    "lanes:bus:forward": "1",
+    "lanes:forward": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "turn:lanes:forward": "through|through|right",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1190591364,
+  "bounds": {
+    "minlat": 50.6377383,
+    "minlon": 5.5776443,
+    "maxlat": 50.6378499,
+    "maxlon": 5.5777138
+  },
+  "geometry": [
+    { "lat": 50.6378499, "lon": 5.5776443 },
+    { "lat": 50.6377383, "lon": 5.5777138 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "lane_markings": "no",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Quai Marcellis",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "ref:BE-WAL-icar": "7730134",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1190591365,
+  "bounds": {
+    "minlat": 50.6378499,
+    "minlon": 5.5776443,
+    "maxlat": 50.6379069,
+    "maxlon": 5.5778375
+  },
+  "geometry": [
+    { "lat": 50.6379069, "lon": 5.5778375 },
+    { "lat": 50.6378752, "lon": 5.5777406 },
+    { "lat": 50.6378499, "lon": 5.5776443 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "service",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Quai Édouard Van Beneden",
+    "oneway": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1211264841,
+  "bounds": {
+    "minlat": 45.4679217,
+    "minlon": 12.2807723,
+    "maxlat": 45.4685432,
+    "maxlon": 12.2823897
+  },
+  "geometry": [
+    { "lat": 45.4685432, "lon": 12.2823897 },
+    { "lat": 45.4683670, "lon": 12.2819242 },
+    { "lat": 45.4681149, "lon": 12.2812917 },
+    { "lat": 45.4679217, "lon": 12.2807723 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "check_date:surface": "2023-05-24",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1245516562,
+  "bounds": {
+    "minlat": 50.6294492,
+    "minlon": 5.5777988,
+    "maxlat": 50.6297213,
+    "maxlon": 5.5786489
+  },
+  "geometry": [
+    { "lat": 50.6297192, "lon": 5.5786189 },
+    { "lat": 50.6297124, "lon": 5.5785160 },
+    { "lat": 50.6296548, "lon": 5.5779472 },
+    { "lat": 50.6296583, "lon": 5.5778923 },
+    { "lat": 50.6296833, "lon": 5.5778342 },
+    { "lat": 50.6297213, "lon": 5.5777988 },
+    { "lat": 50.6294654, "lon": 5.5778076 },
+    { "lat": 50.6294492, "lon": 5.5778084 },
+    { "lat": 50.6295132, "lon": 5.5785203 },
+    { "lat": 50.6295034, "lon": 5.5785891 },
+    { "lat": 50.6294777, "lon": 5.5786489 },
+    { "lat": 50.6295663, "lon": 5.5786381 },
+    { "lat": 50.6296153, "lon": 5.5786322 },
+    { "lat": 50.6296425, "lon": 5.5786289 },
+    { "lat": 50.6297014, "lon": 5.5786217 },
+    { "lat": 50.6297192, "lon": 5.5786189 }
+  ],
+  "tags": {
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont des Vennes",
+    "wikidata": "Q3397415",
+    "wikipedia": "fr:Pont des Vennes"
+  }
+},
+{
+  "type": "way",
+  "id": 1275420104,
+  "bounds": {
+    "minlat": 45.4407907,
+    "minlon": 12.3157117,
+    "maxlat": 45.4407966,
+    "maxlon": 12.3157274
+  },
+  "geometry": [
+    { "lat": 45.4407966, "lon": 12.3157274 },
+    { "lat": 45.4407907, "lon": 12.3157117 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2022-12-20",
+    "cycleway:surface": "asphalt",
+    "cycleway:width": "4",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "level": "1",
+    "path": "crossing",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1275420105,
+  "bounds": {
+    "minlat": 45.4407235,
+    "minlon": 12.3155313,
+    "maxlat": 45.4407286,
+    "maxlon": 12.3155451
+  },
+  "geometry": [
+    { "lat": 45.4407286, "lon": 12.3155451 },
+    { "lat": 45.4407235, "lon": 12.3155313 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2022-12-20",
+    "cycleway:surface": "asphalt",
+    "cycleway:width": "4",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "level": "1",
+    "path": "crossing",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1275420107,
+  "bounds": {
+    "minlat": 45.4407235,
+    "minlon": 12.3155082,
+    "maxlat": 45.4407595,
+    "maxlon": 12.3155313
+  },
+  "geometry": [
+    { "lat": 45.4407235, "lon": 12.3155313 },
+    { "lat": 45.4407595, "lon": 12.3155082 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "segregated": "no",
+    "surface": "sett",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1286260289,
+  "bounds": {
+    "minlat": 50.6269271,
+    "minlon": 5.5731434,
+    "maxlat": 50.6290758,
+    "maxlon": 5.5768630
+  },
+  "geometry": [
+    { "lat": 50.6276378, "lon": 5.5731434 },
+    { "lat": 50.6276259, "lon": 5.5731576 },
+    { "lat": 50.6275905, "lon": 5.5731998 },
+    { "lat": 50.6275598, "lon": 5.5732364 },
+    { "lat": 50.6276086, "lon": 5.5733315 },
+    { "lat": 50.6275963, "lon": 5.5733460 },
+    { "lat": 50.6272770, "lon": 5.5735222 },
+    { "lat": 50.6275391, "lon": 5.5732509 },
+    { "lat": 50.6275321, "lon": 5.5732349 },
+    { "lat": 50.6275247, "lon": 5.5732182 },
+    { "lat": 50.6269271, "lon": 5.5738361 },
+    { "lat": 50.6269320, "lon": 5.5738505 },
+    { "lat": 50.6269373, "lon": 5.5738592 },
+    { "lat": 50.6272002, "lon": 5.5736028 },
+    { "lat": 50.6276039, "lon": 5.5733812 },
+    { "lat": 50.6276225, "lon": 5.5733605 },
+    { "lat": 50.6282380, "lon": 5.5746466 },
+    { "lat": 50.6286944, "lon": 5.5758591 },
+    { "lat": 50.6288098, "lon": 5.5762081 },
+    { "lat": 50.6290471, "lon": 5.5768630 },
+    { "lat": 50.6290617, "lon": 5.5768517 },
+    { "lat": 50.6290758, "lon": 5.5768408 },
+    { "lat": 50.6288235, "lon": 5.5761436 },
+    { "lat": 50.6287422, "lon": 5.5758947 },
+    { "lat": 50.6286750, "lon": 5.5757127 },
+    { "lat": 50.6283214, "lon": 5.5747707 },
+    { "lat": 50.6286315, "lon": 5.5754150 },
+    { "lat": 50.6286447, "lon": 5.5753987 },
+    { "lat": 50.6286577, "lon": 5.5753827 },
+    { "lat": 50.6278156, "lon": 5.5736359 },
+    { "lat": 50.6276378, "lon": 5.5731434 }
+  ],
+  "tags": {
+    "bridge:structure": "suspension",
+    "description": "En hommage à Anne-Josèphe Théroigne de Méricourt (1762 - 1817), une des premières féministes de l'histoire. Inaugurée le 2 mai 2016",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Passerelle La Belle Liégeoise",
+    "start_date": "2016",
+    "wikipedia": "fr:Passerelle La Belle Liégeoise"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085256,
+  "bounds": {
+    "minlat": 45.4407809,
+    "minlon": 12.3128338,
+    "maxlat": 45.4414545,
+    "maxlon": 12.3150274
+  },
+  "geometry": [
+    { "lat": 45.4414545, "lon": 12.3150274 },
+    { "lat": 45.4414192, "lon": 12.3149941 },
+    { "lat": 45.4413553, "lon": 12.3149309 },
+    { "lat": 45.4413227, "lon": 12.3149008 },
+    { "lat": 45.4412538, "lon": 12.3148128 },
+    { "lat": 45.4411836, "lon": 12.3147106 },
+    { "lat": 45.4411206, "lon": 12.3146031 },
+    { "lat": 45.4410433, "lon": 12.3144341 },
+    { "lat": 45.4409909, "lon": 12.3143036 },
+    { "lat": 45.4409623, "lon": 12.3142186 },
+    { "lat": 45.4409247, "lon": 12.3140828 },
+    { "lat": 45.4409042, "lon": 12.3140027 },
+    { "lat": 45.4408835, "lon": 12.3138917 },
+    { "lat": 45.4408704, "lon": 12.3138112 },
+    { "lat": 45.4408493, "lon": 12.3135891 },
+    { "lat": 45.4408291, "lon": 12.3133524 },
+    { "lat": 45.4408009, "lon": 12.3130436 },
+    { "lat": 45.4407809, "lon": 12.3128338 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "yes",
+    "highway": "cycleway",
+    "oneway": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085258,
+  "bounds": {
+    "minlat": 45.4416926,
+    "minlon": 12.3102391,
+    "maxlat": 45.4420191,
+    "maxlon": 12.3119334
+  },
+  "geometry": [
+    { "lat": 45.4417265, "lon": 12.3119334 },
+    { "lat": 45.4417601, "lon": 12.3119206 },
+    { "lat": 45.4417910, "lon": 12.3118817 },
+    { "lat": 45.4418010, "lon": 12.3118512 },
+    { "lat": 45.4418024, "lon": 12.3118187 },
+    { "lat": 45.4417882, "lon": 12.3117862 },
+    { "lat": 45.4417653, "lon": 12.3117435 },
+    { "lat": 45.4417040, "lon": 12.3111052 },
+    { "lat": 45.4416926, "lon": 12.3109812 },
+    { "lat": 45.4416983, "lon": 12.3109324 },
+    { "lat": 45.4417140, "lon": 12.3108572 },
+    { "lat": 45.4419108, "lon": 12.3104690 },
+    { "lat": 45.4420191, "lon": 12.3102391 }
+  ],
+  "tags": {
+    "highway": "cycleway",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085259,
+  "bounds": {
+    "minlat": 45.4408079,
+    "minlon": 12.3121397,
+    "maxlat": 45.4410723,
+    "maxlon": 12.3125153
+  },
+  "geometry": [
+    { "lat": 45.4408079, "lon": 12.3124862 },
+    { "lat": 45.4408506, "lon": 12.3124990 },
+    { "lat": 45.4408777, "lon": 12.3125153 },
+    { "lat": 45.4408924, "lon": 12.3125132 },
+    { "lat": 45.4409212, "lon": 12.3125020 },
+    { "lat": 45.4409362, "lon": 12.3124909 },
+    { "lat": 45.4409533, "lon": 12.3124665 },
+    { "lat": 45.4409619, "lon": 12.3124258 },
+    { "lat": 45.4409626, "lon": 12.3123882 },
+    { "lat": 45.4409576, "lon": 12.3123598 },
+    { "lat": 45.4409533, "lon": 12.3123282 },
+    { "lat": 45.4409597, "lon": 12.3122815 },
+    { "lat": 45.4409754, "lon": 12.3122358 },
+    { "lat": 45.4410054, "lon": 12.3121920 },
+    { "lat": 45.4410460, "lon": 12.3121514 },
+    { "lat": 45.4410723, "lon": 12.3121397 }
+  ],
+  "tags": {
+    "highway": "cycleway",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085260,
+  "bounds": {
+    "minlat": 45.4410723,
+    "minlon": 12.3119334,
+    "maxlat": 45.4417265,
+    "maxlon": 12.3121397
+  },
+  "geometry": [
+    { "lat": 45.4410723, "lon": 12.3121397 },
+    { "lat": 45.4417265, "lon": 12.3119334 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085261,
+  "bounds": {
+    "minlat": 45.4420191,
+    "minlon": 12.3095586,
+    "maxlat": 45.4423135,
+    "maxlon": 12.3102391
+  },
+  "geometry": [
+    { "lat": 45.4420191, "lon": 12.3102391 },
+    { "lat": 45.4422195, "lon": 12.3097708 },
+    { "lat": 45.4423135, "lon": 12.3095586 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "lit": "no",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085264,
+  "bounds": {
+    "minlat": 45.4422568,
+    "minlon": 12.3087648,
+    "maxlat": 45.4423075,
+    "maxlon": 12.3088785
+  },
+  "geometry": [
+    { "lat": 45.4423075, "lon": 12.3087648 },
+    { "lat": 45.4422767, "lon": 12.3088339 },
+    { "lat": 45.4422568, "lon": 12.3088785 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "cycleway": "crossing",
+    "foot": "designated",
+    "highway": "cycleway"
+  }
+},
+{
+  "type": "way",
+  "id": 1288085270,
+  "bounds": {
+    "minlat": 45.4393122,
+    "minlon": 12.3052073,
+    "maxlat": 45.4403533,
+    "maxlon": 12.3060882
+  },
+  "geometry": [
+    { "lat": 45.4403533, "lon": 12.3060882 },
+    { "lat": 45.4402468, "lon": 12.3059981 },
+    { "lat": 45.4401564, "lon": 12.3059215 },
+    { "lat": 45.4400760, "lon": 12.3058535 },
+    { "lat": 45.4399845, "lon": 12.3057760 },
+    { "lat": 45.4398494, "lon": 12.3056616 },
+    { "lat": 45.4396856, "lon": 12.3055229 },
+    { "lat": 45.4395100, "lon": 12.3053742 },
+    { "lat": 45.4393473, "lon": 12.3052365 },
+    { "lat": 45.4393122, "lon": 12.3052073 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "foot": "designated",
+    "highway": "cycleway",
+    "oneway": "no",
+    "segregated": "yes",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1327510449,
+  "bounds": {
+    "minlat": 50.6262333,
+    "minlon": 5.5566660,
+    "maxlat": 50.6370170,
+    "maxlon": 5.5637614
+  },
+  "geometry": [
+    { "lat": 50.6268711, "lon": 5.5633357 },
+    { "lat": 50.6265784, "lon": 5.5634047 },
+    { "lat": 50.6265770, "lon": 5.5635144 },
+    { "lat": 50.6268359, "lon": 5.5635051 },
+    { "lat": 50.6268709, "lon": 5.5635038 },
+    { "lat": 50.6269005, "lon": 5.5635002 },
+    { "lat": 50.6269804, "lon": 5.5634904 },
+    { "lat": 50.6270472, "lon": 5.5634809 },
+    { "lat": 50.6270962, "lon": 5.5634723 },
+    { "lat": 50.6270982, "lon": 5.5634984 },
+    { "lat": 50.6269954, "lon": 5.5635310 },
+    { "lat": 50.6268206, "lon": 5.5635703 },
+    { "lat": 50.6268029, "lon": 5.5635727 },
+    { "lat": 50.6267886, "lon": 5.5635753 },
+    { "lat": 50.6267034, "lon": 5.5635905 },
+    { "lat": 50.6265795, "lon": 5.5636103 },
+    { "lat": 50.6265132, "lon": 5.5636173 },
+    { "lat": 50.6264836, "lon": 5.5636198 },
+    { "lat": 50.6263460, "lon": 5.5636316 },
+    { "lat": 50.6262333, "lon": 5.5636366 },
+    { "lat": 50.6262346, "lon": 5.5637312 },
+    { "lat": 50.6262350, "lon": 5.5637614 },
+    { "lat": 50.6264776, "lon": 5.5637453 },
+    { "lat": 50.6264877, "lon": 5.5637441 },
+    { "lat": 50.6265505, "lon": 5.5637363 },
+    { "lat": 50.6265793, "lon": 5.5637327 },
+    { "lat": 50.6266692, "lon": 5.5637193 },
+    { "lat": 50.6267207, "lon": 5.5637117 },
+    { "lat": 50.6268602, "lon": 5.5636869 },
+    { "lat": 50.6269993, "lon": 5.5636550 },
+    { "lat": 50.6271231, "lon": 5.5636203 },
+    { "lat": 50.6272554, "lon": 5.5635804 },
+    { "lat": 50.6273425, "lon": 5.5635483 },
+    { "lat": 50.6273871, "lon": 5.5635345 },
+    { "lat": 50.6275088, "lon": 5.5634871 },
+    { "lat": 50.6275610, "lon": 5.5634646 },
+    { "lat": 50.6276444, "lon": 5.5634270 },
+    { "lat": 50.6277097, "lon": 5.5633960 },
+    { "lat": 50.6278420, "lon": 5.5633294 },
+    { "lat": 50.6278941, "lon": 5.5633021 },
+    { "lat": 50.6279731, "lon": 5.5632598 },
+    { "lat": 50.6280452, "lon": 5.5632174 },
+    { "lat": 50.6281435, "lon": 5.5631634 },
+    { "lat": 50.6281569, "lon": 5.5631554 },
+    { "lat": 50.6282615, "lon": 5.5630953 },
+    { "lat": 50.6283974, "lon": 5.5630127 },
+    { "lat": 50.6284283, "lon": 5.5629931 },
+    { "lat": 50.6284824, "lon": 5.5629587 },
+    { "lat": 50.6285334, "lon": 5.5629251 },
+    { "lat": 50.6287755, "lon": 5.5627673 },
+    { "lat": 50.6289864, "lon": 5.5626298 },
+    { "lat": 50.6291967, "lon": 5.5624907 },
+    { "lat": 50.6294032, "lon": 5.5623549 },
+    { "lat": 50.6297577, "lon": 5.5621244 },
+    { "lat": 50.6299410, "lon": 5.5620035 },
+    { "lat": 50.6301244, "lon": 5.5618836 },
+    { "lat": 50.6303195, "lon": 5.5617552 },
+    { "lat": 50.6305052, "lon": 5.5616381 },
+    { "lat": 50.6307114, "lon": 5.5615171 },
+    { "lat": 50.6309900, "lon": 5.5613598 },
+    { "lat": 50.6311306, "lon": 5.5612827 },
+    { "lat": 50.6312692, "lon": 5.5612066 },
+    { "lat": 50.6314876, "lon": 5.5610816 },
+    { "lat": 50.6315054, "lon": 5.5610712 },
+    { "lat": 50.6318268, "lon": 5.5608835 },
+    { "lat": 50.6320722, "lon": 5.5607211 },
+    { "lat": 50.6321322, "lon": 5.5606840 },
+    { "lat": 50.6321783, "lon": 5.5606557 },
+    { "lat": 50.6322029, "lon": 5.5606404 },
+    { "lat": 50.6323108, "lon": 5.5605736 },
+    { "lat": 50.6326001, "lon": 5.5603799 },
+    { "lat": 50.6328805, "lon": 5.5601954 },
+    { "lat": 50.6328904, "lon": 5.5601895 },
+    { "lat": 50.6331764, "lon": 5.5600024 },
+    { "lat": 50.6332036, "lon": 5.5599851 },
+    { "lat": 50.6332979, "lon": 5.5599223 },
+    { "lat": 50.6335365, "lon": 5.5597657 },
+    { "lat": 50.6337182, "lon": 5.5596465 },
+    { "lat": 50.6338424, "lon": 5.5595646 },
+    { "lat": 50.6339893, "lon": 5.5594684 },
+    { "lat": 50.6340590, "lon": 5.5594220 },
+    { "lat": 50.6341668, "lon": 5.5593511 },
+    { "lat": 50.6342547, "lon": 5.5592929 },
+    { "lat": 50.6343342, "lon": 5.5592409 },
+    { "lat": 50.6344503, "lon": 5.5591653 },
+    { "lat": 50.6345698, "lon": 5.5590875 },
+    { "lat": 50.6347212, "lon": 5.5589878 },
+    { "lat": 50.6347911, "lon": 5.5589408 },
+    { "lat": 50.6347925, "lon": 5.5589474 },
+    { "lat": 50.6347180, "lon": 5.5589967 },
+    { "lat": 50.6345871, "lon": 5.5590813 },
+    { "lat": 50.6345536, "lon": 5.5591030 },
+    { "lat": 50.6344506, "lon": 5.5591695 },
+    { "lat": 50.6343360, "lon": 5.5592459 },
+    { "lat": 50.6342569, "lon": 5.5592981 },
+    { "lat": 50.6341443, "lon": 5.5593695 },
+    { "lat": 50.6340615, "lon": 5.5594243 },
+    { "lat": 50.6339840, "lon": 5.5594744 },
+    { "lat": 50.6338458, "lon": 5.5595645 },
+    { "lat": 50.6337211, "lon": 5.5596474 },
+    { "lat": 50.6335683, "lon": 5.5597467 },
+    { "lat": 50.6332982, "lon": 5.5599229 },
+    { "lat": 50.6328652, "lon": 5.5602189 },
+    { "lat": 50.6328985, "lon": 5.5603294 },
+    { "lat": 50.6331118, "lon": 5.5601789 },
+    { "lat": 50.6333271, "lon": 5.5600368 },
+    { "lat": 50.6334079, "lon": 5.5599842 },
+    { "lat": 50.6334908, "lon": 5.5599278 },
+    { "lat": 50.6336567, "lon": 5.5598205 },
+    { "lat": 50.6337351, "lon": 5.5597708 },
+    { "lat": 50.6338764, "lon": 5.5596770 },
+    { "lat": 50.6341393, "lon": 5.5595057 },
+    { "lat": 50.6343189, "lon": 5.5593924 },
+    { "lat": 50.6345318, "lon": 5.5592492 },
+    { "lat": 50.6345586, "lon": 5.5592321 },
+    { "lat": 50.6347088, "lon": 5.5591360 },
+    { "lat": 50.6348724, "lon": 5.5590276 },
+    { "lat": 50.6350041, "lon": 5.5589335 },
+    { "lat": 50.6350532, "lon": 5.5588960 },
+    { "lat": 50.6351496, "lon": 5.5588177 },
+    { "lat": 50.6352826, "lon": 5.5587021 },
+    { "lat": 50.6354260, "lon": 5.5585718 },
+    { "lat": 50.6358269, "lon": 5.5581960 },
+    { "lat": 50.6358940, "lon": 5.5581332 },
+    { "lat": 50.6359352, "lon": 5.5580946 },
+    { "lat": 50.6360082, "lon": 5.5580262 },
+    { "lat": 50.6361379, "lon": 5.5579061 },
+    { "lat": 50.6361533, "lon": 5.5578911 },
+    { "lat": 50.6362932, "lon": 5.5577599 },
+    { "lat": 50.6366557, "lon": 5.5574242 },
+    { "lat": 50.6367430, "lon": 5.5573422 },
+    { "lat": 50.6369157, "lon": 5.5571801 },
+    { "lat": 50.6370170, "lon": 5.5570857 },
+    { "lat": 50.6370018, "lon": 5.5570449 },
+    { "lat": 50.6369833, "lon": 5.5569964 },
+    { "lat": 50.6369588, "lon": 5.5569301 },
+    { "lat": 50.6369097, "lon": 5.5568024 },
+    { "lat": 50.6368733, "lon": 5.5567043 },
+    { "lat": 50.6368589, "lon": 5.5566660 },
+    { "lat": 50.6368299, "lon": 5.5566936 },
+    { "lat": 50.6367789, "lon": 5.5567409 },
+    { "lat": 50.6367274, "lon": 5.5567887 },
+    { "lat": 50.6365939, "lon": 5.5569126 },
+    { "lat": 50.6364099, "lon": 5.5570851 },
+    { "lat": 50.6362787, "lon": 5.5572082 },
+    { "lat": 50.6359949, "lon": 5.5574726 },
+    { "lat": 50.6357732, "lon": 5.5576797 },
+    { "lat": 50.6357077, "lon": 5.5577409 },
+    { "lat": 50.6354003, "lon": 5.5580279 },
+    { "lat": 50.6351453, "lon": 5.5582653 },
+    { "lat": 50.6350328, "lon": 5.5583637 },
+    { "lat": 50.6349045, "lon": 5.5584684 },
+    { "lat": 50.6348449, "lon": 5.5585129 },
+    { "lat": 50.6347601, "lon": 5.5585716 },
+    { "lat": 50.6345954, "lon": 5.5586818 },
+    { "lat": 50.6344932, "lon": 5.5587499 },
+    { "lat": 50.6344190, "lon": 5.5587985 },
+    { "lat": 50.6343028, "lon": 5.5588745 },
+    { "lat": 50.6342122, "lon": 5.5589346 },
+    { "lat": 50.6339120, "lon": 5.5591335 },
+    { "lat": 50.6337909, "lon": 5.5592126 },
+    { "lat": 50.6334818, "lon": 5.5594169 },
+    { "lat": 50.6333346, "lon": 5.5595127 },
+    { "lat": 50.6332350, "lon": 5.5595665 },
+    { "lat": 50.6331871, "lon": 5.5595871 },
+    { "lat": 50.6331386, "lon": 5.5596067 },
+    { "lat": 50.6330868, "lon": 5.5596264 },
+    { "lat": 50.6329945, "lon": 5.5596548 },
+    { "lat": 50.6329111, "lon": 5.5596739 },
+    { "lat": 50.6327449, "lon": 5.5596987 },
+    { "lat": 50.6325272, "lon": 5.5597295 },
+    { "lat": 50.6325625, "lon": 5.5598929 },
+    { "lat": 50.6327409, "lon": 5.5598637 },
+    { "lat": 50.6328508, "lon": 5.5598456 },
+    { "lat": 50.6329244, "lon": 5.5598305 },
+    { "lat": 50.6329741, "lon": 5.5598172 },
+    { "lat": 50.6330463, "lon": 5.5597960 },
+    { "lat": 50.6331122, "lon": 5.5597690 },
+    { "lat": 50.6331813, "lon": 5.5597347 },
+    { "lat": 50.6332538, "lon": 5.5596935 },
+    { "lat": 50.6333170, "lon": 5.5596525 },
+    { "lat": 50.6333597, "lon": 5.5596289 },
+    { "lat": 50.6334362, "lon": 5.5595793 },
+    { "lat": 50.6335158, "lon": 5.5595270 },
+    { "lat": 50.6335994, "lon": 5.5594714 },
+    { "lat": 50.6337233, "lon": 5.5593908 },
+    { "lat": 50.6338360, "lon": 5.5593157 },
+    { "lat": 50.6339408, "lon": 5.5592475 },
+    { "lat": 50.6340543, "lon": 5.5591727 },
+    { "lat": 50.6341936, "lon": 5.5590802 },
+    { "lat": 50.6343656, "lon": 5.5589662 },
+    { "lat": 50.6345031, "lon": 5.5588760 },
+    { "lat": 50.6345955, "lon": 5.5588155 },
+    { "lat": 50.6347173, "lon": 5.5587342 },
+    { "lat": 50.6347191, "lon": 5.5587431 },
+    { "lat": 50.6345315, "lon": 5.5588665 },
+    { "lat": 50.6345065, "lon": 5.5588824 },
+    { "lat": 50.6343670, "lon": 5.5589721 },
+    { "lat": 50.6341952, "lon": 5.5590839 },
+    { "lat": 50.6340534, "lon": 5.5591765 },
+    { "lat": 50.6339333, "lon": 5.5592550 },
+    { "lat": 50.6338123, "lon": 5.5593341 },
+    { "lat": 50.6337229, "lon": 5.5593924 },
+    { "lat": 50.6335996, "lon": 5.5594727 },
+    { "lat": 50.6335173, "lon": 5.5595270 },
+    { "lat": 50.6334372, "lon": 5.5595794 },
+    { "lat": 50.6333744, "lon": 5.5596205 },
+    { "lat": 50.6333184, "lon": 5.5596571 },
+    { "lat": 50.6332301, "lon": 5.5597146 },
+    { "lat": 50.6331530, "lon": 5.5597661 },
+    { "lat": 50.6329819, "lon": 5.5598777 },
+    { "lat": 50.6325537, "lon": 5.5601676 },
+    { "lat": 50.6321436, "lon": 5.5604332 },
+    { "lat": 50.6321238, "lon": 5.5604459 },
+    { "lat": 50.6320797, "lon": 5.5604740 },
+    { "lat": 50.6319642, "lon": 5.5605477 },
+    { "lat": 50.6316614, "lon": 5.5607410 },
+    { "lat": 50.6310735, "lon": 5.5610714 },
+    { "lat": 50.6304743, "lon": 5.5614110 },
+    { "lat": 50.6304159, "lon": 5.5614463 },
+    { "lat": 50.6304014, "lon": 5.5613915 },
+    { "lat": 50.6302534, "lon": 5.5614921 },
+    { "lat": 50.6300433, "lon": 5.5616331 },
+    { "lat": 50.6298322, "lon": 5.5617719 },
+    { "lat": 50.6297260, "lon": 5.5618410 },
+    { "lat": 50.6296111, "lon": 5.5619163 },
+    { "lat": 50.6295744, "lon": 5.5619400 },
+    { "lat": 50.6295121, "lon": 5.5619808 },
+    { "lat": 50.6294927, "lon": 5.5619937 },
+    { "lat": 50.6294307, "lon": 5.5620342 },
+    { "lat": 50.6293500, "lon": 5.5620868 },
+    { "lat": 50.6292524, "lon": 5.5621506 },
+    { "lat": 50.6292135, "lon": 5.5621758 },
+    { "lat": 50.6291118, "lon": 5.5622424 },
+    { "lat": 50.6290403, "lon": 5.5622899 },
+    { "lat": 50.6287313, "lon": 5.5624944 },
+    { "lat": 50.6285041, "lon": 5.5626444 },
+    { "lat": 50.6282325, "lon": 5.5628160 },
+    { "lat": 50.6281891, "lon": 5.5628390 },
+    { "lat": 50.6281707, "lon": 5.5628488 },
+    { "lat": 50.6281091, "lon": 5.5628844 },
+    { "lat": 50.6280464, "lon": 5.5629175 },
+    { "lat": 50.6280073, "lon": 5.5629411 },
+    { "lat": 50.6279704, "lon": 5.5629584 },
+    { "lat": 50.6279210, "lon": 5.5629748 },
+    { "lat": 50.6278630, "lon": 5.5629886 },
+    { "lat": 50.6278175, "lon": 5.5629934 },
+    { "lat": 50.6277484, "lon": 5.5629932 },
+    { "lat": 50.6277114, "lon": 5.5629874 },
+    { "lat": 50.6276956, "lon": 5.5629850 },
+    { "lat": 50.6276443, "lon": 5.5629718 },
+    { "lat": 50.6275888, "lon": 5.5629482 },
+    { "lat": 50.6275744, "lon": 5.5629416 },
+    { "lat": 50.6275291, "lon": 5.5629209 },
+    { "lat": 50.6274781, "lon": 5.5628861 },
+    { "lat": 50.6274419, "lon": 5.5628552 },
+    { "lat": 50.6273962, "lon": 5.5628128 },
+    { "lat": 50.6273274, "lon": 5.5627270 },
+    { "lat": 50.6272909, "lon": 5.5627970 },
+    { "lat": 50.6273620, "lon": 5.5628824 },
+    { "lat": 50.6274140, "lon": 5.5629345 },
+    { "lat": 50.6274710, "lon": 5.5629804 },
+    { "lat": 50.6274836, "lon": 5.5629906 },
+    { "lat": 50.6275240, "lon": 5.5630151 },
+    { "lat": 50.6275953, "lon": 5.5630508 },
+    { "lat": 50.6276275, "lon": 5.5630622 },
+    { "lat": 50.6276660, "lon": 5.5630741 },
+    { "lat": 50.6277166, "lon": 5.5630839 },
+    { "lat": 50.6277189, "lon": 5.5630972 },
+    { "lat": 50.6277047, "lon": 5.5630989 },
+    { "lat": 50.6276364, "lon": 5.5631300 },
+    { "lat": 50.6275970, "lon": 5.5631451 },
+    { "lat": 50.6275575, "lon": 5.5631608 },
+    { "lat": 50.6274558, "lon": 5.5631996 },
+    { "lat": 50.6273417, "lon": 5.5632367 },
+    { "lat": 50.6272497, "lon": 5.5632631 },
+    { "lat": 50.6271286, "lon": 5.5632912 },
+    { "lat": 50.6269997, "lon": 5.5633166 },
+    { "lat": 50.6268711, "lon": 5.5633357 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "layer": "2",
+    "man_made": "bridge",
+    "material": "prestressed_concrete",
+    "name": "Viaduc des Guillemins"
+  }
+},
+{
+  "type": "way",
+  "id": 1340827543,
+  "bounds": {
+    "minlat": 50.6380784,
+    "minlon": 5.5763567,
+    "maxlat": 50.6381556,
+    "maxlon": 5.5767873
+  },
+  "geometry": [
+    { "lat": 50.6381556, "lon": 5.5763567 },
+    { "lat": 50.6381093, "lon": 5.5765468 },
+    { "lat": 50.6380784, "lon": 5.5767873 }
+  ],
+  "tags": {
+    "bicycle:lanes": "use_sidepath|designated",
+    "bridge": "yes",
+    "bus:lanes": "yes|designated",
+    "cycleway": "separate",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Kennedy",
+    "oneway": "yes",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "postal_code": "4000",
+    "ref": "N671a",
+    "sidewalk": "separate",
+    "smoothness": "good",
+    "source:maxspeed": "BE-WAL:urban",
+    "surface": "asphalt",
+    "zone:traffic": "BE-WAL:urban"
+  }
+},
+{
+  "type": "way",
+  "id": 1434397348,
+  "bounds": {
+    "minlat": 45.4421928,
+    "minlon": 12.3094548,
+    "maxlat": 45.4422601,
+    "maxlon": 12.3095127
+  },
+  "geometry": [
+    { "lat": 45.4422601, "lon": 12.3095127 },
+    { "lat": 45.4421928, "lon": 12.3094548 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "cycleway": "crossing",
+    "foot": "designated",
+    "highway": "cycleway",
+    "surface": "paving_stones"
+  }
+},
+{
+  "type": "way",
+  "id": 1434397349,
+  "bounds": {
+    "minlat": 45.4421491,
+    "minlon": 12.3094171,
+    "maxlat": 45.4421928,
+    "maxlon": 12.3094548
+  },
+  "geometry": [
+    { "lat": 45.4421928, "lon": 12.3094548 },
+    { "lat": 45.4421795, "lon": 12.3094433 },
+    { "lat": 45.4421491, "lon": 12.3094171 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "cycleway": "crossing",
+    "foot": "designated",
+    "highway": "cycleway",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1458028084,
+  "bounds": {
+    "minlat": 45.4685432,
+    "minlon": 12.2819206,
+    "maxlat": 45.4691466,
+    "maxlon": 12.2823897
+  },
+  "geometry": [
+    { "lat": 45.4691466, "lon": 12.2819206 },
+    { "lat": 45.4685432, "lon": 12.2823897 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "check_date:surface": "2023-05-24",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "lit": "yes",
+    "oneway": "no",
+    "segregated": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1460744168,
+  "bounds": {
+    "minlat": 44.8498674,
+    "minlon": 1.3207092,
+    "maxlat": 44.8499673,
+    "maxlon": 1.3207352
+  },
+  "geometry": [
+    { "lat": 44.8498674, "lon": 1.3207352 },
+    { "lat": 44.8499673, "lon": 1.3207092 }
+  ],
+  "tags": {
+    "highway": "cycleway",
+    "layer": "-1",
+    "motor_vehicle": "no",
+    "tunnel": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 1472517524,
+  "bounds": {
+    "minlat": 50.6215371,
+    "minlon": 5.5816205,
+    "maxlat": 50.6220006,
+    "maxlon": 5.5822284
+  },
+  "geometry": [
+    { "lat": 50.6220006, "lon": 5.5822284 },
+    { "lat": 50.6215371, "lon": 5.5816205 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "lane",
+    "cycleway:left:lane": "advisory",
+    "cycleway:left:separation": "bollard",
+    "cycleway:right:separation": "no",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont de Fétinne",
+    "operator": "Service public de Wallonie",
+    "owner": "Région wallonne",
+    "parking:both": "no",
+    "ref": "N633",
+    "sidewalk:both": "separate",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1518102222,
+  "bounds": {
+    "minlat": 43.3232892,
+    "minlon": -1.9806092,
+    "maxlat": 43.3233135,
+    "maxlon": -1.9805607
+  },
+  "geometry": [
+    { "lat": 43.3233135, "lon": -1.9805607 },
+    { "lat": 43.3232892, "lon": -1.9806092 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "secondary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Erregina Erregeordearen kalea",
+    "name:es": "Calle Reina Regente",
+    "name:etymology:wikidata": "Q538125",
+    "name:eu": "Erregina Erregeordearen kalea",
+    "oneway": "yes",
+    "sidewalk:both": "no",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1518102223,
+  "bounds": {
+    "minlat": 43.3232964,
+    "minlon": -1.9806145,
+    "maxlat": 43.3233135,
+    "maxlon": -1.9805607
+  },
+  "geometry": [
+    { "lat": 43.3233135, "lon": -1.9805607 },
+    { "lat": 43.3232964, "lon": -1.9806145 }
+  ],
+  "tags": {
+    "access": "bus",
+    "bridge": "yes",
+    "busway": "yes",
+    "foot": "no",
+    "highway": "residential",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Erregina Erregeordearen kalea",
+    "name:es": "Calle Reina Regente",
+    "name:etymology:wikidata": "Q538125",
+    "name:eu": "Erregina Erregeordearen kalea",
+    "oneway": "yes",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "surface": "asphalt"
+  }
+}
+
+  ]
+}

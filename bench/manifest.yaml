@@ -1,0 +1,616 @@
+# Manifest du banc qualité d'osm-route-details.
+# Une entrée par cas. Les chemins relatifs partent de bench/. Les fichiers marqués `hors_git`
+# ne sont pas versionnés : leur empreinte sha256 permet de vérifier qu'on mesure bien la même chose.
+# Les séries `tenue_a_l_ecart` ne servent qu'au jugement final d'un incrément (README §2).
+version: 1
+date: "2026-10-30"
+
+depots_externes:
+  vcyclist: {chemin: "/Volumes/Data/code/perso/vcyclist", commit: 4dfd6c5, version: "6.11.0-1", licence_code: "Apache-2.0"}
+  osm-surface: {chemin: "/Volumes/Data/code/perso/osm-surface", commit: 44e5da6, licence_code: "aucune déclarée (auteur = utilisateur ; demander avant copie)"}
+
+# ---------------------------------------------------------------------------------------------
+# 1. Bancs de vcyclist (référencés, non copiés)
+# ---------------------------------------------------------------------------------------------
+vcyclist:
+  - id: vc-test1
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test1.gpx"
+    sha256: 5a69e3afadfd16de33cfbea1be61ed58ccc9ac8c09606606f7d08cf595ceb108
+    teste: "Saint-Nazaire 10 km : pont de Saint-Nazaire, écluses"
+    reference: "analysis/truth/test1.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
+    licence: "Itinéraires Strava de l'auteur ; géométrie © contributeurs OSM (ODbL) ; vérité dérivée IGN LiDAR HD (Etalab 2.0)"
+    provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
+    serie: calibration
+  - id: vc-test2
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test2.gpx"
+    sha256: a5488a73d7f63e0e503cab0322738f536616f6f1127bdf38d2982e91b7f57585
+    teste: "Nantes 25 km : 16 ponts de Loire, D+ de plaine (37 m vrais)"
+    reference: "analysis/truth/test2.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
+    licence: "Itinéraires Strava de l'auteur ; géométrie © contributeurs OSM (ODbL) ; vérité dérivée IGN LiDAR HD (Etalab 2.0)"
+    provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
+    serie: calibration
+  - id: vc-test3
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test3.gpx"
+    sha256: 17922899583af54c70423abee82deeb0f1ca5179cfd02678db61e723ff054bba
+    teste: "Mauves 10 km : ponts contigus, D+ de plaine"
+    reference: "analysis/truth/test3.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
+    licence: "Itinéraires Strava de l'auteur ; géométrie © contributeurs OSM (ODbL) ; vérité dérivée IGN LiDAR HD (Etalab 2.0)"
+    provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
+    serie: calibration
+  - id: vc-test4
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test4.gpx"
+    sha256: 0ed92d597ab818c822dca2e5f617c0814d28efb03b5e4600b486132b2a527e8b
+    teste: "Vercors 111 km : 4 tunnels (Grands Goulets), balcons, pont d'Échevis, D+ montagne"
+    reference: "analysis/truth/test4.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
+    licence: "Itinéraires Strava de l'auteur ; géométrie © contributeurs OSM (ODbL) ; vérité dérivée IGN LiDAR HD (Etalab 2.0)"
+    provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
+    serie: calibration
+  - id: vc-structures
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/analysis/truth/structures.csv"
+    sha256: 8f66abb27ea02f26cf62f27f1bf4cdcb7c94a336497774b605964a1e0629d285
+    teste: "Inventaire des 21 ponts, 4 tunnels, 6 balcons et 15 ponts OSM non détectés des parcours test1..4"
+    reference: "Sortie du détecteur Python de vcyclist sur MNS/MNT IGN : les 15 ponts « missed » gardent une vérité au MNT (fausse)"
+    licence: "Apache-2.0 (dépôt) ; données ODbL/Etalab 2.0"
+    provenance: "vcyclist analysis/export_truth.py"
+    serie: calibration
+  - id: vc-temoins-ponts
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/controls/ + analysis/truth/controls/"
+    sha256: index 626a5e951c58cba0dec87a3d78ce37a7dfd8bd49343d1001cd1b334a743f449f ; spans a96f04324d4bcdaff7f6d618b4617844fc0844398bdf0dcc6297d5c14185e6f0
+    teste: "Témoins ponts p01..p17 et négatifs n01..n16 (détection, faux positifs)"
+    reference: "Spans OSM (kind G/O/L/X/x/D), sans altitude : vérité recalculée à l'exécution"
+    licence: "ODbL"
+    provenance: "vcyclist analysis/controls.py ; p09..p17 déjà jugés (4/11) : plus hors échantillon pour nous"
+    serie: calibration
+  - id: vc-temoins-tunnels
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/controls/tunnels/ + analysis/truth/tunnels/"
+    sha256: index 4f243240162db9202c5e8b4967dce56f432cf41d607c03aceb1fd5e43b2806d7 ; spans 6c86e17020c9b4685097ebb97e35d92bed2d654e6218bdae98b5d305af764290
+    teste: "Témoins tunnels th01..th09, tt01..tt08, négatifs hn01..hn06 (détection, faux tunnels)"
+    reference: "Droite entre MNT des stations hors tunnel, calculée à l'exécution"
+    licence: "ODbL"
+    provenance: "vcyclist analysis/controls.py ; th*/hn* déjà jugés (6/7) : plus hors échantillon pour nous"
+    serie: calibration
+  - id: vc-results
+    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/analysis/results.json"
+    sha256: bfd676d173d778e46ad8de429ed2ca9855bd1aa07cf69e26dd09be032f651287
+    teste: "Chiffres de référence (RMSE, D+, tabliers) : ligne de base à égaler"
+    reference: "—"
+    licence: "Apache-2.0"
+    provenance: "vcyclist analysis/analyze.py"
+    serie: calibration
+
+# ---------------------------------------------------------------------------------------------
+# 2. Éval d'osm-surface (référencée, non copiée)
+# ---------------------------------------------------------------------------------------------
+osm_surface:
+  - id: os-graymond
+    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/graymond-ride-138.gpx"
+    sha256: 9aee94b8da1f601bdddf43b0ef65f3190aeed247996a8e439968e01bae415ffc
+    teste: "Revêtement et appariement, 90.2 km autour de Nantes (route + gravel)"
+    reference: "graymond-ride-138.route.json (sha256 e421e8bbb1cea3e5fd9f5c6da1f1f267703e6d0509130783cd951e260107cf82) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"
+    licence: "Géométrie © OSM (ODbL) ; référence Stadia : conditions de réutilisation à vérifier ; exports tribly à expurger"
+    provenance: "Parcours de groupe (N-Peloton) exportés de tribly/Pédalons"
+    serie: calibration
+  - id: os-np655
+    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/np-655-gravel.gpx"
+    sha256: 184833d75e548ce7c4e5260c615f6b5c0572614921dadab7bf2c7162f98b2f0e
+    teste: "Revêtement et appariement, 52.2 km autour de Nantes (route + gravel)"
+    reference: "np-655-gravel.route.json (sha256 3b54c229f809cdeeef96f3e5a9f2ef516f64644d1a46ae1a96861b88a1b3b12b) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"
+    licence: "Géométrie © OSM (ODbL) ; référence Stadia : conditions de réutilisation à vérifier ; exports tribly à expurger"
+    provenance: "Parcours de groupe (N-Peloton) exportés de tribly/Pédalons"
+    serie: calibration
+  - id: os-np677
+    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/np677-chill-gravel.gpx"
+    sha256: be68a330b9142457299e00632e217ea4fb1921f1519f22445743537a3213754e
+    teste: "Revêtement et appariement, 42.8 km autour de Nantes (route + gravel)"
+    reference: "np677-chill-gravel.route.json (sha256 07b8ddf3ae3418652f607cb7cb9f4f084f82b5f9fda6f13996dcb500538b0dff) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"
+    licence: "Géométrie © OSM (ODbL) ; référence Stadia : conditions de réutilisation à vérifier ; exports tribly à expurger"
+    provenance: "Parcours de groupe (N-Peloton) exportés de tribly/Pédalons"
+    serie: calibration
+
+# ---------------------------------------------------------------------------------------------
+# 3. Corpus d'ouvrages (versionné : data/ouvrages.yaml, 36 entrées)
+# ---------------------------------------------------------------------------------------------
+ouvrages:
+  fichier: data/ouvrages.yaml
+  geometrie: data/ouvrages-geom.json
+  reponses_brutes: data/ouvrages-osm/   # Overpass (ODbL) et API alti IGN (Etalab 2.0), 2026-10-30
+  scripts: tools/ouvrages/              # à lancer depuis un dossier contenant raw/ (copie de data/ouvrages-osm)
+  licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+  reference: "MNT RGE ALTI + MNT/MNS/MNH LiDAR HD (ressource ign_lidar_hd_mnx_multi_wld) aux extrémités et au milieu ; baromètre corrigé quand une trace perso le traverse (data/deck_baro_vs_lidar.csv)"
+  serie_tenue_a_l_ecart: [stn-pont, stn-acces-nord, chevire-dessous, rotonde-dessous, re-depart-sur-pont,
+                          reze-ponts-successifs, mauves, grands-goulets-tunnel, moines, croix-rousse,
+                          voie-verte-24, donostia-zurriola]
+  regle_serie: "sha256('osm-route-details:' + id), premier chiffre hexadécimal dans 0–4"
+
+mesures_derivees:
+  - id: deck-baro-vs-lidar
+    fichier: data/deck_baro_vs_lidar.csv
+    teste: "Baromètre corrigé du décalage local vs MNS LiDAR au milieu des ouvrages traversés"
+    script: tools/deck_baro_vs_lidar.py
+    provenance: "Traces perso (pseudonymes) × data/ouvrages.yaml, 2026-10-30"
+
+# ---------------------------------------------------------------------------------------------
+# 4. Traces barométriques personnelles (hors git : bench/private/, voir README §1.3)
+# ---------------------------------------------------------------------------------------------
+# Source : streams Strava de l'utilisateur (MCP Strava, 2026-10-30), altitude enregistrée brute.
+# Licence : données personnelles de l'utilisateur, usage interne au banc, non redistribuables.
+# La table pseudo → identifiant Strava est dans private/perso-map.csv (hors git).
+# qualification : sortie de tools/qualify_baro.py contre le MNT RGE ALTI (pas de 50 m).
+perso:
+  hors_git: true
+  regle_serie: "sha256('osm-route-details:' + id), premier chiffre hexadécimal dans 0–4 ; négatifs et hors France en calibration"
+  periode_exclue: "2015-05 → 2020-09 (baromètre KO en 2015-05/07, altitude bruitée jusqu'en 2020-08) ; voir README §1.3"
+  traces:
+    - id: perso-01
+      groupe: dplus
+      serie: calibration
+      cas: "Moyenne montagne Corrèze/Cantal (voyage J1)"
+      region: "Corrèze"
+      mois: "2026-08"
+      dist_km: 112.6
+      fichier: private/traces/perso-01.gpx
+      sha256: 3d235c1ccf1d4f57ce2d9fa6ec2423b5d2708a04ea1ac071cabd394c85384f57
+      sha256_trim1km: fd4762dae11b176531da6d6a1c5f9e490c12eb484717dd4ae1e7822801d2af08
+      qualification: {verdict: fiable, offset_m: -22.09, drift_m: 40.5, noise_m: 1.08, p95_abs_m: 2.9, gain_baro_m: 2215, gain_mnt_m: 2399}
+    - id: perso-02
+      groupe: dplus
+      serie: calibration
+      cas: "Moyenne montagne Puy-de-Dôme/Sancy (voyage J2)"
+      region: "Puy-de-Dôme"
+      mois: "2026-08"
+      dist_km: 99.0
+      fichier: private/traces/perso-02.gpx
+      sha256: 81bf48a3d858ededc02236a9c96d7c5eaa630c610d2280dc04f76776ecf9e493
+      sha256_trim1km: 39986debdc023b5e4d7fe16244638c9951e6f1fc7550c0dc04a7e0a4a671e946
+      qualification: {verdict: fiable, offset_m: -3.14, drift_m: 27.4, noise_m: 1.09, p95_abs_m: 4.4, gain_baro_m: 1491, gain_mnt_m: 1712}
+    - id: perso-03
+      groupe: dplus
+      serie: calibration
+      cas: "Moyenne montagne Cantal (voyage J3)"
+      region: "Cantal"
+      mois: "2026-08"
+      dist_km: 92.8
+      fichier: private/traces/perso-03.gpx
+      sha256: 4dfb6113705513f49ea9a20152017a65828d528fafd6d1108cf55d4c8e5c51bd
+      sha256_trim1km: 0957eb677f98c9fc404286dd3e042dd9afe02b4338a545873f41e8c6f064fb9a
+      qualification: {verdict: fiable, offset_m: -13.18, drift_m: 42.4, noise_m: 0.86, p95_abs_m: 4.0, gain_baro_m: 1808, gain_mnt_m: 1964}
+    - id: perso-04
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Moyenne montagne Cantal (voyage J4)"
+      region: "Cantal"
+      mois: "2026-08"
+      dist_km: 74.4
+      fichier: private/traces/perso-04.gpx
+      sha256: 2988b7635da7a48b41950a0ad68d2d144a517fdafff4e4ff62781c811165b89b
+      sha256_trim1km: 588cb21e0ee39b06a05f86ce3471dbe6160f62220bbf7d86756a0f2fd3ef9e43
+      qualification: {verdict: fiable, offset_m: 3.61, drift_m: 23.0, noise_m: 1.08, p95_abs_m: 3.4, gain_baro_m: 1187, gain_mnt_m: 1285}
+    - id: perso-05
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Montagne Noire (Tarn)"
+      region: "Tarn"
+      mois: "2026-06"
+      dist_km: 140.9
+      fichier: private/traces/perso-05.gpx
+      sha256: 2473718990c5a9009504b48559d80f7de6b02063eb8061cf0e0f060d9018cf42
+      sha256_trim1km: fc6248f6f25e5cc87287cf7791a511559417d2b1fa8dbd0e2b70a5c222cac718
+      qualification: {verdict: fiable, offset_m: -1.57, drift_m: 55.2, noise_m: 0.83, p95_abs_m: 2.7, gain_baro_m: 2413, gain_mnt_m: 2630}
+    - id: perso-06
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Longue sortie gravel 205 km Loire/Anjou (dérive baro 62 m)"
+      region: "Loire-Atlantique"
+      mois: "2026-06"
+      dist_km: 205.3
+      fichier: private/traces/perso-06.gpx
+      sha256: c79860159550b2feea6fb1f20b80ee21c3b485f5448b3f4b1d2bd92161883f78
+      sha256_trim1km: 2d93bd21005fd1777e0c5bae62cde019774da4069311768a823bf286b8e43297
+      qualification: {verdict: suspect, offset_m: -26.43, drift_m: 62.4, noise_m: 0.81, p95_abs_m: 2.4, gain_baro_m: 2165, gain_mnt_m: 2276}
+    - id: perso-07
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Préalpes de Haute-Provence"
+      region: "Alpes-de-Haute-Provence"
+      mois: "2023-04"
+      dist_km: 110.0
+      fichier: private/traces/perso-07.gpx
+      sha256: 03fe6b4e3f84146a6e028519d141b925514f1a8c1ba583341ff4c5ec4a2c2871
+      sha256_trim1km: b24a0282612b87c431c77ada732f53fa671770107cd576007fcb609f9bed6fe7
+      qualification: {verdict: fiable, offset_m: 1.74, drift_m: 15.4, noise_m: 1.26, p95_abs_m: 3.2, gain_baro_m: 1623, gain_mnt_m: 1802}
+    - id: perso-08
+      groupe: dplus
+      serie: calibration
+      cas: "Vaucluse (plateau d'Albion / Ventoux)"
+      region: "Vaucluse"
+      mois: "2023-04"
+      dist_km: 119.2
+      fichier: private/traces/perso-08.gpx
+      sha256: cebd362f36adfce1f85ba3ab1b1783b1f3a8f6c12ebbf7181b7ac5d1c0cd569e
+      sha256_trim1km: e411190be4f0cbb9278491727dd6d4fdd9ed893b1df57dd8ea5165df373b7bab
+      qualification: {verdict: fiable, offset_m: 8.36, drift_m: 19.0, noise_m: 1.25, p95_abs_m: 3.7, gain_baro_m: 2220, gain_mnt_m: 2289}
+    - id: perso-09
+      groupe: dplus
+      serie: calibration
+      cas: "Pyrénées-Orientales"
+      region: "Pyrénées-Orientales"
+      mois: "2023-04"
+      dist_km: 93.0
+      fichier: private/traces/perso-09.gpx
+      sha256: 01110016e00719fa8c07c4dcf80c015f97b22599704eb047a46e06116eacbb3a
+      sha256_trim1km: f0d67502bb20818fb960c4ec0d6e95991997d84872672e339c1e4a345ba189bd
+      qualification: {verdict: fiable, offset_m: 1.76, drift_m: 39.7, noise_m: 1.17, p95_abs_m: 5.1, gain_baro_m: 2301, gain_mnt_m: 2559}
+    - id: perso-10
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Hautes-Pyrénées (haute montagne)"
+      region: "Hautes Pyrenees"
+      mois: "2023-05"
+      dist_km: 69.6
+      fichier: private/traces/perso-10.gpx
+      sha256: 575f8dae417d0494718fc8250f4241ca1dd3fe01b610c81fc62e90719ee3026d
+      sha256_trim1km: a30bfd8f5d4f19dbfe4eafd44084a3ff383a9710b6ce084fa3b985ca0464bb4e
+      qualification: {verdict: fiable, offset_m: 5.35, drift_m: 39.6, noise_m: 2.35, p95_abs_m: 7.8, gain_baro_m: 1940, gain_mnt_m: 2325}
+    - id: perso-11
+      groupe: dplus
+      serie: calibration
+      cas: "Savoie (haute montagne)"
+      region: "Savoy"
+      mois: "2023-07"
+      dist_km: 118.8
+      fichier: private/traces/perso-11.gpx
+      sha256: cb4806537441ad05773e4cd693f31c661b701bc7c8db689f67b9b5c4313d7426
+      sha256_trim1km: 52355899fce0eb4774ebbb25af8cf4990ff80642630bc99cab80a55273b02829
+      qualification: {verdict: fiable, offset_m: 5.15, drift_m: 35.0, noise_m: 1.44, p95_abs_m: 4.9, gain_baro_m: 2422, gain_mnt_m: 2631}
+    - id: perso-12
+      groupe: dplus
+      serie: calibration
+      cas: "Vosges (Haut-Rhin)"
+      region: "Haut-Rhin"
+      mois: "2022-06"
+      dist_km: 72.0
+      fichier: private/traces/perso-12.gpx
+      sha256: 750993a371290562886794b44ae7d571ff08fe08017336e036cfdd60d17441fd
+      sha256_trim1km: 2cf4796f26a5c133f448d035b5ab1349da064ba88bbbe4eb44138a50b1e992cc
+      qualification: {verdict: fiable, offset_m: 6.95, drift_m: 18.1, noise_m: 0.87, p95_abs_m: 3.7, gain_baro_m: 1014, gain_mnt_m: 1045}
+    - id: perso-13
+      groupe: dplus
+      serie: calibration
+      cas: "Finistère (relief breton)"
+      region: "Finistère"
+      mois: "2022-07"
+      dist_km: 158.1
+      fichier: private/traces/perso-13.gpx
+      sha256: 08c514dcb555b981acbb41ae304af1496ec2c7a5ab7448eb16a1e34201eb8066
+      sha256_trim1km: e9dcf18c329ba60e4cac8a545cd7e8162825f266fd32fdf22d0446bf8f0f2869
+      qualification: {verdict: fiable, offset_m: -2.58, drift_m: 43.9, noise_m: 0.9, p95_abs_m: 2.4, gain_baro_m: 2547, gain_mnt_m: 2600}
+    - id: perso-14
+      groupe: dplus
+      serie: calibration
+      cas: "Lot (causses)"
+      region: "Lot"
+      mois: "2022-08"
+      dist_km: 110.6
+      fichier: private/traces/perso-14.gpx
+      sha256: 067f74a22427c46cb188733324b8ecd2f96a96bf320122be202bd12ab6625a98
+      sha256_trim1km: 4157dfd74ad4e199cb42df4ea50fef693fd40b70e9885f79e0f69792b56359ec
+      qualification: {verdict: fiable, offset_m: -15.87, drift_m: 16.2, noise_m: 1.73, p95_abs_m: 4.6, gain_baro_m: 3078, gain_mnt_m: 3028}
+    - id: perso-15
+      groupe: dplus
+      serie: calibration
+      cas: "Livradois-Forez (Puy-de-Dôme)"
+      region: "Puy-de-Dôme"
+      mois: "2022-10"
+      dist_km: 125.3
+      fichier: private/traces/perso-15.gpx
+      sha256: 9fb7d29509042ef5009a79996bdd11204b19f0080481e7ce948f73b30fb4dc3d
+      sha256_trim1km: 491c86e81cb6029ac1edf80ea7b0237ed88a23a3f63deff990d6cd01761f7768
+      qualification: {verdict: fiable, offset_m: -0.08, drift_m: 7.2, noise_m: 0.7, p95_abs_m: 2.3, gain_baro_m: 2623, gain_mnt_m: 2653}
+    - id: perso-16
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Chaîne des Puys (Puy-de-Dôme)"
+      region: "Puy-de-Dôme"
+      mois: "2024-03"
+      dist_km: 71.6
+      fichier: private/traces/perso-16.gpx
+      sha256: 549cdf24c76dbfa6431753388caa4407fe5a187de97e0fb93dfab9355249c80f
+      sha256_trim1km: 7de269d0c518007bf340934a5eeb5b14130ce93658a54dea33b3cc11530f8f4b
+      qualification: {verdict: fiable, offset_m: 0.39, drift_m: 5.8, noise_m: 0.66, p95_abs_m: 1.6, gain_baro_m: 1424, gain_mnt_m: 1437}
+    - id: perso-17
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      cas: "Cézallier (Puy-de-Dôme)"
+      region: "Puy-de-Dôme"
+      mois: "2025-06"
+      dist_km: 53.3
+      fichier: private/traces/perso-17.gpx
+      sha256: 6fb7249636bb58b14080645465a8c1d287f751faf6365e5c9b8f2ebfe3d70d47
+      sha256_trim1km: b9cec95907b665689b8240b9aa5b29bc408cb246d20123e49f322c3f6d4e236d
+      qualification: {verdict: fiable, offset_m: 0.58, drift_m: 7.0, noise_m: 0.76, p95_abs_m: 1.8, gain_baro_m: 823, gain_mnt_m: 830}
+    - id: perso-18
+      groupe: dplus
+      serie: calibration
+      cas: "Monts d'Ambazac (Haute-Vienne)"
+      region: "Haute-Vienne"
+      mois: "2021-07"
+      dist_km: 48.8
+      fichier: private/traces/perso-18.gpx
+      sha256: 07cf6da160e5d06d4321b099f41aa2bee34f881efb9b26f56ecb86bb433024a0
+      sha256_trim1km: f1e22583b03cf79dfb737c1b19c27e9c2f592098c774c27625da29ca5febb6bc
+      qualification: {verdict: fiable, offset_m: 1.79, drift_m: 3.0, noise_m: 1.21, p95_abs_m: 5.8, gain_baro_m: 1409, gain_mnt_m: 1448}
+    - id: perso-19
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine et bocage (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2021-02"
+      dist_km: 108.7
+      fichier: private/traces/perso-19.gpx
+      sha256: 3440fde29a9e70f6aefb5ea55993c5dd5c5b32936a34dda7ab0fa26c29b9617b
+      sha256_trim1km: f8a73b6bdc21ec66893282f6f5468f4f6d41661f53ad982e81e454e9d6fef5a7
+      qualification: {verdict: fiable, offset_m: -0.06, drift_m: 13.1, noise_m: 1.02, p95_abs_m: 2.8, gain_baro_m: 1130, gain_mnt_m: 1153}
+    - id: perso-20
+      groupe: ouvrage
+      serie: calibration
+      cas: "Pont de Saint-Nazaire (tablier tagué + accès nord non tagué)"
+      region: "Loire-Atlantique"
+      mois: "2025-08"
+      dist_km: 130.7
+      fichier: private/traces/perso-20.gpx
+      sha256: d0a2680db904845b1e0578fb5033e6976d7b0f6f64ac2df7e2f73a41a5f5075b
+      sha256_trim1km: c45908f1ff679b29bbed6a12ac803de0f06da767bfc91384d209680813a97406
+      qualification: {verdict: fiable, offset_m: -0.17, drift_m: 10.9, noise_m: 0.29, p95_abs_m: 1.1, gain_baro_m: 622, gain_mnt_m: 643}
+    - id: perso-21
+      groupe: ouvrage
+      serie: calibration
+      cas: "Pont de Saint-Nazaire (tablier tagué + accès nord non tagué)"
+      region: "Loire-Atlantique"
+      mois: "2024-04"
+      dist_km: 144.7
+      fichier: private/traces/perso-21.gpx
+      sha256: c4694d0dd7982bdaf60044adc40d7ebaee797077887557f0276f1f4d8b32e96a
+      sha256_trim1km: 037de9bc1f7d510b4f2afa83cd667589db51fd6132feacb33e75e5df2eebaeb2
+      qualification: {verdict: fiable, offset_m: -0.14, drift_m: 11.1, noise_m: 0.36, p95_abs_m: 1.2, gain_baro_m: 821, gain_mnt_m: 809}
+    - id: perso-22
+      groupe: ouvrage
+      serie: calibration
+      cas: "Pont de Saint-Nazaire (tablier tagué + accès nord non tagué)"
+      region: "Loire-Atlantique"
+      mois: "2023-09"
+      dist_km: 113.8
+      fichier: private/traces/perso-22.gpx
+      sha256: 0c7f4fc69b85726103ddda434dc437fe383a41290e2380958c61f0ce11325237
+      sha256_trim1km: 7b88289d5af8c0aa9dfdffe6e61df39b402c931cf0c7d830f79cebaffcded7e4
+      qualification: {verdict: fiable, offset_m: -0.32, drift_m: 11.2, noise_m: 0.33, p95_abs_m: 1.2, gain_baro_m: 479, gain_mnt_m: 473}
+    - id: perso-23
+      groupe: ouvrage
+      serie: calibration
+      cas: "Passage sous le viaduc de Cheviré"
+      region: "Loire-Atlantique"
+      mois: "2024-01"
+      dist_km: 146.8
+      fichier: private/traces/perso-23.gpx
+      sha256: 89218c2dad59bd3a60fb9a976b15e844446f92b096d64a0fc0c1a4c6ad30a2f4
+      sha256_trim1km: 44b5694c46a8af57c8386c586ccc9d818ba420eb0a5d3178d3c400cf369406a4
+      qualification: {verdict: fiable, offset_m: 0.41, drift_m: 2.9, noise_m: 0.32, p95_abs_m: 1.8, gain_baro_m: 669, gain_mnt_m: 812}
+    - id: perso-24
+      groupe: ouvrage
+      serie: calibration
+      cas: "Passage sous le viaduc de Cheviré"
+      region: "Loire-Atlantique"
+      mois: "2026-10"
+      dist_km: 63.5
+      fichier: private/traces/perso-24.gpx
+      sha256: d5ff8025c9dc6bfb0ca34b451e07079e1c9d5c69da4d0503dcbcb8faa5ead04c
+      sha256_trim1km: bbbfbae19d4a13395be0d9b5162c7dda83a840a15884fc2c3a138a31fec19a79
+      qualification: {verdict: fiable, offset_m: -4.71, drift_m: 8.2, noise_m: 0.47, p95_abs_m: 1.3, gain_baro_m: 421, gain_mnt_m: 419}
+    - id: perso-25
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      cas: "Pont Audibert ; passage sous Cheviré"
+      region: "Loire-Atlantique"
+      mois: "2025-10"
+      dist_km: 101.6
+      fichier: private/traces/perso-25.gpx
+      sha256: 1a6da8397fc6f975e39800c18d3e6bfd7010d67c6d819b4d0f21d826a3c69e2c
+      sha256_trim1km: 54e6e741b46ad71b830821bffdd7a81018e42863357d7d12c4b82cb58137eb38
+      qualification: {verdict: fiable, offset_m: 0.04, drift_m: 3.3, noise_m: 0.41, p95_abs_m: 1.2, gain_baro_m: 866, gain_mnt_m: 882}
+    - id: perso-26
+      groupe: ouvrage
+      serie: calibration
+      cas: "Ponts de Pirmil et Audibert"
+      region: "Loire-Atlantique"
+      mois: "2026-01"
+      dist_km: 104.5
+      fichier: private/traces/perso-26.gpx
+      sha256: ef926761b8bf484b00cb29f18c52e8b48e7ea2544a36ec5b5b21f58684f135aa
+      sha256_trim1km: 64b56e419739d2a9ec39ede8158bd72f0b6200648bd3493ba8437c9ec726a701
+      qualification: {verdict: fiable, offset_m: -0.6, drift_m: 4.1, noise_m: 0.4, p95_abs_m: 1.4, gain_baro_m: 877, gain_mnt_m: 935}
+    - id: perso-27
+      groupe: ouvrage
+      serie: calibration
+      cas: "Pont Audibert ; ponts de Mauves"
+      region: "Loire-Atlantique"
+      mois: "2025-03"
+      dist_km: 98.8
+      fichier: private/traces/perso-27.gpx
+      sha256: c53bb3ed2f1052d6015cd7faf6651bf10adff3b2c78860efaf735a875e7ca9b1
+      sha256_trim1km: 53db3260e4e0b800df8b6d9f3562934b11938893111657ef57d4f130320ffa36
+      qualification: {verdict: fiable, offset_m: -0.43, drift_m: 4.3, noise_m: 0.4, p95_abs_m: 1.4, gain_baro_m: 730, gain_mnt_m: 795}
+    - id: perso-28
+      groupe: ouvrage
+      serie: calibration
+      cas: "Pont Audibert"
+      region: "Loire-Atlantique"
+      mois: "2026-03"
+      dist_km: 110.7
+      fichier: private/traces/perso-28.gpx
+      sha256: da34fd6ea34ce7c4b2cf7f23fb06dd6cbda1e0ae9cb4f4810bb79d60f0f5bb76
+      sha256_trim1km: 310ce77fc8782a903858fbcfdd2bd08e6dfaa4c44fdc45df2f2c2f1a29cbcbf5
+      qualification: {verdict: fiable, offset_m: -6.85, drift_m: 10.4, noise_m: 0.75, p95_abs_m: 1.6, gain_baro_m: 935, gain_mnt_m: 900}
+    - id: perso-29
+      groupe: ouvrage
+      serie: calibration
+      cas: "Ponts Anne-de-Bretagne et Audibert"
+      region: "Loire-Atlantique"
+      mois: "2020-10"
+      dist_km: 117.1
+      fichier: private/traces/perso-29.gpx
+      sha256: 08470777cfd34400650ccb331fcd7378d7089fc683ee77cceba844d5f30b6e04
+      sha256_trim1km: 827a3c264979aefdb6e8e304677df02ce6ad4d4b706d39b9c8980cff7d0b9cdb
+      qualification: {verdict: fiable, offset_m: -2.5, drift_m: 5.1, noise_m: 1.17, p95_abs_m: 4.6, gain_baro_m: 623, gain_mnt_m: 679}
+    - id: perso-30
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2026-04"
+      dist_km: 90.8
+      fichier: private/traces/perso-30.gpx
+      sha256: 8293fefd543963aec06fba2580c2a61eccaf6d72bf14a66abe9d44a42b1ad757
+      sha256_trim1km: 0b814a92bc8f52e74cfe84b67b9d8f1afefb3e26c1141ac41ae055c29232c977
+      qualification: {verdict: fiable, offset_m: -0.59, drift_m: 5.2, noise_m: 0.49, p95_abs_m: 1.3, gain_baro_m: 719, gain_mnt_m: 689}
+    - id: perso-31
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2026-05"
+      dist_km: 107.3
+      fichier: private/traces/perso-31.gpx
+      sha256: 07d606426b62c80cbec4863a8abebfb7e649680fc962cbb1c0d1ee8ed3225ab0
+      sha256_trim1km: 27e78591bf905d855b073e900ef0176537a16994f5ee3a155c4c6b41d448b2a2
+      qualification: {verdict: fiable, offset_m: -2.83, drift_m: 3.9, noise_m: 0.57, p95_abs_m: 1.7, gain_baro_m: 741, gain_mnt_m: 728}
+    - id: perso-32
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2026-07"
+      dist_km: 113.3
+      fichier: private/traces/perso-32.gpx
+      sha256: 4af476d14d6cba61084411261ae5ad554b621d36458bc4f0ee9cf7af1dca3161
+      sha256_trim1km: 6a99fd1434f3026908b45121988a5a4b584ed46bce2fa4bdae553204700d2b7f
+      qualification: {verdict: fiable, offset_m: -2.8, drift_m: 4.0, noise_m: 0.5, p95_abs_m: 1.5, gain_baro_m: 943, gain_mnt_m: 994}
+    - id: perso-33
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2026-09"
+      dist_km: 105.4
+      fichier: private/traces/perso-33.gpx
+      sha256: 293d5e5323ad143c0c935239a0eed80137115c66802818970d59357736bbfbab
+      sha256_trim1km: 72251df542c09321fa50b5504b1181f83fafac3ad6ffb344d1b2661aa150e19d
+      qualification: {verdict: fiable, offset_m: -5.73, drift_m: 6.1, noise_m: 0.65, p95_abs_m: 1.3, gain_baro_m: 734, gain_mnt_m: 701}
+    - id: perso-34
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2022-05"
+      dist_km: 104.0
+      fichier: private/traces/perso-34.gpx
+      sha256: e7434bb6644aae2a63627afae287b7255331beb8b48b7c0eb64fd5d0c5a54292
+      sha256_trim1km: 33604e5073b3bf67958f11741ca9a51a18ede74f4bacffe6c4f83792966f4612
+      qualification: {verdict: fiable, offset_m: -7.67, drift_m: 6.2, noise_m: 0.86, p95_abs_m: 2.0, gain_baro_m: 711, gain_mnt_m: 721}
+    - id: perso-35
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2021-04"
+      dist_km: 87.3
+      fichier: private/traces/perso-35.gpx
+      sha256: 76101f70041136088ec0b38c9a3f9aec08ccb1845d297704d206f98a3f0cf155
+      sha256_trim1km: e5ace6aeb6b91263e6dbb5a4e0bf35e27cf751d2ec6e6c4496c74b83e6b21d96
+      qualification: {verdict: fiable, offset_m: -2.91, drift_m: 10.2, noise_m: 1.39, p95_abs_m: 3.6, gain_baro_m: 1338, gain_mnt_m: 1331}
+    - id: perso-36
+      groupe: plaine
+      serie: calibration
+      cas: "Plaine (Loire-Atlantique)"
+      region: "Loire-Atlantique"
+      mois: "2020-12"
+      dist_km: 129.6
+      fichier: private/traces/perso-36.gpx
+      sha256: 63f62cfa908facb1147833863d88f2f1e44d9cc497847c88dfb751381d20eb96
+      sha256_trim1km: a0c09a301d38d9b31a5f5635ded2c90e6b18ca6449dd3136960e58e2f9c1ac8f
+      qualification: {verdict: fiable, offset_m: -0.52, drift_m: 3.5, noise_m: 0.45, p95_abs_m: 1.3, gain_baro_m: 896, gain_mnt_m: 909}
+    - id: perso-37
+      groupe: hors_france
+      serie: calibration
+      cas: "Pays basque espagnol, pont de la Zurriola (hors LiDAR HD)"
+      region: "Landes"
+      mois: "2022-08"
+      dist_km: 97.8
+      fichier: private/traces/perso-37.gpx
+      sha256: bbf33d318f79c9ec3c32eda91ff62c0a0223951c105190c7ca49b74318bfcbec
+      sha256_trim1km: 67921932804b3a8ed97f73a3f788ca8559be7accd1fe0f629f1fa6fa793840aa
+      qualification: {verdict: hors_ign, offset_m: 4.3, drift_m: 9.5, noise_m: 1.41, p95_abs_m: 5.6, gain_baro_m: 627, gain_mnt_m: 712}
+    - id: perso-38
+      groupe: hors_france
+      serie: calibration
+      cas: "Grossglockner (Autriche, haute montagne, Mapterhorn seul)"
+      region: "Austria"
+      mois: "2023-08"
+      dist_km: 109.2
+      fichier: private/traces/perso-38.gpx
+      sha256: b714a8a1ccda875fc3c5893eee6b68c696703e325c837ed28ea50c60d86719ab
+      sha256_trim1km: b3ef447425561fbfb8474ba2923666216ff43fdd94dcf44b43acd92daa0857eb
+      qualification: {verdict: hors_ign, offset_m: null, drift_m: null, noise_m: null, p95_abs_m: null, gain_baro_m: null, gain_mnt_m: null}
+    - id: perso-39
+      groupe: hors_france
+      serie: calibration
+      cas: "Highlands (Écosse, Mapterhorn seul)"
+      region: "United Kingdom"
+      mois: "2024-07"
+      dist_km: 96.1
+      fichier: private/traces/perso-39.gpx
+      sha256: 2e0ad7c409f513ee667e4f827938a9f6db551b670a7212cefd0d7a54c1923672
+      sha256_trim1km: 1e6a5cc97f6555719604e35fb740914378e0a27316f5782776e9cb521a610374
+      qualification: {verdict: hors_ign, offset_m: null, drift_m: null, noise_m: null, p95_abs_m: null, gain_baro_m: null, gain_mnt_m: null}
+    - id: neg-01
+      groupe: negatif
+      serie: calibration
+      cas: "Baromètre KO (mai 2015) : D+ enregistré 38 % du MNT"
+      region: "Loire-Atlantique"
+      mois: "2015-05"
+      dist_km: 105.9
+      fichier: private/traces/neg-01.gpx
+      sha256: fce6bb54e44b8b72bd38335af42a3ae4b121ed35a4658669390715752219635a
+      sha256_trim1km: bd2239e60600c6c67bc9477e681f3910e753ad7f236e11cd81498776c931d756
+      qualification: {verdict: suspect, offset_m: -29.86, drift_m: 54.8, noise_m: 3.55, p95_abs_m: 12.9, gain_baro_m: 242, gain_mnt_m: 644}
+    - id: neg-02
+      groupe: negatif
+      serie: calibration
+      cas: "Baromètre KO (juillet 2015) : D+ 37 % du MNT, dérive 138 m"
+      region: "Loire-Atlantique"
+      mois: "2015-07"
+      dist_km: 108.8
+      fichier: private/traces/neg-02.gpx
+      sha256: fb2b7693984594818166a253248a4c4cba05da7fab5a59025d1d07a84bad8e65
+      sha256_trim1km: 64982695a022e9bba689e40bb8930ea73ba2f667fabdde299f6f9cba454c4bba
+      qualification: {verdict: suspect, offset_m: -29.84, drift_m: 137.9, noise_m: 3.53, p95_abs_m: 10.9, gain_baro_m: 272, gain_mnt_m: 723}
+    - id: neg-03
+      groupe: negatif
+      serie: calibration
+      cas: "Altitude bruitée (2016, bruit 7,5 m)"
+      region: "Pyrénées-Orientales"
+      mois: "2016-03"
+      dist_km: 106.1
+      fichier: private/traces/neg-03.gpx
+      sha256: 08ea4c20a87ceab93940877955de75fe4e997505afe27bc4464716d6ba58959d
+      sha256_trim1km: 9f63c20f9b06f8f14eb933ac0a915abc42c9d19c244f5bddbc3f0d0704a20ff0
+      qualification: {verdict: suspect, offset_m: 2.18, drift_m: 32.3, noise_m: 7.51, p95_abs_m: 21.9, gain_baro_m: 3810, gain_mnt_m: 2554}
+    - id: neg-04
+      groupe: negatif
+      serie: calibration
+      cas: "Altitude bruitée en haute montagne (2015, bruit 9,6 m)"
+      region: "Savoy"
+      mois: "2015-08"
+      dist_km: 134.0
+      fichier: private/traces/neg-04.gpx
+      sha256: de72c71ceb3bc1c444b30e8a924930886ac7660aedd6b192aa6d62ffba88b67d
+      sha256_trim1km: 8dc93fc2039e93204affa0006078b680d1155dc4a5f9837962de548dce02ec51
+      qualification: {verdict: hors_ign, offset_m: -2.09, drift_m: 49.5, noise_m: 9.63, p95_abs_m: 24.6, gain_baro_m: 6315, gain_mnt_m: 5013}

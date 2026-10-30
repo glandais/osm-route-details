@@ -1,0 +1,940 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-30T16:17:06Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 25441264,
+  "bounds": {
+    "minlat": 45.6938730,
+    "minlon": 4.8381623,
+    "maxlat": 45.6969782,
+    "maxlon": 4.8435372
+  },
+  "geometry": [
+    { "lat": 45.6969782, "lon": 4.8381623 },
+    { "lat": 45.6938730, "lon": 4.8435372 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "highway": "cycleway",
+    "layer": "2",
+    "lit": "no",
+    "mofa": "yes",
+    "moped": "yes",
+    "name": "Pont Pierre-Bénite",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 25875028,
+  "bounds": {
+    "minlat": 45.7703477,
+    "minlon": 6.0557869,
+    "maxlat": 45.7729029,
+    "maxlon": 6.0562849
+  },
+  "geometry": [
+    { "lat": 45.7729029, "lon": 6.0562849 },
+    { "lat": 45.7728846, "lon": 6.0562422 },
+    { "lat": 45.7728715, "lon": 6.0562067 },
+    { "lat": 45.7728491, "lon": 6.0561872 },
+    { "lat": 45.7728117, "lon": 6.0561758 },
+    { "lat": 45.7727639, "lon": 6.0561745 },
+    { "lat": 45.7725619, "lon": 6.0562067 },
+    { "lat": 45.7724417, "lon": 6.0562174 },
+    { "lat": 45.7723360, "lon": 6.0562187 },
+    { "lat": 45.7722354, "lon": 6.0562067 },
+    { "lat": 45.7720862, "lon": 6.0561778 },
+    { "lat": 45.7716728, "lon": 6.0560819 },
+    { "lat": 45.7711536, "lon": 6.0559653 },
+    { "lat": 45.7703477, "lon": 6.0557869 }
+  ],
+  "tags": {
+    "highway": "unclassified",
+    "lane_markings": "no",
+    "lanes": "2",
+    "name": "Route du Pont de l'Abîme",
+    "ref": "D 31",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 38220155,
+  "bounds": {
+    "minlat": 45.7643517,
+    "minlon": 6.0565592,
+    "maxlat": 45.7646628,
+    "maxlon": 6.0572723
+  },
+  "geometry": [
+    { "lat": 45.7646628, "lon": 6.0572723 },
+    { "lat": 45.7643517, "lon": 6.0565592 }
+  ],
+  "tags": {
+    "access": "no",
+    "artist_name": "Ferdinand Arnodin",
+    "bridge": "yes",
+    "bridge:name": "Pont de l'Abîme",
+    "bridge:structure": "suspension",
+    "disused:highway": "tertiary",
+    "height": "96",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "no",
+    "maxheight": "3.45",
+    "maxspeed": "30",
+    "maxweight": "19",
+    "name": "Route du Pont de l'Abîme",
+    "oneway": "alternating",
+    "sidewalk": "both",
+    "smoothness": "good",
+    "start_date": "1891-03-25",
+    "surface": "asphalt",
+    "website": "https://patrimoine.auvergnerhonealpes.fr/dossier/pont-suspendu-dit-pont-de-l-abime/557922b2-24e6-42c7-b4ea-c7efc48001ff",
+    "wikidata": "Q3397204",
+    "wikipedia": "fr:Pont de l'Abîme",
+    "year_of_construction": "1887-06"
+  }
+},
+{
+  "type": "way",
+  "id": 47312262,
+  "bounds": {
+    "minlat": 50.6216725,
+    "minlon": 7.9109804,
+    "maxlat": 50.6242841,
+    "maxlon": 7.9113171
+  },
+  "geometry": [
+    { "lat": 50.6216725, "lon": 7.9113171 },
+    { "lat": 50.6242841, "lon": 7.9109804 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "highway": "path",
+    "layer": "1",
+    "name": "Erbacher Brücke",
+    "railway": "abandoned",
+    "surface": "gravel"
+  }
+},
+{
+  "type": "way",
+  "id": 67503864,
+  "bounds": {
+    "minlat": 46.6392421,
+    "minlon": 1.0512171,
+    "maxlat": 46.6416448,
+    "maxlon": 1.0567462
+  },
+  "geometry": [
+    { "lat": 46.6392421, "lon": 1.0512171 },
+    { "lat": 46.6395346, "lon": 1.0519551 },
+    { "lat": 46.6397938, "lon": 1.0525266 },
+    { "lat": 46.6399439, "lon": 1.0528646 },
+    { "lat": 46.6399665, "lon": 1.0529155 },
+    { "lat": 46.6404468, "lon": 1.0539817 },
+    { "lat": 46.6410667, "lon": 1.0554106 },
+    { "lat": 46.6416448, "lon": 1.0567462 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "construction_date": "1886",
+    "foot": "designated",
+    "highway": "cycleway",
+    "horse": "no",
+    "layer": "2",
+    "length": "528",
+    "maxheight": "38",
+    "name": "Ligne de Saint-Benoît au Blanc",
+    "railway": "abandoned",
+    "viaduct:name": "Viaduc du Blanc",
+    "width": "4.5",
+    "wikidata": "Q18005547"
+  }
+},
+{
+  "type": "way",
+  "id": 88802033,
+  "bounds": {
+    "minlat": 45.2960619,
+    "minlon": 2.3890472,
+    "maxlat": 45.2993312,
+    "maxlon": 2.3905304
+  },
+  "geometry": [
+    { "lat": 45.2993312, "lon": 2.3890472 },
+    { "lat": 45.2977550, "lon": 2.3897516 },
+    { "lat": 45.2960619, "lon": 2.3905304 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bridge": "viaduct",
+    "fixme": "access",
+    "heritage": "3",
+    "heritage:operator": "mhs",
+    "highway": "path",
+    "historic": "bridge",
+    "layer": "1",
+    "mhs:inscription_date": "2006-10-28",
+    "name": "Viaduc de la Sumène",
+    "railway": "abandoned",
+    "ref:mhs": "PA15000034;PA15000036",
+    "source": "© CNES 2004-2007 / Spot Image;data.gouv.fr:Ministère de la Culture - 08/2011",
+    "source:heritage": "Ministère de la Culture - 06/2019",
+    "wikidata": "Q22995888",
+    "wikipedia": "fr:Viaduc de la Sumène"
+  }
+},
+{
+  "type": "way",
+  "id": 93980851,
+  "bounds": {
+    "minlat": 46.6758118,
+    "minlon": 5.5039244,
+    "maxlat": 46.6760884,
+    "maxlon": 5.5085205
+  },
+  "geometry": [
+    { "lat": 46.6758118, "lon": 5.5085205 },
+    { "lat": 46.6760884, "lon": 5.5039244 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "description": "Ancienne Ligne de Chaugey à Lons-le-Saunier",
+    "end_date:railway": "~1994",
+    "foot": "designated",
+    "highway": "path",
+    "horse": "no",
+    "layer": "1",
+    "lit": "no",
+    "motor_vehicle": "no",
+    "name": "Viaduc de Courlans",
+    "operator": "ECLA",
+    "operator:type": "public",
+    "railway": "abandoned",
+    "segregated": "no",
+    "smoothness": "good",
+    "start_date:railway": "1905",
+    "surface": "asphalt",
+    "width": "2.5"
+  }
+},
+{
+  "type": "way",
+  "id": 94121461,
+  "bounds": {
+    "minlat": 44.9077782,
+    "minlon": 1.4936659,
+    "maxlat": 44.9083902,
+    "maxlon": 1.4978615
+  },
+  "geometry": [
+    { "lat": 44.9077782, "lon": 1.4978615 },
+    { "lat": 44.9081113, "lon": 1.4955499 },
+    { "lat": 44.9083343, "lon": 1.4941511 },
+    { "lat": 44.9083685, "lon": 1.4939085 },
+    { "lat": 44.9083902, "lon": 1.4936659 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "electrified": "no",
+    "gauge": "1435",
+    "highway": "path",
+    "layer": "1",
+    "name": "Viaduc du Bramefond",
+    "razed:railway": "rail",
+    "source": "Bing; local survey",
+    "wikidata": "Q82555734",
+    "wikipedia": "fr:Viaduc du Bramefond"
+  }
+},
+{
+  "type": "way",
+  "id": 102002515,
+  "bounds": {
+    "minlat": 44.5631555,
+    "minlon": 4.4608375,
+    "maxlat": 44.5631892,
+    "maxlon": 4.4641922
+  },
+  "geometry": [
+    { "lat": 44.5631555, "lon": 4.4608375 },
+    { "lat": 44.5631892, "lon": 4.4641922 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "foot": "designated",
+    "highway": "path",
+    "historic:gauge": "1435",
+    "horse": "no",
+    "layer": "1",
+    "motor_vehicle": "no",
+    "name": "Viaduc de l'Auzon",
+    "old_name": "Ligne Alès - Le Teil",
+    "oneway": "no",
+    "railway": "abandoned",
+    "ref:structurae": "20044850",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "width": "3",
+    "wikidata": "Q87114471"
+  }
+},
+{
+  "type": "way",
+  "id": 120289323,
+  "bounds": {
+    "minlat": 44.9297719,
+    "minlon": 4.0166204,
+    "maxlat": 44.9320492,
+    "maxlon": 4.0176232
+  },
+  "geometry": [
+    { "lat": 44.9297719, "lon": 4.0176215 },
+    { "lat": 44.9300922, "lon": 4.0176232 },
+    { "lat": 44.9303512, "lon": 4.0176016 },
+    { "lat": 44.9305557, "lon": 4.0175698 },
+    { "lat": 44.9307123, "lon": 4.0175296 },
+    { "lat": 44.9308447, "lon": 4.0174881 },
+    { "lat": 44.9311084, "lon": 4.0173810 },
+    { "lat": 44.9311955, "lon": 4.0173411 },
+    { "lat": 44.9313519, "lon": 4.0172559 },
+    { "lat": 44.9314757, "lon": 4.0171814 },
+    { "lat": 44.9316058, "lon": 4.0170823 },
+    { "lat": 44.9317180, "lon": 4.0169875 },
+    { "lat": 44.9318181, "lon": 4.0168914 },
+    { "lat": 44.9319183, "lon": 4.0167859 },
+    { "lat": 44.9320492, "lon": 4.0166204 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bicycle": "yes",
+    "bridge": "viaduct",
+    "foot": "yes",
+    "heritage": "3",
+    "heritage:operator": "mhs",
+    "highway": "path",
+    "historic": "yes",
+    "horse": "yes",
+    "layer": "2",
+    "maxspeed": "20",
+    "mhs:inscription_date": "1989-08-21",
+    "mtb:scale": "0",
+    "mtb:scale:imba": "0",
+    "mtb:scale:uphill": "0",
+    "name": "Viaduc de la Recoumène",
+    "railway": "abandoned",
+    "ref": "791000",
+    "ref:mhs": "PA00092929",
+    "smoothness": "bad",
+    "source": "DDT Haute-Loire - 2014",
+    "source:heritage": "Ministère de la Culture - 06/2019",
+    "surface": "gravel",
+    "tracktype": "grade2",
+    "wikidata": "Q3556674",
+    "wikipedia": "fr:Viaduc de la Recoumène"
+  }
+},
+{
+  "type": "way",
+  "id": 164153049,
+  "bounds": {
+    "minlat": 43.2665203,
+    "minlon": -2.9492588,
+    "maxlat": 43.2678745,
+    "maxlon": -2.9458365
+  },
+  "geometry": [
+    { "lat": 43.2675964, "lon": -2.9492588 },
+    { "lat": 43.2678485, "lon": -2.9480855 },
+    { "lat": 43.2678705, "lon": -2.9478176 },
+    { "lat": 43.2678745, "lon": -2.9475654 },
+    { "lat": 43.2678475, "lon": -2.9473221 },
+    { "lat": 43.2677807, "lon": -2.9470612 },
+    { "lat": 43.2676834, "lon": -2.9468125 },
+    { "lat": 43.2676462, "lon": -2.9467454 },
+    { "lat": 43.2675702, "lon": -2.9466087 },
+    { "lat": 43.2673944, "lon": -2.9464048 },
+    { "lat": 43.2672186, "lon": -2.9462546 },
+    { "lat": 43.2665203, "lon": -2.9458365 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "highway": "cycleway",
+    "layer": "1",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 248126290,
+  "bounds": {
+    "minlat": 46.3484819,
+    "minlon": 3.3463900,
+    "maxlat": 46.3507580,
+    "maxlon": 3.3481600
+  },
+  "geometry": [
+    { "lat": 46.3484819, "lon": 3.3463900 },
+    { "lat": 46.3490390, "lon": 3.3468312 },
+    { "lat": 46.3494920, "lon": 3.3471839 },
+    { "lat": 46.3500542, "lon": 3.3476176 },
+    { "lat": 46.3505821, "lon": 3.3480373 },
+    { "lat": 46.3507580, "lon": 3.3481600 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "highway": "cycleway",
+    "layer": "1",
+    "width": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 357527175,
+  "bounds": {
+    "minlat": 50.6890315,
+    "minlon": 4.3657737,
+    "maxlat": 50.6891578,
+    "maxlon": 4.3695751
+  },
+  "geometry": [
+    { "lat": 50.6890315, "lon": 4.3695751 },
+    { "lat": 50.6890473, "lon": 4.3680433 },
+    { "lat": 50.6890570, "lon": 4.3674476 },
+    { "lat": 50.6890760, "lon": 4.3669382 },
+    { "lat": 50.6891020, "lon": 4.3664646 },
+    { "lat": 50.6891578, "lon": 4.3657737 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "viaduct",
+    "bridge:structure": "arch",
+    "fixme": "acces interdit cause traveau",
+    "foot": "yes",
+    "highway": "path",
+    "layer": "1",
+    "name": "Viaduc de l'Estrée",
+    "railway": "abandoned",
+    "ref:INV": "25014-INV-0200-01",
+    "smoothness": "bad",
+    "start_date": "1885",
+    "surface": "gravel",
+    "temporary:access": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 464727566,
+  "bounds": {
+    "minlat": 45.7635695,
+    "minlon": 6.0550800,
+    "maxlat": 45.7638753,
+    "maxlon": 6.0556273
+  },
+  "geometry": [
+    { "lat": 45.7636590, "lon": 6.0550800 },
+    { "lat": 45.7636339, "lon": 6.0551029 },
+    { "lat": 45.7636058, "lon": 6.0551432 },
+    { "lat": 45.7635862, "lon": 6.0551861 },
+    { "lat": 45.7635749, "lon": 6.0552263 },
+    { "lat": 45.7635712, "lon": 6.0552759 },
+    { "lat": 45.7635695, "lon": 6.0553365 },
+    { "lat": 45.7635765, "lon": 6.0553841 },
+    { "lat": 45.7636010, "lon": 6.0554640 },
+    { "lat": 45.7636255, "lon": 6.0555187 },
+    { "lat": 45.7636573, "lon": 6.0555656 },
+    { "lat": 45.7636984, "lon": 6.0556045 },
+    { "lat": 45.7637368, "lon": 6.0556220 },
+    { "lat": 45.7637724, "lon": 6.0556273 },
+    { "lat": 45.7638043, "lon": 6.0556227 },
+    { "lat": 45.7638386, "lon": 6.0556091 },
+    { "lat": 45.7638753, "lon": 6.0555901 },
+    { "lat": 45.7638617, "lon": 6.0555415 },
+    { "lat": 45.7637649, "lon": 6.0553913 },
+    { "lat": 45.7637466, "lon": 6.0553819 },
+    { "lat": 45.7637162, "lon": 6.0553135 },
+    { "lat": 45.7637181, "lon": 6.0552880 },
+    { "lat": 45.7637274, "lon": 6.0552666 },
+    { "lat": 45.7636590, "lon": 6.0550800 }
+  ],
+  "tags": {
+    "access": "yes",
+    "amenity": "parking",
+    "capacity:disabled": "1",
+    "fee": "no",
+    "lit": "yes",
+    "maxstay": "unlimited",
+    "name": "Pont de l'Abîme",
+    "opening_hours": "24/7",
+    "park_ride": "no",
+    "parking": "surface",
+    "smoothness": "good",
+    "supervised": "no",
+    "surface": "concrete:plates"
+  }
+},
+{
+  "type": "way",
+  "id": 485684586,
+  "bounds": {
+    "minlat": 45.3376662,
+    "minlon": 9.3317550,
+    "maxlat": 45.3400270,
+    "maxlon": 9.3320140
+  },
+  "geometry": [
+    { "lat": 45.3376662, "lon": 9.3317550 },
+    { "lat": 45.3385341, "lon": 9.3319273 },
+    { "lat": 45.3389242, "lon": 9.3319906 },
+    { "lat": 45.3390992, "lon": 9.3320113 },
+    { "lat": 45.3392217, "lon": 9.3320127 },
+    { "lat": 45.3394037, "lon": 9.3320140 },
+    { "lat": 45.3395699, "lon": 9.3320138 },
+    { "lat": 45.3400270, "lon": 9.3319584 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "viaduct",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "name": "Pista ciclabile Alfonsina Morini Strada",
+    "source": "gps;local knowledge",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 530083530,
+  "bounds": {
+    "minlat": 50.8089232,
+    "minlon": -0.6592977,
+    "maxlat": 50.8099089,
+    "maxlon": -0.6519990
+  },
+  "geometry": [
+    { "lat": 50.8097128, "lon": -0.6592977 },
+    { "lat": 50.8097704, "lon": -0.6589378 },
+    { "lat": 50.8098344, "lon": -0.6584120 },
+    { "lat": 50.8098488, "lon": -0.6583036 },
+    { "lat": 50.8098739, "lon": -0.6580039 },
+    { "lat": 50.8098921, "lon": -0.6577143 },
+    { "lat": 50.8099089, "lon": -0.6569140 },
+    { "lat": 50.8099030, "lon": -0.6564761 },
+    { "lat": 50.8098981, "lon": -0.6563925 },
+    { "lat": 50.8098688, "lon": -0.6558968 },
+    { "lat": 50.8097867, "lon": -0.6551426 },
+    { "lat": 50.8097289, "lon": -0.6547707 },
+    { "lat": 50.8096711, "lon": -0.6544520 },
+    { "lat": 50.8095846, "lon": -0.6540369 },
+    { "lat": 50.8093870, "lon": -0.6532880 },
+    { "lat": 50.8091596, "lon": -0.6525950 },
+    { "lat": 50.8089232, "lon": -0.6519990 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "source": "Local knowledge",
+    "surface": "asphalt",
+    "width": "3"
+  }
+},
+{
+  "type": "way",
+  "id": 653756341,
+  "bounds": {
+    "minlat": 48.6995765,
+    "minlon": 9.2854526,
+    "maxlat": 48.7034317,
+    "maxlon": 9.2932049
+  },
+  "geometry": [
+    { "lat": 48.7034317, "lon": 9.2932049 },
+    { "lat": 48.7034230, "lon": 9.2930861 },
+    { "lat": 48.7034114, "lon": 9.2929457 },
+    { "lat": 48.7033930, "lon": 9.2927460 },
+    { "lat": 48.7033708, "lon": 9.2925483 },
+    { "lat": 48.7033453, "lon": 9.2923441 },
+    { "lat": 48.7033120, "lon": 9.2921095 },
+    { "lat": 48.7032818, "lon": 9.2919217 },
+    { "lat": 48.7032475, "lon": 9.2917229 },
+    { "lat": 48.7032136, "lon": 9.2915416 },
+    { "lat": 48.7031725, "lon": 9.2913378 },
+    { "lat": 48.7031241, "lon": 9.2911163 },
+    { "lat": 48.7030772, "lon": 9.2909190 },
+    { "lat": 48.7030314, "lon": 9.2907386 },
+    { "lat": 48.7029780, "lon": 9.2905400 },
+    { "lat": 48.7029317, "lon": 9.2903783 },
+    { "lat": 48.7028743, "lon": 9.2901871 },
+    { "lat": 48.7028265, "lon": 9.2900360 },
+    { "lat": 48.7027641, "lon": 9.2898510 },
+    { "lat": 48.7026924, "lon": 9.2896476 },
+    { "lat": 48.7026303, "lon": 9.2894805 },
+    { "lat": 48.7025546, "lon": 9.2892886 },
+    { "lat": 48.7024792, "lon": 9.2891057 },
+    { "lat": 48.7024022, "lon": 9.2889293 },
+    { "lat": 48.7023296, "lon": 9.2887693 },
+    { "lat": 48.7022555, "lon": 9.2886141 },
+    { "lat": 48.7021809, "lon": 9.2884630 },
+    { "lat": 48.7021041, "lon": 9.2883163 },
+    { "lat": 48.7020172, "lon": 9.2881552 },
+    { "lat": 48.7019452, "lon": 9.2880274 },
+    { "lat": 48.7018676, "lon": 9.2878937 },
+    { "lat": 48.7017980, "lon": 9.2877797 },
+    { "lat": 48.7017070, "lon": 9.2876337 },
+    { "lat": 48.7016188, "lon": 9.2874987 },
+    { "lat": 48.7015116, "lon": 9.2873426 },
+    { "lat": 48.7014113, "lon": 9.2872032 },
+    { "lat": 48.7013266, "lon": 9.2870904 },
+    { "lat": 48.7012376, "lon": 9.2869733 },
+    { "lat": 48.7011540, "lon": 9.2868701 },
+    { "lat": 48.7010890, "lon": 9.2867924 },
+    { "lat": 48.7009923, "lon": 9.2866798 },
+    { "lat": 48.7008934, "lon": 9.2865673 },
+    { "lat": 48.7007934, "lon": 9.2864610 },
+    { "lat": 48.7006636, "lon": 9.2863278 },
+    { "lat": 48.7005134, "lon": 9.2861808 },
+    { "lat": 48.7004064, "lon": 9.2860841 },
+    { "lat": 48.7002836, "lon": 9.2859774 },
+    { "lat": 48.7001656, "lon": 9.2858794 },
+    { "lat": 48.7000588, "lon": 9.2857933 },
+    { "lat": 48.6999394, "lon": 9.2857043 },
+    { "lat": 48.6998077, "lon": 9.2856105 },
+    { "lat": 48.6997126, "lon": 9.2855448 },
+    { "lat": 48.6995765, "lon": 9.2854526 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "foot": "designated",
+    "highway": "path",
+    "horse": "no",
+    "layer": "2",
+    "lcn": "yes",
+    "lit": "no",
+    "segregated": "no",
+    "surface": "asphalt",
+    "width": "2.75"
+  }
+},
+{
+  "type": "way",
+  "id": 658129207,
+  "bounds": {
+    "minlat": 45.7643334,
+    "minlon": 6.0565431,
+    "maxlat": 45.7646809,
+    "maxlon": 6.0572886
+  },
+  "geometry": [
+    { "lat": 45.7646809, "lon": 6.0572561 },
+    { "lat": 45.7646628, "lon": 6.0572723 },
+    { "lat": 45.7646447, "lon": 6.0572886 },
+    { "lat": 45.7643334, "lon": 6.0565756 },
+    { "lat": 45.7643517, "lon": 6.0565592 },
+    { "lat": 45.7643661, "lon": 6.0565463 },
+    { "lat": 45.7643697, "lon": 6.0565431 },
+    { "lat": 45.7643822, "lon": 6.0565718 },
+    { "lat": 45.7646809, "lon": 6.0572561 }
+  ],
+  "tags": {
+    "artist:wikidata": "Q730311",
+    "artist_name": "Ferdinand Arnodin",
+    "bridge:structure": "suspension",
+    "contact:website": "https://patrimoine.auvergnerhonealpes.fr/dossier/pont-suspendu-dit-pont-de-l-abime/557922b2-24e6-42c7-b4ea-c7efc48001ff",
+    "layer": "1",
+    "man_made": "bridge",
+    "name": "Pont de l'Abîme",
+    "name:etymology:wikidata": "Q4670803",
+    "owner": "Conseil général de la Haute-Savoie",
+    "owner:wikidata": "Q2994013",
+    "start_date": "1891-03-25",
+    "wikidata": "Q3397204",
+    "wikimedia_commons": "Category:Pont de l'Abîme",
+    "wikipedia": "fr:Pont de l'Abîme",
+    "year_of_construction": "1887"
+  }
+},
+{
+  "type": "way",
+  "id": 717300511,
+  "bounds": {
+    "minlat": 45.5142141,
+    "minlon": 9.1028465,
+    "maxlat": 45.5169805,
+    "maxlon": 9.1047191
+  },
+  "geometry": [
+    { "lat": 45.5142141, "lon": 9.1028465 },
+    { "lat": 45.5169805, "lon": 9.1047191 }
+  ],
+  "tags": {
+    "access": "no",
+    "bridge": "viaduct",
+    "foot": "no",
+    "highway": "path",
+    "layer": "3",
+    "name": "Passerella pedonale Merlata - MIND",
+    "note": "la passerella é stata troncata sul lato sud"
+  }
+},
+{
+  "type": "way",
+  "id": 915940603,
+  "bounds": {
+    "minlat": 45.7646628,
+    "minlon": 6.0566005,
+    "maxlat": 45.7684542,
+    "maxlon": 6.0574324
+  },
+  "geometry": [
+    { "lat": 45.7684542, "lon": 6.0566005 },
+    { "lat": 45.7683818, "lon": 6.0567860 },
+    { "lat": 45.7683602, "lon": 6.0568424 },
+    { "lat": 45.7683002, "lon": 6.0570306 },
+    { "lat": 45.7682841, "lon": 6.0570709 },
+    { "lat": 45.7682659, "lon": 6.0571100 },
+    { "lat": 45.7682450, "lon": 6.0571411 },
+    { "lat": 45.7682265, "lon": 6.0571629 },
+    { "lat": 45.7682050, "lon": 6.0571817 },
+    { "lat": 45.7681741, "lon": 6.0572004 },
+    { "lat": 45.7681423, "lon": 6.0572125 },
+    { "lat": 45.7681077, "lon": 6.0572219 },
+    { "lat": 45.7680643, "lon": 6.0572292 },
+    { "lat": 45.7680309, "lon": 6.0572286 },
+    { "lat": 45.7679963, "lon": 6.0572232 },
+    { "lat": 45.7679215, "lon": 6.0572071 },
+    { "lat": 45.7678878, "lon": 6.0572018 },
+    { "lat": 45.7678541, "lon": 6.0571991 },
+    { "lat": 45.7678189, "lon": 6.0572005 },
+    { "lat": 45.7677875, "lon": 6.0572077 },
+    { "lat": 45.7671942, "lon": 6.0573834 },
+    { "lat": 45.7671526, "lon": 6.0573940 },
+    { "lat": 45.7671126, "lon": 6.0574036 },
+    { "lat": 45.7669772, "lon": 6.0574298 },
+    { "lat": 45.7669439, "lon": 6.0574324 },
+    { "lat": 45.7669111, "lon": 6.0574298 },
+    { "lat": 45.7668784, "lon": 6.0574231 },
+    { "lat": 45.7668448, "lon": 6.0574110 },
+    { "lat": 45.7668124, "lon": 6.0573887 },
+    { "lat": 45.7666305, "lon": 6.0572648 },
+    { "lat": 45.7665968, "lon": 6.0572420 },
+    { "lat": 45.7665648, "lon": 6.0572230 },
+    { "lat": 45.7665332, "lon": 6.0572058 },
+    { "lat": 45.7664920, "lon": 6.0571884 },
+    { "lat": 45.7664548, "lon": 6.0571769 },
+    { "lat": 45.7664181, "lon": 6.0571656 },
+    { "lat": 45.7663049, "lon": 6.0571441 },
+    { "lat": 45.7662637, "lon": 6.0571414 },
+    { "lat": 45.7662254, "lon": 6.0571414 },
+    { "lat": 45.7660542, "lon": 6.0571522 },
+    { "lat": 45.7660182, "lon": 6.0571522 },
+    { "lat": 45.7659878, "lon": 6.0571495 },
+    { "lat": 45.7659522, "lon": 6.0571401 },
+    { "lat": 45.7659226, "lon": 6.0571302 },
+    { "lat": 45.7657922, "lon": 6.0570703 },
+    { "lat": 45.7657464, "lon": 6.0570543 },
+    { "lat": 45.7657052, "lon": 6.0570502 },
+    { "lat": 45.7656603, "lon": 6.0570502 },
+    { "lat": 45.7655134, "lon": 6.0570677 },
+    { "lat": 45.7654760, "lon": 6.0570690 },
+    { "lat": 45.7654395, "lon": 6.0570636 },
+    { "lat": 45.7653791, "lon": 6.0570512 },
+    { "lat": 45.7653393, "lon": 6.0570444 },
+    { "lat": 45.7653086, "lon": 6.0570422 },
+    { "lat": 45.7652739, "lon": 6.0570449 },
+    { "lat": 45.7652375, "lon": 6.0570516 },
+    { "lat": 45.7652038, "lon": 6.0570610 },
+    { "lat": 45.7651626, "lon": 6.0570757 },
+    { "lat": 45.7651140, "lon": 6.0570998 },
+    { "lat": 45.7650726, "lon": 6.0571236 },
+    { "lat": 45.7650320, "lon": 6.0571535 },
+    { "lat": 45.7648206, "lon": 6.0573228 },
+    { "lat": 45.7648063, "lon": 6.0573325 },
+    { "lat": 45.7647874, "lon": 6.0573407 },
+    { "lat": 45.7647698, "lon": 6.0573444 },
+    { "lat": 45.7647521, "lon": 6.0573442 },
+    { "lat": 45.7647332, "lon": 6.0573400 },
+    { "lat": 45.7647167, "lon": 6.0573325 },
+    { "lat": 45.7647031, "lon": 6.0573233 },
+    { "lat": 45.7646902, "lon": 6.0573116 },
+    { "lat": 45.7646788, "lon": 6.0572983 },
+    { "lat": 45.7646710, "lon": 6.0572868 },
+    { "lat": 45.7646628, "lon": 6.0572723 }
+  ],
+  "tags": {
+    "highway": "unclassified",
+    "lane_markings": "no",
+    "lanes": "2",
+    "name": "Route du Pont de l'Abîme",
+    "oneway": "no",
+    "ref": "D 31",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 970620312,
+  "bounds": {
+    "minlat": 50.8230741,
+    "minlon": 3.6017436,
+    "maxlat": 50.8243010,
+    "maxlon": 3.6057529
+  },
+  "geometry": [
+    { "lat": 50.8230741, "lon": 3.6017436 },
+    { "lat": 50.8236004, "lon": 3.6035364 },
+    { "lat": 50.8239178, "lon": 3.6045759 },
+    { "lat": 50.8241064, "lon": 3.6051715 },
+    { "lat": 50.8243010, "lon": 3.6057529 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:name": "Lange Leupe",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "name": "Lange Leupe",
+    "railway": "abandoned",
+    "ref": "F46",
+    "surface": "asphalt",
+    "wikidata": "Q141738241",
+    "wikipedia": "Lange Leupe",
+    "wikipedia:nl": "Lange Leupe"
+  }
+},
+{
+  "type": "way",
+  "id": 1124491815,
+  "bounds": {
+    "minlat": 49.4959823,
+    "minlon": 5.9498483,
+    "maxlat": 49.5005723,
+    "maxlon": 5.9623482
+  },
+  "geometry": [
+    { "lat": 49.4959823, "lon": 5.9623482 },
+    { "lat": 49.4959868, "lon": 5.9622184 },
+    { "lat": 49.4960217, "lon": 5.9619228 },
+    { "lat": 49.4960507, "lon": 5.9617650 },
+    { "lat": 49.4961280, "lon": 5.9614266 },
+    { "lat": 49.4961938, "lon": 5.9611953 },
+    { "lat": 49.4962570, "lon": 5.9609670 },
+    { "lat": 49.4963219, "lon": 5.9607387 },
+    { "lat": 49.4963794, "lon": 5.9605087 },
+    { "lat": 49.4964351, "lon": 5.9602768 },
+    { "lat": 49.4966047, "lon": 5.9595592 },
+    { "lat": 49.4966582, "lon": 5.9593090 },
+    { "lat": 49.4967169, "lon": 5.9590633 },
+    { "lat": 49.4967737, "lon": 5.9588173 },
+    { "lat": 49.4968357, "lon": 5.9585704 },
+    { "lat": 49.4968573, "lon": 5.9584840 },
+    { "lat": 49.4968914, "lon": 5.9583250 },
+    { "lat": 49.4969461, "lon": 5.9580759 },
+    { "lat": 49.4973222, "lon": 5.9564665 },
+    { "lat": 49.4974603, "lon": 5.9558801 },
+    { "lat": 49.4977181, "lon": 5.9547856 },
+    { "lat": 49.4977666, "lon": 5.9546075 },
+    { "lat": 49.4978257, "lon": 5.9544388 },
+    { "lat": 49.4978893, "lon": 5.9542766 },
+    { "lat": 49.4979417, "lon": 5.9540967 },
+    { "lat": 49.4979726, "lon": 5.9539356 },
+    { "lat": 49.4985369, "lon": 5.9515200 },
+    { "lat": 49.4986208, "lon": 5.9512252 },
+    { "lat": 49.4987030, "lon": 5.9510055 },
+    { "lat": 49.4988106, "lon": 5.9507705 },
+    { "lat": 49.4989897, "lon": 5.9503831 },
+    { "lat": 49.4990527, "lon": 5.9502653 },
+    { "lat": 49.4991267, "lon": 5.9501543 },
+    { "lat": 49.4991913, "lon": 5.9500796 },
+    { "lat": 49.4992613, "lon": 5.9500134 },
+    { "lat": 49.4993373, "lon": 5.9499548 },
+    { "lat": 49.4994194, "lon": 5.9499086 },
+    { "lat": 49.4995034, "lon": 5.9498721 },
+    { "lat": 49.4995850, "lon": 5.9498538 },
+    { "lat": 49.4996700, "lon": 5.9498524 },
+    { "lat": 49.4997545, "lon": 5.9498539 },
+    { "lat": 49.4999223, "lon": 5.9498483 },
+    { "lat": 49.5000084, "lon": 5.9498602 },
+    { "lat": 49.5000825, "lon": 5.9499087 },
+    { "lat": 49.5002189, "lon": 5.9499911 },
+    { "lat": 49.5003871, "lon": 5.9500665 },
+    { "lat": 49.5005723, "lon": 5.9501157 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "viaduct",
+    "foot": "designated",
+    "highway": "path",
+    "lit": "yes",
+    "name": "Vëlodukt",
+    "segregated": "yes",
+    "surface": "asphalt",
+    "width": "4.5",
+    "wikidata": "Q115867902",
+    "wikipedia": "lb:Vëlodukt Esch - Belval"
+  }
+},
+{
+  "type": "way",
+  "id": 1572262980,
+  "bounds": {
+    "minlat": 45.7684542,
+    "minlon": 6.0556152,
+    "maxlat": 45.7703477,
+    "maxlon": 6.0566005
+  },
+  "geometry": [
+    { "lat": 45.7703477, "lon": 6.0557869 },
+    { "lat": 45.7700684, "lon": 6.0557172 },
+    { "lat": 45.7697677, "lon": 6.0556447 },
+    { "lat": 45.7696919, "lon": 6.0556327 },
+    { "lat": 45.7696077, "lon": 6.0556199 },
+    { "lat": 45.7695207, "lon": 6.0556152 },
+    { "lat": 45.7694370, "lon": 6.0556206 },
+    { "lat": 45.7693449, "lon": 6.0556447 },
+    { "lat": 45.7692528, "lon": 6.0556789 },
+    { "lat": 45.7691412, "lon": 6.0557442 },
+    { "lat": 45.7690615, "lon": 6.0558190 },
+    { "lat": 45.7690497, "lon": 6.0558300 },
+    { "lat": 45.7688735, "lon": 6.0559977 },
+    { "lat": 45.7687064, "lon": 6.0562006 },
+    { "lat": 45.7685796, "lon": 6.0563877 },
+    { "lat": 45.7684849, "lon": 6.0565363 },
+    { "lat": 45.7684542, "lon": 6.0566005 }
+  ],
+  "tags": {
+    "highway": "unclassified",
+    "lane_markings": "no",
+    "lanes": "2",
+    "name": "Route du Pont de l'Abîme",
+    "ref": "D 31",
+    "surface": "asphalt"
+  }
+}
+
+  ]
+}

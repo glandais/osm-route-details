@@ -1,0 +1,6 @@
+[out:json][timeout:200];
+(
+  way[name~"Pont de l'Ab[iî]me"](45.70,5.95,45.85,6.15);
+  way[highway~"^(cycleway|path)$"][bridge=viaduct](if: length() > 250)(41.3,-5.2,51.1,9.6);
+);
+out tags geom;

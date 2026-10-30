@@ -1,0 +1,8 @@
+[out:json][timeout:120];
+(
+  way[highway][name~"Pont de Saint-Nazaire|Pont Tournant|Pont basculant|Pont écluse",i](47.25,-2.24,47.31,-2.14);
+  way[highway][bridge][name~"^Pont|Passerelle",i](47.18,-1.60,47.25,-1.36);
+  way[highway][name~"Pont de Cheviré|Pont de Mauves",i](47.17,-1.65,47.31,-1.36);
+  way(id:27013264,362043805,30807706,1287936957,1287936958,1418371535,410671587,715090406,1512061831,1360125047,735179993,1489503872,1489503873);
+);
+out tags geom;

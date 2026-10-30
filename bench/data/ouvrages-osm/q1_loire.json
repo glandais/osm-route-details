@@ -1,0 +1,3196 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-30T16:09:51Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 24485925,
+  "bounds": {
+    "minlat": 47.2085208,
+    "minlon": -1.5495620,
+    "maxlat": 47.2086987,
+    "maxlon": -1.5494298
+  },
+  "geometry": [
+    { "lat": 47.2085208, "lon": -1.5494298 },
+    { "lat": 47.2085986, "lon": -1.5494846 },
+    { "lat": 47.2086453, "lon": -1.5495191 },
+    { "lat": 47.2086653, "lon": -1.5495368 },
+    { "lat": 47.2086987, "lon": -1.5495620 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "name": "Pont Général Audibert",
+    "name:br": "Pont Jeneral Audibert",
+    "name:etymology:wikidata": "Q3260285",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 24698601,
+  "bounds": {
+    "minlat": 47.1981688,
+    "minlon": -1.5439308,
+    "maxlat": 47.1999776,
+    "maxlon": -1.5426882
+  },
+  "geometry": [
+    { "lat": 47.1999776, "lon": -1.5439308 },
+    { "lat": 47.1981688, "lon": -1.5426882 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "highway": "secondary",
+    "lanes": "4",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de Pirmil",
+    "name:br": "Pont Pirmil",
+    "name:etymology:wikidata": "Q3397083",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk": "both",
+    "source:name:br": "copied from name",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 25778038,
+  "bounds": {
+    "minlat": 47.2070625,
+    "minlon": -1.5498019,
+    "maxlat": 47.2084711,
+    "maxlon": -1.5489028
+  },
+  "geometry": [
+    { "lat": 47.2084711, "lon": -1.5498019 },
+    { "lat": 47.2071787, "lon": -1.5489769 },
+    { "lat": 47.2070625, "lon": -1.5489028 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Général Audibert",
+    "name:br": "Pont Jeneral Audibert",
+    "name:etymology:wikidata": "Q3260285",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 25905051,
+  "bounds": {
+    "minlat": 47.2307385,
+    "minlon": -1.4748891,
+    "maxlat": 47.2335399,
+    "maxlon": -1.4699932
+  },
+  "geometry": [
+    { "lat": 47.2335399, "lon": -1.4748891 },
+    { "lat": 47.2335318, "lon": -1.4748753 },
+    { "lat": 47.2312329, "lon": -1.4709160 },
+    { "lat": 47.2311597, "lon": -1.4707700 },
+    { "lat": 47.2311268, "lon": -1.4706916 },
+    { "lat": 47.2310843, "lon": -1.4706036 },
+    { "lat": 47.2310397, "lon": -1.4705198 },
+    { "lat": 47.2308796, "lon": -1.4702458 },
+    { "lat": 47.2307993, "lon": -1.4701077 },
+    { "lat": 47.2307631, "lon": -1.4700500 },
+    { "lat": 47.2307385, "lon": -1.4699932 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "name": "Pont de Bellevue",
+    "name:br": "Pont Bellevue",
+    "smoothness": "excellent",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 26717038,
+  "bounds": {
+    "minlat": 47.2084711,
+    "minlon": -1.5499882,
+    "maxlat": 47.2087218,
+    "maxlon": -1.5498019
+  },
+  "geometry": [
+    { "lat": 47.2087218, "lon": -1.5499882 },
+    { "lat": 47.2086823, "lon": -1.5499573 },
+    { "lat": 47.2085846, "lon": -1.5498760 },
+    { "lat": 47.2084711, "lon": -1.5498019 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "secondary",
+    "lanes": "1",
+    "layer": "1",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "name": "Pont Général Audibert",
+    "name:br": "Pont Jeneral Audibert",
+    "name:etymology:wikidata": "Q3260285",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 26820089,
+  "bounds": {
+    "minlat": 47.2908270,
+    "minlon": -1.3830581,
+    "maxlat": 47.2942124,
+    "maxlon": -1.3789129
+  },
+  "geometry": [
+    { "lat": 47.2908270, "lon": -1.3789129 },
+    { "lat": 47.2942124, "lon": -1.3830581 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "cycleway:both": "separate",
+    "hgv": "no",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "50",
+    "maxweight": "3.5",
+    "maxweightrating": "3.5",
+    "maxwidth": "2.0",
+    "name": "Pont de Mauves-sur-Loire",
+    "name:br": "Pont Malvid",
+    "note": "La circulation des poids lourds est temporairement interdite (février 2026) sur les ponts en raison d'un glissement de terrain.",
+    "oneway": "no",
+    "ref": "D 31",
+    "ref:FR:NantesMetropole": "2629",
+    "surface": "asphalt",
+    "was:maxweight": "8.0"
+  }
+},
+{
+  "type": "way",
+  "id": 27013264,
+  "bounds": {
+    "minlat": 47.2987002,
+    "minlon": -2.1826117,
+    "maxlat": 47.2992522,
+    "maxlon": -2.1818586
+  },
+  "geometry": [
+    { "lat": 47.2987002, "lon": -2.1826117 },
+    { "lat": 47.2992522, "lon": -2.1818586 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "maxspeed": "50",
+    "sidewalk:both": "yes",
+    "sidewalk:both:surface": "asphalt",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 27656066,
+  "bounds": {
+    "minlat": 47.2321071,
+    "minlon": -1.4977774,
+    "maxlat": 47.2330721,
+    "maxlon": -1.4965018
+  },
+  "geometry": [
+    { "lat": 47.2330721, "lon": -1.4977774 },
+    { "lat": 47.2321071, "lon": -1.4965018 }
+  ],
+  "tags": {
+    "admin_level": "11",
+    "bicycle": "yes",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "cycleway": "no",
+    "foot": "yes",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Pont des Américains",
+    "name:br": "Pont an Amerikaned",
+    "oneway": "no",
+    "sidewalk": "both",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 28115438,
+  "bounds": {
+    "minlat": 47.1949859,
+    "minlon": -1.5450620,
+    "maxlat": 47.1956278,
+    "maxlon": -1.5444171
+  },
+  "geometry": [
+    { "lat": 47.1956278, "lon": -1.5444171 },
+    { "lat": 47.1949859, "lon": -1.5450620 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "foot": "yes",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont des Bataillons FFI",
+    "name:br": "Pont Batailhonoù an FFI",
+    "name:etymology:wikidata": "Q186595",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 28200548,
+  "bounds": {
+    "minlat": 47.1941504,
+    "minlon": -1.6139531,
+    "maxlat": 47.1960079,
+    "maxlon": -1.6134720
+  },
+  "geometry": [
+    { "lat": 47.1941504, "lon": -1.6134720 },
+    { "lat": 47.1945234, "lon": -1.6135063 },
+    { "lat": 47.1948372, "lon": -1.6135611 },
+    { "lat": 47.1951611, "lon": -1.6136419 },
+    { "lat": 47.1953226, "lon": -1.6137028 },
+    { "lat": 47.1954709, "lon": -1.6137508 },
+    { "lat": 47.1957754, "lon": -1.6138483 },
+    { "lat": 47.1960079, "lon": -1.6139531 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Porte de Saint-Herblain",
+    "destination:lanes": "||Porte de l'Estuaire;Couëron;Indre;Nantes - Centre",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Intérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diabarzh - Pont Chevire",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "ref": "N 844",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 28820530,
+  "bounds": {
+    "minlat": 47.2081993,
+    "minlon": -1.5153118,
+    "maxlat": 47.2087727,
+    "maxlon": -1.5151346
+  },
+  "geometry": [
+    { "lat": 47.2081993, "lon": -1.5151346 },
+    { "lat": 47.2084193, "lon": -1.5152007 },
+    { "lat": 47.2087727, "lon": -1.5153118 }
+  ],
+  "tags": {
+    "bicycle": "dismount",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "path",
+    "layer": "1",
+    "lit": "no",
+    "maxweight": "16",
+    "maxweightrating": "16",
+    "name": "Passerelle Porthcawl",
+    "name:br": "Treuzell bPorthcawl",
+    "name:etymology:wikidata": "Q39480",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "segregated": "no",
+    "source:name:br": "proper translation",
+    "start_date": "2006-07-24",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 30122145,
+  "bounds": {
+    "minlat": 47.1827858,
+    "minlon": -1.5314647,
+    "maxlat": 47.1833558,
+    "maxlon": -1.5309999
+  },
+  "geometry": [
+    { "lat": 47.1833558, "lon": -1.5309999 },
+    { "lat": 47.1827858, "lon": -1.5314647 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight": "11",
+    "maxweightrating": "11",
+    "name": "Pont de la Morinière",
+    "name:br": "Pont La Morinière",
+    "name:etymology:wikidata": "Q16510443",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 30807706,
+  "bounds": {
+    "minlat": 47.1970847,
+    "minlon": -1.5497284,
+    "maxlat": 47.1993607,
+    "maxlon": -1.5497023
+  },
+  "geometry": [
+    { "lat": 47.1970847, "lon": -1.5497284 },
+    { "lat": 47.1980283, "lon": -1.5497067 },
+    { "lat": 47.1993607, "lon": -1.5497023 }
+  ],
+  "tags": {
+    "abandoned:railway": "rail",
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "railway": "abandoned",
+    "razed:railway": "rail",
+    "segregated": "no",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 32150278,
+  "bounds": {
+    "minlat": 47.2107568,
+    "minlon": -1.5355659,
+    "maxlat": 47.2109335,
+    "maxlon": -1.5355261
+  },
+  "geometry": [
+    { "lat": 47.2109335, "lon": -1.5355659 },
+    { "lat": 47.2108263, "lon": -1.5355561 },
+    { "lat": 47.2107568, "lon": -1.5355261 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "separate",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Willy Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk": "no",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 32150280,
+  "bounds": {
+    "minlat": 47.2109335,
+    "minlon": -1.5362851,
+    "maxlat": 47.2124374,
+    "maxlon": -1.5355659
+  },
+  "geometry": [
+    { "lat": 47.2109335, "lon": -1.5355659 },
+    { "lat": 47.2119304, "lon": -1.5360391 },
+    { "lat": 47.2119899, "lon": -1.5360695 },
+    { "lat": 47.2124374, "lon": -1.5362851 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bus:lanes": "yes|yes|designated",
+    "busway:right": "lane",
+    "cycleway:left": "separate",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:forward": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Willy Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "no",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 34019676,
+  "bounds": {
+    "minlat": 47.2726078,
+    "minlon": -2.2018799,
+    "maxlat": 47.2726634,
+    "maxlon": -2.2014350
+  },
+  "geometry": [
+    { "lat": 47.2726078, "lon": -2.2014350 },
+    { "lat": 47.2726634, "lon": -2.2018799 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "movable",
+    "bridge:movable": "bascule",
+    "highway": "service",
+    "layer": "1",
+    "maxaxleload": "2",
+    "maxheight": "4.9",
+    "maxspeed": "50",
+    "name": "Pont basculant",
+    "name:br": "Pont-gwint",
+    "panoramax": "efc585ed-aced-4c6b-ba8b-85d674fcdbae",
+    "seamark:type": "bridge",
+    "source:maxspeed": "FR:urban",
+    "source:name:br": "ofis publik ar brezhoneg",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 35007890,
+  "bounds": {
+    "minlat": 47.2750479,
+    "minlon": -2.1994947,
+    "maxlat": 47.2751787,
+    "maxlon": -2.1994639
+  },
+  "geometry": [
+    { "lat": 47.2751787, "lon": -2.1994639 },
+    { "lat": 47.2750479, "lon": -2.1994947 }
+  ],
+  "tags": {
+    "bridge": "movable",
+    "bridge:movable": "swing",
+    "cycleway:both": "no",
+    "highway": "tertiary",
+    "lanes": "1",
+    "layer": "1",
+    "maxspeed": "30",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont Tournant",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "metal",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 35045070,
+  "bounds": {
+    "minlat": 47.2709283,
+    "minlon": -2.2024679,
+    "maxlat": 47.2710208,
+    "maxlon": -2.2017325
+  },
+  "geometry": [
+    { "lat": 47.2710208, "lon": -2.2024679 },
+    { "lat": 47.2709283, "lon": -2.2017325 }
+  ],
+  "tags": {
+    "bridge": "movable",
+    "bridge:movable": "swing",
+    "cycleway:both": "no",
+    "highway": "residential",
+    "lane_markings": "no",
+    "layer": "1",
+    "maxspeed": "50",
+    "maxweight": "2",
+    "maxweightrating": "2",
+    "name": "Pont écluse sud aval",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "seamark:type": "bridge",
+    "source:maxspeed": "FR:urban",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 38811442,
+  "bounds": {
+    "minlat": 47.2114206,
+    "minlon": -1.4959173,
+    "maxlat": 47.2116287,
+    "maxlon": -1.4958950
+  },
+  "geometry": [
+    { "lat": 47.2114206, "lon": -1.4958950 },
+    { "lat": 47.2116287, "lon": -1.4959173 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "highway": "pedestrian",
+    "lanes": "1",
+    "layer": "1",
+    "name": "Passerelle du Boireau",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 45273919,
+  "bounds": {
+    "minlat": 47.2492112,
+    "minlon": -1.5789503,
+    "maxlat": 47.2492701,
+    "maxlon": -1.5788434
+  },
+  "geometry": [
+    { "lat": 47.2492112, "lon": -1.5789503 },
+    { "lat": 47.2492701, "lon": -1.5788434 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1",
+    "name": "Passerelle Bell Hooks",
+    "name:br": "Treuzell Bell Hooks",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 47405821,
+  "bounds": {
+    "minlat": 47.2921467,
+    "minlon": -2.1781448,
+    "maxlat": 47.2972333,
+    "maxlon": -2.1758706
+  },
+  "geometry": [
+    { "lat": 47.2972333, "lon": -2.1781448 },
+    { "lat": 47.2963439, "lon": -2.1777759 },
+    { "lat": 47.2945954, "lon": -2.1770418 },
+    { "lat": 47.2938515, "lon": -2.1767175 },
+    { "lat": 47.2934524, "lon": -2.1765362 },
+    { "lat": 47.2930531, "lon": -2.1763444 },
+    { "lat": 47.2923927, "lon": -2.1760017 },
+    { "lat": 47.2921467, "lon": -2.1758706 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "cycleway": "lane",
+    "description": "voies régulées par feux",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:both_ways": "1",
+    "lanes:forward": "1",
+    "lanes:reversible": "1",
+    "maxspeed": "70",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont de Saint-Nazaire",
+    "name:br": "Pont Sant-Nazer",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "ref": "D 213",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "wikidata": "Q1060111",
+    "wikipedia": "en:Saint-Nazaire Bridge"
+  }
+},
+{
+  "type": "way",
+  "id": 55460080,
+  "bounds": {
+    "minlat": 47.2228600,
+    "minlon": -1.5531941,
+    "maxlat": 47.2228878,
+    "maxlon": -1.5529331
+  },
+  "geometry": [
+    { "lat": 47.2228600, "lon": -1.5531941 },
+    { "lat": 47.2228878, "lon": -1.5529331 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "pedestrian",
+    "layer": "1",
+    "lit": "yes",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "no",
+    "name": "Pont Saint-Mihiel",
+    "name:br": "Pont Sant-Mihiel",
+    "name:etymology:wikidata": "Q3396735",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "sidewalk": "both",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "width": "8"
+  }
+},
+{
+  "type": "way",
+  "id": 118354599,
+  "bounds": {
+    "minlat": 47.2114111,
+    "minlon": -1.5293480,
+    "maxlat": 47.2134094,
+    "maxlon": -1.5287819
+  },
+  "geometry": [
+    { "lat": 47.2114111, "lon": -1.5287819 },
+    { "lat": 47.2133982, "lon": -1.5293447 },
+    { "lat": 47.2134094, "lon": -1.5293480 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "tertiary",
+    "lanes": "1",
+    "layer": "2",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Éric Tabarly",
+    "name:br": "Pont Éric Tabarly",
+    "name:etymology:wikidata": "Q288394",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "concrete:plates",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 121552274,
+  "bounds": {
+    "minlat": 47.2149237,
+    "minlon": -1.5471679,
+    "maxlat": 47.2157767,
+    "maxlon": -1.5462081
+  },
+  "geometry": [
+    { "lat": 47.2157767, "lon": -1.5471679 },
+    { "lat": 47.2157193, "lon": -1.5470636 },
+    { "lat": 47.2156088, "lon": -1.5468761 },
+    { "lat": 47.2155122, "lon": -1.5467413 },
+    { "lat": 47.2154255, "lon": -1.5466270 },
+    { "lat": 47.2152485, "lon": -1.5464693 },
+    { "lat": 47.2149237, "lon": -1.5462081 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "lane",
+    "foot": "no",
+    "highway": "secondary",
+    "lanes": "1",
+    "layer": "2",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight": "3.5",
+    "maxweightrating": "3.5",
+    "name": "Pont de la Rotonde",
+    "name:br": "Pont ar Gronnell",
+    "name:etymology:wikidata": "Q623525",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk:both": "no",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "traffic_sign": "FR:B30[30]",
+    "zone:maxspeed": "FR:30"
+  }
+},
+{
+  "type": "way",
+  "id": 141224680,
+  "bounds": {
+    "minlat": 47.2003235,
+    "minlon": -1.5362386,
+    "maxlat": 47.2030422,
+    "maxlon": -1.5340090
+  },
+  "geometry": [
+    { "lat": 47.2003235, "lon": -1.5340090 },
+    { "lat": 47.2029895, "lon": -1.5361977 },
+    { "lat": 47.2030422, "lon": -1.5362386 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "track",
+    "cycleway:right:segregated": "yes",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Georges Clemenceau",
+    "name:br": "Pont Georges Clemenceau",
+    "name:etymology:wikidata": "Q171730",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 141561646,
+  "bounds": {
+    "minlat": 47.2088892,
+    "minlon": -1.5428008,
+    "maxlat": 47.2110250,
+    "maxlon": -1.5410294
+  },
+  "geometry": [
+    { "lat": 47.2088892, "lon": -1.5410294 },
+    { "lat": 47.2092067, "lon": -1.5413075 },
+    { "lat": 47.2092682, "lon": -1.5413614 },
+    { "lat": 47.2099833, "lon": -1.5419450 },
+    { "lat": 47.2110250, "lon": -1.5428008 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:right": "separate",
+    "cycleway:right:segregated": "yes",
+    "foot": "yes",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Aristide Briand",
+    "name:br": "Pont Aristide Briand",
+    "name:etymology:wikidata": "Q179888",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 141561647,
+  "bounds": {
+    "minlat": 47.2088083,
+    "minlon": -1.5429240,
+    "maxlat": 47.2109811,
+    "maxlon": -1.5411634
+  },
+  "geometry": [
+    { "lat": 47.2109811, "lon": -1.5429240 },
+    { "lat": 47.2099329, "lon": -1.5420668 },
+    { "lat": 47.2092290, "lon": -1.5414872 },
+    { "lat": 47.2091605, "lon": -1.5414335 },
+    { "lat": 47.2088083, "lon": -1.5411634 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:right": "separate",
+    "foot": "yes",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Aristide Briand",
+    "name:br": "Pont Aristide Briand",
+    "name:etymology:wikidata": "Q179888",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 141681926,
+  "bounds": {
+    "minlat": 47.2073886,
+    "minlon": -1.5555128,
+    "maxlat": 47.2092432,
+    "maxlon": -1.5550962
+  },
+  "geometry": [
+    { "lat": 47.2073886, "lon": -1.5550962 },
+    { "lat": 47.2074354, "lon": -1.5551077 },
+    { "lat": 47.2075894, "lon": -1.5551456 },
+    { "lat": 47.2089519, "lon": -1.5554488 },
+    { "lat": 47.2089693, "lon": -1.5554544 },
+    { "lat": 47.2091112, "lon": -1.5554842 },
+    { "lat": 47.2092152, "lon": -1.5555067 },
+    { "lat": 47.2092432, "lon": -1.5555128 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:both": "lane",
+    "cycleway:both:lane": "exclusive",
+    "foot": "yes",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Haudaudine",
+    "name:br": "Pont Haudaudine",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "wikidata": "Q3396561",
+    "wikipedia": "fr:Pont Haudaudine"
+  }
+},
+{
+  "type": "way",
+  "id": 141683275,
+  "bounds": {
+    "minlat": 47.2084273,
+    "minlon": -1.5617137,
+    "maxlat": 47.2097775,
+    "maxlon": -1.5613989
+  },
+  "geometry": [
+    { "lat": 47.2097775, "lon": -1.5617137 },
+    { "lat": 47.2084273, "lon": -1.5613989 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bicycle:conditional": "dismount @ (7:00-9:00; 17:00-19:00; Sa 8:00-13:00)",
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "pedestrian",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "motorcycle": "no",
+    "name": "Passerelle Victor Schœlcher",
+    "name:br": "Treuzell Victor Schœlcher",
+    "name:etymology:wikidata": "Q120417",
+    "segregated": "no",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "width": "5"
+  }
+},
+{
+  "type": "way",
+  "id": 141929708,
+  "bounds": {
+    "minlat": 47.1968563,
+    "minlon": -1.5620953,
+    "maxlat": 47.1993914,
+    "maxlon": -1.5616266
+  },
+  "geometry": [
+    { "lat": 47.1993914, "lon": -1.5616266 },
+    { "lat": 47.1992956, "lon": -1.5616464 },
+    { "lat": 47.1984849, "lon": -1.5617988 },
+    { "lat": 47.1976226, "lon": -1.5619577 },
+    { "lat": 47.1968563, "lon": -1.5620953 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "construction": "minor",
+    "direction": "backward",
+    "foot": "yes",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Pont des Trois Continents",
+    "name:br": "Pont an Tri C'hevandir",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 142312988,
+  "bounds": {
+    "minlat": 47.2149799,
+    "minlon": -1.5467114,
+    "maxlat": 47.2157768,
+    "maxlon": -1.5460614
+  },
+  "geometry": [
+    { "lat": 47.2149799, "lon": -1.5460614 },
+    { "lat": 47.2153163, "lon": -1.5463373 },
+    { "lat": 47.2155168, "lon": -1.5465120 },
+    { "lat": 47.2156637, "lon": -1.5466336 },
+    { "lat": 47.2157768, "lon": -1.5467114 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cyclestreet": "yes",
+    "cycleway": "no",
+    "highway": "secondary",
+    "lanes": "1",
+    "layer": "2",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight": "11",
+    "maxweightrating": "11",
+    "name": "Pont de la Rotonde",
+    "name:br": "Pont ar Gronnell",
+    "name:etymology:wikidata": "Q623525",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "traffic_sign": "FR:B30[30]",
+    "zone:maxspeed": "FR:30"
+  }
+},
+{
+  "type": "way",
+  "id": 142316340,
+  "bounds": {
+    "minlat": 47.2228878,
+    "minlon": -1.5529331,
+    "maxlat": 47.2229182,
+    "maxlon": -1.5526146
+  },
+  "geometry": [
+    { "lat": 47.2228878, "lon": -1.5529331 },
+    { "lat": 47.2229182, "lon": -1.5526146 }
+  ],
+  "tags": {
+    "admin_level": "10",
+    "bicycle": "designated",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "foot": "designated",
+    "highway": "pedestrian",
+    "layer": "1",
+    "lit": "yes",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "no",
+    "name": "Pont Saint-Mihiel",
+    "name:br": "Pont Sant-Mihiel",
+    "name:etymology:wikidata": "Q3396735",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "political_division": "circonscription_législative",
+    "sidewalk": "both",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "width": "8"
+  }
+},
+{
+  "type": "way",
+  "id": 142926676,
+  "bounds": {
+    "minlat": 47.2166351,
+    "minlon": -1.5488002,
+    "maxlat": 47.2169901,
+    "maxlon": -1.5487393
+  },
+  "geometry": [
+    { "lat": 47.2169901, "lon": -1.5487393 },
+    { "lat": 47.2166351, "lon": -1.5488002 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "path",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Pont de secours",
+    "name:br": "Pont-terc'hel",
+    "source:name:br": "proper translation",
+    "start_date": "1900",
+    "start_date:edtf": "19XX",
+    "start_date:note": "fr:pont reconstruit au XXe siècle.",
+    "surface": "wood"
+  }
+},
+{
+  "type": "way",
+  "id": 143307761,
+  "bounds": {
+    "minlat": 47.2278991,
+    "minlon": -1.5526809,
+    "maxlat": 47.2282356,
+    "maxlon": -1.5521691
+  },
+  "geometry": [
+    { "lat": 47.2278991, "lon": -1.5521691 },
+    { "lat": 47.2282356, "lon": -1.5526809 }
+  ],
+  "tags": {
+    "admin_level": "11",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight": "5.5",
+    "maxweightrating": "5.5",
+    "name": "Pont Général de la Motte Rouge",
+    "name:br": "Pont Jeneral de la Motte Rouge",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "political_division": "canton",
+    "shoulder": "no",
+    "sidewalk": "separate",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 147156933,
+  "bounds": {
+    "minlat": 47.2352867,
+    "minlon": -1.5488138,
+    "maxlat": 47.2353441,
+    "maxlon": -1.5484077
+  },
+  "geometry": [
+    { "lat": 47.2352867, "lon": -1.5488138 },
+    { "lat": 47.2353441, "lon": -1.5484077 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "busway:left": "lane",
+    "cycleway": "no",
+    "highway": "primary",
+    "lanes": "4",
+    "lanes:backward": "2",
+    "lanes:bus:backward": "1",
+    "lanes:forward": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de la Tortière",
+    "name:br": "Pont La Tortière",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:both": "no",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "turn:lanes:forward": "left|through",
+    "wikidata": "Q3397297",
+    "wikipedia": "fr:Pont de la Tortière"
+  }
+},
+{
+  "type": "way",
+  "id": 148921260,
+  "bounds": {
+    "minlat": 47.2016127,
+    "minlon": -1.5363080,
+    "maxlat": 47.2030164,
+    "maxlon": -1.5351457
+  },
+  "geometry": [
+    { "lat": 47.2030164, "lon": -1.5363080 },
+    { "lat": 47.2016127, "lon": -1.5351457 }
+  ],
+  "tags": {
+    "admin_level": "11",
+    "bicycle": "no",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "emergency": "yes",
+    "foot": "no",
+    "highway": "busway",
+    "lane_markings": "no",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "motor_vehicle": "no",
+    "name": "Pont Georges Clemenceau",
+    "name:br": "Pont Georges Clemenceau",
+    "name:etymology:wikidata": "Q171730",
+    "note": "Voie réservée BusWay. Ce n'est pas un bus guidé.",
+    "oneway": "no",
+    "parking:lane:both": "no_parking",
+    "psv": "yes",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 148921261,
+  "bounds": {
+    "minlat": 47.2029403,
+    "minlon": -1.5363651,
+    "maxlat": 47.2029954,
+    "maxlon": -1.5363199
+  },
+  "geometry": [
+    { "lat": 47.2029954, "lon": -1.5363651 },
+    { "lat": 47.2029403, "lon": -1.5363199 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "track",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Georges Clemenceau",
+    "name:br": "Pont Georges Clemenceau",
+    "name:etymology:wikidata": "Q171730",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no",
+    "sidewalk": "right",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 148921264,
+  "bounds": {
+    "minlat": 47.1948205,
+    "minlon": -1.5447043,
+    "maxlat": 47.1955224,
+    "maxlon": -1.5441440
+  },
+  "geometry": [
+    { "lat": 47.1948205, "lon": -1.5447043 },
+    { "lat": 47.1955224, "lon": -1.5441440 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "foot": "yes",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de Pont-Rousseau",
+    "name:br": "Pont Pont-Rousseau",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 161477274,
+  "bounds": {
+    "minlat": 47.2264710,
+    "minlon": -1.6003938,
+    "maxlat": 47.2267127,
+    "maxlon": -1.5998805
+  },
+  "geometry": [
+    { "lat": 47.2267127, "lon": -1.6003938 },
+    { "lat": 47.2264710, "lon": -1.5998805 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "residential",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Le Nain",
+    "name:br": "Pont Le Nain",
+    "name:etymology:wikidata": "Q736207",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "no",
+    "sidewalk": "both",
+    "source:name:br": "same as name",
+    "surface": "asphalt",
+    "traffic_sign": "FR:B30[30]",
+    "zone:maxspeed": "FR:30"
+  }
+},
+{
+  "type": "way",
+  "id": 178217283,
+  "bounds": {
+    "minlat": 47.2002752,
+    "minlon": -1.5363199,
+    "maxlat": 47.2029403,
+    "maxlon": -1.5341340
+  },
+  "geometry": [
+    { "lat": 47.2029403, "lon": -1.5363199 },
+    { "lat": 47.2002752, "lon": -1.5341340 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "track",
+    "cycleway:right:segregated": "yes",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Georges Clemenceau",
+    "name:br": "Pont Georges Clemenceau",
+    "name:etymology:wikidata": "Q171730",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 179246916,
+  "bounds": {
+    "minlat": 47.2113857,
+    "minlon": -1.5295428,
+    "maxlat": 47.2133805,
+    "maxlon": -1.5289814
+  },
+  "geometry": [
+    { "lat": 47.2133805, "lon": -1.5295428 },
+    { "lat": 47.2133725, "lon": -1.5295406 },
+    { "lat": 47.2113857, "lon": -1.5289814 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "tertiary",
+    "lanes": "1",
+    "layer": "2",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Éric Tabarly",
+    "name:br": "Pont Éric Tabarly",
+    "name:etymology:wikidata": "Q288394",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "concrete:plates",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 206173188,
+  "bounds": {
+    "minlat": 47.2884152,
+    "minlon": -1.3767960,
+    "maxlat": 47.2891131,
+    "maxlon": -1.3759326
+  },
+  "geometry": [
+    { "lat": 47.2884152, "lon": -1.3759326 },
+    { "lat": 47.2886632, "lon": -1.3762262 },
+    { "lat": 47.2888826, "lon": -1.3764983 },
+    { "lat": 47.2891131, "lon": -1.3767960 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "hgv": "no",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "50",
+    "maxweight": "3.5",
+    "maxweightrating": "3.5",
+    "maxwidth": "2.0",
+    "name": "Pont de Mauves sur Loire",
+    "name:br": "Pont Malvid",
+    "note": "La circulation des poids lourds est temporairement interdite (février 2026) sur les ponts en raison d'un glissement de terrain.",
+    "oneway": "no",
+    "ref": "D 31",
+    "surface": "asphalt",
+    "was:maxweight": "8.0"
+  }
+},
+{
+  "type": "way",
+  "id": 234973995,
+  "bounds": {
+    "minlat": 47.2692859,
+    "minlon": -2.1682159,
+    "maxlat": 47.2822456,
+    "maxlon": -2.1621212
+  },
+  "geometry": [
+    { "lat": 47.2822456, "lon": -2.1682159 },
+    { "lat": 47.2818188, "lon": -2.1678523 },
+    { "lat": 47.2814135, "lon": -2.1675322 },
+    { "lat": 47.2810003, "lon": -2.1672333 },
+    { "lat": 47.2806033, "lon": -2.1669506 },
+    { "lat": 47.2801666, "lon": -2.1666359 },
+    { "lat": 47.2797883, "lon": -2.1663713 },
+    { "lat": 47.2793572, "lon": -2.1661051 },
+    { "lat": 47.2789493, "lon": -2.1658502 },
+    { "lat": 47.2785275, "lon": -2.1656031 },
+    { "lat": 47.2780986, "lon": -2.1653589 },
+    { "lat": 47.2776695, "lon": -2.1651287 },
+    { "lat": 47.2772584, "lon": -2.1649116 },
+    { "lat": 47.2768002, "lon": -2.1646923 },
+    { "lat": 47.2763763, "lon": -2.1644885 },
+    { "lat": 47.2759041, "lon": -2.1642818 },
+    { "lat": 47.2750748, "lon": -2.1639454 },
+    { "lat": 47.2741587, "lon": -2.1636252 },
+    { "lat": 47.2732625, "lon": -2.1633439 },
+    { "lat": 47.2723662, "lon": -2.1630625 },
+    { "lat": 47.2715843, "lon": -2.1628226 },
+    { "lat": 47.2705963, "lon": -2.1625252 },
+    { "lat": 47.2692859, "lon": -2.1621212 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "bridge:structure": "suspension",
+    "class:bicycle": "-3",
+    "cycleway": "lane",
+    "description": "voies régulées par feux",
+    "highway": "primary",
+    "incline": "6%",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:both_ways": "1",
+    "lanes:forward": "1",
+    "lanes:reversible": "1",
+    "layer": "1",
+    "maxspeed": "70",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont de Saint-Nazaire",
+    "name:br": "Pont Sant-Nazer",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "ref": "D 213",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no",
+    "wikidata": "Q1060111",
+    "wikipedia": "fr:Pont de Saint-Nazaire"
+  }
+},
+{
+  "type": "way",
+  "id": 234973999,
+  "bounds": {
+    "minlat": 47.2822456,
+    "minlon": -2.1729315,
+    "maxlat": 47.2878886,
+    "maxlon": -2.1682159
+  },
+  "geometry": [
+    { "lat": 47.2878886, "lon": -2.1729315 },
+    { "lat": 47.2877703, "lon": -2.1728296 },
+    { "lat": 47.2866471, "lon": -2.1718909 },
+    { "lat": 47.2850858, "lon": -2.1705837 },
+    { "lat": 47.2835334, "lon": -2.1692717 },
+    { "lat": 47.2822456, "lon": -2.1682159 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "bridge:structure": "suspension",
+    "cycleway": "lane",
+    "description": "voies régulées par feux",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:both_ways": "1",
+    "lanes:forward": "1",
+    "lanes:reversible": "1",
+    "layer": "1",
+    "maxspeed": "70",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont de Saint-Nazaire",
+    "name:br": "Pont Sant-Nazer",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "ref": "D 213",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 263350937,
+  "bounds": {
+    "minlat": 47.2049541,
+    "minlon": -1.5266995,
+    "maxlat": 47.2067510,
+    "maxlon": -1.5237336
+  },
+  "geometry": [
+    { "lat": 47.2067510, "lon": -1.5266995 },
+    { "lat": 47.2050665, "lon": -1.5239199 },
+    { "lat": 47.2049541, "lon": -1.5237336 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "separate",
+    "cycleway:right": "no",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Léopold-Sédar-Senghor",
+    "name:br": "Pont Léopold-Sédar-Senghor",
+    "name:etymology:wikidata": "Q154545",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk": "right",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 273034480,
+  "bounds": {
+    "minlat": 47.2878886,
+    "minlon": -2.1732941,
+    "maxlat": 47.2883471,
+    "maxlon": -2.1729315
+  },
+  "geometry": [
+    { "lat": 47.2883471, "lon": -2.1732941 },
+    { "lat": 47.2878886, "lon": -2.1729315 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:both": "lane",
+    "cycleway:both:lane": "advisory",
+    "description": "voies régulées par feux",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:both_ways": "1",
+    "lanes:forward": "1",
+    "lanes:reversible": "1",
+    "layer": "1",
+    "maxspeed": "70",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont de Saint-Nazaire",
+    "name:br": "Pont Sant-Nazer",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "ref": "D 213",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 273034481,
+  "bounds": {
+    "minlat": 47.2883471,
+    "minlon": -2.1758706,
+    "maxlat": 47.2921467,
+    "maxlon": -2.1732941
+  },
+  "geometry": [
+    { "lat": 47.2921467, "lon": -2.1758706 },
+    { "lat": 47.2918027, "lon": -2.1756771 },
+    { "lat": 47.2912348, "lon": -2.1753406 },
+    { "lat": 47.2907695, "lon": -2.1750549 },
+    { "lat": 47.2903320, "lon": -2.1747666 },
+    { "lat": 47.2899399, "lon": -2.1745004 },
+    { "lat": 47.2894960, "lon": -2.1741785 },
+    { "lat": 47.2890635, "lon": -2.1738600 },
+    { "lat": 47.2887487, "lon": -2.1736226 },
+    { "lat": 47.2883471, "lon": -2.1732941 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "cycleway:both": "lane",
+    "cycleway:both:lane": "advisory",
+    "description": "voies régulées par feux",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "1",
+    "lanes:both_ways": "1",
+    "lanes:forward": "1",
+    "lanes:reversible": "1",
+    "maxspeed": "70",
+    "maxweight": "40",
+    "maxweightrating": "40",
+    "name": "Pont de Saint-Nazaire",
+    "name:br": "Pont Sant-Nazer",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "ref": "D 213",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 285609261,
+  "bounds": {
+    "minlat": 47.2071643,
+    "minlon": -1.5494959,
+    "maxlat": 47.2085036,
+    "maxlon": -1.5486314
+  },
+  "geometry": [
+    { "lat": 47.2071643, "lon": -1.5486314 },
+    { "lat": 47.2071791, "lon": -1.5486412 },
+    { "lat": 47.2072024, "lon": -1.5486566 },
+    { "lat": 47.2085036, "lon": -1.5494959 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2025-11-17",
+    "cycleway:surface": "asphalt",
+    "foot": "yes",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Pont Général Audibert",
+    "name:br": "Pont Jeneral Audibert",
+    "name:etymology:wikidata": "Q3260285",
+    "segregated": "yes",
+    "sidewalk": "left",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "width": "4"
+  }
+},
+{
+  "type": "way",
+  "id": 293742437,
+  "bounds": {
+    "minlat": 47.1923126,
+    "minlon": -1.6161712,
+    "maxlat": 47.1987129,
+    "maxlon": -1.6135968
+  },
+  "geometry": [
+    { "lat": 47.1987129, "lon": -1.6161712 },
+    { "lat": 47.1984737, "lon": -1.6159122 },
+    { "lat": 47.1982359, "lon": -1.6156630 },
+    { "lat": 47.1980246, "lon": -1.6154580 },
+    { "lat": 47.1978070, "lon": -1.6152581 },
+    { "lat": 47.1975927, "lon": -1.6150825 },
+    { "lat": 47.1973729, "lon": -1.6149134 },
+    { "lat": 47.1971336, "lon": -1.6147443 },
+    { "lat": 47.1968897, "lon": -1.6145850 },
+    { "lat": 47.1966632, "lon": -1.6144509 },
+    { "lat": 47.1964079, "lon": -1.6143110 },
+    { "lat": 47.1960216, "lon": -1.6141299 },
+    { "lat": 47.1957728, "lon": -1.6140260 },
+    { "lat": 47.1954474, "lon": -1.6138855 },
+    { "lat": 47.1951461, "lon": -1.6137999 },
+    { "lat": 47.1948339, "lon": -1.6137153 },
+    { "lat": 47.1944786, "lon": -1.6136564 },
+    { "lat": 47.1941488, "lon": -1.6136257 },
+    { "lat": 47.1937883, "lon": -1.6135968 },
+    { "lat": 47.1923126, "lon": -1.6136223 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Bordeaux;Poitiers;Aéroport Nantes-Atlantique;Nantes - Sud;Rezé - Atout-Sud;Bouguenais - Les Couëts",
+    "destination:lanes": "||Noirmoutier;Saint-Brévin;Pornic;Bouguenais - Centre;Porte de Bouguenais",
+    "destination:symbol": "motorway;none;airport",
+    "destination:symbol:lanes": "||none;none;none;none;none",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Extérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diavaez - Pont Chevire",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "ref": "N 844",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 293742439,
+  "bounds": {
+    "minlat": 47.1840180,
+    "minlon": -1.6136029,
+    "maxlat": 47.1932982,
+    "maxlon": -1.6134540
+  },
+  "geometry": [
+    { "lat": 47.1840180, "lon": -1.6135905 },
+    { "lat": 47.1842589, "lon": -1.6136015 },
+    { "lat": 47.1847073, "lon": -1.6136029 },
+    { "lat": 47.1852651, "lon": -1.6135807 },
+    { "lat": 47.1857006, "lon": -1.6135733 },
+    { "lat": 47.1868094, "lon": -1.6135503 },
+    { "lat": 47.1875417, "lon": -1.6135423 },
+    { "lat": 47.1882804, "lon": -1.6135265 },
+    { "lat": 47.1890398, "lon": -1.6135121 },
+    { "lat": 47.1898072, "lon": -1.6134969 },
+    { "lat": 47.1912531, "lon": -1.6134878 },
+    { "lat": 47.1932982, "lon": -1.6134540 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Porte de Saint-Herblain",
+    "destination:lanes": "||Porte de l'Estuaire;Couëron;Indre;Nantes - Centre",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Intérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diabarzh - Pont Chevire",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "ref": "N 844",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no",
+    "turn:lanes": "||slight_right"
+  }
+},
+{
+  "type": "way",
+  "id": 312779490,
+  "bounds": {
+    "minlat": 47.2071714,
+    "minlon": -1.5494298,
+    "maxlat": 47.2085208,
+    "maxlon": -1.5485560
+  },
+  "geometry": [
+    { "lat": 47.2071714, "lon": -1.5485560 },
+    { "lat": 47.2085208, "lon": -1.5494298 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Général Audibert",
+    "name:br": "Pont Jeneral Audibert",
+    "name:etymology:wikidata": "Q3260285",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "shoulder": "no",
+    "sidewalk:left": "no",
+    "sidewalk:right": "separate",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 331815434,
+  "bounds": {
+    "minlat": 47.2002980,
+    "minlon": -1.5351457,
+    "maxlat": 47.2016127,
+    "maxlon": -1.5340749
+  },
+  "geometry": [
+    { "lat": 47.2016127, "lon": -1.5351457 },
+    { "lat": 47.2002980, "lon": -1.5340749 }
+  ],
+  "tags": {
+    "admin_level": "11",
+    "bicycle": "no",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "emergency": "yes",
+    "foot": "no",
+    "highway": "busway",
+    "lane_markings": "no",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "motor_vehicle": "no",
+    "name": "Pont Georges Clemenceau",
+    "name:br": "Pont Georges Clemenceau",
+    "name:etymology:wikidata": "Q171730",
+    "note": "Voie réservée BusWay. Ce n'est pas un bus guidé.",
+    "oneway": "no",
+    "parking:lane:both": "no_parking",
+    "psv": "yes",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 332126833,
+  "bounds": {
+    "minlat": 47.2282356,
+    "minlon": -1.5531065,
+    "maxlat": 47.2285046,
+    "maxlon": -1.5526809
+  },
+  "geometry": [
+    { "lat": 47.2285046, "lon": -1.5531065 },
+    { "lat": 47.2284674, "lon": -1.5530520 },
+    { "lat": 47.2282356, "lon": -1.5526809 }
+  ],
+  "tags": {
+    "admin_level": "11",
+    "boundary": "administrative",
+    "bridge": "yes",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight": "5.5",
+    "maxweightrating": "5.5",
+    "name": "Pont Général de la Motte Rouge",
+    "name:br": "Pont Jeneral de la Motte Rouge",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "shoulder": "no",
+    "sidewalk": "separate",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 332223398,
+  "bounds": {
+    "minlat": 47.1981727,
+    "minlon": -1.5437232,
+    "maxlat": 47.2001793,
+    "maxlon": -1.5423486
+  },
+  "geometry": [
+    { "lat": 47.1981727, "lon": -1.5423486 },
+    { "lat": 47.2001793, "lon": -1.5437232 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "no",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "motor_vehicle": "no",
+    "name": "Pont de Pirmil",
+    "name:br": "Pont Pirmil",
+    "name:etymology:wikidata": "Q3397083",
+    "oneway": "no",
+    "smoothness": "excellent",
+    "source:name:br": "copied from name",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 362043805,
+  "bounds": {
+    "minlat": 47.2288290,
+    "minlon": -1.4700614,
+    "maxlat": 47.2301200,
+    "maxlon": -1.4697386
+  },
+  "geometry": [
+    { "lat": 47.2288290, "lon": -1.4697386 },
+    { "lat": 47.2289460, "lon": -1.4697795 },
+    { "lat": 47.2290052, "lon": -1.4697956 },
+    { "lat": 47.2290598, "lon": -1.4698063 },
+    { "lat": 47.2291209, "lon": -1.4698177 },
+    { "lat": 47.2292092, "lon": -1.4698257 },
+    { "lat": 47.2293053, "lon": -1.4698318 },
+    { "lat": 47.2294647, "lon": -1.4698432 },
+    { "lat": 47.2295867, "lon": -1.4698539 },
+    { "lat": 47.2296696, "lon": -1.4698680 },
+    { "lat": 47.2297392, "lon": -1.4698841 },
+    { "lat": 47.2298116, "lon": -1.4699069 },
+    { "lat": 47.2298795, "lon": -1.4699370 },
+    { "lat": 47.2299275, "lon": -1.4699565 },
+    { "lat": 47.2300054, "lon": -1.4699940 },
+    { "lat": 47.2300609, "lon": -1.4700229 },
+    { "lat": 47.2301200, "lon": -1.4700614 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 374886890,
+  "bounds": {
+    "minlat": 47.2316949,
+    "minlon": -1.4965018,
+    "maxlat": 47.2321071,
+    "maxlon": -1.4959454
+  },
+  "geometry": [
+    { "lat": 47.2321071, "lon": -1.4965018 },
+    { "lat": 47.2316949, "lon": -1.4959454 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway": "no",
+    "foot": "yes",
+    "highway": "residential",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Pont des Américains",
+    "name:br": "Pont an Amerikaned",
+    "oneway": "no",
+    "sidewalk": "both",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 379199964,
+  "bounds": {
+    "minlat": 47.1960079,
+    "minlon": -1.6160492,
+    "maxlat": 47.1987719,
+    "maxlon": -1.6139531
+  },
+  "geometry": [
+    { "lat": 47.1960079, "lon": -1.6139531 },
+    { "lat": 47.1964436, "lon": -1.6141399 },
+    { "lat": 47.1967001, "lon": -1.6142787 },
+    { "lat": 47.1971797, "lon": -1.6145879 },
+    { "lat": 47.1974169, "lon": -1.6147647 },
+    { "lat": 47.1976386, "lon": -1.6149367 },
+    { "lat": 47.1978537, "lon": -1.6151124 },
+    { "lat": 47.1980873, "lon": -1.6153328 },
+    { "lat": 47.1983169, "lon": -1.6155599 },
+    { "lat": 47.1987719, "lon": -1.6160492 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Porte de Saint-Herblain",
+    "destination:lanes": "||Porte de l'Estuaire;Couëron;Indre;Nantes - Centre",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Intérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diabarzh - Pont Chevire",
+    "oneway": "yes",
+    "ref": "N 844",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 410671583,
+  "bounds": {
+    "minlat": 47.2127036,
+    "minlon": -1.5416725,
+    "maxlat": 47.2134422,
+    "maxlon": -1.5401077
+  },
+  "geometry": [
+    { "lat": 47.2127036, "lon": -1.5416725 },
+    { "lat": 47.2133807, "lon": -1.5402458 },
+    { "lat": 47.2134160, "lon": -1.5401678 },
+    { "lat": 47.2134422, "lon": -1.5401077 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "lane",
+    "cycleway:left:lane": "exclusive",
+    "cycleway:right": "separate",
+    "foot": "yes",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de Tbilissi",
+    "name:br": "Pont Tbilisi",
+    "name:etymology:wikidata": "Q994",
+    "name:ka": "თბილისის ხიდი",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "no",
+    "panoramax:streetsign": "ff3f2ca2-73a5-46b7-b577-32d0f811abc3",
+    "parking:both": "no",
+    "parking:both:restriction": "no_parking",
+    "sidewalk:both": "separate",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 410671587,
+  "bounds": {
+    "minlat": 47.2126725,
+    "minlon": -1.5416290,
+    "maxlat": 47.2133935,
+    "maxlon": -1.5400588
+  },
+  "geometry": [
+    { "lat": 47.2126725, "lon": -1.5416290 },
+    { "lat": 47.2132176, "lon": -1.5404845 },
+    { "lat": 47.2132878, "lon": -1.5403316 },
+    { "lat": 47.2133206, "lon": -1.5402679 },
+    { "lat": 47.2133500, "lon": -1.5401958 },
+    { "lat": 47.2133732, "lon": -1.5401301 },
+    { "lat": 47.2133900, "lon": -1.5400748 },
+    { "lat": 47.2133935, "lon": -1.5400588 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:surface": "asphalt",
+    "est_width": "4.5",
+    "foot": "yes",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "oneway": "no",
+    "segregated": "yes",
+    "sidewalk": "right",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 714716507,
+  "bounds": {
+    "minlat": 47.1840183,
+    "minlon": -1.6137438,
+    "maxlat": 47.1923126,
+    "maxlon": -1.6136223
+  },
+  "geometry": [
+    { "lat": 47.1923126, "lon": -1.6136223 },
+    { "lat": 47.1912294, "lon": -1.6136420 },
+    { "lat": 47.1898026, "lon": -1.6136495 },
+    { "lat": 47.1890364, "lon": -1.6136660 },
+    { "lat": 47.1882807, "lon": -1.6136739 },
+    { "lat": 47.1875386, "lon": -1.6136906 },
+    { "lat": 47.1868056, "lon": -1.6137043 },
+    { "lat": 47.1857085, "lon": -1.6137156 },
+    { "lat": 47.1852641, "lon": -1.6137264 },
+    { "lat": 47.1847131, "lon": -1.6137359 },
+    { "lat": 47.1842714, "lon": -1.6137438 },
+    { "lat": 47.1840183, "lon": -1.6137336 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Bordeaux;Poitiers;Aéroport Nantes-Atlantique;Nantes - Sud;Rezé - Atout-Sud;Bouguenais - Les Couëts",
+    "destination:lanes": "||Noirmoutier;Saint-Brévin;Pornic;Bouguenais - Centre;Porte de Bouguenais",
+    "destination:symbol": "motorway;none;airport",
+    "destination:symbol:lanes": "||none;none;none;none;none",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Extérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diavaez - Pont Chevire",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "ref": "N 844",
+    "shoulder": "right",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no",
+    "turn:lanes": "||slight_right"
+  }
+},
+{
+  "type": "way",
+  "id": 714763395,
+  "bounds": {
+    "minlat": 47.1932982,
+    "minlon": -1.6134720,
+    "maxlat": 47.1941504,
+    "maxlon": -1.6134432
+  },
+  "geometry": [
+    { "lat": 47.1932982, "lon": -1.6134540 },
+    { "lat": 47.1937814, "lon": -1.6134432 },
+    { "lat": 47.1941504, "lon": -1.6134720 }
+  ],
+  "tags": {
+    "agricultural": "no",
+    "alt_name": "Pont de Cheviré",
+    "alt_name:br": "Pont Chevire",
+    "bicycle": "no",
+    "bridge": "viaduct",
+    "destination": "Porte de Saint-Herblain",
+    "destination:lanes": "||Porte de l'Estuaire;Couëron;Indre;Nantes - Centre",
+    "foot": "no",
+    "highway": "trunk",
+    "int_ref": "E 03",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "70",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "motor_vehicle": "designated",
+    "motorroad": "yes",
+    "name": "Périphérique Intérieur - Pont de Cheviré",
+    "name:br": "Hent-tro Diabarzh - Pont Chevire",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "ref": "N 844",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 715090406,
+  "bounds": {
+    "minlat": 47.2161227,
+    "minlon": -1.4790403,
+    "maxlat": 47.2163545,
+    "maxlon": -1.4788303
+  },
+  "geometry": [
+    { "lat": 47.2163545, "lon": -1.4788303 },
+    { "lat": 47.2161227, "lon": -1.4790403 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "motor_vehicle": "destination",
+    "smoothness": "excellent",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 735179993,
+  "bounds": {
+    "minlat": 47.1993981,
+    "minlon": -1.5335248,
+    "maxlat": 47.1994163,
+    "maxlon": -1.5334778
+  },
+  "geometry": [
+    { "lat": 47.1993981, "lon": -1.5335248 },
+    { "lat": 47.1994077, "lon": -1.5335006 },
+    { "lat": 47.1994163, "lon": -1.5334778 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "footway": "crossing",
+    "highway": "footway",
+    "layer": "1",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 810794875,
+  "bounds": {
+    "minlat": 47.2041516,
+    "minlon": -1.3849415,
+    "maxlat": 47.2043537,
+    "maxlon": -1.3847583
+  },
+  "geometry": [
+    { "lat": 47.2041516, "lon": -1.3849415 },
+    { "lat": 47.2042287, "lon": -1.3848692 },
+    { "lat": 47.2043111, "lon": -1.3847945 },
+    { "lat": 47.2043537, "lon": -1.3847583 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway": "no",
+    "highway": "tertiary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "50",
+    "name": "Pont de l'Ouen",
+    "oneway": "no",
+    "ref": "D 105",
+    "sidewalk": "no",
+    "surface": "asphalt",
+    "wikidata": "Q3397224",
+    "wikipedia": "fr:Pont de l'Ouen"
+  }
+},
+{
+  "type": "way",
+  "id": 884155019,
+  "bounds": {
+    "minlat": 47.2908270,
+    "minlon": -1.3830128,
+    "maxlat": 47.2942379,
+    "maxlon": -1.3788946
+  },
+  "geometry": [
+    { "lat": 47.2908270, "lon": -1.3789129 },
+    { "lat": 47.2908733, "lon": -1.3788946 },
+    { "lat": 47.2942379, "lon": -1.3830128 }
+  ],
+  "tags": {
+    "access": "no",
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "name": "Pont de Mauves-sur-Loire",
+    "name:br": "Pont Malvid",
+    "note": "Passerelle amont fermée (février 2026) sur les ponts en raison d'un glissement de terrain.",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 884155020,
+  "bounds": {
+    "minlat": 47.2908232,
+    "minlon": -1.3831004,
+    "maxlat": 47.2941886,
+    "maxlon": -1.3789129
+  },
+  "geometry": [
+    { "lat": 47.2941886, "lon": -1.3831004 },
+    { "lat": 47.2941745, "lon": -1.3830852 },
+    { "lat": 47.2908232, "lon": -1.3789819 },
+    { "lat": 47.2908270, "lon": -1.3789129 }
+  ],
+  "tags": {
+    "bicycle": "dismount",
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "name": "Pont de Mauves-sur-Loire",
+    "name:br": "Pont Malvid",
+    "note": "La passerelle avale est la seule ouverte aux piétons et cyclistes suite à un glissement de terrain (février 2026), les cyclistes doivent mettre pied à terre.",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 884155023,
+  "bounds": {
+    "minlat": 47.2884152,
+    "minlon": -1.3767960,
+    "maxlat": 47.2891131,
+    "maxlon": -1.3759326
+  },
+  "geometry": [
+    { "lat": 47.2884152, "lon": -1.3759326 },
+    { "lat": 47.2884383, "lon": -1.3759326 },
+    { "lat": 47.2888930, "lon": -1.3764763 },
+    { "lat": 47.2891120, "lon": -1.3767612 },
+    { "lat": 47.2891131, "lon": -1.3767960 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "name": "Pont de Mauves sur Loire",
+    "name:br": "Pont Malvid",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 884155024,
+  "bounds": {
+    "minlat": 47.2884127,
+    "minlon": -1.3768065,
+    "maxlat": 47.2891131,
+    "maxlon": -1.3759326
+  },
+  "geometry": [
+    { "lat": 47.2891131, "lon": -1.3767960 },
+    { "lat": 47.2890927, "lon": -1.3768065 },
+    { "lat": 47.2888669, "lon": -1.3765162 },
+    { "lat": 47.2884127, "lon": -1.3759731 },
+    { "lat": 47.2884152, "lon": -1.3759326 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "truss",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "no",
+    "name": "Pont de Mauves sur Loire",
+    "name:br": "Pont Malvid",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1087338994,
+  "bounds": {
+    "minlat": 47.2279374,
+    "minlon": -1.5530731,
+    "maxlat": 47.2285268,
+    "maxlon": -1.5521608
+  },
+  "geometry": [
+    { "lat": 47.2279374, "lon": -1.5521608 },
+    { "lat": 47.2285268, "lon": -1.5530731 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "cycleway:surface": "asphalt",
+    "cycleway:width": "0.8",
+    "foot": "designated",
+    "footway": "sidewalk",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Pont Général de la Motte Rouge",
+    "name:br": "Pont Jeneral de la Motte Rouge",
+    "oneway:bicycle": "yes",
+    "segregated": "yes",
+    "source:name:br": "proper translation"
+  }
+},
+{
+  "type": "way",
+  "id": 1087339009,
+  "bounds": {
+    "minlat": 47.2278707,
+    "minlon": -1.5531425,
+    "maxlat": 47.2284756,
+    "maxlon": -1.5522061
+  },
+  "geometry": [
+    { "lat": 47.2284756, "lon": -1.5531425 },
+    { "lat": 47.2278891, "lon": -1.5522353 },
+    { "lat": 47.2278707, "lon": -1.5522061 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "cycleway:surface": "asphalt",
+    "footway": "sidewalk",
+    "footway:surface": "asphalt",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Pont Général de la Motte Rouge",
+    "name:br": "Pont Jeneral de la Motte Rouge",
+    "oneway:bicycle": "yes",
+    "segregated": "yes",
+    "source:name:br": "proper translation",
+    "width": "0.8"
+  }
+},
+{
+  "type": "way",
+  "id": 1206693958,
+  "bounds": {
+    "minlat": 47.2353441,
+    "minlon": -1.5484077,
+    "maxlat": 47.2354227,
+    "maxlon": -1.5478062
+  },
+  "geometry": [
+    { "lat": 47.2353441, "lon": -1.5484077 },
+    { "lat": 47.2354227, "lon": -1.5478062 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "busway:both": "lane",
+    "cycleway": "no",
+    "highway": "primary",
+    "lanes": "5",
+    "lanes:backward": "2",
+    "lanes:bus:backward": "1",
+    "lanes:bus:forward": "1",
+    "lanes:forward": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de la Tortière",
+    "name:br": "Pont La Tortière",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:both": "no",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "turn:lanes:forward": "left|through;right|through",
+    "wikidata": "Q3397297",
+    "wikipedia": "fr:Pont de la Tortière"
+  }
+},
+{
+  "type": "way",
+  "id": 1206693959,
+  "bounds": {
+    "minlat": 47.2352329,
+    "minlon": -1.5492252,
+    "maxlat": 47.2352867,
+    "maxlon": -1.5488138
+  },
+  "geometry": [
+    { "lat": 47.2352329, "lon": -1.5492252 },
+    { "lat": 47.2352439, "lon": -1.5491410 },
+    { "lat": 47.2352867, "lon": -1.5488138 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "busway:left": "lane",
+    "cycleway": "no",
+    "highway": "primary",
+    "lanes": "3",
+    "lanes:backward": "2",
+    "lanes:bus:backward": "1",
+    "lanes:forward": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont de la Tortière",
+    "name:br": "Pont La Tortière",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "parking:both": "no",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt",
+    "wikidata": "Q3397297",
+    "wikipedia": "fr:Pont de la Tortière"
+  }
+},
+{
+  "type": "way",
+  "id": 1214118016,
+  "bounds": {
+    "minlat": 47.2422845,
+    "minlon": -1.4988906,
+    "maxlat": 47.2423656,
+    "maxlon": -1.4988236
+  },
+  "geometry": [
+    { "lat": 47.2423656, "lon": -1.4988906 },
+    { "lat": 47.2422845, "lon": -1.4988236 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "foot": "yes",
+    "highway": "cycleway",
+    "incline": "0%",
+    "layer": "1",
+    "name": "Passerelle voie verte",
+    "name:br": "Treuzell hent glas",
+    "smoothness": "intermediate",
+    "width": "3"
+  }
+},
+{
+  "type": "way",
+  "id": 1287936957,
+  "bounds": {
+    "minlat": 47.2078326,
+    "minlon": -1.5664172,
+    "maxlat": 47.2089663,
+    "maxlon": -1.5653842
+  },
+  "geometry": [
+    { "lat": 47.2078326, "lon": -1.5653842 },
+    { "lat": 47.2089238, "lon": -1.5663777 },
+    { "lat": 47.2089663, "lon": -1.5664172 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "check_date:surface": "2025-07-07",
+    "crossing": "uncontrolled",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "footway",
+    "lit": "yes",
+    "smoothness": "good",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1287936958,
+  "bounds": {
+    "minlat": 47.2078112,
+    "minlon": -1.5666000,
+    "maxlat": 47.2089061,
+    "maxlon": -1.5653842
+  },
+  "geometry": [
+    { "lat": 47.2089061, "lon": -1.5666000 },
+    { "lat": 47.2088664, "lon": -1.5665539 },
+    { "lat": 47.2088540, "lon": -1.5665426 },
+    { "lat": 47.2078112, "lon": -1.5655732 },
+    { "lat": 47.2078288, "lon": -1.5654221 },
+    { "lat": 47.2078326, "lon": -1.5653842 }
+  ],
+  "tags": {
+    "bicycle": "dismount",
+    "bridge": "yes",
+    "check_date": "2026-10-20",
+    "check_date:surface": "2025-07-24",
+    "construction": "path",
+    "crossing": "uncontrolled",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway:surface": "asphalt",
+    "highway": "construction",
+    "lit": "yes",
+    "oneway:bicycle": "yes",
+    "segregated": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1360125047,
+  "bounds": {
+    "minlat": 47.1990874,
+    "minlon": -1.5336665,
+    "maxlat": 47.1995450,
+    "maxlon": -1.5332995
+  },
+  "geometry": [
+    { "lat": 47.1990874, "lon": -1.5332995 },
+    { "lat": 47.1993906, "lon": -1.5335412 },
+    { "lat": 47.1995450, "lon": -1.5336665 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "footway": "sidewalk",
+    "highway": "footway",
+    "layer": "1",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1371341883,
+  "bounds": {
+    "minlat": 47.2941886,
+    "minlon": -1.3833093,
+    "maxlat": 47.2943470,
+    "maxlon": -1.3831004
+  },
+  "geometry": [
+    { "lat": 47.2943470, "lon": -1.3833093 },
+    { "lat": 47.2942925, "lon": -1.3832659 },
+    { "lat": 47.2942688, "lon": -1.3832118 },
+    { "lat": 47.2942390, "lon": -1.3831602 },
+    { "lat": 47.2941886, "lon": -1.3831004 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge:structure": "truss",
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "no",
+    "name": "Pont de Mauves-sur-Loire",
+    "name:br": "Pont Malvid",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1371341884,
+  "bounds": {
+    "minlat": 47.2942379,
+    "minlon": -1.3832262,
+    "maxlat": 47.2944487,
+    "maxlon": -1.3830128
+  },
+  "geometry": [
+    { "lat": 47.2942379, "lon": -1.3830128 },
+    { "lat": 47.2943068, "lon": -1.3830964 },
+    { "lat": 47.2943445, "lon": -1.3831358 },
+    { "lat": 47.2943859, "lon": -1.3831515 },
+    { "lat": 47.2944364, "lon": -1.3832008 },
+    { "lat": 47.2944487, "lon": -1.3832262 }
+  ],
+  "tags": {
+    "bridge:structure": "truss",
+    "foot": "yes",
+    "highway": "cycleway",
+    "lit": "no",
+    "name": "Pont de Mauves-sur-Loire",
+    "name:br": "Pont Malvid",
+    "oneway": "yes",
+    "segregated": "no",
+    "smoothness": "excellent",
+    "surface": "wood",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1418371535,
+  "bounds": {
+    "minlat": 47.2078288,
+    "minlon": -1.5664172,
+    "maxlat": 47.2089663,
+    "maxlon": -1.5654221
+  },
+  "geometry": [
+    { "lat": 47.2078288, "lon": -1.5654221 },
+    { "lat": 47.2088945, "lon": -1.5663966 },
+    { "lat": 47.2089663, "lon": -1.5664172 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "cycleway",
+    "lanes": "1",
+    "layer": "1",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1420620185,
+  "bounds": {
+    "minlat": 47.2107504,
+    "minlon": -1.5364374,
+    "maxlat": 47.2125445,
+    "maxlon": -1.5355744
+  },
+  "geometry": [
+    { "lat": 47.2125445, "lon": -1.5364374 },
+    { "lat": 47.2107504, "lon": -1.5355744 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:width": "2",
+    "foot": "yes",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Pont Willy-Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "oneway": "no",
+    "segregated": "yes",
+    "sidewalk": "right",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1420620190,
+  "bounds": {
+    "minlat": 47.2124374,
+    "minlon": -1.5363170,
+    "maxlat": 47.2125677,
+    "maxlon": -1.5362851
+  },
+  "geometry": [
+    { "lat": 47.2124374, "lon": -1.5362851 },
+    { "lat": 47.2125677, "lon": -1.5363170 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bus:lanes": "yes|designated",
+    "busway:right": "lane",
+    "cycleway:left": "no",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Willy Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1420620191,
+  "bounds": {
+    "minlat": 47.2124374,
+    "minlon": -1.5363989,
+    "maxlat": 47.2125528,
+    "maxlon": -1.5362851
+  },
+  "geometry": [
+    { "lat": 47.2125528, "lon": -1.5363989 },
+    { "lat": 47.2124374, "lon": -1.5362851 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:right": "separate",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Willy Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "parking:lane:both": "no_parking",
+    "shoulder": "no",
+    "sidewalk": "no",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1420620192,
+  "bounds": {
+    "minlat": 47.2107665,
+    "minlon": -1.5355659,
+    "maxlat": 47.2109335,
+    "maxlon": -1.5354444
+  },
+  "geometry": [
+    { "lat": 47.2107665, "lon": -1.5354444 },
+    { "lat": 47.2108343, "lon": -1.5354812 },
+    { "lat": 47.2109335, "lon": -1.5355659 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "lane",
+    "cycleway:right:lane": "exclusive",
+    "highway": "primary",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "30",
+    "maxweight:signed": "no",
+    "maxweightrating:signed": "no",
+    "name": "Pont Willy Brandt",
+    "name:br": "Pont Willy Brandt",
+    "name:etymology:wikidata": "Q2514",
+    "note": "maxweight=* déprécié, utilisez maxweightrating=* à la place (https://forum.openstreetmap.fr/t/proposition-d-edition-automatisee-migration-de-maxweight-en-maxweightrating-pour-la-france/35439/71)",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "parking:lane:both": "no_parking",
+    "sidewalk": "right",
+    "sidewalk:right:surface": "asphalt",
+    "smoothness": "excellent",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1422135119,
+  "bounds": {
+    "minlat": 47.2049689,
+    "minlon": -1.5266573,
+    "maxlat": 47.2067740,
+    "maxlon": -1.5236801
+  },
+  "geometry": [
+    { "lat": 47.2067740, "lon": -1.5266573 },
+    { "lat": 47.2050639, "lon": -1.5238347 },
+    { "lat": 47.2049716, "lon": -1.5236849 },
+    { "lat": 47.2049689, "lon": -1.5236801 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "foot": "no",
+    "highway": "cycleway",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "mofa": "no",
+    "motor_vehicle": "no",
+    "motorcycle": "no",
+    "name": "Pont Léopold-Sédar-Senghor",
+    "name:br": "Pont Léopold-Sédar-Senghor",
+    "segregated": "yes",
+    "sidewalk": "left",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1489503872,
+  "bounds": {
+    "minlat": 47.2091666,
+    "minlon": -1.5429689,
+    "maxlat": 47.2109651,
+    "maxlon": -1.5414822
+  },
+  "geometry": [
+    { "lat": 47.2109651, "lon": -1.5429689 },
+    { "lat": 47.2091666, "lon": -1.5414822 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2026-08-13",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway": "sidewalk",
+    "footway:surface": "asphalt",
+    "highway": "footway",
+    "layer": "1",
+    "oneway:bicycle": "yes",
+    "segregated": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1489503873,
+  "bounds": {
+    "minlat": 47.2092274,
+    "minlon": -1.5427688,
+    "maxlat": 47.2110364,
+    "maxlon": -1.5412838
+  },
+  "geometry": [
+    { "lat": 47.2092274, "lon": -1.5412838 },
+    { "lat": 47.2110364, "lon": -1.5427688 }
+  ],
+  "tags": {
+    "bicycle": "designated",
+    "bridge": "yes",
+    "check_date:surface": "2026-08-13",
+    "cycleway:surface": "asphalt",
+    "foot": "designated",
+    "footway": "sidewalk",
+    "footway:surface": "asphalt",
+    "highway": "footway",
+    "layer": "1",
+    "oneway:bicycle": "yes",
+    "segregated": "yes",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1512061831,
+  "bounds": {
+    "minlat": 47.2087746,
+    "minlon": -1.5494490,
+    "maxlat": 47.2088071,
+    "maxlon": -1.5493374
+  },
+  "geometry": [
+    { "lat": 47.2088071, "lon": -1.5493374 },
+    { "lat": 47.2087978, "lon": -1.5493901 },
+    { "lat": 47.2087746, "lon": -1.5494490 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "est_width": "3",
+    "highway": "cycleway",
+    "layer": "1",
+    "lit": "yes",
+    "surface": "asphalt",
+    "width": "2"
+  }
+},
+{
+  "type": "way",
+  "id": 1512297095,
+  "bounds": {
+    "minlat": 47.2092432,
+    "minlon": -1.5555188,
+    "maxlat": 47.2092688,
+    "maxlon": -1.5555128
+  },
+  "geometry": [
+    { "lat": 47.2092432, "lon": -1.5555128 },
+    { "lat": 47.2092688, "lon": -1.5555188 }
+  ],
+  "tags": {
+    "bicycle": "yes",
+    "bridge": "yes",
+    "cycleway:both": "lane",
+    "cycleway:both:lane": "advisory",
+    "foot": "yes",
+    "highway": "secondary",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Pont Haudaudine",
+    "name:br": "Pont Haudaudine",
+    "sidewalk": "both",
+    "sidewalk:both:surface": "asphalt",
+    "smoothness": "good",
+    "source:name:br": "proper translation",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 1544866073,
+  "bounds": {
+    "minlat": 47.2076681,
+    "minlon": -1.5668793,
+    "maxlat": 47.2087709,
+    "maxlon": -1.5657241
+  },
+  "geometry": [
+    { "lat": 47.2087709, "lon": -1.5668793 },
+    { "lat": 47.2085792, "lon": -1.5665717 },
+    { "lat": 47.2083519, "lon": -1.5663423 },
+    { "lat": 47.2076681, "lon": -1.5657241 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "check_date": "2026-10-20",
+    "construction": "primary",
+    "highway": "construction",
+    "layer": "1",
+    "name": "Pont Anne de Bretagne",
+    "name:br": "Pont Anna Breizh",
+    "name:etymology:wikidata": "Q201143"
+  }
+}
+
+  ]
+}

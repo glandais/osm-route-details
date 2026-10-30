@@ -1,0 +1,17 @@
+[out:json][timeout:180];
+(
+  way[highway][name~"Pont de Normandie"](49.40,0.18,49.46,0.32);
+  way[highway][name~"Pont de Tancarville"](49.45,0.40,49.49,0.50);
+  way[highway][bridge](46.155,-1.24,46.185,-1.18);
+  way[highway][tunnel](44.95,5.30,45.06,5.45);
+  way[name~"Goulets"](44.98,5.33,45.06,5.45);
+  way[highway][name~"Echevis",i](45.03,5.36,45.05,5.39);
+  way[highway][name~"Ab[iî]me",i](45.70,5.95,45.85,6.15);
+  way[highway][name~"Caille|Charles-Albert|Caquot",i](45.98,6.05,46.06,6.18);
+  way[name~"Souleuvre",i](48.88,-0.98,49.00,-0.78);
+  way[highway][name~"Ponte della Libert"](45.42,12.22,45.49,12.34);
+  way[highway][name~"Belle Li"](50.60,5.53,50.66,5.60);
+  way[highway=cycleway][bridge](43.45,2.5,43.70,3.10);
+  way(id:261949130,668765888,250224690,236377208,1391029801,1391035951,56415172);
+);
+out tags geom;

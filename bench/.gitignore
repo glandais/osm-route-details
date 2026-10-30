@@ -1,0 +1,5 @@
+# Traces personnelles, streams Strava, table pseudo -> identifiant : jamais versionnés.
+private/
+# Fichiers lourds éventuels (> 1 Mo) : origine et sha256 dans manifest.yaml.
+data/heavy/
+__pycache__/

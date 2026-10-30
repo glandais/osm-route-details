@@ -1,0 +1,66 @@
+{
+    "title": "IGN - LIDAR HD - MNT, MNS et MNH - France enti\u00e8re - avec interpolation",
+    "abstract": "Donn\u00e9es sources issues des relev\u00e9s LIDAR HD. La couverture de ce r\u00e9f\u00e9rentiel est compl\u00e9t\u00e9e au fur et \u00e0 mesure. Certains territoires peuvent \u00eatre absents au moment de l'interrogation du service. La valeur d'altitude -99 999 sera alors renvoy\u00e9e. La donn\u00e9e source est pr\u00e9sent\u00e9e en projection mondiale, Il est donc possible de rencontrer des valeurs interpol\u00e9es dues \u00e0 la reprojection lors des transition zones sans donn\u00e9es - zones avec donn\u00e9es. Cette ressource d'alticodage est une ressource multi-donn\u00e9es. Par d\u00e9faut la r\u00e9ponse est d\u00e9livr\u00e9e sur le MNT. En mode d\u00e9taill\u00e9 il est aussi possible de r\u00e9cup\u00e9rer les informations dans le MNS et le MNH. Plus d'information sur la manipulation de l'API en mode ressource multi-donn\u00e9es : https://geoservices.ign.fr/documentation/services/services-geoplateforme/altimetrie",
+    "keywords": [
+        "IGN",
+        "MNT",
+        "MNS",
+        "MNH",
+        "LIDAR_HD",
+        "ALTI"
+    ],
+    "bbox": {
+        "east": 7.6279958746375085,
+        "north": 50.39357942424416,
+        "west": -2.604005934324654,
+        "south": 45.876668730372565
+    },
+    "_id": "ign_lidar_hd_mnx_mono_wld",
+    "data": [
+        {
+            "title": "IGN - LIDAR HD - MNT - France M\u00e9tropolitaine (dont Corse)- avec interpolation",
+            "bbox": {
+                "east": 7.6279958746,
+                "north": 50.3935792942,
+                "west": -2.6040058043,
+                "south": 45.8766689404
+            },
+            "source": {
+                "value": "LIDAR HD IGN"
+            },
+            "accuracy": {
+                "value": "Pas de 50 cm"
+            }
+        },
+        {
+            "title": "IGN - LIDAR HD - MNS - France M\u00e9tropolitaine (dont Corse)- avec interpolation",
+            "bbox": {
+                "east": 7.6279958746,
+                "north": 50.3935792942,
+                "west": -2.6040058043,
+                "south": 45.8766689404
+            },
+            "source": {
+                "value": "LIDAR HD IGN"
+            },
+            "accuracy": {
+                "value": "Pas de 50 cm"
+            }
+        },
+        {
+            "title": "IGN - LIDAR HD - MNH - France M\u00e9tropolitaine (dont Corse)- avec interpolation",
+            "bbox": {
+                "east": 7.6279958746,
+                "north": 50.3935794242,
+                "west": -2.6040059343,
+                "south": 45.8766687304
+            },
+            "source": {
+                "value": "LIDAR HD IGN"
+            },
+            "accuracy": {
+                "value": "Pas de 50 cm"
+            }
+        }
+    ]
+}

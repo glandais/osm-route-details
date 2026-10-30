@@ -1,0 +1,1559 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-30T16:25:21Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 8875307,
+  "bounds": {
+    "minlat": 38.3084087,
+    "minlon": 21.7670861,
+    "maxlat": 38.3317405,
+    "maxlon": 21.7798563
+  },
+  "geometry": [
+    { "lat": 38.3317405, "lon": 21.7670861 },
+    { "lat": 38.3315662, "lon": 21.7671815 },
+    { "lat": 38.3084087, "lon": 21.7798563 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "80",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:de": "Charilaos-Trikoupis Brücke",
+    "name:el": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:en": "Charilaos Trikoupis Bridge",
+    "name:fr": "Pont Charilaos Trikoupis",
+    "name:pl": "Most Rio-Andirio im. Charilaosa Trikupisa",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes",
+    "wikidata": "Q48353"
+  }
+},
+{
+  "type": "way",
+  "id": 19836115,
+  "bounds": {
+    "minlat": 38.3026588,
+    "minlon": 21.7994988,
+    "maxlat": 38.3026927,
+    "maxlon": 21.7997326
+  },
+  "geometry": [
+    { "lat": 38.3026927, "lon": 21.7997326 },
+    { "lat": 38.3026588, "lon": 21.7994988 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "destination": "Ρίο - Κέντρο",
+    "destination:lang:el-Latn": "Rio - Center",
+    "destination:symbol": "hospital",
+    "highway": "motorway_link",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "oneway": "yes",
+    "operator": "Ολυμπία Οδός",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 24025835,
+  "bounds": {
+    "minlat": 45.2422965,
+    "minlon": 14.5620827,
+    "maxlat": 45.2448355,
+    "maxlon": 14.5666465
+  },
+  "geometry": [
+    { "lat": 45.2448355, "lon": 14.5666465 },
+    { "lat": 45.2422965, "lon": 14.5620827 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "length": "1430",
+    "lit": "no",
+    "maxspeed": "60",
+    "maxweight:signed": "no",
+    "name": "Krčki most",
+    "name:de": "Krk-Brücke",
+    "name:en": "Krk Bridge",
+    "name:et": "Krki sild",
+    "name:fa": "پل کرک",
+    "name:fr": "Pont de Krk",
+    "name:hu": "Krki híd",
+    "name:it": "Ponte di Veglia",
+    "name:ja": "クルク橋",
+    "name:mk": "Крчки мост",
+    "name:no": "Krk-brua",
+    "name:pt": "Ponte Krk",
+    "name:ru": "Кркский мост",
+    "name:sl": "Krški most",
+    "name:sr": "Крчки мост",
+    "name:sv": "Krk-bron",
+    "name:uk": "Кирцький міст",
+    "old_name": "Titov most",
+    "old_name:de": "Tito-Brücke",
+    "old_name:en": "Tito's Bridge",
+    "old_name:et": "Tito sillaks",
+    "old_name:fr": "Pont de Tito",
+    "old_name:hu": "Tito híd",
+    "old_name:it": "Ponte di Tito",
+    "old_name:mk": "Титов мост",
+    "old_name:no": "Tito-brua",
+    "old_name:pt": "Ponte Tito",
+    "old_name:sr": "Титов мост",
+    "old_name:uk": "Тітів міст",
+    "operator": "ARZ",
+    "ref": "D102",
+    "sidewalk": "no",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "toll": "no",
+    "wikidata": "Q842102",
+    "wikipedia": "hr:Krčki most"
+  }
+},
+{
+  "type": "way",
+  "id": 25083536,
+  "bounds": {
+    "minlat": 38.3062140,
+    "minlon": 21.7805781,
+    "maxlat": 38.3073040,
+    "maxlon": 21.7811907
+  },
+  "geometry": [
+    { "lat": 38.3073040, "lon": 21.7805781 },
+    { "lat": 38.3069453, "lon": 21.7807834 },
+    { "lat": 38.3068014, "lon": 21.7808631 },
+    { "lat": 38.3065916, "lon": 21.7809529 },
+    { "lat": 38.3063819, "lon": 21.7810694 },
+    { "lat": 38.3062140, "lon": 21.7811907 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "destination": "Pio;Αθηνα",
+    "destination:lang:el-Latn": "Rio;Athina",
+    "highway": "motorway_link",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "smoothness": "excellent",
+    "source:maxspeed": "sign",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 27439502,
+  "bounds": {
+    "minlat": 38.3011097,
+    "minlon": 21.7986875,
+    "maxlat": 38.3013968,
+    "maxlon": 21.7988827
+  },
+  "geometry": [
+    { "lat": 38.3011097, "lon": 21.7986955 },
+    { "lat": 38.3011377, "lon": 21.7986898 },
+    { "lat": 38.3011736, "lon": 21.7986875 },
+    { "lat": 38.3012148, "lon": 21.7986921 },
+    { "lat": 38.3012437, "lon": 21.7987006 },
+    { "lat": 38.3012702, "lon": 21.7987116 },
+    { "lat": 38.3012975, "lon": 21.7987336 },
+    { "lat": 38.3013255, "lon": 21.7987693 },
+    { "lat": 38.3013968, "lon": 21.7988827 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "tertiary",
+    "layer": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 27439643,
+  "bounds": {
+    "minlat": 38.3029562,
+    "minlon": 21.7882569,
+    "maxlat": 38.3031068,
+    "maxlon": 21.7884118
+  },
+  "geometry": [
+    { "lat": 38.3029562, "lon": 21.7884118 },
+    { "lat": 38.3031068, "lon": 21.7882569 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "motorway",
+    "int_name": "Ionia Odos",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "50",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 27439647,
+  "bounds": {
+    "minlat": 38.3029172,
+    "minlon": 21.7881480,
+    "maxlat": 38.3030750,
+    "maxlon": 21.7882990
+  },
+  "geometry": [
+    { "lat": 38.3030750, "lon": 21.7881480 },
+    { "lat": 38.3029172, "lon": 21.7882990 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "motorway",
+    "int_name": "Ionia Odos",
+    "int_ref": "E 55;E 65",
+    "lanes": "3",
+    "layer": "1",
+    "lit": "yes",
+    "maxspeed": "80",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 27439657,
+  "bounds": {
+    "minlat": 38.3040634,
+    "minlon": 21.7911592,
+    "maxlat": 38.3041662,
+    "maxlon": 21.7912617
+  },
+  "geometry": [
+    { "lat": 38.3041662, "lon": 21.7911592 },
+    { "lat": 38.3040634, "lon": 21.7912617 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "secondary",
+    "int_name": "Egnatias",
+    "lanes": "2",
+    "layer": "1",
+    "name": "Εγνατίας",
+    "oneway": "no",
+    "ref": "ΕΟ5",
+    "smoothness": "good",
+    "source:ref": "Ministerial Decision Γ25871/1963 (ΦΕΚ Β 319/23.07.1963, the ferry is still in service for non-motorway traffic)",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 39887748,
+  "bounds": {
+    "minlat": 38.3048985,
+    "minlon": 21.7829559,
+    "maxlat": 38.3055052,
+    "maxlon": 21.7849456
+  },
+  "geometry": [
+    { "lat": 38.3055052, "lon": 21.7829559 },
+    { "lat": 38.3054701, "lon": 21.7830418 },
+    { "lat": 38.3053957, "lon": 21.7832441 },
+    { "lat": 38.3053438, "lon": 21.7833979 },
+    { "lat": 38.3051053, "lon": 21.7841774 },
+    { "lat": 38.3049875, "lon": 21.7845878 },
+    { "lat": 38.3049391, "lon": 21.7847300 },
+    { "lat": 38.3048985, "lon": 21.7849456 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "highway": "motorway_link",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 39904852,
+  "bounds": {
+    "minlat": 38.3047118,
+    "minlon": 21.7815310,
+    "maxlat": 38.3065952,
+    "maxlon": 21.7857013
+  },
+  "geometry": [
+    { "lat": 38.3047118, "lon": 21.7857013 },
+    { "lat": 38.3049435, "lon": 21.7850993 },
+    { "lat": 38.3051961, "lon": 21.7843926 },
+    { "lat": 38.3053954, "lon": 21.7838248 },
+    { "lat": 38.3055344, "lon": 21.7834544 },
+    { "lat": 38.3056742, "lon": 21.7831017 },
+    { "lat": 38.3058349, "lon": 21.7827537 },
+    { "lat": 38.3060027, "lon": 21.7824252 },
+    { "lat": 38.3061961, "lon": 21.7820931 },
+    { "lat": 38.3063632, "lon": 21.7818541 },
+    { "lat": 38.3065952, "lon": 21.7815310 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 87883376,
+  "bounds": {
+    "minlat": 38.3065952,
+    "minlon": 21.7804417,
+    "maxlat": 38.3076690,
+    "maxlon": 21.7815310
+  },
+  "geometry": [
+    { "lat": 38.3065952, "lon": 21.7815310 },
+    { "lat": 38.3067155, "lon": 21.7813811 },
+    { "lat": 38.3068753, "lon": 21.7812023 },
+    { "lat": 38.3070283, "lon": 21.7810334 },
+    { "lat": 38.3071833, "lon": 21.7808731 },
+    { "lat": 38.3073301, "lon": 21.7807282 },
+    { "lat": 38.3075048, "lon": 21.7805761 },
+    { "lat": 38.3076690, "lon": 21.7804417 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "3",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 87883383,
+  "bounds": {
+    "minlat": 38.3078977,
+    "minlon": 21.7671778,
+    "maxlat": 38.3317721,
+    "maxlon": 21.7802746
+  },
+  "geometry": [
+    { "lat": 38.3078977, "lon": 21.7802746 },
+    { "lat": 38.3080955, "lon": 21.7801445 },
+    { "lat": 38.3082976, "lon": 21.7800213 },
+    { "lat": 38.3317721, "lon": 21.7671778 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "80",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:de": "Charilaos-Trikoupis Brücke",
+    "name:el": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:en": "Charilaos Trikoupis Bridge",
+    "name:fr": "Pont Charilaos Trikoupis",
+    "name:pl": "Most Rio-Andirio im. Charilaosa Trikupisa",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes",
+    "wikidata": "Q48353"
+  }
+},
+{
+  "type": "way",
+  "id": 93567081,
+  "bounds": {
+    "minlat": 45.2454312,
+    "minlon": 14.5677133,
+    "maxlat": 45.2507611,
+    "maxlon": 14.5759588
+  },
+  "geometry": [
+    { "lat": 45.2507611, "lon": 14.5759588 },
+    { "lat": 45.2504050, "lon": 14.5752201 },
+    { "lat": 45.2503113, "lon": 14.5750442 },
+    { "lat": 45.2502003, "lon": 14.5748610 },
+    { "lat": 45.2481264, "lon": 14.5717550 },
+    { "lat": 45.2466106, "lon": 14.5694932 },
+    { "lat": 45.2462115, "lon": 14.5688971 },
+    { "lat": 45.2458204, "lon": 14.5682947 },
+    { "lat": 45.2454312, "lon": 14.5677133 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "cycleway:both": "no",
+    "foot": "no",
+    "highway": "primary",
+    "lanes": "2",
+    "layer": "1",
+    "length": "1430",
+    "lit": "no",
+    "maxspeed": "60",
+    "maxweight:signed": "no",
+    "name": "Krčki most",
+    "name:de": "Krk-Brücke",
+    "name:en": "Krk Bridge",
+    "name:et": "Krki sild",
+    "name:fa": "پل کرک",
+    "name:fr": "Pont de Krk",
+    "name:hu": "Krki híd",
+    "name:it": "Ponte di Veglia",
+    "name:ja": "クルク橋",
+    "name:mk": "Крчки мост",
+    "name:no": "Krk-brua",
+    "name:pt": "Ponte Krk",
+    "name:ru": "Кркский мост",
+    "name:sl": "Krški most",
+    "name:sr": "Крчки мост",
+    "name:sv": "Krk-bron",
+    "name:uk": "Кирцький міст",
+    "old_name": "Titov most",
+    "old_name:de": "Tito-Brücke",
+    "old_name:en": "Tito's Bridge",
+    "old_name:et": "Tito sillaks",
+    "old_name:fr": "Pont de Tito",
+    "old_name:hu": "Tito híd",
+    "old_name:it": "Ponte di Tito",
+    "old_name:mk": "Титов мост",
+    "old_name:no": "Tito-brua",
+    "old_name:pt": "Ponte Tito",
+    "old_name:sr": "Титов мост",
+    "old_name:uk": "Тітів міст",
+    "operator": "ARZ",
+    "ref": "D102",
+    "sidewalk": "no",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 191915344,
+  "bounds": {
+    "minlat": 38.3048985,
+    "minlon": 21.7805781,
+    "maxlat": 38.3073040,
+    "maxlon": 21.7849456
+  },
+  "geometry": [
+    { "lat": 38.3073040, "lon": 21.7805781 },
+    { "lat": 38.3070556, "lon": 21.7808347 },
+    { "lat": 38.3068711, "lon": 21.7810347 },
+    { "lat": 38.3066930, "lon": 21.7812372 },
+    { "lat": 38.3065113, "lon": 21.7814600 },
+    { "lat": 38.3063528, "lon": 21.7816787 },
+    { "lat": 38.3061653, "lon": 21.7819829 },
+    { "lat": 38.3060084, "lon": 21.7822415 },
+    { "lat": 38.3058792, "lon": 21.7824784 },
+    { "lat": 38.3057538, "lon": 21.7827255 },
+    { "lat": 38.3056193, "lon": 21.7830271 },
+    { "lat": 38.3055077, "lon": 21.7833095 },
+    { "lat": 38.3053924, "lon": 21.7836115 },
+    { "lat": 38.3052744, "lon": 21.7839291 },
+    { "lat": 38.3051143, "lon": 21.7843726 },
+    { "lat": 38.3048985, "lon": 21.7849456 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "60",
+    "maxspeed:type": "sign",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 297745257,
+  "bounds": {
+    "minlat": 38.3050628,
+    "minlon": 21.7958976,
+    "maxlat": 38.3051208,
+    "maxlon": 21.7959902
+  },
+  "geometry": [
+    { "lat": 38.3050628, "lon": 21.7958976 },
+    { "lat": 38.3051208, "lon": 21.7959902 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "layer": "1",
+    "name": "25ης Μαρτίου"
+  }
+},
+{
+  "type": "way",
+  "id": 519358712,
+  "bounds": {
+    "minlat": 38.3079673,
+    "minlon": 21.7938825,
+    "maxlat": 38.3080094,
+    "maxlon": 21.7940304
+  },
+  "geometry": [
+    { "lat": 38.3079673, "lon": 21.7938825 },
+    { "lat": 38.3079969, "lon": 21.7939821 },
+    { "lat": 38.3080094, "lon": 21.7940304 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "residential",
+    "layer": "1",
+    "name": "Σολωμού"
+  }
+},
+{
+  "type": "way",
+  "id": 636195392,
+  "bounds": {
+    "minlat": 38.3046291,
+    "minlon": 21.7849456,
+    "maxlat": 38.3048985,
+    "maxlon": 21.7856405
+  },
+  "geometry": [
+    { "lat": 38.3048985, "lon": 21.7849456 },
+    { "lat": 38.3046291, "lon": 21.7856405 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "no"
+  }
+},
+{
+  "type": "way",
+  "id": 732565955,
+  "bounds": {
+    "minlat": 38.3064922,
+    "minlon": 21.7803189,
+    "maxlat": 38.3079476,
+    "maxlon": 21.7823286
+  },
+  "geometry": [
+    { "lat": 38.3067765, "lon": 21.7823286 },
+    { "lat": 38.3067081, "lon": 21.7823084 },
+    { "lat": 38.3066424, "lon": 21.7822698 },
+    { "lat": 38.3065917, "lon": 21.7822185 },
+    { "lat": 38.3065552, "lon": 21.7821620 },
+    { "lat": 38.3065253, "lon": 21.7821020 },
+    { "lat": 38.3065008, "lon": 21.7820235 },
+    { "lat": 38.3064946, "lon": 21.7819556 },
+    { "lat": 38.3064922, "lon": 21.7818857 },
+    { "lat": 38.3065017, "lon": 21.7818012 },
+    { "lat": 38.3065247, "lon": 21.7817395 },
+    { "lat": 38.3065635, "lon": 21.7816753 },
+    { "lat": 38.3066855, "lon": 21.7815168 },
+    { "lat": 38.3068078, "lon": 21.7813601 },
+    { "lat": 38.3069326, "lon": 21.7812170 },
+    { "lat": 38.3070489, "lon": 21.7810888 },
+    { "lat": 38.3071844, "lon": 21.7809527 },
+    { "lat": 38.3073796, "lon": 21.7807667 },
+    { "lat": 38.3075658, "lon": 21.7806001 },
+    { "lat": 38.3076957, "lon": 21.7805021 },
+    { "lat": 38.3079404, "lon": 21.7803189 },
+    { "lat": 38.3079476, "lon": 21.7803347 }
+  ],
+  "tags": {
+    "access": "private",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης (Ανατολικός Πεζόδρομος)",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 735689295,
+  "bounds": {
+    "minlat": 38.3064585,
+    "minlon": 21.7815310,
+    "maxlat": 38.3067744,
+    "maxlon": 21.7823759
+  },
+  "geometry": [
+    { "lat": 38.3067744, "lon": 21.7823759 },
+    { "lat": 38.3066973, "lon": 21.7823531 },
+    { "lat": 38.3066240, "lon": 21.7823081 },
+    { "lat": 38.3065679, "lon": 21.7822545 },
+    { "lat": 38.3065248, "lon": 21.7821872 },
+    { "lat": 38.3064893, "lon": 21.7821096 },
+    { "lat": 38.3064689, "lon": 21.7820278 },
+    { "lat": 38.3064603, "lon": 21.7819571 },
+    { "lat": 38.3064585, "lon": 21.7818861 },
+    { "lat": 38.3064695, "lon": 21.7817988 },
+    { "lat": 38.3065650, "lon": 21.7816262 },
+    { "lat": 38.3065952, "lon": 21.7815310 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "highway": "motorway_link",
+    "incline": "up",
+    "lanes": "1",
+    "layer": "1",
+    "lit": "yes",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "smoothness": "excellent",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 759292869,
+  "bounds": {
+    "minlat": 38.3122112,
+    "minlon": 21.7983157,
+    "maxlat": 38.3122534,
+    "maxlon": 21.7984222
+  },
+  "geometry": [
+    { "lat": 38.3122112, "lon": 21.7983157 },
+    { "lat": 38.3122248, "lon": 21.7983431 },
+    { "lat": 38.3122469, "lon": 21.7984002 },
+    { "lat": 38.3122534, "lon": 21.7984222 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "tertiary",
+    "int_name": "Eleftherias",
+    "layer": "1",
+    "name": "Ελευθερίας"
+  }
+},
+{
+  "type": "way",
+  "id": 780039855,
+  "bounds": {
+    "minlat": 38.3078603,
+    "minlon": 21.7798563,
+    "maxlat": 38.3084087,
+    "maxlon": 21.7801840
+  },
+  "geometry": [
+    { "lat": 38.3084087, "lon": 21.7798563 },
+    { "lat": 38.3082654, "lon": 21.7799347 },
+    { "lat": 38.3080612, "lon": 21.7800571 },
+    { "lat": 38.3078603, "lon": 21.7801840 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "60",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:de": "Charilaos-Trikoupis Brücke",
+    "name:el": "Γέφυρα Χαρίλαος Τρικούπης",
+    "name:en": "Charilaos Trikoupis Bridge",
+    "name:fr": "Pont Charilaos Trikoupis",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 886322110,
+  "bounds": {
+    "minlat": 38.3078140,
+    "minlon": 21.7800135,
+    "maxlat": 38.3078416,
+    "maxlon": 21.7800623
+  },
+  "geometry": [
+    { "lat": 38.3078416, "lon": 21.7800556 },
+    { "lat": 38.3078318, "lon": 21.7800623 },
+    { "lat": 38.3078140, "lon": 21.7800203 },
+    { "lat": 38.3078238, "lon": 21.7800135 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 886322111,
+  "bounds": {
+    "minlat": 38.3078163,
+    "minlon": 21.7800156,
+    "maxlat": 38.3078406,
+    "maxlon": 21.7800590
+  },
+  "geometry": [
+    { "lat": 38.3078406, "lon": 21.7800533 },
+    { "lat": 38.3078322, "lon": 21.7800590 },
+    { "lat": 38.3078163, "lon": 21.7800214 },
+    { "lat": 38.3078247, "lon": 21.7800156 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 886322112,
+  "bounds": {
+    "minlat": 38.3078443,
+    "minlon": 21.7799964,
+    "maxlat": 38.3078673,
+    "maxlon": 21.7800372
+  },
+  "geometry": [
+    { "lat": 38.3078443, "lon": 21.7800021 },
+    { "lat": 38.3078524, "lon": 21.7799964 },
+    { "lat": 38.3078673, "lon": 21.7800315 },
+    { "lat": 38.3078590, "lon": 21.7800372 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "3",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 886322113,
+  "bounds": {
+    "minlat": 38.3078434,
+    "minlon": 21.7799933,
+    "maxlat": 38.3078699,
+    "maxlon": 21.7800398
+  },
+  "geometry": [
+    { "lat": 38.3078434, "lon": 21.7800000 },
+    { "lat": 38.3078531, "lon": 21.7799933 },
+    { "lat": 38.3078699, "lon": 21.7800331 },
+    { "lat": 38.3078601, "lon": 21.7800398 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 886322114,
+  "bounds": {
+    "minlat": 38.3078552,
+    "minlon": 21.7672129,
+    "maxlat": 38.3313559,
+    "maxlon": 21.7801023
+  },
+  "geometry": [
+    { "lat": 38.3078552, "lon": 21.7801023 },
+    { "lat": 38.3080341, "lon": 21.7799881 },
+    { "lat": 38.3082393, "lon": 21.7798648 },
+    { "lat": 38.3313559, "lon": 21.7672129 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "footway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης (Δυτικός Πεζόδρομος)",
+    "operator": "Γέφυρα Α.Ε.",
+    "smoothness": "good",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 886822576,
+  "bounds": {
+    "minlat": 38.3313559,
+    "minlon": 21.7670156,
+    "maxlat": 38.3317163,
+    "maxlon": 21.7672129
+  },
+  "geometry": [
+    { "lat": 38.3313559, "lon": 21.7672129 },
+    { "lat": 38.3317163, "lon": 21.7670156 }
+  ],
+  "tags": {
+    "access": "private",
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "footway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης (Δυτικός Πεζόδρομος)",
+    "operator": "Γέφυρα Α.Ε.",
+    "surface": "concrete"
+  }
+},
+{
+  "type": "way",
+  "id": 886822577,
+  "bounds": {
+    "minlat": 38.3079476,
+    "minlon": 21.7672501,
+    "maxlat": 38.3317970,
+    "maxlon": 21.7803347
+  },
+  "geometry": [
+    { "lat": 38.3079476, "lon": 21.7803347 },
+    { "lat": 38.3081245, "lon": 21.7802185 },
+    { "lat": 38.3083249, "lon": 21.7800947 },
+    { "lat": 38.3314340, "lon": 21.7674488 },
+    { "lat": 38.3317970, "lon": 21.7672501 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "bridge:structure": "cable-stayed",
+    "ele": "65",
+    "highway": "footway",
+    "layer": "1",
+    "lit": "yes",
+    "name": "Γέφυρα Χαρίλαος Τρικούπης (Ανατολικός Πεζόδρομος)",
+    "operator": "Γέφυρα Α.Ε.",
+    "smoothness": "good",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "asphalt"
+  }
+},
+{
+  "type": "way",
+  "id": 905223583,
+  "bounds": {
+    "minlat": 38.3116854,
+    "minlon": 21.7922277,
+    "maxlat": 38.3117165,
+    "maxlon": 21.7923134
+  },
+  "geometry": [
+    { "lat": 38.3117165, "lon": 21.7922277 },
+    { "lat": 38.3116854, "lon": 21.7923134 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "tertiary",
+    "layer": "1",
+    "name": "Ελευθερίας"
+  }
+},
+{
+  "type": "way",
+  "id": 1008913791,
+  "bounds": {
+    "minlat": 38.3313396,
+    "minlon": 21.7671651,
+    "maxlat": 38.3313559,
+    "maxlon": 21.7672129
+  },
+  "geometry": [
+    { "lat": 38.3313396, "lon": 21.7671651 },
+    { "lat": 38.3313559, "lon": 21.7672129 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1008913794,
+  "bounds": {
+    "minlat": 38.3314340,
+    "minlon": 21.7674488,
+    "maxlat": 38.3314485,
+    "maxlon": 21.7674875
+  },
+  "geometry": [
+    { "lat": 38.3314485, "lon": 21.7674875 },
+    { "lat": 38.3314340, "lon": 21.7674488 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1008914985,
+  "bounds": {
+    "minlat": 38.3079476,
+    "minlon": 21.7803347,
+    "maxlat": 38.3079652,
+    "maxlon": 21.7803577
+  },
+  "geometry": [
+    { "lat": 38.3079476, "lon": 21.7803347 },
+    { "lat": 38.3079572, "lon": 21.7803577 },
+    { "lat": 38.3079652, "lon": 21.7803523 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1008914986,
+  "bounds": {
+    "minlat": 38.3078326,
+    "minlon": 21.7800506,
+    "maxlat": 38.3078552,
+    "maxlon": 21.7801023
+  },
+  "geometry": [
+    { "lat": 38.3078395, "lon": 21.7800506 },
+    { "lat": 38.3078326, "lon": 21.7800554 },
+    { "lat": 38.3078552, "lon": 21.7801023 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "3",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1303201698,
+  "bounds": {
+    "minlat": 38.3337550,
+    "minlon": 21.7656078,
+    "maxlat": 38.3339822,
+    "maxlon": 21.7662746
+  },
+  "geometry": [
+    { "lat": 38.3337550, "lon": 21.7656078 },
+    { "lat": 38.3339822, "lon": 21.7662746 }
+  ],
+  "tags": {
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1"
+  }
+},
+{
+  "type": "way",
+  "id": 1312987702,
+  "bounds": {
+    "minlat": 38.3079864,
+    "minlon": 21.7803350,
+    "maxlat": 38.3080060,
+    "maxlon": 21.7803676
+  },
+  "geometry": [
+    { "lat": 38.3079864, "lon": 21.7803408 },
+    { "lat": 38.3079949, "lon": 21.7803350 },
+    { "lat": 38.3080060, "lon": 21.7803618 },
+    { "lat": 38.3079974, "lon": 21.7803676 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1312987704,
+  "bounds": {
+    "minlat": 38.3079856,
+    "minlon": 21.7803319,
+    "maxlat": 38.3080084,
+    "maxlon": 21.7803696
+  },
+  "geometry": [
+    { "lat": 38.3079856, "lon": 21.7803386 },
+    { "lat": 38.3079956, "lon": 21.7803319 },
+    { "lat": 38.3080084, "lon": 21.7803628 },
+    { "lat": 38.3079983, "lon": 21.7803696 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119851,
+  "bounds": {
+    "minlat": 38.3073040,
+    "minlon": 21.7801840,
+    "maxlat": 38.3078603,
+    "maxlon": 21.7805781
+  },
+  "geometry": [
+    { "lat": 38.3078603, "lon": 21.7801840 },
+    { "lat": 38.3076356, "lon": 21.7803340 },
+    { "lat": 38.3075425, "lon": 21.7804007 },
+    { "lat": 38.3073040, "lon": 21.7805781 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "60",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119852,
+  "bounds": {
+    "minlat": 38.3076690,
+    "minlon": 21.7802746,
+    "maxlat": 38.3078977,
+    "maxlon": 21.7804417
+  },
+  "geometry": [
+    { "lat": 38.3076690, "lon": 21.7804417 },
+    { "lat": 38.3078977, "lon": 21.7802746 }
+  ],
+  "tags": {
+    "bridge": "viaduct",
+    "bridge:structure": "beam",
+    "ele": "65",
+    "highway": "motorway",
+    "int_name": "Charilaos-Trikoupis Bridge",
+    "int_ref": "E 55;E 65",
+    "lanes": "2",
+    "layer": "1",
+    "length": "2295",
+    "lit": "yes",
+    "loc_name": "Γέφυρα Ρίου-Αντιρρίου",
+    "maxspeed": "80",
+    "name": "Ιονία Οδός",
+    "name:bg": "Йонийска магистрала",
+    "name:de": "Ionische Autobahn",
+    "name:el": "Ιονία Οδός",
+    "name:en": "Ionian Motorway",
+    "name:fr": "Autoroute Ionienne",
+    "name:it": "Autostrada Ionica",
+    "name:mk": "Автопат Јонски",
+    "name:sq": "Autostrada Jonianë",
+    "name:tr": "İyonya Otoyolu",
+    "oneway": "yes",
+    "operator": "Γέφυρα Α.Ε.",
+    "ref": "Α5",
+    "smoothness": "excellent",
+    "source:ref": "Ministerial Decision ΔΟΥ/οικ/5776/2015 (ΦΕΚ ΑΑΠ 253/21.12.2015)",
+    "surface": "asphalt",
+    "toll": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119853,
+  "bounds": {
+    "minlat": 38.3079773,
+    "minlon": 21.7803676,
+    "maxlat": 38.3079974,
+    "maxlon": 21.7803811
+  },
+  "geometry": [
+    { "lat": 38.3079773, "lon": 21.7803811 },
+    { "lat": 38.3079974, "lon": 21.7803676 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119854,
+  "bounds": {
+    "minlat": 38.3079784,
+    "minlon": 21.7803696,
+    "maxlat": 38.3079983,
+    "maxlon": 21.7803830
+  },
+  "geometry": [
+    { "lat": 38.3079784, "lon": 21.7803830 },
+    { "lat": 38.3079983, "lon": 21.7803696 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119855,
+  "bounds": {
+    "minlat": 38.3079652,
+    "minlon": 21.7803386,
+    "maxlat": 38.3079856,
+    "maxlon": 21.7803523
+  },
+  "geometry": [
+    { "lat": 38.3079856, "lon": 21.7803386 },
+    { "lat": 38.3079652, "lon": 21.7803523 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119856,
+  "bounds": {
+    "minlat": 38.3079661,
+    "minlon": 21.7803408,
+    "maxlat": 38.3079864,
+    "maxlon": 21.7803545
+  },
+  "geometry": [
+    { "lat": 38.3079864, "lon": 21.7803408 },
+    { "lat": 38.3079661, "lon": 21.7803545 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119857,
+  "bounds": {
+    "minlat": 38.3079562,
+    "minlon": 21.7803545,
+    "maxlat": 38.3079784,
+    "maxlon": 21.7803899
+  },
+  "geometry": [
+    { "lat": 38.3079784, "lon": 21.7803830 },
+    { "lat": 38.3079681, "lon": 21.7803899 },
+    { "lat": 38.3079562, "lon": 21.7803611 },
+    { "lat": 38.3079661, "lon": 21.7803545 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "footway",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119859,
+  "bounds": {
+    "minlat": 38.3078395,
+    "minlon": 21.7800372,
+    "maxlat": 38.3078590,
+    "maxlon": 21.7800506
+  },
+  "geometry": [
+    { "lat": 38.3078590, "lon": 21.7800372 },
+    { "lat": 38.3078395, "lon": 21.7800506 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "3",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119860,
+  "bounds": {
+    "minlat": 38.3078406,
+    "minlon": 21.7800398,
+    "maxlat": 38.3078601,
+    "maxlon": 21.7800533
+  },
+  "geometry": [
+    { "lat": 38.3078601, "lon": 21.7800398 },
+    { "lat": 38.3078406, "lon": 21.7800533 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119861,
+  "bounds": {
+    "minlat": 38.3078238,
+    "minlon": 21.7800000,
+    "maxlat": 38.3078434,
+    "maxlon": 21.7800135
+  },
+  "geometry": [
+    { "lat": 38.3078238, "lon": 21.7800135 },
+    { "lat": 38.3078434, "lon": 21.7800000 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119862,
+  "bounds": {
+    "minlat": 38.3078416,
+    "minlon": 21.7800421,
+    "maxlat": 38.3078611,
+    "maxlon": 21.7800556
+  },
+  "geometry": [
+    { "lat": 38.3078611, "lon": 21.7800421 },
+    { "lat": 38.3078416, "lon": 21.7800556 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "1",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+},
+{
+  "type": "way",
+  "id": 1313119863,
+  "bounds": {
+    "minlat": 38.3078247,
+    "minlon": 21.7800021,
+    "maxlat": 38.3078443,
+    "maxlon": 21.7800156
+  },
+  "geometry": [
+    { "lat": 38.3078247, "lon": 21.7800156 },
+    { "lat": 38.3078443, "lon": 21.7800021 }
+  ],
+  "tags": {
+    "bicycle": "no",
+    "bridge": "yes",
+    "highway": "steps",
+    "incline": "up",
+    "layer": "2",
+    "operator": "Γέφυρα Α.Ε.",
+    "ramp:wheelchair": "no",
+    "source:bicycle": "https://www.gefyra.gr/en/security/Pezoi/",
+    "surface": "metal"
+  }
+}
+
+  ]
+}
