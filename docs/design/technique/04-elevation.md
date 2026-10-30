@@ -169,6 +169,14 @@ de 65,8 m dessous ; D+ de 0,74 à 1,08 × vrai. OSM règle les échecs du **dét
 superstructures) mais pas ceux du **constructeur** (creux longs et lisses de Cheviré, toit lisse
 fusionné, arche de plus de 10 % plafonnée par l'étape 6, §8).
 
+Première mesure du banc (`bench/README.md` §1.5) : au milieu des grands ponts (Saint-Nazaire,
+Pirmil, Anne-de-Bretagne, Mauves), le MNS LiDAR est à ≤ 1 m du baromètre corrigé. Au pont
+Général-Audibert, la lecture **ponctuelle** est 2,4 à 4,5 m au-dessus, sur 5 passages
+(superstructure, lampadaires, véhicules). Le constructeur ne lit donc **jamais** le MNS en un seul
+point : il ne retient que des ancres propres (étapes 4–5), puis prend une médiane sur 25 m
+(étape 6). Si un biais survit à la médiane, par exemple une superstructure lisse et continue, il se
+verra en E3 contre le baromètre (bench §3) ; aucune autre correction n'est prévue au MVP.
+
 ### 3.3 Repli d'interpolation (`interpolated_structure`)
 
 - **Pont sans MNS exploitable** (hors LiDAR, MNS en échec, moins de 2 ancres, incohérence) : droite
@@ -473,7 +481,7 @@ par `proptest`.
 | Parcours de 2 points très proches (moins de 5 m) | Grille réduite aux deux points d'entrée ; pas d'heuristique (fenêtres trop courtes) ; D+ sur 2 stations |
 | Trace qui commence ou finit sur un pont | Axe prolongé par la géométrie OSM jusqu'à l'extrémité (§3.1). Sans `beyond` : `structure_uncorrected` |
 | Tunnel dont un portail est en no-data | `structure_uncorrected` (invariant 4), jamais de 0 m |
-| Pont OSM au-dessus de la trace | Écarté par la typologie (invariant 6). Sinon, la rampe de plus de 15 % le rejette (§3.2, étape 8) |
+| Pont OSM au-dessus de la trace | Écarté par la typologie (invariant 6), et le MNS n'est lu qu'aux stations d'un pont apparié (§2.3). Sinon, la rampe de plus de 15 % le rejette (§3.2, étape 8). Cas du banc : piste sous Cheviré, MNS à 57 m au croisement pour un sol à 6,9 m (E5, `bench/README.md` §3–§4 : écart au MNT ≤ 1 m) |
 | Plage GLO-30 de moins de 200 m (littoral) | Pas d'adaptation. La provenance la montre quand même |
 | Trou long au milieu d'un ouvrage | L'ouvrage est remplacé en entier si ses sondes sont valides. Sinon, il n'est pas corrigé |
 
