@@ -13,6 +13,12 @@
 > de la 5.0.1). Changements de fond : IGN LiDAR HD en direct comme source d'élévation en France, MNS
 > LiDAR sur les ponts dès le MVP, heuristiques de vcyclist en contrôle croisé, provenance du terrain
 > par tronçon, erreurs RFC 9457.
+>
+> Révision 2 : les questions ouvertes de l'ancien §10 sont tranchées (§10 Décisions). Points de fond :
+> service **indépendant** de vcyclist, France d'abord, sortie par défaut « points d'entrée + points de
+> rupture », seuil de D+ adapté automatiquement sur les plages GLO-30, référentiel vertical ignoré,
+> API publiques avec cache tant que le volume reste personnel. Restent des vérifications factuelles
+> (§11).
 
 ## 1. Vision
 
@@ -35,8 +41,8 @@ Ce que le service apporte par rapport à l'existant :
    **altitude** dans le LiDAR HD en France : le MNS sur le tablier, le MNT aux portails des tunnels.
    L'interpolation entre culées, pratique de GraphHopper et Valhalla (dénivelé ramené de 1395 m à
    142 m chez GraphHopper), n'est qu'un **repli** : elle laisse 22 à 40 m d'erreur sur les grands
-   ponts bombés (doc 01, enseignement 3). Les heuristiques de vcyclist, portées, servent de contrôle
-   croisé et de filet pour les ouvrages absents d'OSM.
+   ponts bombés (doc 01, enseignement 3). Des heuristiques inspirées de vcyclist, portées librement
+   en Rust, servent de contrôle croisé et de filet pour les ouvrages absents d'OSM.
 2. **Un contrat honnête.** Revêtu / non revêtu est fiable : 98 à 99 % d'accord avec Stadia, qui est
    une référence et non une vérité terrain (doc 02 §7). Une classe plus fine serait une inférence. Le
    contrat dit toujours d'où vient la valeur : tag explicite ou déduction par le type de voie
@@ -46,6 +52,19 @@ Ce que le service apporte par rapport à l'existant :
 3. **Aucune donnée à produire au démarrage.** Le MVP s'appuie sur des sources prêtes à l'emploi
    (VersaTiles, IGN LiDAR HD par la Géoplateforme, Mapterhorn). L'atelier de données hors ligne
    n'arrive que lorsqu'un besoin mesuré le justifie.
+4. **Un profil lisible tel quel.** Par défaut, la sortie reprend les points d'entrée et y ajoute des
+   points insérés là où le profil ou la typologie change de façon significative (sommet, creux,
+   rupture de pente, entrée et sortie d'ouvrage, changement de revêtement ou de source de terrain),
+   chacun avec sa raison (§5.6).
+
+**Indépendance vis-à-vis de vcyclist.** osm-route-details et vcyclist sont deux projets
+indépendants : aucun ne dépend de l'autre, aucun n'appelle l'autre. vcyclist n'est pas « le client »
+du service. On en reprend seulement les enseignements (mesures, bancs, règles de cache et de repli),
+et le service est conçu pour ses propres clients (applications vélo et rando, à commencer par un
+usage personnel).
+
+**Zone servie** : la **France d'abord**, où la qualité est maximale (LiDAR HD de l'IGN). Ailleurs, le
+service répond avec Mapterhorn seul, en **mode dégradé signalé**.
 
 À ne pas promettre : le service ne corrige pas l'écart résiduel du D+ sur MNT face au baromètre,
 remesuré par vcyclist à **+12 %** sur un parcours (714 m contre 637 m ; le « +35 % » de l'ancienne
@@ -59,9 +78,10 @@ grosses erreurs du profil.
 
 | Domaine | Contenu |
 |---|---|
-| Entrée | Un **tracé planifié** à vélo : liste de points lat/lon ou polyline encodée. |
-| Élévation | Altitude par point après correction des ouvrages. Altitude lissée sur option. D+/D− avec leurs paramètres. Pente par tronçon. Méthode d'obtention de chaque valeur. Provenance du terrain par tronçon. |
-| Structure | `ground`, `bridge`, `tunnel`, `unknown`, avec l'origine de la décision (tag OSM, heuristique, les deux). La valeur `ford` est réservée mais pas produite (§5.3). |
+| Entrée | Un **tracé planifié** à vélo : liste de points lat/lon ou polyline encodée, jusqu'à 200 km. |
+| Zone | France en qualité maximale (IGN LiDAR HD). Ailleurs : Mapterhorn seul, mode dégradé signalé. |
+| Élévation | Altitude après correction des ouvrages, aux points d'entrée et aux points de rupture insérés par le service (§5.6). Altitude lissée sur option. D+/D− avec leurs paramètres effectifs, seuil adapté automatiquement sur les plages GLO-30. Pente par tronçon. Méthode d'obtention de chaque valeur. Provenance du terrain par tronçon. |
+| Structure | `ground`, `bridge`, `tunnel`, `unknown`, avec l'origine de la décision (tag OSM, heuristique, les deux). La valeur `ford` est réservée mais pas produite avant les tuiles maison (V2, §5.3). |
 | Revêtement | `class` ∈ {`paved`, `unpaved`, `unknown`} avec sa provenance (`source`). Le champ `detail` est réservé. |
 | Type de voie | `way_kind`, une enum courte dérivée de `highway`. Elle explique le revêtement inféré. |
 | Qualité | Part appariée, part inférée, couverture de l'élévation, statut de la correction des ouvrages, avertissements localisés. |
@@ -71,8 +91,13 @@ grosses erreurs du profil.
 
 - Le calcul d'itinéraire et le routage.
 - La compatibilité Valhalla (`trace_attributes`, codes d'erreur Valhalla).
-- L'**interprétation** du profil (détection de montées, physique, durées) : c'est le rôle de vcyclist.
-  Le service fournit le profil sans l'interpréter.
+- L'**interprétation** du profil (détection de montées, physique, durées) : c'est le rôle des
+  clients. Le service fournit le profil et ses points de rupture sans l'interpréter.
+- Tout couplage avec vcyclist : ni appel, ni code partagé, ni alignement de résultats.
+- Le **référentiel vertical** : le service n'en déclare pas, n'en convertit pas et ne signale pas les
+  changements de référentiel (frontières, bord de couverture). L'écart, de l'ordre du mètre, est jugé
+  négligeable pour l'usage vélo et rando.
+- Les parcours au-delà de 200 km et le traitement asynchrone (§2.3).
 - Le recalage de la trace sur la route pour améliorer l'altitude. Il a été mesuré inutile (R29, doc 01 §6.3).
 - Les balcons et encorbellements, où le MNT lit la falaise ou la gorge : ni vcyclist ni OSM ne les
   traitent (doc 01 §6.2).
@@ -85,11 +110,12 @@ grosses erreurs du profil.
 | Sujet | Étape | Déclencheur |
 |---|---|---|
 | Traces GPS enregistrées (bruitées), mode piéton | V2 | Jeu d'évaluation dédié. osm-surface n'a été validé que sur 3 tracés planifiés à vélo (doc 02 §7). |
-| Revêtement fin (`detail`), `smoothness`, gué sur nœuds, `covered`, `layer`, `osm_id` | V2 | Un client doit distinguer gravier et terre, ou la fraîcheur des données devient un problème. |
-| Gué sur les ways, `layer` | V1.x | Adaptateur OpenFreeMap, après évaluation. |
-| Heuristiques de vcyclist (tabliers, tunnels) : contrôle croisé avec OSM et filet pour les ouvrages absents d'OSM | V1 | Portage validé sur les bancs de vcyclist. |
-| Lecture du MNS sur la géométrie OSM du pont plutôt que sur la trace | V1.x | Mesure sur le corpus : traces qui passent à côté du tablier. |
-| Harmonisation verticale | V3 | Raccords transfrontaliers mesurés gênants. |
+| Revêtement fin (`detail`), `smoothness`, gué (`ford`, ways et nœuds), `covered`, `layer`, `osm_id` | V2 | Tuiles maison disponibles. Décidé : revêtu / non revêtu suffit en v1, le gué attend la V2. |
+| `layer`, fraîcheur hebdomadaire | V1.x | Adaptateur OpenFreeMap, après évaluation. |
+| Heuristiques (tabliers, tunnels) inspirées de vcyclist : contrôle croisé avec OSM et filet pour les ouvrages absents d'OSM | V1 | Portage Rust validé sur les bancs (§8.5). |
+| Lecture du MNS sur la géométrie OSM du pont plutôt que sur la trace | V1.x | Mesure sur les bancs avant la V1.x (§11). |
+| Parcours au-delà de 200 km, endpoint asynchrone | Plus tard | Besoin réel (rando sur plusieurs jours). D'ici là : 413 et découpage par le client. |
+| Auto-hébergement de Mapterhorn (PMTiles) | Plus tard | Volume au-delà d'un usage personnel, ou conditions d'usage des API publiques (§11). |
 | Confiance agrégée `high/medium/low` | V3 | Vérité terrain disponible pour la calibrer. |
 
 ## 3. Vue d'ensemble
@@ -100,19 +126,22 @@ pointillés.
 
 ```mermaid
 flowchart TB
-    client([Client : vcyclist, apps vélo/rando]) -->|POST /v1/route-details| api
+    client([Client : apps vélo/rando, usage perso]) -->|POST /v1/route-details| api
 
     subgraph service["Service en ligne (binaire Rust sans état)"]
         api[API HTTP<br/>contrat v1, validation, bornes] --> orch[Orchestrateur<br/>préparation du parcours, budget, mode de réponse]
         orch --> typo[Chaîne typologie<br/>graphe par niveaux, appariement, segmentation]
         orch --> elev[Chaîne élévation<br/>MNT + origine par point, repli, no-data]
-        orch --> couv[Référentiel de couverture<br/>contour LiDAR HD, zones GLO-30, référentiels verticaux]
+        orch --> couv[Référentiel de couverture<br/>contour LiDAR HD, zone France, plages GLO-30]
         typo --> classif[Classification<br/>règles versionnées → enums]
         typo -->|tronçons d'ouvrage| fusion
         elev --> fusion[Fusion du profil<br/>tabliers MNS, tunnels, repli interpolé, puis dérivés]
-        heur[Détecteurs heuristiques V1<br/>portage vcyclist, terrain mesuré] -.-> fusion
+        heur[Détecteurs heuristiques V1<br/>portage Rust libre, terrain mesuré] -.-> fusion
+        classif --> rupt
+        fusion --> rupt[Sélection des points de rupture<br/>relief, ouvrages, revêtement, source de terrain]
         classif --> asm
-        fusion --> asm[Assembleur<br/>segments, résumé, quality, provenance, attribution]
+        rupt --> asm
+        fusion --> asm[Assembleur<br/>points, segments, résumé, quality, provenance, attribution]
         asm --> api
         typo --> srcT[Adaptateur typologie<br/>Shortbread → modèle neutre]
         elev --> srcE[Adaptateur élévation<br/>BIL float32 IGN MNT/MNS, Terrarium]
@@ -123,8 +152,8 @@ flowchart TB
     end
 
     acc -->|tous modes, France| ign[(IGN Géoplateforme WMS-R<br/>LiDAR HD MNT et MNS)]
-    acc -->|dev / pilote| pub[(API publiques<br/>VersaTiles, Mapterhorn)]
-    acc -->|production V1| files[(Fichiers locaux<br/>.versatiles, PMTiles Mapterhorn)]
+    acc -->|MVP, usage perso, avec cache| pub[(API publiques<br/>VersaTiles, Mapterhorn)]
+    acc -.->|production : .versatiles ; plus tard : PMTiles| files[(Fichiers locaux<br/>.versatiles, PMTiles Mapterhorn)]
     atelier[["Atelier de données (V2+)<br/>tuiles maison, dalles LiDAR ciblées"]] -.->|packs versionnés| files
 ```
 
@@ -146,12 +175,16 @@ Le flux d'une requête :
 4. **Fusion** : correction des ouvrages, **avant tout lissage**. Sur les ponts appariés, lecture du
    MNS LiDAR et profil du tablier ; sur les tunnels, droite entre portails ; ailleurs, repli sur
    l'interpolation. En V1, les heuristiques passent sur le profil LiDAR en contrôle croisé. Puis
-   comblement des trous courts, lissage s'il est demandé, D+/D− et pentes.
-5. **Assemblage** : segments, points, résumé, bloc `quality` (dont la provenance du terrain par
-   tronçon), avertissements, versions, attribution.
+   comblement des trous courts, lissage s'il est demandé, D+/D− (seuil adapté sur les plages GLO-30)
+   et pentes.
+5. **Sélection des points de rupture** (mode de sortie par défaut) : sur le profil corrigé et les
+   tronçons typés, repérage des endroits significatifs à ajouter aux points d'entrée (§5.6).
+6. **Assemblage** : points (d'entrée et insérés), segments, résumé, bloc `quality` (dont la
+   provenance du terrain par tronçon), avertissements, versions, attribution.
 
 Les agrégats (D+/D−, pentes, extrema) sont calculés sur le profil interne densifié, quel que soit le
-mode d'échantillonnage de la sortie : ils ne dépendent pas du nombre de points envoyés par le client.
+mode d'échantillonnage de la sortie : ils ne dépendent ni du nombre de points envoyés par le client
+ni des points de rupture renvoyés.
 
 **Déterminisme** : la même requête, avec les mêmes `api_version`, `rules_version` et `data_versions`,
 donne la même réponse, hors `request_id` et durée. Le calcul n'a aucun effet de bord. Un client peut
@@ -166,22 +199,23 @@ elle qui corrige les ouvrages. Le client peut désactiver explicitement cette co
 |---|---|---|
 | **API HTTP** | Contrat versionné, validation, bornes, compression, erreurs uniformes. | — |
 | **Orchestrateur** | Prépare le parcours (densification, distances). Lance les deux chaînes sous un budget de temps. Décide du mode de réponse : complet, partiel accepté, ou erreur. | Parcours |
-| **Accès données** | **Un seul port** de lecture de tuiles z/x/y, avec plusieurs implémentations : XYZ HTTP avec cache disque (dev et MVP), WMS `GetMap` dont l'emprise est celle de la tuile XYZ (IGN Géoplateforme, tous modes), fichier local `.versatiles` / PMTiles (V1 production), *range requests* vers un stockage objet maîtrisé (plus tard). Cadence par hôte **pour tout le processus** et relance des 429/503 (règles de vcyclist). Distingue « tuile vide » de « tuile introuvable » : une tuile introuvable n'est jamais lue comme « pas de rue ». Les échecs sont collectés **par requête**, le port étant partagé. | Toutes les sources |
+| **Accès données** | **Un seul port** de lecture de tuiles z/x/y, avec plusieurs implémentations : XYZ HTTP avec cache disque (MVP, usage personnel, et toute source lue en ligne), WMS `GetMap` dont l'emprise est celle de la tuile XYZ (IGN Géoplateforme, tous modes), fichier local `.versatiles` (production) / PMTiles (auto-hébergement, plus tard), *range requests* vers un stockage objet maîtrisé (plus tard). Cadence par hôte **pour tout le processus** et relance des 429/503 (règles de vcyclist). Distingue « tuile vide » de « tuile introuvable » : une tuile introuvable n'est jamais lue comme « pas de rue ». Les échecs sont collectés **par requête**, le port étant partagé. | Toutes les sources |
 | **Caches** | LRU mémoire de tuiles décodées, borné en octets, avec déduplication des chargements concurrents. Cache disque des octets bruts pour toute source distante, IGN comprise en production ; cache négatif court des tuiles en échec (règles au §8.3). | — |
 | **Adaptateur typologie** | Décode la couche routes et la traduit vers un **modèle interne neutre « façon OSM »** : highway, surface brute ou regroupée, tracktype, bridge, tunnel, accès vélo… Seul cet adaptateur connaît Shortbread. | VersaTiles Shortbread z14 |
 | **Chaîne typologie** | Reconstruit la topologie (recollage aux bords de tuile, jonctions), avec des niveaux sol/pont/tunnel **déconnectés**. Apparie le parcours (HMM repris d'osm-surface, sans la couche Valhalla). Produit des tronçons homogènes en distance et les suites d'ouvrages appariées avec leurs extrémités. | Modèle neutre |
 | **Classification** | Traduit les attributs neutres vers les enums publiques (`structure`, `surface.class` et `source`, `way_kind`). La table de règles vit dans le service, jamais dans les tuiles. Elle est versionnée par `rules_version` et testable seule. | Règles (doc 02 §6) |
 | **Adaptateur élévation** | Donne une altitude continue en tout point lat/lon, y compris aux bords de tuiles, la valeur d'un pixel étant celle de son **centre** pour toutes les sources (doc 01 §6.1). Décode le BIL float32 de l'IGN (MNT et MNS, no-data explicite) et le Terrarium de Mapterhorn (sans valeur no-data : une tuile absente ou une valeur aberrante doit être reconnue comme telle). Applique le repli : un point dont un voisin d'interpolation est no-data est relu **entièrement** dans Mapterhorn, jamais mélangé. Renvoie l'**origine** de chaque altitude. N'offre jamais de repli pour le MNS. | IGN LiDAR HD, Mapterhorn |
-| **Référentiel de couverture** | Connaissance statique, à gros grain, de **où** chaque donnée est valable : contour de couverture du LiDAR HD (aucune requête IGN au-dehors), emprise des fichiers configurés (extraits), zones en GLO-30 (MNS), zones de référentiel vertical. Sert à distinguer « hors couverture » de « panne », à qualifier l'origine (`mapterhorn_measured` dans l'emprise France) et à émettre `dsm_source` et `vertical_datum_mixed`. Mapterhorn ne fournit pas de provenance par pixel (issue #350). | Configuration, contour repris de vcyclist, catalogue Mapterhorn |
+| **Référentiel de couverture** | Connaissance statique, à gros grain, de **où** chaque donnée est valable : contour de couverture du LiDAR HD (aucune requête IGN au-dehors), zone France (qualité maximale), emprise des fichiers configurés (extraits), **plages GLO-30** (MNS). Sert à distinguer « hors couverture » de « panne », à qualifier l'origine (`mapterhorn_measured` dans l'emprise France), à signaler le mode dégradé hors France, à émettre `dsm_source` et à déclencher l'**adaptation du seuil de D+** sur les plages GLO-30. Mapterhorn ne fournit pas de provenance par pixel (issue #350) : la source des emprises GLO-30 est à vérifier (§11). | Configuration, contour LiDAR HD, catalogue Mapterhorn ou carte maintenue à la main |
 | **Chaîne élévation** | Échantillonne le parcours densifié et produit l'altitude brute, ou « absente », avec son origine, à chaque échantillon. | — |
-| **Fusion du profil** | Corrige les ouvrages (§5.5) : profil de tablier lu dans le MNS, droite entre portails, interpolation de repli. Comble les trous courts, lisse si demandé, calcule D+/D− et les pentes. Attache une **méthode** à chaque valeur. | Profil, tronçons d'ouvrage, MNS |
-| **Détecteurs heuristiques** (V1) | Portage des détecteurs purs de vcyclist (tabliers par MNS − MNT, tunnels par la forme du MNT). Ne tournent que sur du terrain **mesuré**. Servent de contrôle croisé avec OSM et de filet pour les ouvrages absents d'OSM. | Profil LiDAR |
-| **Assembleur** | Fusionne les tronçons, calcule le résumé et remplit le bloc `quality` : provenance factuelle, dont le terrain par tronçon. Ajoute avertissements, versions et attribution. | Résultats internes |
+| **Fusion du profil** | Corrige les ouvrages (§5.5) : profil de tablier lu dans le MNS, droite entre portails, interpolation de repli. Comble les trous courts, lisse si demandé, calcule D+/D− (seuil adapté automatiquement sur les plages GLO-30, paramètres effectifs conservés pour la réponse) et les pentes. Attache une **méthode** à chaque valeur. | Profil, tronçons d'ouvrage, MNS |
+| **Détecteurs heuristiques** (V1) | Portage Rust **libre** des détecteurs de vcyclist (tabliers par MNS − MNT, tunnels par la forme du MNT), sans obligation d'alignement : réglages propres, validés sur nos bancs. Ne tournent que sur du terrain **mesuré**. Servent de contrôle croisé avec OSM et de filet pour les ouvrages absents d'OSM. | Profil LiDAR |
+| **Sélection des points de rupture** | Repère, sur le profil corrigé et les tronçons typés, les endroits significatifs à insérer entre les points d'entrée : sommet, creux, rupture de pente (y compris dans un ouvrage corrigé), entrée et sortie d'ouvrage, changement de revêtement, changement de source de terrain. Attribue à chaque point inséré sa position (distance curviligne, point d'entrée précédent) et ses **raisons**, en codes stables. Seuils de signification versionnés par `rules_version` (§5.6). | Profil corrigé, tronçons, provenance du terrain |
+| **Assembleur** | Produit les points (d'entrée et insérés), fusionne les tronçons, calcule le résumé et remplit le bloc `quality` : provenance factuelle, dont le terrain par tronçon. Ajoute avertissements, versions et attribution. | Résultats internes |
 | **Observabilité** | Logs structurés **sans coordonnées**, métriques techniques et produit, sondes de santé. | — |
 
 **Choix structurant : deux adaptateurs et un modèle neutre.** Changer de source revient à écrire un
 adaptateur : OpenFreeMap, tuiles maison, dalles LiDAR locales. Le cœur (appariement, classification,
-fusion, détecteurs) ne bouge pas. Changer de support (HTTP, fichier, stockage objet) revient à changer
+fusion, détecteurs, sélection des points de rupture) ne bouge pas. Changer de support (HTTP, fichier, stockage objet) revient à changer
 d'implémentation du port d'accès. Les deux axes sont indépendants.
 
 ## 5. Stratégie de données
@@ -196,7 +230,7 @@ Mapterhorn en repli et partout ailleurs.**
 | 1 (France) | **IGN LiDAR HD, MNT** : Géoplateforme WMS-R, BIL float32, z15 (≈ 3,4 m/px) | MNT LiDAR (terrain nu, grille 1 m) là où il est publié ; no-data ailleurs (zones non publiées, ZICAD) | Altitude du sol en France métropolitaine et en Corse |
 | — (France) | **IGN LiDAR HD, MNS** : même service, même zoom | Sommet de tout : tabliers, mais aussi canopée et toits | **Seulement sur l'emprise d'un pont** (et, en V1, pour les heuristiques). Jamais comme sol, jamais comparé à un sol d'une autre source. |
 | 2 | **Mapterhorn**, z12 par défaut | MNT national là où il existe (en France le LiDAR HD sous-échantillonné, sinon RGE ALTI ; DGM1, swissALTI3D…). Fond mondial GLO-30, qui est un **MNS**. | Repli point par point en France (no-data, panne IGN) ; source unique hors France |
-| — | API publique `tiles.mapterhorn.com` | Même contenu | **Développement et pilote uniquement** ; en production, PMTiles auto-hébergé (planète z0–12 ≈ 356 Go, ou extrait par bbox) |
+| — | API publique `tiles.mapterhorn.com` | Même contenu | **MVP et usage personnel**, derrière un cache disque (faible volume). PMTiles auto-hébergé (planète z0–12 ≈ 356 Go, ou extrait par bbox) seulement si le volume ou les conditions d'usage l'exigent (§2.3, §11) |
 | — | API alti IGN (REST, 5 req/s) | MNT, MNS, MNH au point | Outil de **mesure** et de contrôle, jamais en production |
 
 **Pourquoi l'IGN en direct**, alors que Mapterhorn sert déjà le LiDAR HD en France (à z12, 0,46 m RMS
@@ -206,7 +240,8 @@ du MNT LiDAR ; jusqu'à z17 disponible ; doc 01 §2.3) :
   source** ;
 - la **provenance** est connue : une altitude IGN est du LiDAR mesuré, alors que Mapterhorn ne publie
   aucune emprise par source ;
-- c'est la chaîne que vcyclist a mesurée (bancs, seuils, provenance) : ses résultats sont réutilisables.
+- c'est la chaîne que vcyclist a mesurée (bancs, seuils, provenance) : ses enseignements sont
+  réutilisables.
 
 Le prix : environ 15 fois le volume de Mapterhorn (130 km à froid : 66 Mo et 19 s contre 2,3 Mo et
 3 s), un BIL non compressé et une dépendance à un service en ligne (40 req/s/IP publiés, pas de SLA).
@@ -214,7 +249,8 @@ D'où un cache disque obligatoire, une cadence partagée par tout le processus e
 Mapterhorn (§6, §8.3, §9). Sur le sol seul, le gain est modeste (en Savoie, écart moyen 2 m, D+
 identique à 0,2 % près) : l'IGN se justifie d'abord par les ouvrages et par la provenance. Un **mode
 sobre** reste possible par configuration : Mapterhorn pour le sol partout, IGN interrogé seulement sur
-l'emprise des ponts (MNT et MNS ensemble). Le choix pour la production est une question ouverte (§10).
+l'emprise des ponts (MNT et MNS ensemble). **Décision pour la production** : WMS-R en direct, cache
+disque et repli Mapterhorn (§10) ; le mode sobre reste une option de configuration, pas le défaut.
 
 **Règles de repli** (reprises de vcyclist) : hors du contour de couverture LiDAR, aucune requête IGN ;
 no-data IGN sur un voisin d'interpolation → point relu entièrement dans Mapterhorn ; tuile IGN en échec
@@ -244,22 +280,28 @@ un vrai trou ne vient que d'une tuile absente (hors emprise d'un extrait, défau
 Un indicateur distingue en plus le repli **subi** (IGN en échec) du repli **normal** (hors LiDAR).
 « Mesurée » conditionne les heuristiques (§5.5).
 
+**Zone servie et mode dégradé.** La France (métropole et Corse) est la zone de qualité maximale. Hors
+France, l'altitude vient de Mapterhorn seul (origine `mapterhorn`, non mesurée) : pas de MNS, donc
+ponts interpolés et pas d'heuristiques. La réponse le signale par plages (avertissement dédié, doc 02
+§4.5) en plus de la provenance du terrain.
+
+**Plages GLO-30 et seuil de D+.** Là où Mapterhorn retombe sur GLO-30, qui est un MNS (canopée, toits),
+le seuil de D+ est **adapté automatiquement** sur ces plages, à la manière de BRouter. Les paramètres
+effectifs (seuil appliqué par plage) sont renvoyés dans la réponse. Cela suppose de savoir détecter les
+plages GLO-30 : c'est le rôle du référentiel de couverture, dont la source reste à vérifier (§11).
+
 **Exclus** : FABDEM (licence non commerciale), Terrain Tiles AWS (plus maintenu), BD ALTI (obsolète).
 
-**Sémantique annoncée de l'altitude** : « orthométrique nationale, non harmonisée ; MNS GLO-30
-possible hors couverture MNT nationale ». Le LiDAR IGN est en IGN69. Ni le service ni Mapterhorn ne
-convertissent les référentiels verticaux : marche de 0,76 m entre IGN69 et EGM2008 (GLO-30) en bordure
-de couverture (estuaire de la Loire), 2,33 m entre Belgique et Pays-Bas. Le service signale les
-traversées de zones de référentiel connues du référentiel de couverture (§4). L'harmonisation est
-reportée à la V3. L'altitude n'est jamais une hauteur ellipsoïdale : un client ne doit pas la comparer
-à l'altitude GPS brute (écart ≈ +50 m en France).
+**Référentiel vertical : ignoré.** Le service ne déclare pas de référentiel vertical, ne convertit rien
+et ne signale pas les changements de référentiel (marches de l'ordre du mètre en bord de couverture
+ou aux frontières) : l'écart est jugé négligeable pour l'usage vélo et rando (§2.2).
 
 ### 5.2 Typologie : sources
 
 | Source | Rôle | Raison |
 |---|---|---|
-| **VersaTiles Shortbread z14** : HTTP en dev, fichier `.versatiles` local en production | **Primaire MVP et V1** | Seule source déjà évaluée : 86 à 94 % d'accord sur la classe, 98 à 99 % sur revêtu / non revêtu, moins de 100 ms à chaud. Elle porte `kind` (= highway brut) et `tracktype` brut, dont dépend l'inférence. Le téléchargement du fichier (62 Go) est l'usage prévu. |
-| OpenFreeMap PMTiles auto-hébergé | Adaptateur **optionnel en V1.x** | Apporte `ford` (ways seulement), `layer` et une mise à jour hebdomadaire. Mais il n'a **pas** de `tracktype`, ce qui dégrade l'inférence, et l'appariement est calibré sur Shortbread. Ce n'est donc pas un remplacement transparent. On l'évalue d'abord sur les parcours de référence. |
+| **VersaTiles Shortbread z14** : API publique HTTP avec cache au MVP, fichier `.versatiles` local en production (après vérification des conditions d'usage, §11) | **Primaire MVP et V1** | Seule source déjà évaluée : 86 à 94 % d'accord sur la classe, 98 à 99 % sur revêtu / non revêtu, moins de 100 ms à chaud. Elle porte `kind` (= highway brut) et `tracktype` brut, dont dépend l'inférence. Le téléchargement du fichier (62 Go) est l'usage prévu. |
+| OpenFreeMap PMTiles auto-hébergé | Adaptateur **optionnel en V1.x** | Apporte `layer` et une mise à jour hebdomadaire (son `ford`, sur les ways seulement, n'est pas exploité : le gué attend les tuiles maison). Mais il n'a **pas** de `tracktype`, ce qui dégrade l'inférence, et l'appariement est calibré sur Shortbread. Ce n'est donc pas un remplacement transparent. On l'évalue d'abord sur les parcours de référence. |
 | **Tuiles maison Planetiler**, schéma « route-details » | **Primaire V2** | Seule source avec `surface` brut, `smoothness`, `ford` sur ways **et** nœuds, `layer`, `covered`, `osm_id`, sans fusion de lignes. |
 | OSMF, API publique OpenFreeMap, Protomaps | Écartées | Téléchargement en masse ou collecte automatisée interdits ; `surface` absent. |
 | Index OSM PBF (ancienne voie d'osm-surface) | Non retenu | Les tuiles maison donnent les mêmes tags, sans jointure et sans ≈ 3 Go de RAM pour la France. |
@@ -271,7 +313,7 @@ reportée à la V3. L'altitude n'est jamais une hauteur ellipsoïdale : un clien
 | `ground` | Le tronçon apparié est au sol. Le MNT est l'altitude de la voie. Cela inclut le **passage sous un pont**. | Ni `bridge` ni `tunnel` |
 | `bridge` | Le tronçon est sur un ouvrage qui franchit quelque chose. Le MNT y est faux. **Attention** : Shortbread y range aussi les passages à gué bétonnés (`low_water_crossing`). C'est documenté. Sans sursol dans le MNS, aucun tablier n'y est lu et l'altitude reste celle du sol : seule l'étiquette est trompeuse. On les reclassera quand une source le permettra. | `bridge=true` ; en V1, aussi un tablier détecté par heuristique hors de tout way `bridge` |
 | `tunnel` | Le tronçon passe sous le terrain ou sous une couverture. Le MNT y est faux. Shortbread y range aussi `covered` et `building_passage`. Ils ne seront distingués qu'avec les tuiles maison. | `tunnel=true` ; en V1, aussi un tunnel détecté par heuristique sur terrain mesuré |
-| `ford` | Gué. **Réservé dès la v1 mais jamais produit** tant qu'aucune source ne le porte. `/v1/capabilities` indique si la valeur est détectable. | — (V1.x / V2) |
+| `ford` | Gué. **Réservé dès la v1 mais jamais produit** avant les tuiles maison. `/v1/capabilities` indique si la valeur est détectable. | — (V2, tuiles maison) |
 | `unknown` | Portion non appariée (voie absente des tuiles, bridleway…). Un ouvrage non corrigé n'est pas exclu. | — |
 
 ### 5.4 Enum `Surface` (deux niveaux et une provenance)
@@ -303,10 +345,11 @@ les ouvrages. Au MVP, il vaut toujours `osm`.
 
 ### 5.5 Comment la typologie et le LiDAR corrigent l'élévation
 
-Répartition des rôles avec vcyclist : vcyclist doit **deviner** l'ouvrage sur le profil ; le service le
-**lit** dans OSM (emprise, type, continuité), et lit son altitude dans le LiDAR. Il **porte** de
-vcyclist la construction du profil de tablier et les détecteurs, sans en reprendre la partie
-détection pour les ouvrages qu'OSM connaît (doc 01, enseignement 3).
+Différence d'approche avec vcyclist : vcyclist doit **deviner** l'ouvrage sur le profil ; le service le
+**lit** dans OSM (emprise, type, continuité), et lit son altitude dans le LiDAR. Il s'inspire de
+vcyclist pour la construction du profil de tablier et les détecteurs, portés **librement** en Rust,
+sans en reprendre la partie détection pour les ouvrages qu'OSM connaît (doc 01, enseignement 3). Les
+deux projets restent indépendants : un écart de résultats avec vcyclist est possible et assumé.
 
 Sur chaque suite d'ouvrage appariée, l'altitude MNT est **remplacée** :
 
@@ -322,15 +365,15 @@ Sur chaque suite d'ouvrage appariée, l'altitude MNT est **remplacée** :
 - **Tunnel** : droite entre les altitudes MNT aux portails, prises **juste à l'extérieur** du way (le
   front de taille contamine sinon). Méthode `interpolated_structure`.
 
-**Heuristiques (V1)** : les détecteurs de vcyclist, portés, tournent sur le profil LiDAR, **sur
+**Heuristiques (V1)** : les détecteurs inspirés de vcyclist tournent sur le profil LiDAR, **sur
 terrain mesuré seulement** (sur GLO-30, une sonde de vcyclist a trouvé de faux tunnels). Ils servent :
 
 - de **contrôle croisé** : un ouvrage OSM confirmé passe en `osm_heuristic` ; un ouvrage OSM non
   détecté reste `osm` sans être mis en doute, les détecteurs ratant beaucoup ;
 - de **filet** : un tablier ou un tunnel détecté hors de tout way OSM signale un tag manquant
-  (viaduc nord de Saint-Nazaire, ≈ 1 050 m, non tagué). Il est corrigé comme le fait vcyclist, avec
-  `structure_source: heuristic` et un avertissement. En faire un simple avertissement reste une
-  question ouverte (§10).
+  (viaduc nord de Saint-Nazaire, ≈ 1 050 m, non tagué). **Décision** : il est **corrigé**, sur
+  terrain mesuré seulement, avec `structure_source: heuristic` et l'avertissement
+  `structure_untagged` (§10).
 
 Invariants, tous applicables dès le MVP :
 
@@ -368,10 +411,43 @@ Limites connues en v1 :
   tranchées couvertes ; doc 01 §4, §5). Hors terrain mesuré, OSM est la seule source ;
 - hors LiDAR, un pont bombé ou en rampe est approché par une droite ;
 - une trace GPS qui passe **à côté** du tablier lit le MNS hors de l'ouvrage : lire sur la géométrie
-  OSM est prévu en V1.x ;
+  OSM n'est retenu en V1.x que si la mesure sur les bancs le donne meilleur (§11) ;
 - sans `layer`, deux ouvrages superposés se distinguent seulement par la continuité de l'appariement ;
 - les pentes interpolées ne sont pas bornées. Un contrôle de plausibilité émet un avertissement, et le
   bornage sera décidé après le corpus d'ouvrages.
+
+### 5.6 Forme de sortie : points d'entrée et points de rupture
+
+Par défaut, `points[]` contient **tous les points d'entrée** (dédoublonnage des consécutifs mis à part),
+**plus des points insérés** par le service entre eux, aux endroits où le profil ou la typologie change
+de façon significative. Un client obtient ainsi un profil fidèle sans demander un pas fixe, même quand
+ses points d'entrée sont espacés au point qu'un ouvrage tombe entre deux d'entre eux.
+
+Raisons d'insertion (codes stables, liste extensible ; un point peut en cumuler plusieurs) :
+
+| Famille | Raisons |
+|---|---|
+| Relief | sommet, creux, rupture de pente, y compris **à l'intérieur d'un ouvrage corrigé** (sommet d'un tablier bombé) |
+| Structure | entrée et sortie de pont ou de tunnel (extrémités de l'ouvrage sur le parcours) |
+| Revêtement | changement de `surface.class` |
+| Terrain | changement de source de terrain (IGN ↔ Mapterhorn, entrée ou sortie d'une plage GLO-30) |
+| Données | début et fin d'une plage sans altitude |
+
+Règles du contrat (le *comment* de la sélection n'est pas fixé ici) :
+
+- chaque point dit s'il vient de l'**entrée** ou s'il est **inséré**, et porte ses raisons ;
+- chaque point porte sa **distance curviligne** et l'**indice du point d'entrée** qui le précède (le
+  sien s'il vient de l'entrée) ;
+- un point inséré porte ses coordonnées ; un point d'entrée n'est jamais déplacé ;
+- une rupture qui tombe sur un point d'entrée ne crée pas de doublon : ses raisons sont portées par
+  le point d'entrée ;
+- les seuils de « significatif » sont des règles versionnées par `rules_version`, publiées dans
+  `/v1/capabilities` ; la sortie reste déterministe ;
+- D+, pentes et extrema sont toujours calculés sur le profil interne densifié, jamais à partir des
+  points renvoyés.
+
+Les autres modes restent disponibles : **points d'entrée seuls** (une valeur par point du client,
+sans insertion) et **profil à pas fixe** (doc 02 §3.2).
 
 ## 6. Données disponibles → comportement
 
@@ -383,9 +459,9 @@ Règle générale :
 - une panne **absorbée par un repli configuré** (IGN en échec, Mapterhorn disponible) n'est pas une
   panne pour le client : 200, avertissement, provenance qui le montre. C'est le choix de vcyclist.
 
-Une réponse partielle en cas de panne n'est renvoyée que si le client l'a explicitement acceptée. La
-raison : pour vcyclist, recevoir sans le savoir une élévation non corrigée sur les ouvrages à cause
-d'une panne passagère est pire que de réessayer.
+**Décision** : une réponse partielle en cas de panne n'est renvoyée que si le client l'a explicitement
+acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoir sans le savoir une
+élévation non corrigée sur les ouvrages à cause d'une panne passagère est pire que de réessayer.
 
 | Situation | Comportement | Signal |
 |---|---|---|
@@ -393,36 +469,38 @@ d'une panne passagère est pire que de réessayer.
 | Trou court de no-data (seuil de longueur publié dans `/v1/capabilities`) | Comblé par interpolation. | méthode `gap_filled`, `elevation_gap_filled` |
 | Trou long (hors emprise de l'extrait d'élévation, tuile absente de la source) | Altitude `null` sur la plage. D+ calculé sur les parties valides et marqué partiel. Les ouvrages qui touchent la plage ne sont pas corrigés. | `elevation_missing` + plages, `quality.elevation_coverage`, `status = partial` |
 | Parcours hors emprise de l'extrait de typologie, sur une partie | Tronçons `unknown`, `matched: false`, MNT brut (ouvrages non corrigés). | `typology_missing` + plages, `status = partial` |
-| Point sans LiDAR IGN (non publié, ZICAD, hors du contour France) | Relu dans Mapterhorn, sans requête IGN hors du contour. | `quality.terrain` (origine par tronçon) |
+| Point sans LiDAR IGN en France (non publié, ZICAD) | Relu dans Mapterhorn. | `quality.terrain` (origine par tronçon) |
+| Parcours hors France, en tout ou partie | Mapterhorn seul, sans requête IGN hors du contour : pas de MNS, ponts interpolés, pas d'heuristiques. 200, mode dégradé. | `outside_primary_zone` + plages, `quality.terrain` |
 | Service IGN en échec ou en limitation, après relances | Tuiles relues dans Mapterhorn. Ponts touchés : interpolation au lieu du MNS. 200. | `terrain_fallback`, `dsm_unavailable` + plages |
 | Pont OSM sans MNS exploitable (hors LiDAR, trop peu d'ancres) | Interpolation entre culées. | méthode `interpolated_structure` |
-| Zone GLO-30 (MNS) | Lecture normale. Seuil de D+ adapté et annoncé, comme BRouter (§10). Détection à gros grain par le référentiel de couverture. Pas d'heuristiques. | `dsm_source` + plages |
-| Traversée d'une frontière de référentiel vertical | Réponse normale. | `vertical_datum_mixed` |
+| Zone GLO-30 (MNS) | Lecture normale. Seuil de D+ **adapté automatiquement** sur la plage, comme BRouter ; paramètres effectifs renvoyés. Détection à gros grain par le référentiel de couverture (§11). Pas d'heuristiques. | `dsm_source` + plages, `gain_params` |
+| Traversée d'une frontière de référentiel vertical | Réponse normale, aucun signal : référentiel vertical ignoré (§2.2). | — |
 | Ouvrage sans extrémités exploitables, ou appariement douteux | MNT brut conservé. | `structure_uncorrected` + plage |
 | Pente implausible après interpolation | Valeur conservée. | `structure_slope_implausible` |
 | Portion non appariée, données présentes (voie absente d'OSM ou des tuiles, bridleway, hors réseau, bac, points trop espacés pour suivre la voie) | `structure` et `surface.class` à `unknown`, MNT brut. La réponse reste `complete` : la donnée a été lue, la voie n'y est pas. | `unmatched_range` (« risque d'ouvrage non corrigé ») |
 | Pont ou tunnel non tagué ou absent d'OSM | MVP : non détecté, MNT brut, `structure: ground`. V1, sur terrain mesuré : détecté par heuristique et corrigé. Ailleurs : non détecté. | MVP : aucun (§5.5). V1 : `structure_source: heuristic`, `structure_untagged` |
 | Ouvrage OSM non confirmé par les heuristiques (V1) | Traitement normal : les détecteurs ratent beaucoup d'ouvrages réels. | `structure_source: osm` |
 | Aller-retour, boucle, passage sous puis sur le même pont | Traitement normal : tout est indexé en distance le long du parcours ; le niveau (sol / pont) est décidé par la continuité de l'appariement. | — |
-| Gué demandé mais source sans gué | `ford` jamais produit. | `/v1/capabilities` |
+| Gué demandé mais source sans gué | `ford` jamais produit avant les tuiles maison (V2). | `/v1/capabilities` |
 | Correction désactivée par le client | MNT brut sur les ouvrages. | `quality.structure_correction` à `disabled` |
 | Source typologie en panne | 503. Si le partiel est accepté : élévation non corrigée, tronçons `unknown`. | `typology_unavailable`, `structure_correction` à `unavailable` |
 | Élévation en panne (IGN **et** Mapterhorn, ou Mapterhorn hors France) | 503. Si le partiel est accepté : typologie seule, pas d'altitude. | `elevation_unavailable` |
 | Les deux en panne | 503, toujours. | — |
 | Une seule des deux sources couvre l'emprise (ex. extrait typologie France, parcours en Espagne) | 200 `partial`, avec la seule partie disponible. | `typology_missing` ou `elevation_missing` |
 | Aucune donnée d'aucune source sur toute l'emprise | 422 `out_of_coverage`. Ne survient qu'avec des extraits : les fichiers planète couvrent tout. | — |
-| Parcours au-delà des bornes (très long, trop de points) | 413. Le client découpe ; la correction d'un ouvrage coupé reste juste (extrémités de l'ouvrage), mais les D+ des morceaux ne s'additionnent pas exactement. | — |
+| Parcours au-delà des bornes (plus de 200 km, trop de points) | 413. Pas d'asynchrone en v1 : le client découpe ; la correction d'un ouvrage coupé reste juste (extrémités de l'ouvrage), mais les D+ des morceaux ne s'additionnent pas exactement. | — |
 | Budget de temps dépassé | 504 `timeout`. File saturée : 503 `overloaded`. Jamais de réponse tronquée en silence. | — |
 
 ## 7. Trajectoire
 
 | Étape | Contenu | Déclencheur |
 |---|---|---|
-| **MVP** | VersaTiles en HTTP avec cache. Élévation : IGN LiDAR HD (MNT, et MNS sur les ponts) par WMS-R, avec cadence, relances, cache disque et repli Mapterhorn z12 en HTTP. Provenance du terrain par tronçon. Chaîne typologie d'osm-surface. Correction des ouvrages du §5.5 : tablier MNS sur les ponts OSM en France, interpolation de repli, droite entre portails pour les tunnels. Contrat v1 complet, avec `surface.class` seul, erreurs RFC 9457. Règle « panne → 503 ». Corpus d'ouvrages et bancs de vcyclist. | — |
-| **V1 production** | Lecture locale de `.versatiles` et de PMTiles Mapterhorn (extraits par bbox). IGN WMS-R conservé en ligne, cache disque persistant (ou mode sobre, §5.1). API publiques VersaTiles et Mapterhorn **verrouillées hors mode dev**. **Portage des heuristiques** de vcyclist : contrôle croisé et filet sur terrain mesuré. `/v1/capabilities`, métriques produit. | Premier client en production |
-| **V1.x** | Adaptateur OpenFreeMap optionnel (`ford` sur ways, `layer`), après évaluation. Lecture du MNS sur la géométrie OSM du pont. Décision sur le bornage des pentes d'ouvrage (l'avertissement existe dès le MVP). Sortie GeoJSON. Hors France, mesure d'un zoom Mapterhorn plus fin autour des extrémités d'ouvrages. | Besoin de gué ou de fraîcheur hebdomadaire ; résultats du corpus |
-| **V2 : atelier typologie** | Tuiles maison Planetiler sur un extrait France : `surface.detail`, `smoothness`, gué sur nœuds, `covered`, `layer`, `osm_id`. Manifestes de packs, bascule à chaud, porte de qualité. Mode piéton et traces enregistrées, avec leur évaluation. | Besoin client de gravier / terre, ou fraîcheur |
-| **V3 : atelier élévation** | Dalles LiDAR HD (MNT et MNS) téléchargées autour des ouvrages OSM, pour sortir de la dépendance au WMS-R si elle pose problème. Harmonisation verticale en option. MNS nationaux hors France (AHN…) si la mesure le justifie. Confiance agrégée calibrée. | Quotas ou disponibilité IGN insuffisants ; vérité terrain ; avancée de l'issue Mapterhorn #350 |
+| **MVP** | France d'abord ; ailleurs, Mapterhorn en mode dégradé signalé. API publiques VersaTiles et Mapterhorn z12 avec cache disque (usage personnel, faible volume). Élévation : IGN LiDAR HD (MNT, et MNS sur les ponts) par WMS-R, avec cadence, relances, cache disque et repli Mapterhorn. Provenance du terrain par tronçon. Seuil de D+ adapté sur les plages GLO-30. Chaîne typologie d'osm-surface. Correction des ouvrages du §5.5 : tablier MNS sur les ponts OSM en France, interpolation de repli, droite entre portails pour les tunnels. Sortie par défaut : points d'entrée + points de rupture (§5.6). Contrat v1 complet, avec `surface.class` seul, erreurs RFC 9457, bornes à 200 km. Règle « panne → 503 ». Corpus d'ouvrages, bancs de vcyclist et traces barométriques personnelles. | — |
+| **V1** | **Portage Rust des heuristiques** (inspirées de vcyclist) : contrôle croisé et filet sur terrain mesuré, ouvrage vu par l'heuristique seule corrigé. VersaTiles en fichier `.versatiles` local pour la production (après vérification des conditions d'usage, §11). IGN WMS-R en ligne, cache disque persistant, repli Mapterhorn. `/v1/capabilities`, métriques produit. | Portage validé sur les bancs ; passage en production |
+| **V1.x** | Adaptateur OpenFreeMap optionnel (`layer`, fraîcheur hebdomadaire), après évaluation. Lecture du MNS sur la géométrie OSM du pont, si la mesure la donne meilleure (§11). Décision sur le bornage des pentes d'ouvrage (l'avertissement existe dès le MVP). Sortie GeoJSON. Hors France, mesure d'un zoom Mapterhorn plus fin autour des extrémités d'ouvrages. | Besoin de fraîcheur ; résultats des bancs |
+| **V2 : atelier typologie** | Tuiles maison Planetiler sur un extrait France : `surface.detail` (enum fine), `smoothness`, **gué** (`ford` sur ways et nœuds), `covered`, `layer`, `osm_id`. Manifestes de packs, bascule à chaud, porte de qualité. Mode piéton et traces enregistrées, avec leur évaluation. | Atelier disponible |
+| **V3 : atelier élévation** | Dalles LiDAR HD (MNT et MNS) téléchargées autour des ouvrages OSM, pour sortir de la dépendance au WMS-R si elle pose problème. MNS nationaux hors France (AHN…) si la mesure le justifie. Confiance agrégée calibrée. | Quotas ou disponibilité IGN insuffisants ; vérité terrain ; avancée de l'issue Mapterhorn #350 |
+| **Plus tard, hors version** | Auto-hébergement de Mapterhorn (PMTiles, extraits par bbox). Endpoint asynchrone pour les parcours au-delà de 200 km. | Volume au-delà de l'usage personnel ; conditions d'usage des API publiques ; besoin de rando sur plusieurs jours |
 
 ## 8. Exploitation
 
@@ -431,13 +509,16 @@ d'une panne passagère est pire que de réessayer.
 - Une image Docker minimale, non-root, avec un binaire unique, sur le modèle du Dockerfile
   d'osm-surface. Toute la configuration passe par des variables d'environnement : source et support de
   chaque chaîne, zoom, caches, concurrence, budget, bornes, mode dev.
-- **Dev / pilote** : le service seul, sur les URL publiques, avec un cache disque. Le pilote sur l'URL
-  publique VersaTiles n'est possible qu'après confirmation de ses conditions d'usage. L'exploration ne
-  documente que la politique de téléchargement. Mapterhorn décourage l'usage automatisé massif.
-- **Production V1** : un fichier `.versatiles` (planète ou extrait) et un extrait PMTiles Mapterhorn
-  z0–12 sur un volume **en lecture seule**. Les API publiques VersaTiles et Mapterhorn sont
-  verrouillées. Le WMS-R de l'IGN fait exception : service public, Licence Ouverte, cadence publiée ;
-  il est lu en ligne, derrière un cache disque persistant sur un volume **inscriptible** à part.
+- **MVP et usage personnel** : le service seul, sur les API publiques VersaTiles et Mapterhorn et sur
+  le WMS-R de l'IGN, derrière un cache disque. Le volume visé (usage personnel, faible) rend ce mode
+  suffisant longtemps. L'exploration ne documente que la politique de téléchargement de VersaTiles,
+  et Mapterhorn décourage l'usage automatisé **massif** : les conditions d'usage restent à vérifier
+  (§11).
+- **Production** : un fichier `.versatiles` (planète ou extrait) sur un volume **en lecture seule**,
+  le téléchargement étant l'usage prévu par VersaTiles. Mapterhorn reste lu en ligne avec cache tant
+  que le volume le permet ; un extrait PMTiles z0–12 auto-hébergé n'arrive que si le volume ou ses
+  conditions d'usage l'exigent. Le WMS-R de l'IGN (service public, Licence Ouverte, cadence publiée)
+  est lu en ligne, derrière un cache disque persistant sur un volume **inscriptible** à part.
 - Pas d'authentification intégrée. Le service se place derrière un reverse proxy, qui gère TLS, clés et
   quotas (le 429 est délégué au proxy).
 
@@ -458,7 +539,8 @@ d'une panne passagère est pire que de réessayer.
 
 - **Mémoire** (tous modes) : LRU de tuiles décodées, borné en octets, avec déduplication des
   chargements concurrents.
-- **Disque** (toute source distante, donc l'IGN en production), selon les règles éprouvées de vcyclist
+- **Disque** (toute source distante : l'IGN, et Mapterhorn ou VersaTiles tant qu'ils sont lus en
+  ligne), selon les règles éprouvées de vcyclist
   et d'osm-surface : on ne met en cache qu'une tuile valide (jamais un échec ni une page d'erreur), une
   entrée corrompue se répare d'elle-même, le cache périmé sert de secours en cas de panne, et l'espace
   de noms est lié à la source, au produit (MNT, MNS) et à sa version. Une tuile en échec est mémorisée
@@ -490,6 +572,13 @@ d'une panne passagère est pire que de réessayer.
   ses 16 ponts de Loire, Mauves, Vercors et ses tunnels), vérité `analysis/truth/`, et sa discipline :
   séries tenues à l'écart, critères écrits avant, jugées une seule fois (doc 01 §6.4). Ses chiffres
   sont la ligne de base à battre (ponts : 18/21 en calibration, 4/11 hors échantillon ; tunnels : 6/7).
+  On ne cherche pas à reproduire les résultats de vcyclist, seulement à faire au moins aussi bien.
+- Les **traces barométriques personnelles** de l'utilisateur, dans d'autres régions que celles des
+  bancs de vcyclist : corpus de référence pour le D+, les ouvrages hors Loire-Atlantique et Vercors,
+  et à terme les ponts hors LiDAR et la confiance agrégée. Même discipline : séries tenues à l'écart,
+  critères écrits avant.
+- Les mesures à faire avant la V1.x (§11) : MNS sur la trace ou sur la géométrie OSM, détection des
+  plages GLO-30.
 - Les points de contrôle de vcyclist (Mont Blanc, mer Morte, Badwater), en tests live hors CI.
 - Une empreinte d'une tuile de référence décodée, en test hors ligne.
 
@@ -518,74 +607,64 @@ mentionne que les sources effectivement configurées.
 
 | Risque | Impact | Parade |
 |---|---|---|
-| Conditions d'usage des API publiques VersaTiles et Mapterhorn | Blocage ou non-conformité | Réservées au dev et au pilote ; auto-hébergement dès la production ; cache agressif |
+| Conditions d'usage des API publiques VersaTiles et Mapterhorn | Blocage ou non-conformité | Faible volume (usage personnel) et cache agressif ; vérification des conditions (§11) ; `.versatiles` local en production ; auto-hébergement de Mapterhorn possible si nécessaire |
 | **Dépendance au WMS-R de l'IGN** : quota (40 req/s/IP, partagé par tout le processus), pas de SLA, évolution ou retrait du service | Latence à froid (≈ 19 s pour 130 km), perte du MNS sur les ponts, profil moins sûr | Cache disque persistant ; cadence et relances ; repli Mapterhorn avec avertissement et provenance ; mode sobre ; dalles ciblées en V3 |
-| Latence d'une requête froide sur l'IGN face au budget de temps | 504 sur de longs parcours inédits | Budget dimensionné sur le cas froid ; cache ; bornes ; mesure en pilote |
+| Latence d'une requête froide sur l'IGN face au budget de temps | 504 sur de longs parcours inédits | Budget dimensionné sur le cas froid ; cache ; bornes ; mesure au MVP |
 | Pont mal tagué ou mal apparié | Creux ou faux plat de plusieurs dizaines de mètres | Pas de correction en cas de doute, avertissements localisés, contrôle croisé heuristique (V1), corpus d'ouvrages |
 | Pont hors LiDAR approché par une droite | 22 à 40 m d'erreur sur les grands ponts bombés | Méthode `interpolated_structure` exposée ; MNS nationaux hors France en V3 si mesuré |
 | Extrémité d'ouvrage lue à z12 hors France (pixel ≈ 13,5 m) | Altitude de culée mêlée au fond de vallée | Mesure sur le corpus ; zoom plus fin ciblé en V1.x |
 | RGE ALTI radar en montagne là où le LiDAR HD manque (≈ 7 m d'erreur sur fortes pentes) | Profils de cols dégradés là où ils comptent le plus | Visible dans la provenance (`mapterhorn_measured` au lieu de `ign_lidar_hd`) ; suivi de la couverture LiDAR HD |
 | Pont ou tunnel non tagué dans OSM | Creux ou bosse non corrigé | MVP : limite documentée. V1 : heuristiques sur terrain mesuré ; hors terrain mesuré, la limite demeure |
-| Faux positif d'heuristique (butte à ≥ 30 % prise pour un tunnel sur sentier ou VTT, toit lisse fusionné à un pont) | Vraie montée aplatie | Terrain mesuré seulement ; `structure_source: heuristic` et avertissement ; option d'avertissement seul (§10) |
-| Divergence entre le portage Rust et les détecteurs Kotlin de vcyclist | Résultats différents sur les mêmes parcours, réglages dupliqués | Bancs communs et rejoués ; paramètres versionnés par `rules_version` ; mutualisation en question ouverte |
+| Faux positif d'heuristique (butte à ≥ 30 % prise pour un tunnel sur sentier ou VTT, toit lisse fusionné à un pont) | Vraie montée aplatie, d'autant que l'ouvrage vu par l'heuristique seule est corrigé | Terrain mesuré seulement ; `structure_source: heuristic` et `structure_untagged` ; bancs et traces barométriques |
+| Écart de résultats avec vcyclist (portage libre) | Profils différents sur les mêmes parcours | **Assumé** : aucun alignement visé ; nos propres bancs ; réglages versionnés par `rules_version` |
+| Points de rupture trop nombreux, trop rares ou mal placés | Sortie bruitée, ou ouvrage et sommet invisibles | Raisons explicites par point ; seuils versionnés par `rules_version` ; bancs ; modes `input` et pas fixe toujours disponibles |
 | Ouvrages superposés sans `layer` | Mauvais niveau apparié | Continuité de l'appariement ; `layer` en V1.x / V2 |
 | `bridge` qui couvre les gués bétonnés (Shortbread) | Client induit en erreur | Documenté ; reclassement quand la source le permet |
-| MNS GLO-30 hors couverture nationale | Faux dénivelé en forêt et en ville | Avertissement `dsm_source`, seuil de D+ adapté et annoncé |
-| Marches de référentiel aux frontières | Faux D+ local | Sémantique annoncée, avertissement de traversée |
+| MNS GLO-30 hors couverture nationale | Faux dénivelé en forêt et en ville | Avertissement `dsm_source`, seuil de D+ adapté automatiquement, paramètres effectifs renvoyés |
+| Détection des plages GLO-30 imprécise ou indisponible | Seuil adapté au mauvais endroit, D+ faussé | Vérification du catalogue Mapterhorn (§11) ; sinon carte maintenue à la main ; plages exposées dans la réponse |
+| Hors France, qualité dégradée (pas de MNS, z12) | Ponts approchés par une droite, extrémités grossières | Mode dégradé signalé (`outside_primary_zone`) ; France d'abord par décision |
 | Fraîcheur VersaTiles (2 à 4 mois) | Écarts avec le terrain récent | Date exposée ; OpenFreeMap (hebdomadaire) ou tuiles maison |
 | Pérennité des sources (générateur VersaTiles archivé, OpenFreeMap porté par une seule personne) | Rupture d'approvisionnement | Fichiers conservés localement ; adaptateurs multiples ; tuiles maison en V2 |
 | Client qui prend l'inféré pour un fait | Mauvaise expérience utilisateur | `surface.source` obligatoire, `class` séparé de `detail`, documentation |
-| Volumétrie (62 Go de typologie, 356 Go d'élévation pour la planète, cache IGN qui grossit avec l'usage) | Coût disque | Extraits par bbox de la zone servie ; cache IGN borné |
+| Volumétrie (62 Go de typologie, 356 Go d'élévation pour la planète, cache IGN qui grossit avec l'usage) | Coût disque | Mapterhorn lu en ligne tant que le volume le permet ; extraits par bbox de la zone servie ; caches bornés |
 
-## 10. Questions ouvertes
+## 10. Décisions
 
-Tranchées par la révision sur vcyclist 6.11 : la convention de pixel (valeur au **centre** pour toutes
-les sources, le décalage d'un demi-pixel est confirmé et corrigé dans vcyclist) ; le pont non tagué
-(heuristiques sur terrain mesuré en V1, plutôt qu'un avertissement « creux suspect ») ; le MNS des ponts
-(dès le MVP en France) ; le format d'erreur (RFC 9457, doc 02 §5.1).
+Tranchées dès la révision sur vcyclist 6.11 : convention de pixel (valeur au **centre** pour toutes
+les sources) ; pont non tagué traité par heuristiques sur terrain mesuré en V1 ; MNS des ponts dès le
+MVP en France ; erreurs RFC 9457 (doc 02 §5.1). Les décisions ci-dessous tranchent les questions
+ouvertes de la révision précédente (numéro d'origine entre parenthèses).
 
-1. **Premier client et volume** : vcyclist, tribly / Pédalons, autre ? Le volume décide quand on passe
-   à l'auto-hébergement.
-2. **Zone servie** : France, Europe de l'Ouest ou planète ? Elle fixe la taille des extraits et, plus
-   tard, la machine de build.
-3. **Revêtement** : revêtu / non revêtu suffit-il en v1, ou faut-il gravier / terre dès le départ ?
-   Dans ce cas, les tuiles maison passent avant la V2.
-4. **Gué** : est-il attendu à court terme ? Il déclenche l'adaptateur OpenFreeMap ou les tuiles maison.
-5. **Politique de panne** : 503 par défaut avec acceptation explicite du partiel (proposé), ou réponse
-   partielle par défaut ?
-6. **Forme de sortie pour vcyclist** : valeurs aux points d'entrée sans lissage (proposé), profil à pas
-   fixe, ou les deux ?
-7. **Référentiel vertical** : l'altitude orthométrique nationale non harmonisée est-elle acceptable,
-   frontières comprises (marche IGN69 / EGM2008 de 0,76 m en bordure du LiDAR) ?
-8. **API publique VersaTiles** : vérifier ses conditions d'usage, ou passer directement au
-   `.versatiles` local avant tout pilote ?
-9. **Bornes** : faut-il dépasser les 200 km d'osm-surface pour la rando sur plusieurs jours ? Un
-   endpoint asynchrone est-il envisageable ?
-10. **Vérité terrain hors des bancs de vcyclist** : ses bancs couvrent la Loire-Atlantique et le
-    Vercors. Peut-on étendre le corpus d'ouvrages (autres régions, hors France, GLO-30) et les traces
-    barométriques ? Sans cela, ni les ponts hors LiDAR ni la confiance agrégée ne seront validés.
-11. **Mutualisation** avec osm-surface et tribly : faut-il partager les fichiers de typologie, puis les
-    tuiles maison ?
-12. **Seuil de D+ en zone MNS** : adapter automatiquement le seuil du preset par défaut sur les plages
-    GLO-30 (comme BRouter), ou garder un seuil unique choisi par le client et seulement avertir ?
-13. **Référentiel de couverture** : le catalogue Mapterhorn donne-t-il des emprises exploitables pour
-    détecter les zones GLO-30 et les frontières de référentiel ? Sinon, `dsm_source` et
-    `vertical_datum_mixed` reposent sur une carte maintenue à la main (le contour LiDAR HD, lui, est
-    repris de vcyclist).
-14. **Qui sert qui, entre vcyclist et ce service ?** vcyclist a déjà sa chaîne HD et un service Ktor
-    (`/elevation/along`, `/enhance`). Trois voies : le service remplace la chaîne de vcyclist, qui
-    l'appelle pour l'élévation et la typologie ; le service ne fournit que la typologie (emprises
-    d'ouvrages, revêtement) et vcyclist garde l'élévation ; ou le service délègue l'élévation à
-    vcyclist. La réponse décide du périmètre du MVP et de la forme de sortie (question 6).
-15. **Mutualisation du code Kotlin / Rust** : porter les détecteurs et le constructeur de profil en
-    Rust (≈ 1 000 lignes, logique pure), au prix de deux implémentations à garder alignées ; ou une
-    seule implémentation partagée (bibliothèque, appel de service) ; ou une spécification et des bancs
-    communs seulement ?
-16. **IGN en production** : la dépendance au WMS-R (quota par IP, pas de SLA) est-elle acceptable,
-    avec cache et repli ? Ou faut-il le mode sobre (Mapterhorn pour le sol, IGN seulement sur les
-    ponts), voire des dalles LiDAR locales autour des ouvrages dès la V1 ?
-17. **Ouvrage vu par l'heuristique seule** : le corriger comme vcyclist (proposé, terrain mesuré
-    seulement) ou se limiter à un avertissement « tag manquant », pour que la typologie reste purement
-    OSM ?
-18. **MNS lu sur la trace ou sur la géométrie OSM du pont** : quand la trace GPS passe à côté du
-    tablier, laquelle donne le meilleur profil ? À mesurer avant la V1.x.
+| Sujet | Décision | Conséquence |
+|---|---|---|
+| Relation avec vcyclist (Q14) | Projets **indépendants** : aucun ne dépend de l'autre, vcyclist n'est pas le client du service. On partage les enseignements. | Pas de forme de sortie dédiée à vcyclist ; clients : apps vélo et rando, usage personnel d'abord (§1). |
+| Code des heuristiques (Q15) | Portage Rust **libre** des détecteurs et du constructeur de tablier, inspiré de vcyclist, sans obligation d'alignement. | Écart de résultats possible et assumé ; validation sur nos bancs (§8.5, §9). |
+| Premier client, volume (Q1) | Usage personnel, faible volume. | API publiques avec cache suffisantes longtemps ; auto-hébergement repoussé, possibilité conservée (§7, §8.1). |
+| Zone servie (Q2) | France d'abord, qualité maximale (IGN). Ailleurs, Mapterhorn. | Mode dégradé signalé hors France (`outside_primary_zone`, §5.1, §6). |
+| Revêtement (Q3) | Revêtu / non revêtu en v1 (VersaTiles). Enum fine en V2. | `surface.detail` rempli seulement avec les tuiles maison (§5.4, §7). |
+| Gué (Q4) | Plus tard. | `ford` réservé, non produit avant les tuiles maison (V2) ; OpenFreeMap n'est plus pris pour le gué (§5.2, §5.3). |
+| Politique de panne (Q5) | 503 + `Retry-After` par défaut ; partiel seulement avec `accept_partial`. | §6, doc 02 §5.2. |
+| Forme de sortie (Q6) | Par défaut : points d'entrée **plus** points de rupture insérés par le service, chacun avec son origine (entrée / inséré), ses raisons et sa position. Points d'entrée seuls et pas fixe restent en option. | Composant « sélection des points de rupture » (§4, §5.6) ; mode `input_with_breakpoints` par défaut (doc 02 §3.2). |
+| Référentiel vertical (Q7) | Ignoré : rien de déclaré, rien de converti, rien de signalé. | Écart jugé négligeable pour l'usage (§2.2) ; plus de `vertical_datum_mixed` ni d'harmonisation prévue. |
+| VersaTiles (Q8) | API publique au MVP, avec cache ; fichier local en production après vérification des conditions d'usage. | §5.2, §8.1, §11. |
+| Bornes (Q9) | 200 km en synchrone ; 413 au-delà, découpage par le client. | Asynchrone éventuel plus tard, hors v1 (§2.3, §7). |
+| Vérité terrain (Q10) | Traces barométriques personnelles de l'utilisateur, d'autres régions, intégrées au banc qualité. | Corpus de référence au-delà des bancs de vcyclist (§8.5). |
+| Mutualisation des données (Q11) | Non : osm-route-details, osm-surface et tribly ont chacun leurs données. | Aucune dépendance de fichiers entre projets. |
+| Seuil de D+ en zone MNS (Q12) | Adaptation **automatique** sur les plages GLO-30, à la BRouter ; paramètres effectifs renvoyés. | Il faut détecter les plages GLO-30 (référentiel de couverture, §4, §11). |
+| IGN en production (Q16) | WMS-R en direct, cache disque et repli Mapterhorn : acceptable. | Mode sobre et dalles locales restent des options, pas le défaut (§5.1, §7). |
+| Ouvrage vu par l'heuristique seule (Q17) | Corrigé, sur terrain mesuré seulement, `structure_source = heuristic`. | Avertissement `structure_untagged` ; risque de faux positif suivi (§5.5, §9). |
+
+## 11. Vérifications à faire
+
+1. **Emprises GLO-30 (ex-Q13)** : le catalogue Mapterhorn fournit-il des emprises par source
+   exploitables pour détecter les plages où il retombe sur GLO-30 ? C'est désormais nécessaire pour
+   adapter le seuil de D+ et émettre `dsm_source`. Sinon : carte à gros grain maintenue à la main
+   (le contour LiDAR HD, lui, est repris de vcyclist).
+2. **MNS sur la trace ou sur la géométrie OSM du pont (ex-Q18)** : quand la trace GPS passe à côté du
+   tablier, laquelle donne le meilleur profil ? À mesurer sur les bancs avant la V1.x ; la lecture sur
+   la géométrie OSM n'est retenue que si elle gagne.
+3. **Conditions d'usage de l'API publique VersaTiles** : l'exploration ne documente que la politique
+   de téléchargement. À confirmer avant de l'utiliser hors développement, et pour fixer le moment de
+   bascule sur le fichier local.
+4. **Conditions d'usage de l'API publique Mapterhorn** pour un faible volume avec cache (elle
+   décourage l'usage automatisé massif) : à confirmer, puisque l'auto-hébergement est repoussé.
