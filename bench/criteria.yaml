@@ -14,7 +14,7 @@ references:
 
 decisions:   # de l'utilisateur, 2026-10-30
   - id: e2_bloquant
-    decision: "E2 indicatif (suivi en non-régression) ; seul E2b (ne pas dégrader vs MNT brut) est bloquant"
+    decision: "E2 indicatif (suivi en non-régression) ; seul E2b (ne pas dégrader vs le service sans correction d'ouvrage) est bloquant"
   - id: traces_enregistrees
     decision: "Les traces perso sont recalées sur la route (Stadia Maps trace_attributes) avant d'entrer dans le service ; l'altitude est comparée au baro transporté sur la géométrie recalée (README §2.1)"
   - id: bornes_entree
@@ -50,17 +50,20 @@ criteres:
     bloquant: false   # indicatif : mesuré, suivi en non-régression (baseline.json)
 
   - id: E2b
-    metrique: "Ne pas dégrader le D+ par rapport au MNT brut"
+    metrique: "Les corrections d'ouvrage ne dégradent pas le D+"
     definition: >-
-      Pour chaque groupe g : médiane_g |ln(D+ service / D+ baro)| ≤ médiane_g |ln(D+ MNT brut / D+ baro)|.
-      D+ MNT brut : MNT RGE ALTI lu par l'outil de banc tous les 5 m sur la géométrie recalée, sans
-      correction d'ouvrage ni lissage, avec le preset dem du service (hystérésis 3 m, fenêtre 30 m).
-      D+ baro : preset barometric (2 m, 15 m) sur le baro transporté. Mêmes tronçons masqués partout.
+      Pour chaque groupe g : médiane_g |ln(D+ service / D+ baro)| ≤ médiane_g |ln(D+ référence / D+ baro)|.
+      D+ référence : le même service, appelé avec l'option publique `structure_correction: false`
+      (contrat §3.2 ; le lissage est désactivé par défaut) : mêmes sources (LiDAR HD, repli
+      Mapterhorn), même géométrie recalée, même preset dem, mêmes tronçons masqués. On mesure
+      l'apport des corrections. Le RGE ALTI n'est pas retenu : trop peu exigeant (≈ 7 m d'erreur
+      en montagne contre le LiDAR que lit le service), le critère serait presque toujours vrai.
+      D+ baro : preset barometric (2 m, 15 m) sur le baro transporté.
     cas: {manifest: perso, groupes: [dplus, plaine, ouvrage]}
     terrain: france
     agregation: mediane_par_groupe
     seuils:
-      - {ecart_log_service_max: ecart_log_mnt_brut}
+      - {ecart_log_service_max: ecart_log_service_sans_correction}
     passe_si: tous_les_groupes
     bloquant: true
 

@@ -244,8 +244,8 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
 3. **Comparaison au baro sur la géométrie recalée.** Chaque point d'origine apparié par Stadia est
    projeté sur la géométrie recalée ; son abscisse y porte l'altitude baro. Les points non appariés,
    ou à plus de 30 m de leur point apparié, sont écartés. Pourquoi la géométrie recalée plutôt que
-   l'originale : (a) c'est celle que lit le service, donc la seule où service et MNT brut sont
-   comparables point à point ; (b) le vélo roulait sur la route, et le baromètre mesure l'altitude de
+   l'originale : (a) c'est celle que lit le service, donc la seule où le service et sa référence
+   sans correction (E2b) sont comparables point à point ; (b) le vélo roulait sur la route, et le baromètre mesure l'altitude de
    la route ; (c) lire le relief sur la géométrie d'origine ajouterait l'erreur latérale du GPS
    multipliée par la pente transversale (5 m d'écart sur un dévers à 30 % ≈ 1,5 m), et sur un pont la
    trace d'origine peut sortir du tablier. La géométrie d'origine ne sert qu'au transport du baro.
@@ -274,7 +274,7 @@ les traces perso.
 |----|----------|------------|-----------|
 | **E1** | Erreur d'altitude hors ouvrage | RMSE et P95 de (service − baro), après décalage et retrait de tendance, sur les stations `ground` | traces `dplus`, `plaine` |
 | **E2** | D+ comparé au baro (indicatif) | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
-| **E2b** | Ne pas dégrader vs MNT brut | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ MNT brut / D+ baro)\| ; MNT brut = RGE ALTI tous les 5 m sur la géométrie recalée, sans correction ni lissage, preset `dem` | idem |
+| **E2b** | Les corrections ne dégradent pas le D+ | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ service avec `structure_correction: false` / D+ baro)\| ; mêmes sources, géométrie recalée, preset `dem` et masques | idem |
 | **E3** | Erreur d'altitude sur tablier | Par pont : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel | `ouvrages.yaml`, vcyclist `N` |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
@@ -299,7 +299,7 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 |----|-----------|---------------|
 | E1 | RMSE ≤ 1,5 m en plaine, ≤ 3,0 m en relief ; P95 ≤ 4 m / 8 m | Baro vs MNT au pas de 50 m : bruit médian 0,6 m (plaine), 1,1 m (relief), p95 médian 1,6 / 3,5 m ; vcyclist Strava vs MNT 0,75–0,85 m / 2,31 m |
 | E2 | **Indicatif** (suivi en non-régression) : par trace dans [0,90 ; 1,20] ; médiane du groupe dans [0,95 ; 1,12] | MNT brut / baro mesuré : 0,96–1,21 (médianes 1,00 plaine, 1,07 relief) ; vcyclist +12 % ; critère vcyclist [0,8 ; 1,2] resserré car notre référence est un baromètre |
-| E2b | **Bloquant** : pour chaque groupe, médiane \|ln(D+ service / D+ baro)\| ≤ même médiane pour le MNT brut | Le service corrige les ouvrages et lisse : il ne doit pas éloigner le D+ du baromètre par rapport au MNT qu'il lit (décision de l'utilisateur, 2026-10-30) |
+| E2b | **Bloquant** : pour chaque groupe, médiane \|ln(D+ service / D+ baro)\| ≤ même médiane pour le service appelé avec `structure_correction: false` | Mesure l'apport des corrections d'ouvrage à sources égales (LiDAR HD, repli Mapterhorn). Le RGE ALTI, ≈ 7 m d'erreur en montagne, rendrait le critère presque toujours vrai (décision de l'utilisateur, 2026-10-30) |
 | E3 | France, pont tagué : \|erreur au milieu\| ≤ 2 m et max ≤ 3 m (ponts < 300 m), ≤ 5 m (grands ponts) ; ≥ 90 % des ponts du corpus passent | vcyclist : ≤ 2 m Nantes, ≤ 5 m Saint-Nazaire, 18/21 = 86 % ; baro − MNS mesuré ≤ 1 m sur Saint-Nazaire, Pirmil, Mauves |
 | E3 hors France | Mesuré et rapporté, pas de seuil (pont interpolé, `interpolated_structure`) | 22–40 m d'erreur attendus sur grands ponts bombés (doc 01 §9) |
 | E4 | \|erreur max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel ; ≥ 6/7 des tunnels tagués | Critère Grands Goulets de vcyclist ; 6/7 hors échantillon ; Strava : +190 m d'erreur, +112 m de D+ fictif aux Grands Goulets |
