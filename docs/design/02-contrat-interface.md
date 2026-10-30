@@ -52,14 +52,15 @@ Le GeoJSON (LineString) en entrée et en sortie est prévu en V1.x.
 ### 3.2 Options
 
 Toutes les options sont facultatives et ont une valeur par défaut documentée dans
-`/v1/capabilities`.
+`/v1/capabilities`, qui publie aussi les bornes ci-dessous. Une valeur hors bornes donne un 400
+`invalid_input`.
 
 | Option | Valeurs | Défaut | Rôle |
 |---|---|---|---|
 | `sections` | sous-ensemble de `elevation`, `typology`, `summary` | toutes | Parties de la réponse à renvoyer. La typologie **tourne quand même** en interne pour corriger les ouvrages. |
 | `sampling.mode` | `input_with_breakpoints` \| `input` \| `distance` | `input_with_breakpoints` | `input_with_breakpoints` : tous les points d'entrée, plus les points de rupture insérés par le service (sommet, creux, rupture de pente, extrémité d'ouvrage, changement de revêtement ou de source de terrain), chacun avec ses raisons (doc 01 §5.6). `input` : une valeur par point d'entrée, sans insertion. `distance` : un profil à pas métrique. |
-| `sampling.step_m` | borné | documenté | Pas du profil en mode `distance`. |
-| `elevation.smoothing_m` | `0` ou une fenêtre en mètres | `0` (désactivé) | Ajoute une altitude lissée. |
+| `sampling.step_m` | [5 ; 1 000] m | 25 m | Pas du profil en mode `distance`. |
+| `elevation.smoothing_m` | `0`, ou [10 ; 1 000] m | `0` (désactivé) | Ajoute une altitude lissée. |
 | `elevation.gain_preset` | `dem`, `raw`, … | `dem` | Seuil et échelle du D+. Sur les plages GLO-30 (MNS), le seuil est **adapté automatiquement**. Les valeurs effectives, plage par plage, sont renvoyées dans la réponse (`gain_params`). |
 | `structure_correction` | booléen | `true` | `false` : MNT brut sur les ouvrages, signalé comme non corrigé. Le client ne choisit ni la source d'élévation ni la méthode : elles sont décidées par le service et exposées dans la réponse. |
 | `accept_partial` | booléen | `false` | Accepte une réponse partielle quand une source est **en panne**, au lieu d'un 503. |
@@ -133,20 +134,20 @@ sur le profil interne densifié : ils ne se recalculent pas à partir de `points
 |---|---|
 | `from_m`, `to_m` | Plage en distance. |
 | `from_index`, `to_index` | Points d'entrée qui encadrent la plage. |
-| `structure` | `ground`, `bridge`, `tunnel`, `unknown`. `ford` est réservé. |
-| `structure_source` | Sur un ouvrage : `osm`, `heuristic` (V1, détecté hors de tout way OSM), `osm_heuristic` (V1, les deux concordent). Absent sur `ground`. |
+| `structure` | `ground`, `bridge`, `tunnel`, `unknown`. `ford` est réservé. `unknown` : portion non appariée **sans** ouvrage détecté. |
+| `structure_source` | Sur un ouvrage : `osm`, `heuristic` (V1, détecté hors de tout way OSM), `osm_heuristic` (V1, les deux concordent). Absent sur `ground` et `unknown`. |
 | `surface.class` | `paved`, `unpaved`, `unknown`. Gelé en v1. |
 | `surface.detail` | **Absent en v1.** Extensible, rempli en V2. |
 | `surface.source` | `tagged`, `inferred_tracktype`, `inferred_highway`, `none`. |
 | `way_kind` | `major_road`, `minor_road`, `track`, `path`, `cycleway`, `footway`, `steps`, `unknown`. |
-| `matched` | `false` sur une portion non appariée. |
+| `matched` | `false` sur une portion non appariée. En V1, un ouvrage détecté par l'heuristique seule sur une portion non appariée est un segment `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, revêtement et `way_kind` à `unknown` : `matched: false` n'implique donc pas `structure: unknown`. |
 | `ele_method` | Méthode d'élévation dominante sur le tronçon. |
 | `ele_start`, `ele_end`, `grade_pct` | Altitudes aux bornes et pente moyenne. |
 | `osm` | Seulement avec `debug` : attributs bruts de la source. |
 
 Un nouveau segment commence dès que l'un de ces attributs change : `structure`, `structure_source`,
 `surface.class`, `surface.source`, `way_kind`, `matched`, ainsi qu'à chaque extrémité d'ouvrage (deux
-ponts contigus restent deux segments, mais forment un seul ouvrage dans `summary.structures[]`). Un
+ponts contigus restent deux segments, mais forment une seule entrée de `summary.structures[]`). Un
 changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
 
 ### 4.4 `summary`
@@ -158,8 +159,12 @@ changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
   manquent ;
 - `ele_min_m`, `ele_max_m` ;
 - répartitions en mètres par `structure`, `surface.class`, `surface.source` et `way_kind` ;
-- `structures[]` : liste des ponts et tunnels rencontrés : plage, longueur, `structure_source`,
-  méthode appliquée (`dsm_deck`, `interpolated_structure`, ou `none` si non corrigé) ;
+- `structures[]` : liste des ponts et tunnels rencontrés, triée par distance : `kind` (`bridge` ou
+  `tunnel`), plage, longueur, `structure_source`, méthode appliquée : `dsm_deck`,
+  `interpolated_structure`, `kept_ground` (pont OSM sans tablier dans le MNS, au ras du sol :
+  l'altitude du sol est gardée, ce qui compte comme une correction), ou `none` (non corrigé). Un
+  ouvrage mixte (pont enchaîné à un tunnel) donne **une entrée par type, contiguës** (la fin de
+  l'une est le début de la suivante), chacune avec sa méthode ; il n'y a pas de liste d'éléments ;
 - `terrain_m` : longueur par origine du terrain (`ign_lidar_hd`, `mapterhorn_measured`, `mapterhorn`,
   `none`) ;
 - `unknown_m` : longueur non appariée.
@@ -171,8 +176,8 @@ changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
 | `matched_ratio` | Part de la longueur appariée. |
 | `inferred_surface_ratio` | Part de la longueur dont le revêtement est déduit. |
 | `elevation_coverage` | Part de la longueur avec une altitude. |
-| `structure_correction` | Un statut **par type d'ouvrage** (`bridges`, `tunnels`), vocabulaire repris de vcyclist : `applied` (tous les ouvrages rencontrés sont corrigés), `partial` (au moins un non corrigé), `none_found` (aucun ouvrage), `disabled` (option client), `unavailable` (typologie absente : panne acceptée ou hors emprise). Plus des compteurs par méthode (`dsm_deck`, `interpolated_structure`, non corrigés) et par `structure_source`. |
-| `terrain` | Provenance du terrain **par tronçon** : plages `{from_m, to_m, origin, measured, fallback_after_error}`. `origin` ∈ `ign_lidar_hd`, `mapterhorn_measured`, `mapterhorn`, `none` ; `measured` dit si l'origine a été mesurée par un banc ; `fallback_after_error` distingue un repli subi (IGN en échec) d'un repli normal (hors LiDAR). |
+| `structure_correction` | Un statut **par type d'ouvrage** (`bridges`, `tunnels`), vocabulaire repris de vcyclist : `applied` (tous les ouvrages rencontrés sont corrigés, `kept_ground` compris), `partial` (au moins un non corrigé), `none_found` (aucun ouvrage), `disabled` (option client), `unavailable` (typologie absente : panne acceptée ou hors emprise). Plus des compteurs `counts` par méthode (`dsm_deck`, `interpolated_structure`, `kept_ground`, `uncorrected`), un par entrée de `summary.structures[]`, et par `structure_source`. |
+| `terrain` | Provenance du terrain **par tronçon** : plages `{from_m, to_m, origin, measured, fallback_after_error}`. `origin` ∈ `ign_lidar_hd`, `mapterhorn_measured` (Mapterhorn en zone France, **hors** plages GLO-30 et leurs coutures), `mapterhorn` (ailleurs, GLO-30 et coutures compris), `none` ; `measured` dit si l'origine a été mesurée par un banc ; `fallback_after_error` distingue un repli subi (IGN en échec) d'un repli normal (hors LiDAR). |
 | `warnings[]` | `{code, message, from_m?, to_m?}`. Les codes sont stables. Un avertissement signale une sortie **sciemment dégradée ou dépendante du réseau**, jamais le cas normal. |
 
 Codes d'avertissement prévus en v1 : `unmatched_range`, `structure_uncorrected`,
@@ -315,10 +320,16 @@ Une option ou une clé inconnue donne un 400 **avant** tout calcul.
 | 400 | `invalid_input` | Format invalide, moins de 2 points distincts, coordonnée hors bornes (y compris hors plage Web Mercator), option hors bornes, `points` et `polyline` fournis ensemble, `debug` demandé sans y avoir droit. |
 | 413 | `route_too_large` | Trop de points, ou parcours de plus de 200 km. Les bornes sont publiées dans `/v1/capabilities`. Le client découpe. |
 | 422 | `out_of_coverage` | **Aucune** donnée d'**aucune** source sur toute l'emprise (cas des extraits par bbox). Si une seule source couvre, ou si la couverture est partielle, la réponse est un 200 `partial`. |
-| 503 | `data_unavailable` | Une source attendue est en panne, même après essai du cache périmé **et du repli** (IGN en échec mais Mapterhorn disponible : 200 avec `terrain_fallback`), et `accept_partial` n'est pas activé. Les deux sources en panne donnent aussi un 503. Toujours avec `Retry-After`. |
+| 503 | `data_unavailable` | Une source attendue est en panne, même après essai du cache périmé **et du repli** (IGN en échec mais Mapterhorn disponible : 200 avec `terrain_fallback`), et `accept_partial` n'est pas activé. Règle stricte, sans seuil de tolérance : une seule tuile en panne non rattrapée suffit, quelle que soit la longueur touchée. Les deux sources en panne donnent toujours un 503, même avec `accept_partial`. Toujours avec `Retry-After`. |
 | 503 | `overloaded` | File saturée. |
 | 504 | `timeout` | Budget de temps dépassé. Jamais de réponse tronquée en silence. |
 | 500 | `internal` | Erreur inattendue. |
+| 404 | `not_found` | Route inconnue. |
+| 405 | `method_not_allowed` | Méthode non prise en charge par la route (ex. `GET /v1/route-details`). |
+| 415 | `unsupported_media_type` | `Content-Type` autre que `application/json` sur `POST /v1/route-details`. |
+
+Un corps trop gros reste un 413 `route_too_large` (`details.limit = "body_bytes"`). Toutes ces
+erreurs, protocolaires comprises, suivent le format du §5.1.
 
 Le 429 (quota) est renvoyé par le reverse proxy, pas par le service.
 
@@ -335,6 +346,9 @@ Le 429 (quota) est renvoyé par le reverse proxy, pas par le service.
 | Points d'entrée trop espacés pour suivre la voie | Ligne droite entre les points : appariement souvent impossible, donc `unknown` ; altitude lue sur la ligne droite. |
 | Pont ou tunnel non tagué ou absent d'OSM | MVP : `structure: ground`, MNT brut, aucun avertissement. V1, sur terrain mesuré : ouvrage détecté par heuristique et **corrigé**, `structure_source: heuristic`, avertissement `structure_untagged`. |
 | Pont sur le terrain LiDAR, MNS illisible | Interpolation entre culées, `dsm_unavailable`. Réponse 200. |
+| Pont OSM sans tablier dans le MNS (au ras du sol, gué bétonné classé `bridge`) | Altitude du sol gardée, `ele_method: dem`, `summary.structures[].method: kept_ground`, compté comme corrigé. |
+| Pont enchaîné à un tunnel | Un seul ouvrage corrigé, deux entrées contiguës dans `summary.structures[]` (une par type). |
+| Ouvrage détecté par l'heuristique seule sur une portion non appariée (V1) | `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, corrigé, `structure_untagged` et `unmatched_range`. |
 | Tuiles IGN en échec | Relues dans Mapterhorn, `terrain_fallback`, `quality.terrain[].fallback_after_error`. Réponse 200. |
 | Parcours partiellement hors emprise des données | Plages concernées en `elevation_missing` ou `typology_missing`, `status: partial`. |
 | Parcours au-delà des bornes (plus de 200 km) | 413. Le client découpe le parcours ; un ouvrage coupé reste bien corrigé, les D+ des morceaux ne s'additionnent pas exactement. |
@@ -384,7 +398,7 @@ Règles d'évolution à l'intérieur de la v1 :
 |---|---|
 | Nombre de points, longueur du parcours | Bornes publiées dans `/v1/capabilities` : **200 km** et 16 000 points (bornes d'osm-surface). Comme dans vcyclist, la borne porte sur la taille **densifiée** (qui dépend de la longueur), pas seulement sur le nombre de points d'entrée. Au-delà : 413, découpage par le client ; un endpoint asynchrone pourra venir plus tard, hors v1. |
 | Taille du corps de requête | Bornée. Les corps compressés sont acceptés. |
-| Budget de temps par requête | Borné ; au-delà, 504 `timeout`. Dimensionné sur une lecture IGN à froid (de l'ordre de 20 s pour 130 km sans cache). |
+| Budget de temps par requête | **90 s** ; au-delà, 504 `timeout`. Dimensionné large sur une lecture IGN à froid (de l'ordre de 20 s pour 130 km sans cache) : usage personnel, latence à froid secondaire. Le délai du reverse proxy doit le dépasser. |
 | Sources tierces | Aucune URL de tuile ni de source fournie par le client. |
 | Concurrence | File d'attente bornée ; au-delà, 503 `overloaded`. |
 | Couverture | France en qualité maximale ; ailleurs, Mapterhorn en mode dégradé signalé. Limitée par les sources configurées (extraits par bbox éventuels), décrite dans `/v1/capabilities`. |

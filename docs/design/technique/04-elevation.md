@@ -142,8 +142,10 @@ rugosité et de canyon du détecteur. Les étapes, sur l'axe du groupe :
 3. **Pont sans sursol** (doc 01 §5.5) : moins de `min_deck_presence = 30 %` [cal] des stations de
    l'axe ont `MNH > deckMnhM = 1 m` [vc] (`:58-59`), **et** il n'y a pas de canyon. On dit qu'il n'y
    a pas de canyon quand le MNT minimal sous l'axe n'est pas plus de `minCanyonDropM = 3 m` [vc]
-   (`:84`) sous le plus bas des deux MNT de sonde. Dans ce cas, l'altitude du sol est gardée (méthode
-   `dem`) et le pont est compté comme traité.
+   (`:84`) sous le plus bas des deux MNT de sonde. Dans ce cas, l'altitude du sol est gardée
+   (`ele_method = dem` aux stations), le pont est compté comme traité, et son issue est
+   `OutcomeMethod::KeptGround`, exposée `kept_ground` dans `summary.structures[].method` et dans les
+   compteurs de `quality.structure_correction` (décision doc 01 §10, contrat §4.4–4.5).
 4. `mf` = médiane glissante du MNS sur 25 m, qui ignore les `NaN`. La rugosité est le RMS de
    `MNS − mf` sur 35 m. Une station est **propre** si le maximum de rugosité sur la fenêtre de 35 m
    est sous `maxRoughnessM = 0,8 m` [vc] (`:39-50`, `vc:G/DeckDetector.kt:470`).
@@ -176,6 +178,10 @@ fusionné, arche de plus de 10 % plafonnée par l'étape 6, §8).
   source ; jamais de MNS (`TunnelStep.write`, `vc:E/path/TunnelStep.kt:178-191`).
 - **Groupe mixte** : chaque pont garde son tablier s'il en a un ; chaque tunnel est une droite entre
   ses voisins connus (fin de tablier ou sonde) ; sans aucun tablier, une seule droite de sonde à sonde.
+  Le patch du groupe porte **un `StructureOutcome` par suite d'éléments de même nature**, contigus,
+  chacun avec sa méthode (pont `dsm_deck`, tunnel `interpolated_structure`, par exemple) : c'est la
+  forme de `summary.structures[]` pour un ouvrage mixte (décision doc 01 §10, T06 §2), sans liste
+  d'éléments dans le contrat.
 - **Plausibilité** : si la pente de la droite dépasse 12 % sur un tunnel (`maxChordGrade`,
   `vc:G/TunnelDetectorOptions.kt:60`) [vc] ou 10 % sur un pont (`maxSlopeP95`) [vc], on émet
   `structure_slope_implausible` et on **garde** la valeur (doc 01 §6).
@@ -188,7 +194,8 @@ fusionné, arche de plus de 10 % plafonnée par l'étape 6, §8).
 struct StructureGroup<'a> { structure: &'a Structure, passages: Vec<&'a StructurePassage>,
     doubtful: bool /* un PassageDoubt, extrémité Unresolved ou plage de TypologyCoverage */ } // interne
 pub struct CorrectionPatch { pub target: GroupRef, pub from_m: f64, pub to_m: f64,
-    pub values: Vec<f64>, pub methods: Vec<EleMethod>, pub outcome: StructureOutcome }
+    pub values: Vec<f64>, pub methods: Vec<EleMethod>,
+    pub outcomes: Vec<StructureOutcome> /* une par suite d'éléments de même nature, contiguës */ }
 ```
 
 ## 4. Heuristiques V1 et fusion avec OSM (`heuristics`, `fusion::merge`)
@@ -280,9 +287,10 @@ pub fn detect_tunnels(mnt: &[f64], lat: &[f64], lon: &[f64], measured: &[bool],
 
 Statut par nature (`bridges`, `tunnels`), vocabulaire de `vc:G/ElevationCorrections.kt:7-30`, par
 priorité : `disabled` (option à `false`), `unavailable` (typologie absente sur tout le parcours),
-`none_found`, `partial` (au moins un ouvrage non corrigé), `applied`. Un pont sans sursol compte
-comme corrigé. On tient des compteurs par méthode (`dsm_deck`,
-`interpolated_structure`, `kept_ground`, `uncorrected`) et par `StructureSource`.
+`none_found`, `partial` (au moins un ouvrage non corrigé), `applied`. Un pont sans sursol
+(`kept_ground`) compte comme corrigé. On tient des compteurs par méthode (`dsm_deck`,
+`interpolated_structure`, `kept_ground`, `uncorrected` : noms du contrat §4.5) et par
+`StructureSource`, comptés par entrée de `summary.structures[]`.
 
 ### 5.3 Lissage optionnel
 
@@ -473,31 +481,27 @@ par `proptest`.
 
 1. **Invariant 9 et heuristiques V1** : le détecteur de tablier lit le MNS sur tout le terrain IGN
    (autorisé par doc 01 §5.1). C'est une donnée de détection, jamais écrite comme altitude hors
-   ouvrage. Coût et budget : T02 §12, point 2.
-2. **Pont sans sursol** : le contrat n'a pas de méthode « gardé au sol » pour
-   `summary.structures[].method` (`dsm_deck`, `interpolated_structure`, `none`), et `none` veut dire
-   « non corrigé ». Proposition : ajouter la valeur `dem` ou un compteur `kept_ground`, ce qui est un
-   ajout compatible. À trancher dans le contrat.
-3. **Invariant 8 et lecture sur la trace** : deux passages ne lisent pas le même MNS ; il faut un
+   ouvrage. Coût à froid : T02 §10, sous le budget de 90 s (T01 §3.3).
+2. **Invariant 8 et lecture sur la trace** : deux passages ne lisent pas le même MNS ; il faut un
    profil par ouvrage, donc une **identité stable** et un **chaînage d'axe** : fournis par T03 §6.3
    (`StructureId`, `StructurePassage::chainage`). Sans identité (heuristique seule), l'unification à
    20 m reste imparfaite.
-4. **Invariant 2 et extrémité hors parcours** : il faut lire MNT et MNS sur la géométrie OSM de
+3. **Invariant 2 et extrémité hors parcours** : il faut lire MNT et MNS sur la géométrie OSM de
    l'extension, alors que cette lecture attend une mesure (V1.x) ; on la limite au hors-trace
    (géométrie : `Structure::axis`, `beyond` : `StructureEnd::approach`, T03 §6.3). Le MNT et le MNS de
    l'extension sont lus par `sample_structures` (étape 4c), après la typologie : une seconde lecture
    courte, sur le chemin critique à froid, y compris au MVP.
-5. **Plafond de pente à 10 %** : les arches plus raides (Pont-Saint-Esprit) restent lissées, même
+4. **Plafond de pente à 10 %** : les arches plus raides (Pont-Saint-Esprit) restent lissées, même
    avec l'emprise OSM ; seuil à recalibrer.
-6. **Seuil de D+ variable** : pas de référence publiée pour une hystérésis à τ par plage (BRouter :
+5. **Seuil de D+ variable** : pas de référence publiée pour une hystérésis à τ par plage (BRouter :
    seuil par source) ; `max(τ_ext, τ_courant)` et 10 m sont des choix non mesurés.
-7. **Typologie absente → pas d'heuristiques** : les détecteurs n'ont pas besoin d'OSM, mais doc 01
+6. **Typologie absente → pas d'heuristiques** : les détecteurs n'ont pas besoin d'OSM, mais doc 01
    §6 impose « élévation non corrigée » ; on s'y tient.
-8. **`structure_correction: false` → « `dem` partout »** (doc 02 §5.3) : compris « sur les
+7. **`structure_correction: false` → « `dem` partout »** (doc 02 §5.3) : compris « sur les
    ouvrages » ; `gap_filled` et `none` restent possibles.
-9. **Points de rupture et D+** : la borne de densité peut retirer des extrema ; la somme des
+8. **Points de rupture et D+** : la borne de densité peut retirer des extrema ; la somme des
    dénivelés de `points[]` s'écarte alors du `summary` (voulu, mais surprenant).
-10. **Pire cas des tunnels** (§7.3) : le plafond de paires peut sauter la détection sur un parcours
+9. **Pire cas des tunnels** (§7.3) : le plafond de paires peut sauter la détection sur un parcours
     inhabituel.
-11. **Ordre ouvrages puis trous** (doc 01 §3) : une sonde dans un trou court rend l'ouvrage non
+10. **Ordre ouvrages puis trous** (doc 01 §3) : une sonde dans un trou court rend l'ouvrage non
     corrigé, alors que le comblement lui aurait donné une valeur. On garde l'ordre du doc.

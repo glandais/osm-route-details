@@ -394,8 +394,12 @@ et comptée en métrique.
 `build_segments(runs, verdicts, route) -> Vec<TypedSegment>`, appelée après la fusion :
 
 1. Superposer les verdicts aux tronçons : `heuristic` impose `structure` (bridge/tunnel) et
-   `structure_source` sur sa plage en gardant `surface` et `way_kind` du dessous ; `osm_heuristic`
-   change seulement la source.
+   `structure_source` sur sa plage en gardant `surface`, `way_kind` et `matched` du dessous ;
+   `osm_heuristic` change seulement la source. **Sur une portion non appariée** (décision doc 01
+   §10, autorisé par doc 02 §4.3) : `structure = bridge|tunnel`, `structure_source = heuristic`,
+   `matched = false`, `surface.class = unknown`, `surface.source = none`, `way_kind = unknown` ;
+   `unknown` reste réservé au non apparié **sans** ouvrage détecté (doc 01 §5.3). La plage compte
+   dans `unknown_m` et garde `unmatched_range` (T06 §2, §4).
 2. Clé de coupe (doc 02 §4.3) : `structure`, `structure_source`, `surface.class`, `surface.source`,
    `way_kind`, `matched`, **et** l'élément d'ouvrage (`ElementId`) ; ni `ele_method` ni l'origine du
    terrain ne coupent.
@@ -428,7 +432,7 @@ pub struct TypedSegment { pub from_m: f64, pub to_m: f64, pub from_index: u32, p
 | Portion hors réseau (bridleway absent, bac, champ) | `Unmatched` → segment `unknown`, `matched: false` ; `status` inchangé. |
 | Tuile `Absent` / `Failed` | Observations `NoData` ; plages rendues dans `TypologyCoverage` ; l'orchestrateur en fait `typology_missing` (partial) ou 503 / `typology_unavailable`. |
 | Ouvrage dont une culée est hors tuiles | `EndUnresolved` → non corrigé par la fusion. |
-| Pont + tunnel contigus | Un ouvrage, deux éléments, deux segments. |
+| Pont + tunnel contigus | Un ouvrage, deux éléments, deux segments ; dans `summary.structures[]`, une entrée par type, contiguës (T06 §2), sans champ d'éléments. |
 
 ## 10. Erreurs, concurrence, budget
 
@@ -495,12 +499,7 @@ pub enum TypologyError { Timeout, Cancelled, Internal(String) }
    parcours d'osm-surface doivent être rejoués en non-régression.
 4. **Deux ponts contigus = deux segments** (doc 02 §4.3) : sans `osm_id`, deux ways pont de mêmes
    attributs fusionnés par Shortbread font une seule ligne, donc un seul segment.
-5. **Ouvrage mixte pont + tunnel** : un seul ouvrage (inv. 3), mais `summary.structures[]` n'a qu'un
-   `kind`. Proposition non cassante : ajouter `elements[]`.
-6. **Ouvrage heuristique sur une portion non appariée** : doc 01 §5.3 réserve `unknown` au non
-   apparié, Q17 veut l'ouvrage heuristique corrigé. Choix : `bridge|tunnel`, `heuristic`,
-   `matched: false`, revêtement `unknown`. Le contrat doit l'autoriser explicitement.
-7. **Extrémités hors couloir** (inv. 2) : un long tunnel peut coûter jusqu'à 32 tuiles et 4 tours
+5. **Extrémités hors couloir** (inv. 2) : un long tunnel peut coûter jusqu'à 32 tuiles et 4 tours
    réseau de plus à froid, sous le budget ; au-delà, `EndUnresolved` et pas de correction.
-8. **Sauts** : un saut (≤ 60 m) compte comme apparié, moitié à chaque rue ; il peut masquer un court
+6. **Sauts** : un saut (≤ 60 m) compte comme apparié, moitié à chaque rue ; il peut masquer un court
    pont absent des tuiles, sans signal au MVP (seules les heuristiques V1 le rattrapent).

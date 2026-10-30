@@ -205,7 +205,7 @@ elle qui corrige les ouvrages. Le client peut désactiver explicitement cette co
 | **Chaîne typologie** | Reconstruit la topologie (recollage aux bords de tuile, jonctions), avec des niveaux sol/pont/tunnel **déconnectés**. Apparie le parcours (HMM repris d'osm-surface, sans la couche Valhalla). Produit des tronçons homogènes en distance et les suites d'ouvrages appariées avec leurs extrémités. | Modèle neutre |
 | **Classification** | Traduit les attributs neutres vers les enums publiques (`structure`, `surface.class` et `source`, `way_kind`). La table de règles vit dans le service, jamais dans les tuiles. Elle est versionnée par `rules_version` et testable seule. | Règles (doc 02 §6) |
 | **Adaptateur élévation** | Donne une altitude continue en tout point lat/lon, y compris aux bords de tuiles, la valeur d'un pixel étant celle de son **centre** pour toutes les sources (doc 01 §6.1). Décode le BIL float32 de l'IGN (MNT et MNS, no-data explicite) et le Terrarium de Mapterhorn (sans valeur no-data : une tuile absente ou une valeur aberrante doit être reconnue comme telle). Applique le repli : un point dont un voisin d'interpolation est no-data est relu **entièrement** dans Mapterhorn, jamais mélangé. Renvoie l'**origine** de chaque altitude. N'offre jamais de repli pour le MNS. | IGN LiDAR HD, Mapterhorn |
-| **Référentiel de couverture** | Connaissance statique, à gros grain, de **où** chaque donnée est valable : contour de couverture du LiDAR HD (aucune requête IGN au-dehors), zone France (qualité maximale), emprise des fichiers configurés (extraits), **plages GLO-30** (MNS). Sert à distinguer « hors couverture » de « panne », à qualifier l'origine (`mapterhorn_measured` dans l'emprise France), à signaler le mode dégradé hors France, à émettre `dsm_source` et à déclencher l'**adaptation du seuil de D+** sur les plages GLO-30. Mapterhorn ne fournit pas de provenance par pixel (issue #350) : la source des emprises GLO-30 est à vérifier (§11). | Configuration, contour LiDAR HD, catalogue Mapterhorn ou carte maintenue à la main |
+| **Référentiel de couverture** | Connaissance statique, à gros grain, de **où** chaque donnée est valable : contour de couverture du LiDAR HD (aucune requête IGN au-dehors), zone France (qualité maximale), emprise des fichiers configurés (extraits), **plages GLO-30** (MNS). La zone France **est** le contour de couverture LiDAR HD repris de vcyclist (§5.1). Sert à distinguer « hors couverture » de « panne », à qualifier l'origine (`mapterhorn_measured` dans la zone France, hors plages GLO-30 et leurs coutures), à signaler le mode dégradé hors France, à émettre `dsm_source` et à déclencher l'**adaptation du seuil de D+** sur les plages GLO-30. Mapterhorn ne fournit pas de provenance par pixel (issue #350) : la source des emprises GLO-30 est à vérifier (§11). | Configuration, contour LiDAR HD, catalogue Mapterhorn ou carte maintenue à la main |
 | **Chaîne élévation** | Échantillonne le parcours densifié et produit l'altitude brute, ou « absente », avec son origine, à chaque échantillon. | — |
 | **Fusion du profil** | Corrige les ouvrages (§5.5) : profil de tablier lu dans le MNS, droite entre portails, interpolation de repli. Comble les trous courts, lisse si demandé, calcule D+/D− (seuil adapté automatiquement sur les plages GLO-30, paramètres effectifs conservés pour la réponse) et les pentes. Attache une **méthode** à chaque valeur. | Profil, tronçons d'ouvrage, MNS |
 | **Détecteurs heuristiques** (V1) | Portage Rust **libre** des détecteurs de vcyclist (tabliers par MNS − MNT, tunnels par la forme du MNT), sans obligation d'alignement : réglages propres, validés sur nos bancs. Ne tournent que sur du terrain **mesuré**. Servent de contrôle croisé avec OSM et de filet pour les ouvrages absents d'OSM. | Profil LiDAR |
@@ -273,14 +273,19 @@ un vrai trou ne vient que d'une tuile absente (hors emprise d'un extrait, défau
 | Origine | Mesurée | Sens |
 |---|---|---|
 | `ign_lidar_hd` | oui | MNT LiDAR IGN |
-| `mapterhorn_measured` | oui | Mapterhorn dans l'emprise France (LiDAR dérivé ou RGE ALTI, banc mesuré par vcyclist) |
-| `mapterhorn` | non | Mapterhorn ailleurs : MNT national ou GLO-30, indiscernables |
+| `mapterhorn_measured` | oui | Mapterhorn dans la zone France (LiDAR dérivé ou RGE ALTI, banc mesuré par vcyclist), **hors** plages GLO-30 et hors de leurs coutures (≈ 150 m de mélange au bord d'une plage GLO-30) |
+| `mapterhorn` | non | Mapterhorn ailleurs : MNT national ou GLO-30, indiscernables ; en zone France, plages GLO-30 et leurs coutures |
 | `none` | non | Aucune donnée |
 
 Un indicateur distingue en plus le repli **subi** (IGN en échec) du repli **normal** (hors LiDAR).
 « Mesurée » conditionne les heuristiques (§5.5).
 
-**Zone servie et mode dégradé.** La France (métropole et Corse) est la zone de qualité maximale. Hors
+**Zone servie et mode dégradé.** La France (métropole et Corse) est la zone de qualité maximale. Son
+contour est celui de la couverture LiDAR HD de vcyclist (deux polygones grossiers tracés à la main,
+métropole et Corse, 5 à 20 km au-delà de la frontière et de la côte ; fichier
+`elevation/src/commonMain/kotlin/io/github/glandais/elevation/IgnLidarHdCoverage.kt` de vcyclist,
+licence Apache 2.0), recopié dans le service : ni Natural Earth ni Admin Express. Une bande de pays
+voisins est donc comptée en France ; c'est assumé, la zone ne qualifie que la provenance. Hors
 France, l'altitude vient de Mapterhorn seul (origine `mapterhorn`, non mesurée) : pas de MNS, donc
 ponts interpolés et pas d'heuristiques. La réponse le signale par plages (avertissement dédié, doc 02
 §4.5) en plus de la provenance du terrain.
@@ -314,7 +319,7 @@ ou aux frontières) : l'écart est jugé négligeable pour l'usage vélo et rand
 | `bridge` | Le tronçon est sur un ouvrage qui franchit quelque chose. Le MNT y est faux. **Attention** : Shortbread y range aussi les passages à gué bétonnés (`low_water_crossing`). C'est documenté. Sans sursol dans le MNS, aucun tablier n'y est lu et l'altitude reste celle du sol : seule l'étiquette est trompeuse. On les reclassera quand une source le permettra. | `bridge=true` ; en V1, aussi un tablier détecté par heuristique hors de tout way `bridge` |
 | `tunnel` | Le tronçon passe sous le terrain ou sous une couverture. Le MNT y est faux. Shortbread y range aussi `covered` et `building_passage`. Ils ne seront distingués qu'avec les tuiles maison. | `tunnel=true` ; en V1, aussi un tunnel détecté par heuristique sur terrain mesuré |
 | `ford` | Gué. **Réservé dès la v1 mais jamais produit** avant les tuiles maison. `/v1/capabilities` indique si la valeur est détectable. | — (V2, tuiles maison) |
-| `unknown` | Portion non appariée (voie absente des tuiles, bridleway…). Un ouvrage non corrigé n'est pas exclu. | — |
+| `unknown` | Portion non appariée (voie absente des tuiles, bridleway…) **sans ouvrage détecté**. Un ouvrage non corrigé n'est pas exclu. Une portion non appariée où l'heuristique seule détecte un ouvrage (V1) est `bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`. | — |
 
 ### 5.4 Enum `Surface` (deux niveaux et une provenance)
 
@@ -361,7 +366,8 @@ Sur chaque suite d'ouvrage appariée, l'altitude MNT est **remplacée** :
   les altitudes MNT prises juste à l'extérieur, aux culées. Méthode `interpolated_structure`. C'est un
   repli, connu pour s'écarter de plusieurs dizaines de mètres sur les grands ponts bombés.
 - **Pont sans sursol** dans le MNS (tablier au ras du sol, gué bétonné classé `bridge`) : rien à
-  corriger, l'altitude du sol est gardée.
+  corriger, l'altitude du sol est gardée. Méthode de l'ouvrage `kept_ground` dans le résumé (les
+  points restent en `dem`) ; il compte comme corrigé.
 - **Tunnel** : droite entre les altitudes MNT aux portails, prises **juste à l'extérieur** du way (le
   front de taille contamine sinon). Méthode `interpolated_structure`.
 
@@ -385,7 +391,8 @@ Invariants, tous applicables dès le MVP :
    coupés aux bords de tuile. Si une extrémité reste hors des tuiles disponibles, l'invariant 4
    s'applique.
 3. **Les ouvrages contigus forment un seul ouvrage** : pont puis tunnel, ou viaduc découpé en
-   plusieurs ways.
+   plusieurs ways. Dans le résumé, un ouvrage mixte (pont enchaîné à un tunnel) donne une entrée par
+   type, contiguës, chacune avec sa méthode, sans liste d'éléments (doc 02 §4.4).
 4. **Pas de correction en cas de doute** : appariement incertain, extrémité sans altitude, portion
    `unknown` qui touche l'ouvrage. On garde alors le MNT brut et on émet un avertissement localisé.
    Corriger à tort fabrique un faux plat.
@@ -460,7 +467,9 @@ Règle générale :
   panne pour le client : 200, avertissement, provenance qui le montre. C'est le choix de vcyclist.
 
 **Décision** : une réponse partielle en cas de panne n'est renvoyée que si le client l'a explicitement
-acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoir sans le savoir une
+acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La règle est **stricte** : toute panne
+non rattrapée par un repli, fût-ce une seule tuile, donne un 503 ; il n'y a pas de seuil de
+longueur en panne en deçà duquel la réponse serait tolérée. La raison : recevoir sans le savoir une
 élévation non corrigée sur les ouvrages à cause d'une panne passagère est pire que de réessayer.
 
 | Situation | Comportement | Signal |
@@ -477,7 +486,7 @@ acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoi
 | Traversée d'une frontière de référentiel vertical | Réponse normale, aucun signal : référentiel vertical ignoré (§2.2). | — |
 | Ouvrage sans extrémités exploitables, ou appariement douteux | MNT brut conservé. | `structure_uncorrected` + plage |
 | Pente implausible après interpolation | Valeur conservée. | `structure_slope_implausible` |
-| Portion non appariée, données présentes (voie absente d'OSM ou des tuiles, bridleway, hors réseau, bac, points trop espacés pour suivre la voie) | `structure` et `surface.class` à `unknown`, MNT brut. La réponse reste `complete` : la donnée a été lue, la voie n'y est pas. | `unmatched_range` (« risque d'ouvrage non corrigé ») |
+| Portion non appariée, données présentes (voie absente d'OSM ou des tuiles, bridleway, hors réseau, bac, points trop espacés pour suivre la voie) | `structure` et `surface.class` à `unknown`, MNT brut. En V1, un ouvrage détecté par l'heuristique seule sur cette portion est corrigé : `structure` `bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`. La réponse reste `complete` : la donnée a été lue, la voie n'y est pas. | `unmatched_range` (« risque d'ouvrage non corrigé ») ; V1 : `structure_untagged` |
 | Pont ou tunnel non tagué ou absent d'OSM | MVP : non détecté, MNT brut, `structure: ground`. V1, sur terrain mesuré : détecté par heuristique et corrigé. Ailleurs : non détecté. | MVP : aucun (§5.5). V1 : `structure_source: heuristic`, `structure_untagged` |
 | Ouvrage OSM non confirmé par les heuristiques (V1) | Traitement normal : les détecteurs ratent beaucoup d'ouvrages réels. | `structure_source: osm` |
 | Aller-retour, boucle, passage sous puis sur le même pont | Traitement normal : tout est indexé en distance le long du parcours ; le niveau (sol / pont) est décidé par la continuité de l'appariement. | — |
@@ -489,7 +498,7 @@ acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoi
 | Une seule des deux sources couvre l'emprise (ex. extrait typologie France, parcours en Espagne) | 200 `partial`, avec la seule partie disponible. | `typology_missing` ou `elevation_missing` |
 | Aucune donnée d'aucune source sur toute l'emprise | 422 `out_of_coverage`. Ne survient qu'avec des extraits : les fichiers planète couvrent tout. | — |
 | Parcours au-delà des bornes (plus de 200 km, trop de points) | 413. Pas d'asynchrone en v1 : le client découpe ; la correction d'un ouvrage coupé reste juste (extrémités de l'ouvrage), mais les D+ des morceaux ne s'additionnent pas exactement. | — |
-| Budget de temps dépassé | 504 `timeout`. File saturée : 503 `overloaded`. Jamais de réponse tronquée en silence. | — |
+| Budget de temps dépassé (90 s) | 504 `timeout`. File saturée : 503 `overloaded`. Jamais de réponse tronquée en silence. | — |
 
 ## 7. Trajectoire
 
@@ -519,8 +528,11 @@ acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoi
   que le volume le permet ; un extrait PMTiles z0–12 auto-hébergé n'arrive que si le volume ou ses
   conditions d'usage l'exigent. Le WMS-R de l'IGN (service public, Licence Ouverte, cadence publiée)
   est lu en ligne, derrière un cache disque persistant sur un volume **inscriptible** à part.
+- **Une seule instance** : la cadence IGN (20 req/s, pour un quota publié de 40 req/s/IP) est tenue
+  par le processus. Plusieurs réplicas derrière une même IP la dépasseraient ; la mise à l'échelle
+  horizontale est hors v1. Le volume visé (usage personnel) ne la demande pas.
 - Pas d'authentification intégrée. Le service se place derrière un reverse proxy, qui gère TLS, clés et
-  quotas (le 429 est délégué au proxy).
+  quotas (le 429 est délégué au proxy). Son délai de lecture doit dépasser le budget de requête (90 s).
 
 ### 8.2 Mises à jour des données
 
@@ -581,6 +593,8 @@ acceptée (`accept_partial`) ; sinon 503 avec `Retry-After`. La raison : recevoi
   plages GLO-30.
 - Les points de contrôle de vcyclist (Mont Blanc, mer Morte, Badwater), en tests live hors CI.
 - Une empreinte d'une tuile de référence décodée, en test hors ligne.
+- Les tuiles lues par les bancs forment un **cache de banc** local, hors du dépôt, régénérable par
+  l'outil de banc ; il n'est ni archivé ni partagé à distance.
 
 ### 8.6 Licences et attributions
 
@@ -612,7 +626,7 @@ mentionne que les sources effectivement configurées.
 |---|---|---|
 | Conditions d'usage des API publiques VersaTiles et Mapterhorn | Blocage ou non-conformité | Faible volume (usage personnel) et cache agressif ; vérification des conditions (§11) ; `.versatiles` local en production ; auto-hébergement de Mapterhorn possible si nécessaire |
 | **Dépendance au WMS-R de l'IGN** : quota (40 req/s/IP, partagé par tout le processus), pas de SLA, évolution ou retrait du service | Latence à froid (≈ 19 s pour 130 km), perte du MNS sur les ponts, profil moins sûr | Cache disque persistant ; cadence et relances ; repli Mapterhorn avec avertissement et provenance ; mode sobre ; dalles ciblées en V3 |
-| Latence d'une requête froide sur l'IGN face au budget de temps | 504 sur de longs parcours inédits | Budget dimensionné sur le cas froid ; cache ; bornes ; mesure au MVP |
+| Latence d'une requête froide sur l'IGN face au budget de temps | 504 sur de longs parcours inédits | Budget de 90 s, large devant le cas froid (≈ 20 s pour 200 km de MNT) ; cache ; bornes ; mesure au MVP |
 | Pont mal tagué ou mal apparié | Creux ou faux plat de plusieurs dizaines de mètres | Pas de correction en cas de doute, avertissements localisés, contrôle croisé heuristique (V1), corpus d'ouvrages |
 | Pont hors LiDAR approché par une droite | 22 à 40 m d'erreur sur les grands ponts bombés | Méthode `interpolated_structure` exposée ; MNS nationaux hors France en V3 si mesuré |
 | Extrémité d'ouvrage lue à z12 hors France (pixel ≈ 13,5 m) | Altitude de culée mêlée au fond de vallée | Mesure sur le corpus ; zoom plus fin ciblé en V1.x |
@@ -636,7 +650,9 @@ mentionne que les sources effectivement configurées.
 Tranchées dès la révision sur vcyclist 6.11 : convention de pixel (valeur au **centre** pour toutes
 les sources) ; pont non tagué traité par heuristiques sur terrain mesuré en V1 ; MNS des ponts dès le
 MVP en France ; erreurs RFC 9457 (doc 02 §5.1). Les décisions ci-dessous tranchent les questions
-ouvertes de la révision précédente (numéro d'origine entre parenthèses).
+ouvertes de la révision précédente (numéro d'origine entre parenthèses) ; les lignes sans numéro, à
+partir de « Pont OSM sans tablier dans le MNS », tranchent les points de tension de la conception
+technique (`technique/`).
 
 | Sujet | Décision | Conséquence |
 |---|---|---|
@@ -656,6 +672,17 @@ ouvertes de la révision précédente (numéro d'origine entre parenthèses).
 | Seuil de D+ en zone MNS (Q12) | Adaptation **automatique** sur les plages GLO-30, à la BRouter ; paramètres effectifs renvoyés. | Il faut détecter les plages GLO-30 (référentiel de couverture, §4, §11). |
 | IGN en production (Q16) | WMS-R en direct, cache disque et repli Mapterhorn : acceptable. | Mode sobre et dalles locales restent des options, pas le défaut (§5.1, §7). |
 | Ouvrage vu par l'heuristique seule (Q17) | Corrigé, sur terrain mesuré seulement, `structure_source = heuristic`. | Avertissement `structure_untagged` ; risque de faux positif suivi (§5.5, §9). |
+| Pont OSM sans tablier dans le MNS | Altitude du sol gardée ; nouvelle méthode `kept_ground` dans `summary.structures[].method` et dans les compteurs de `quality.structure_correction`. | Compté comme corrigé ; points en `dem` (§5.5, doc 02 §4.4–4.5). |
+| Ouvrage heuristique sur une portion non appariée | `structure` = `bridge` ou `tunnel`, `structure_source = heuristic`, `matched: false`. | `unknown` réservé au non apparié sans ouvrage détecté (§5.3) ; autorisé par doc 02 §4.3. |
+| Ouvrage mixte (pont enchaîné à un tunnel) | Une entrée par type dans `summary.structures[]`, contiguës ; pas de champ `elements`. | Un seul ouvrage corrigé (§5.5, inv. 3). |
+| Codes de protocole | 404 `not_found`, 405 `method_not_allowed`, 415 `unsupported_media_type`. | Ajoutés au contrat (doc 02 §5.2). |
+| Panne partielle | Règle stricte : toute panne non rattrapée par un repli → 503, sauf `accept_partial` ; aucun seuil de tolérance. | §6, doc 02 §5.2. |
+| `mapterhorn_measured` | Exclu sur les plages GLO-30 et sur leurs coutures. | Origine `mapterhorn` sur ces plages (§5.1, doc 02 §4.5). |
+| Budget de requête | 90 s (usage personnel, latence à froid secondaire) ; cadence IGN inchangée à 20 req/s. | 504 au-delà ; délai du reverse proxy > 90 s (§8.1, doc 02 §7). |
+| Déploiement | Une seule instance ; mise à l'échelle horizontale hors v1. | La cadence IGN reste locale au processus (§8.1). |
+| Bornes des options | `sampling.step_m` ∈ [5 ; 1 000] m, défaut 25 m ; `smoothing_m` ∈ {0} ∪ [10 ; 1 000] m. | Publiées dans `/v1/capabilities` (doc 02 §3.2). |
+| Zone France | Contour de couverture LiDAR HD de vcyclist (Apache 2.0), recopié ; ni Natural Earth ni Admin Express. | Contour généreux : bandes frontalières comptées en France (§5.1). |
+| Cache de banc | Local, hors git (`~/.cache/osm-route-details/bench`), régénérable par `tools/ord-bench` ; pas de stockage distant. | Bancs hors ligne lancés en local ; une régénération est un changement de données (§8.5). |
 
 ## 11. Vérifications
 

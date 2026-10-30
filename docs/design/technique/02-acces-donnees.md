@@ -156,7 +156,9 @@ d'un appelant : les gabarits sont dans la seule configuration (contrat §7, SSRF
 ### 4.2 `HostBudget` : cadence, concurrence, backoff
 
 Un budget **par hôte, pour tout le processus** : des `Arc` dans un registre indexé par hôte, comme
-`HostPacers` (vc:`M/TileRequestPacing.kt:87-103`). Il réunit :
+`HostPacers` (vc:`M/TileRequestPacing.kt:87-103`). Il est local au processus : le service est
+déployé en **une seule instance** (doc 01 §8.1, T01 §10), seul moyen de tenir les 20 req/s vers
+l'IGN sans coordination entre réplicas. Il réunit :
 
 - un **pacer** : créneaux de départ espacés de `1/débit`, dans l'ordre d'appel
   (vc:`M/TileRequestPacing.kt:105-124`), écrit avec `tokio::time` (testable en temps virtuel) ;
@@ -267,7 +269,7 @@ Savoie, vc:`M/ElevationSource.kt:84-91`, exploration 01 §6.3 ; T01 §3.3 retien
 MNS sur les ponts seulement au MVP, autant que le MNT en V1 (heuristiques) ; Mapterhorn z12 ≈ 25
 tuiles, 25 Mio ; `streets` ≈ 90 tuiles (40 pour 90 km, exploration 02 §3), 50 à 270 Mo.
 
-Défauts [à calibrer] (clés de T01 §7) : `cache.memory_elevation_mb = 512` (somme MNT + MNS + Mapterhorn),
+Défauts [à calibrer] (clés de T07 §1) : `cache.memory_elevation_mb = 512` (somme MNT + MNS + Mapterhorn),
 `cache.memory_streets_mb = 512` (osm-surface : 256, os:`config.rs:60`). Les `Arc` tenus par les requêtes en
 cours s'ajoutent au LRU : pic ≈ caches + N_requêtes × jeu de travail, donc la file bornée de
 l'orchestrateur borne aussi la mémoire. Disque : `cache.disk_max_gb_ign = 20` (256 Ko par tuile) ;
@@ -359,11 +361,24 @@ de la côte, vc:`M/IgnLidarHdCoverage.kt:7-125`), testés contre l'emprise de la
 sommets, croisements, vc:`M/IgnLidarHdCoverage.kt:130-178`), résultat mémoïsé par tuile. Simple filtre
 devant le réseau, **jamais** une affirmation sur la donnée.
 
+**Provenance et licence.** Fichier source :
+`VC/elevation/src/commonMain/kotlin/io/github/glandais/elevation/IgnLidarHdCoverage.kt`
+(constantes `METROPOLE`, polygone `lon, lat` tracé à la main dans le sens horaire depuis la mer du
+Nord, et `CORSICA`, boîte 8,40–9,70° E × 41,25–43,15° N ; introduites par le commit vcyclist
+`ee2b214` du 2026-10-14). vcyclist est sous **licence Apache 2.0** (`VC/LICENSE`) ; les sommets sont
+recopiés une fois dans `ord-data::coverage` (copie gelée, sans dépendance de fichiers entre projets,
+décision Q11), avec en tête du module la mention de provenance et de licence Apache 2.0 exigée pour
+une reprise. Aucune donnée tierce (Natural Earth, Admin Express) n'entre dans ces polygones.
+
 ### 7.2 Zone France (qualité maximale)
 
-Un polygone plus serré, pour `outside_primary_zone` et `mapterhorn_measured`, embarqué dans le
-binaire : frontière simplifiée métropole + Corse d'une donnée du domaine public (Natural Earth admin-0
-par exemple). Test `geo::Contains` après pré-filtre par bbox.
+**Décision** (doc 01 §10) : la zone France **est** le contour du §7.1, sans polygone de plus. Elle
+sert à `outside_primary_zone` et à `mapterhorn_measured`. Test point dans polygone
+(`geo::Contains`) après pré-filtre par bbox, sur les mêmes sommets embarqués. Conséquence assumée :
+le contour est généreux (5 à 20 km au-delà de la frontière et de la côte) ; une bande de Suisse, de
+Belgique ou du Kent est « en zone France » (pas d'`outside_primary_zone`, origine Mapterhorn
+`mapterhorn_measured` hors GLO-30), et une bande côtière en mer aussi. Le bord exact de la France
+n'est pas cherché : la zone ne qualifie que la provenance.
 
 ### 7.3 Détection GLO-30 et origine Mapterhorn
 
@@ -378,7 +393,8 @@ le modèle : `Glo30` si `glo30`, `Dtm` sinon. (3) Sans fichiers de couverture : 
 (§6.3) détecte « GLO-30 seul », sinon `Unknown`.
 
 Origine Mapterhorn : `MapterhornMeasured` si le point est en zone France **et** `dem_kind ∉
-{Glo30, Seam}`, `Mapterhorn` sinon.
+{Glo30, Seam}`, `Mapterhorn` sinon : exclusion sur GLO-30 **et** sur ses coutures, décidée (doc 01
+§5.1, §10 ; contrat §4.5), car ni l'un ni l'autre n'est un MNT mesuré.
 
 **Couture** (exploration 05 §1.6) : un point de MNT national à moins de `seam_m` = 150 m
 [mesuré, mélange documenté] du bord d'un polygone `glo30` adjacent est marqué `DemKind::Seam`. Il
@@ -471,9 +487,11 @@ date OSM de `tiles.json` ou des métadonnées du fichier.
   chaînes lisent en parallèle ; budgets par hôte et dédoublonnage évitent toute double lecture.
 - **Coût à froid, 200 km** : ≈ 400 tuiles MNT à 20 req/s, soit ≈ 20 s de cadence (contrat §7 : « de
   l'ordre de 20 s pour 130 km »), plus le MNS des ponts ; Mapterhorn (≈ 25) et `streets` (≈ 90) sur
-  d'autres hôtes, en parallèle. L'IGN est le chemin critique ; le budget de requête de 45 s (T01
-  §3.3) tient au MVP. À chaud : quelques dizaines de ms
-  (osm-surface < 100 ms, exploration 02 §7).
+  d'autres hôtes, en parallèle. L'IGN est le chemin critique ; le budget de requête de 90 s (T01
+  §3.3) tient au MVP. En V1, le MNS lu sur tout le terrain mesuré (heuristiques) double le volume
+  IGN : ≈ 800 tuiles pour 200 km, ≈ 40 s à 20 req/s, toujours sous le budget, sans conditionner
+  les heuristiques à l'état du cache (déterminisme, doc 01 §3) ; chiffre à remesurer en V1.
+  À chaud : quelques dizaines de ms (osm-surface < 100 ms, exploration 02 §7).
 - **Cas limites** : pôles et antiméridien bornés en amont (plage Web Mercator) et blocage au bord du
   monde (§6.2) ; point sur un bord de tuile → tuile est/sud, voisines chargées ; tuile IGN dans le
   contour mais 100 % no-data (mer, ZICAD) → `NoData` 30 j, points relus dans Mapterhorn ; XML d'erreur
@@ -503,29 +521,19 @@ Propriétaires exacts : carte des types, T01 §0.
 
 **Consommé** : `LatLon`, `Deadline`, `RequestId`, `DataVersion`, `DataVersions`, `SourceRole` (T01) ;
 `StreetTile`, `StreetSchemaAdapter` (T03 §3, pour `StreetsCodec`) ; `DataConfig`, construit par
-l'amorçage depuis `Config` (T01 §7) ; la façade `metrics` (Observabilité).
+l'amorçage depuis `Config` (T07 §5) ; la façade `metrics` (Observabilité).
 
 ## 12. Points de tension
 
 1. **Mapterhorn « immuable » (doc 01 §8.3) contre une URL publique non versionnée** : la version du
    TileJSON entre dans l'espace de noms disque ; si le TileJSON n'en publie pas (à vérifier), il
    faudra revalider par `If-Modified-Since` (30 j) et l'immuabilité ne sera qu'approchée.
-2. **Heuristiques V1 et budget à froid** : le MNS lu sur tout le terrain mesuré double le volume IGN
-   (≈ 800 tuiles pour 200 km, ≈ 40 s à 20 req/s) face à un budget de 45 s (T01 §3.3). Les
-   conditionner à l'état du cache casserait le déterminisme (doc 01 §3) : il faudra élargir le budget
-   des longs parcours à froid ou monter la cadence vers 30 req/s, sur mesure.
-3. **Relances contre échéance** : 6 essais (1, 2, 4… s) font jusqu'à 31 s. Coupées à l'échéance, elles
+2. **Relances contre échéance** : 6 essais (1, 2, 4… s) font jusqu'à 31 s. Coupées à l'échéance, elles
    transforment plus souvent qu'avec vcyclist un ralentissement IGN en `terrain_fallback`.
-4. **Déterminisme en lecture distante** : *stale-if-error*, TTL des tuiles IGN no-data et
+3. **Déterminisme en lecture distante** : *stale-if-error*, TTL des tuiles IGN no-data et
    revalidations VersaTiles peuvent changer une réponse ; conforme au `data_versions` « indicatif »
    (contrat §6), mais `stale_served` doit au moins être journalisé.
-5. **`mapterhorn_measured` sur GLO-30 et ses coutures** : doc 01 dit « Mapterhorn dans l'emprise France » ; je
-   l'exclus sur GLO-30 (littoral, trous), ni mesuré ni MNT. Raffinement à confirmer.
-6. **Zone France contre contour IGN** : vcyclist qualifie « measured » avec son contour généreux ;
-   j'ajoute un polygone plus serré, donnée embarquée de plus (source et licence à confirmer).
-7. **Cadence « pour tout le processus »** : des réplicas derrière une même IP partagent les
-   40 req/s de l'IGN ; diviser la cadence par le nombre de réplicas, ou une seule instance.
-8. **« ≈ 3 Mo par tuile décodée »** n'est pas mesuré ; le dimensionnement des LRU (§5.4) et le pic
+4. **« ≈ 3 Mo par tuile décodée »** n'est pas mesuré ; le dimensionnement des LRU (§5.4) et le pic
    mémoire en dépendent, à fixer par le test d'empreinte.
-9. **Coutures Mapterhorn** (≈ 150 m de mélange) : non exprimables dans le contrat (pas d'origine
+5. **Coutures Mapterhorn** (≈ 150 m de mélange) : non exprimables dans le contrat (pas d'origine
    « mixte »), gardées internes ; la provenance y est approchée.

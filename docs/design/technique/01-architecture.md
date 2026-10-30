@@ -9,7 +9,7 @@
 ## 0. Carte des types partagés
 
 Référence unique des noms : une section qui consomme un type le prend ici, avec ce nom et cette forme.
-T01…T05 = sections techniques 01 à 05. Ports objets (`dyn`) en `#[async_trait]` ; distances en `f64`
+T01…T07 = sections techniques 01 à 07. Ports objets (`dyn`) en `#[async_trait]` ; distances en `f64`
 mètres le long du parcours ; plages en `Range<f64>` ; enums publiques en `snake_case` (doc 02).
 
 | Type / trait | Propriétaire (crate::module — définition) | Consommateurs |
@@ -40,10 +40,11 @@ mètres le long du parcours ; plages en `Range<f64>` ; enums publiques en `snake
 | `OutputPoint`, `PointOrigin`, `BreakpointReason`, `BreakpointRules`, `select_breakpoints`, `sample_output` | `ord-core::elevation::breakpoints` — T04 §6 | assembleur, ord-server (DTO) |
 | `Warning`, `WarningCode` | `ord-domain::report` — T01 §5 | T03, T04, assembleur, ord-server |
 | `Rules` (= `RuleSet` + `MatchParams` + `ElevationRules`), `RULES_VERSION` | `ord-core::rules` — T01 §9 | ord-pipeline, ord-server, T05 (`RulesFingerprint`) |
-| `RouteReport`, `Status`, `Summary`, `Quality`, `assemble`, `Versions` | `ord-core::assemble` — T01 §5.4, §9 | ord-pipeline, ord-server (`to_dto`) |
+| `RouteReport`, `Status`, `Summary`, `Quality`, `assemble` ; `Versions` | `ord-core::assemble` — T06 §5 ; `Versions` : T01 §9 | ord-pipeline, ord-server (`to_dto`) |
 | `Orchestrator`, `Sources`, `Admission`, `PipelineError`, `DataSide`, `Outcome`, `decide_outcome` | `ord-pipeline` — T01 §3, §5.3 | ord-server, T05 |
-| `Capabilities`, `Limits`, `OptionBounds`, `EnumCatalog`, `DataFeatures` | `ord-server` — T01 §5.4 | T05 (contrat) |
-| `Problem`, `ProblemCode`, `StrictJson`, DTO v1, `Config`, `AppState`, `router`, `openapi` | `ord-server` — T01 §4, §7, §10 | T05 |
+| `Capabilities`, `Limits`, `OptionBounds`, `EnumCatalog`, `DataFeatures` | `ord-server` — T07 §2, §4 | T05 (contrat) |
+| `Config` (et ses sous-structures) | `ord-server` — T07 §5 | ord-server (amorçage), T02 (`DataConfig`) |
+| `Problem`, `ProblemCode`, `StrictJson`, DTO v1, `AppState`, `router`, `openapi` | `ord-server` — T01 §4, §10 | T05 |
 | `offline_sources`, `ScriptedServer`, `SyntheticTerrain`, types du corpus | `ord-testkit` — T05 §8 | tests, `tools/ord-bench` |
 
 **Hiérarchie d'erreurs** (une seule) : `DecodeError`, `FetchError` (T02) → `TileOutcome::Failed(TileFailure)`,
@@ -81,7 +82,8 @@ osm-route-details/
     ord-server/    # binaire `osm-route-details` : axum, DTO v1, config, observabilité, OpenAPI, câblage
     ord-testkit/   # (dev) port Offline, ScriptedServer, terrains synthétiques, corpus (T05 §8)
   tools/           # binaires hors image : ord-bench (T05 §5), inspect, fetch-coverage
-  bench/           # données du banc (corpus, critères, rapports) ; bench/private/ hors git
+  bench/           # données du banc (corpus, critères, rapports) ; bench/private/ hors git ;
+                   # cache de banc local hors dépôt, ~/.cache/osm-route-details/bench (T05 §5.3)
   contract/openapi.json      # généré depuis le code, vérifié en test
 ```
 
@@ -157,9 +159,12 @@ Le découpage reprend les modules d'osm-surface (`OS/src/lib.rs:4-14`) en sépar
 
 ### 3.3 Budget de temps et annulation
 
-- Un `Deadline` est créé à la réception (`request_budget`, défaut **45 s [C]**) : 200 km froids
-  ≈ 400 tuiles MNT IGN (264 pour 130 km, exploration 01 §6.3) à 20 req/s ≈ 20 s, plus le MNS et
-  Mapterhorn. Il est **dimensionné sur le cas froid** (doc 02 §7) et mesuré au MVP.
+- Un `Deadline` est créé à la réception (`request_budget`, défaut **90 s**, décision doc 01 §10) :
+  200 km froids ≈ 400 tuiles MNT IGN (264 pour 130 km, exploration 01 §6.3) à 20 req/s ≈ 20 s,
+  plus le MNS et Mapterhorn. Il est **dimensionné large sur le cas froid** (doc 02 §7) : l'usage est
+  personnel et la latence à froid secondaire. La cadence IGN reste à 20 req/s pour tout le processus
+  (§6) : deux parcours froids de 200 km simultanés (≈ 40 s chacun) et le MNS partout des
+  heuristiques V1 (≈ 800 tuiles, ≈ 40 s, T02 §10) tiennent sous ce budget.
 - Le `Deadline` est lu par l'accès données (pas de relance ni d'attente de `Retry-After` qui
   dépasserait l'échéance : l'échec est alors enregistré) et par le cœur, **coopérativement**, via
   `&dyn Budget` aux frontières d'étape et dans les boucles longues (HMM, fusion). Leçon de
@@ -167,7 +172,9 @@ Le découpage reprend les modules d'osm-surface (`OS/src/lib.rs:4-14`) en sépar
   permis jusqu'au bout (`VC/api/.../http/ComputeGate.kt:13-27`).
 - Échéance → `PipelineError::Timeout` → 504 `timeout`, **jamais de réponse tronquée**. Client
   déconnecté : un garde `Drop` déclenche le `CancellationToken`, le calcul s'arrête au prochain
-  contrôle. Le délai de lecture du reverse proxy doit dépasser `request_budget`.
+  contrôle. Le délai de lecture du reverse proxy doit dépasser `request_budget` (90 s), et
+  `shutdown_grace_s` vaut le budget (T07 §1). Les délais réseau par tuile (`connect_timeout_s` 4 s,
+  `fetch_timeout_s` 8 s) et les relances (T02 §4) ne changent pas : seul le budget global s'allonge.
 
 ### Interfaces (runtime)
 
@@ -218,8 +225,8 @@ d'entrée soit un problème RFC 9457 et non un rejet texte d'axum :
    §3.1) : le champ `ele`/`alt` est **toléré** et non signalé comme inconnu.
 5. Coordonnées : finies, `lat ∈ [-85.05112878, 85.05112878]` (plage Web Mercator), `lon ∈ [-180,
    180]` ; chaque erreur porte son pointeur (`/points/12/lat`), **jamais la valeur**.
-6. Options : bornes (`sampling.step_m`, `elevation.smoothing_m`), valeurs d'enum ; `debug: true`
-   sans `debug_allowed` en configuration → 400.
+6. Options : bornes (`sampling.step_m` ∈ [5 ; 1 000] m, `elevation.smoothing_m` ∈ {0} ∪
+   [10 ; 1 000] m, T07 §2), valeurs d'enum ; `debug: true` sans `debug_allowed` en configuration → 400.
 7. Bornes (après dédoublonnage des consécutifs) : moins de 2 points distincts → 400 ; plus de
    `max_points` (16 000 **[M]**, `OS/src/trace.rs:17`) ou longueur > `max_length_m` (200 000
    **[M]**, `OS/src/trace.rs:18`) → 413 `route_too_large`, `details.limit` ∈ {`points`, `length_m`,
@@ -281,7 +288,7 @@ négatif des tuiles en cause)`, borné à `[retry_after_min_s, retry_after_max_s
 
 `/health/live` : 200 dès l'écoute. `/health/ready` : 200 si le référentiel de couverture est
 chargé, chaque fichier local ouvert et lisible, le cache disque inscriptible ; les sources
-distantes n'y entrent pas (§11, point 6) ; le corps donne leur état observé, sans URL.
+distantes n'y entrent pas (§11, point 3) ; le corps donne leur état observé, sans URL.
 
 ### Interfaces (erreurs)
 
@@ -321,7 +328,7 @@ impl From<ElevationError> for PipelineError { /* idem */ }
 | 6 | Fusion du profil : ouvrages OSM, détecteurs + `reconcile` (V1), trous, lissage, D+/D−, pentes | `ord-core::elevation::fuse` (bloquant) | `ElevationProfile` (dont `StructureVerdict`) | — |
 | 7 | Segments homogènes (`build_segments`, verdicts de 6) | `ord-core::typology::segments` | `Vec<TypedSegment>` | — |
 | 8 | Points de sortie (`sample_output` ; ruptures si `InputWithBreakpoints`) | `ord-core::elevation::breakpoints` | `Vec<OutputPoint>` | — |
-| 9 | Assemblage : `ele_*`/pente des segments, résumé, `quality`, avertissements, versions, attribution | `ord-core::assemble` | `RouteReport` | — |
+| 9 | Assemblage : `ele_*`/pente des segments, résumé, `quality`, avertissements, versions, attribution (T06) | `ord-core::assemble` | `RouteReport` | — |
 | 10 | DTO v1, filtrage `sections`, sérialisation | handler | JSON compressé | — |
 
 Les étapes 6 à 9 forment **une seule** tâche bloquante (un permis). La typologie tourne même si
@@ -357,7 +364,7 @@ Chemin critique : HMM à chaud, cadence IGN à froid.
 ### 5.3 Décision du mode de réponse
 
 Fonction pure, testée sur la table du doc 01 §6 ligne à ligne. Elle ne décide que du **rejet** ;
-le `status` est fixé par l'assembleur (§5.4).
+le `status` est fixé par l'assembleur (T06 §3).
 
 - Une source est `Failed` si **une** plage est en panne après relances, cache périmé et repli :
   typologie, `TypologyCoverage::unavailable ≠ ∅` ; élévation, une station `missing = Failed`.
@@ -365,67 +372,22 @@ le `status` est fixé par l'assembleur (§5.4).
 - Les deux `Failed` → 503 `data_unavailable`, `source = both`, même avec `accept_partial`. Une
   seule `Failed` → 503 sans `accept_partial`, sinon `Proceed`, et l'assembleur pose
   `typology_unavailable` ou `elevation_unavailable` sur les plages concernées.
+- Règle **stricte**, confirmée (doc 01 §10) : il n'y a **aucun seuil de tolérance**. Une seule
+  tuile VersaTiles ou MNT en panne non rattrapée par un repli suffit pour un 503 sur tout le
+  parcours, sauf `accept_partial` ; les deux côtés en panne, même sur des plages disjointes, donnent
+  toujours un 503.
 - 422 : décidé dès l'étape 3, quand `typology_absent` et `elevation_absent` couvrent chacun `[0, L]`.
 
 ```rust
 pub enum Outcome { Proceed { typology_failed: bool, elevation_failed: bool }, Reject(PipelineError) }
 ```
 
-### 5.4 Assembleur (`ord-core::assemble`)
+### 5.4 Assembleur et `/v1/capabilities` (renvois)
 
-Fonction pure, dernière étape bloquante. Toutes les longueurs sont des sommes de plages en
-distance, chaque station valant la moitié de ses deux intervalles, comme `TerrainRange`. Les sommes
-sont faites dans l'ordre des distances. `L = PreparedRoute::length_m`, qui est > 0 (≥ 2 points
-distincts).
-
-| Champ du contrat | Calcul |
-|---|---|
-| `segments[]` | `TypedSegment` (T03 §8) + `ele_start`/`ele_end` = `profile.at(from_m/to_m)`, `grade_pct` = `profile.grade_pct`. `ele_method` = méthode qui couvre la plus grande longueur du segment ; à égalité, `dsm_deck` > `interpolated_structure` > `gap_filled` > `dem` > `none`. `structure_source` absent sur `ground`. `osm` = `debug_attrs` |
-| `summary.length_m`, `gain_m`, `loss_m`, `gain_params` | `L` ; `profile.gain` (T04 §5.4) |
-| `ele_min_m`, `ele_max_m` | Extrema de `ele` corrigé non lissé sur les stations non `none` ; absents si aucune |
-| `by_structure_m`, `by_surface_class_m`, `by_surface_source_m`, `by_way_kind_m` | Somme des longueurs de segments par valeur (`BTreeMap`, valeurs nulles omises) |
-| `structures[]` | Un élément par `StructureOutcome` (T04 §5.5), trié par `from_m` : `kind`, `from_m`/`to_m` coupés au parcours, `length_m = to_m − from_m`, `structure_source`, `method` ← `OutcomeMethod` (`Uncorrected` → `none` ; `KeptGround` → `dem`, valeur à ajouter au contrat, T04 §8.2). Avec `structure_correction: false`, tous en `none` |
-| `terrain_m` ; `unknown_m` | Somme des `TerrainRange` par `origin` ; somme des segments `matched = false` |
-| `quality.matched_ratio` | `(L − unknown_m) / L` |
-| `inferred_surface_ratio` | Longueur `surface.source ∈ {inferred_tracktype, inferred_highway}` / `L` |
-| `elevation_coverage` | Longueur des stations dont `ele ≠ none` / `L` |
-| `structure_correction`, `terrain` | `profile.correction`, `profile.terrain_ranges` |
-| `warnings[]` | Union des producteurs ci-dessous. Plages contiguës d'un même code fusionnées. Tri par `(from_m, code)`. `message` = gabarit anglais fixe par code, sans coordonnées |
-| `status` | `partial` si un avertissement `elevation_missing`, `typology_missing`, `typology_unavailable` ou `elevation_unavailable` est présent, sinon `complete` (doc 02 §4.1) |
-| arrondis | §9 : altitudes et distances au cm, ratios et pentes à 1e-4 et 0,01 %, coordonnées à 1e-6° |
-
-**Producteur de chaque avertissement** (un seul par code) :
-
-| Code | Producteur | Plage |
-|---|---|---|
-| `unmatched_range` | assemble | segments `matched = false` hors plages `typology_*` |
-| `typology_missing` | assemble | `TypologyCoverage::missing` ∪ `CoverageRanges::typology_absent` |
-| `typology_unavailable` | assemble | `TypologyCoverage::unavailable`, si `Proceed { typology_failed }` |
-| `outside_primary_zone` | assemble | `CoverageRanges::outside_primary_zone` |
-| `elevation_missing`, `elevation_unavailable` | `fuse` (T04 §5.1) | stations `none` restées après comblement, selon `Missing::{NoData, Failed}` |
-| `elevation_gap_filled` | `fuse` (T04 §5.1) | trous comblés |
-| `terrain_fallback` | `fuse` | `TerrainRange` avec `fallback_after_error` |
-| `dsm_unavailable`, `structure_uncorrected`, `structure_slope_implausible` | `fuse` (T04 §3) | plage de l'ouvrage |
-| `dsm_source` | `fuse` (T04 §5.4) | plages `adapted[]` |
-| `structure_untagged` (V1) | `fuse`, verdict `heuristic` de `reconcile` | plage du verdict |
-
-**`/v1/capabilities`** : construit une fois au démarrage par `ord-server`, à partir de `Config`,
-`Rules`, `SchemaCapabilities` et `DataCatalog`. Il est sérialisé en octets précalculés (§4.1).
-
-```rust
-pub struct Capabilities {
-    pub api_version: &'static str, pub rules_version: &'static str,
-    pub limits: Limits,                 // max_points, max_length_m, max_body_bytes, station_step_m, densified_max
-    pub defaults: RequestOptions, pub option_bounds: OptionBounds,   // step_m, smoothing_m (§7.1)
-    pub enums: EnumCatalog,             // toutes les valeurs publiques, raisons et codes d'avertissement compris
-    pub primary_zone: &'static str,     // "FR-metropole+corse"
-    pub data: DataFeatures,             // ford_detectable, surface_detail, bridge_dsm, heuristics
-    pub elevation_sources: Vec<DataVersion>, // IGN (zoom, mode direct|sober), Mapterhorn (zoom, role fallback)
-    pub rules: Rules,                   // seuils des ruptures, gap_fill_max_m, presets, glo30_threshold_m
-}
-```
-`ford_detectable` = `caps.ford_ways || caps.ford_nodes` ; `surface_detail` = `caps.surface == Raw` ;
-`bridge_dsm` = IGN actif ; `heuristics` = `ElevationRules::heuristics` (T04 §7.1).
+L'assembleur (`ord-core::assemble`, étape 9 : calcul de chaque champ de `summary` et `quality`,
+`status`, producteur de chaque avertissement) est décrit en [T06](06-assembleur.md).
+`/v1/capabilities` (construction au démarrage, bornes publiées) est décrit en
+[T07 §4](07-configuration.md).
 
 ### Interfaces (Orchestrateur)
 
@@ -445,20 +407,7 @@ pub enum WarningCode { UnmatchedRange, StructureUncorrected, StructureSlopeImpla
     ElevationMissing, TypologyMissing, TerrainFallback, DsmUnavailable, DsmSource, OutsidePrimaryZone,
     TypologyUnavailable, ElevationUnavailable, StructureUntagged }       // = doc 02 §4.5, snake_case
 pub struct Warning { pub code: WarningCode, pub message: String, pub range: Option<Range<f64>> }
-// ord-core::assemble
-pub struct RouteReport { pub status: Status, pub points: Vec<OutputPoint>, pub segments: Vec<ReportSegment>,
-    pub summary: Summary, pub quality: Quality, pub warnings: Vec<Warning>, pub versions: Versions,
-    pub attribution: Vec<Attribution> }   // ReportSegment = TypedSegment + ele_method, ele_start/end, grade_pct
-pub enum Status { Complete, Partial }
-pub struct Summary { pub length_m: f64, pub gain: GainResult, pub ele_min_m: Option<f64>, pub ele_max_m: Option<f64>,
-    pub by_structure_m: BTreeMap<StructureClass, f64>, pub by_surface_class_m: BTreeMap<SurfaceClass, f64>,
-    pub by_surface_source_m: BTreeMap<SurfaceSource, f64>, pub by_way_kind_m: BTreeMap<WayKind, f64>,
-    pub structures: Vec<StructureOutcome>, pub terrain_m: BTreeMap<TerrainOrigin, f64>, pub unknown_m: f64 }
-pub struct Quality { pub matched_ratio: f64, pub inferred_surface_ratio: f64, pub elevation_coverage: f64,
-    pub structure_correction: StructureCorrectionReport, pub terrain: Vec<TerrainRange> } // warnings : RouteReport
-pub fn assemble(route: &PreparedRoute, typo: Option<&TypologyOutput>, segs: Vec<TypedSegment>,
-    profile: ElevationProfile, points: Vec<OutputPoint>, cov: &CoverageRanges, outcome: &Outcome,
-    versions: Versions, attribution: Vec<Attribution>) -> RouteReport;
+// RouteReport, Status, Summary, Quality, assemble : ord-core::assemble, T06 §5
 // ord-pipeline
 pub struct Orchestrator { /* Arc<Sources>, Arc<dyn TypologyChain>, Arc<Rules>, Admission, Semaphore */ }
 impl Orchestrator {
@@ -479,7 +428,8 @@ Le détail relève de la section Accès données ; l'architecture fixe le port e
 - Résultat de lecture à quatre états **distincts** (`TileOutcome`) : `Data`, `Empty` (204 / tuile
   vide : « pas de rue »), `Absent` (hors emprise par construction), `Failed` (jamais lu comme « pas
   de rue », `OS/src/tiles.rs:207-212`).
-- **Cadence par hôte pour tout le processus** : IGN 20 req/s **[M]** (moitié des 40 publiées,
+- **Cadence par hôte pour tout le processus**, donc pour tout le service, déployé en une seule
+  instance (§10) : IGN 20 req/s **[M]** (moitié des 40 publiées,
   `VC/elevation/.../TileRequestPacing.kt:24-63`), MNT et MNS sur le **même** budget ; relance des
   429/503 jusqu'à 6 essais après `Retry-After` ou 1, 2, 4… s **[M]**, sans dépasser le `Deadline`.
   VersaTiles : concurrence ≤ 8, backoff sur 429/5xx **[M]** (exploration 06). Mapterhorn :
@@ -492,46 +442,10 @@ Le détail relève de la section Accès données ; l'architecture fixe le port e
 `TileKey`, `SourceId`, `TileOutcome<T>`, `TileCodec`, `TileStore<T>`, `TileFailure` : définitions
 uniques en T02 §2.2–2.3 (non recopiées ici pour éviter deux versions).
 
-## 7. Configuration
+## 7. Configuration (renvoi)
 
-### 7.1 Sources et priorité
-
-Défauts compilés < fichier TOML (`--config <chemin>` ou `ORD_CONFIG`, facultatif) < variables
-d'environnement `ORD_<SECTION>__<CLÉ>` (ex. `ORD_LIMITS__MAX_POINTS`). Le doc 01 §8.1 impose que
-**toute** la configuration passe par l'environnement : chaque clé du fichier a son équivalent
-`ORD_…`, le fichier n'est qu'une commodité. Validation **au démarrage**, échec immédiat avec le
-chemin de la clé (comme les `require` d'`ApiConfig`, `VC/api/.../ApiConfig.kt:44-54`). La
-configuration effective est journalisée au démarrage, sans secret (osm-surface,
-`OS/src/main.rs:19-20`).
-
-| Section | Clés principales (défaut) |
-|---|---|
-| `server` | `listen_addr` (`0.0.0.0:8080`), `metrics_addr` (`0.0.0.0:9090`), `shutdown_grace_s` (= budget) |
-| `limits` | `max_points` (16 000), `max_length_m` (200 000), `max_body_bytes` (8 Mio), `debug_allowed` (false) ; `densify_step_m` = 5 est une règle (`ElevationRules::station_step_m`), pas une clé |
-| `limits.options` | bornes publiées : `sampling.step_m` ∈ [5 ; 1 000] m, défaut 25 m ; `elevation.smoothing_m` ∈ {0} ∪ [10 ; 1 000] m **[C]** |
-| `budget` | `request_budget_s` (45), `max_in_flight` (nb CPU), `max_queued` (2 × in_flight), `compute_permits` (nb CPU), `per_request_fetch_concurrency` (10), `retry_after_*` (§4.4) |
-| `typology` | `source` = `versatiles_http` \| `versatiles_file` ; `url` (`https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}`, `OS/src/config.rs:49`) ou `path` ; `zoom` (14) ; `concurrency` (8) |
-| `elevation.ign` | `enabled` (true), `wms_url` (Géoplateforme WMS-R), couches MNT / MNS, `zoom` (15), `rate_per_s` (20), `max_attempts` (6), `mode` = `direct` \| `sober` (doc 01 §5.1, défaut `direct`) |
-| `elevation.mapterhorn` | `url` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`), `zoom` (12), `concurrency` (4), `version` |
-| `coverage` | chemins du contour LiDAR HD, de la zone France, des PMTiles de couverture Mapterhorn |
-| `cache` | `dir` (`/var/cache/osm-route-details`), `disk_max_gb_ign` (20), `ttl` par source (VersaTiles 7 j **[M]**, IGN avec no-data 30 j **[C]**, Mapterhorn immuable), `negative_ttl_s` (60), `memory_elevation_mb` (512), `memory_streets_mb` (512), `offline` (false) — détail T02 §5 |
-| `http_client` | `user_agent`, `connect_timeout_s` (4 **[M]**, `OS/src/tiles.rs:38`), `fetch_timeout_s` (8 **[M]**, `OS/src/config.rs:27-28`) |
-| `log` | `format` = `json` \| `text`, `filter` (`RUST_LOG` respecté) |
-
-**User-Agent** : `osm-route-details/<CARGO_PKG_VERSION> (+https://github.com/glandais)` par défaut
-(condition VersaTiles, courtoisie Mapterhorn et IGN ; explorations 05, 06), jamais vide. **Aucune
-URL fournie par le client** (doc 02 §7, SSRF) : elles ne viennent que de la configuration.
-
-### Interfaces (configuration)
-
-```rust
-// ord-server (désérialisé par figment) ; sous-structures passées aux crates qui les consomment
-pub struct Config { pub server: ServerConfig, pub limits: LimitsConfig, pub budget: BudgetConfig,
-                    pub typology: TypologySourceConfig, pub elevation: ElevationSourcesConfig,
-                    pub coverage: CoverageConfig, pub cache: CacheConfig,
-                    pub http_client: HttpClientConfig, pub log: LogConfig }
-impl Config { pub fn load(args: &Args) -> Result<Config, ConfigError>; pub fn validate(&self) -> Result<(), ConfigError>; }
-```
+Sources et priorité (défauts < TOML < `ORD_<SECTION>__<CLÉ>`), table des clés et défauts, bornes
+des options, `User-Agent`, `/v1/capabilities` et `Config` : voir [T07](07-configuration.md).
 
 ## 8. Observabilité
 
@@ -579,7 +493,7 @@ collecteur de logs ; aucune ligne ne doit contenir ses chiffres.
 aucune réduction flottante parallèle, sommation dans l'ordre des distances ; `TilePlan` triés, donc
 indifférents à l'ordre d'arrivée des tuiles ; arrondis de sortie fixés dans l'assembleur et
 versionnés (altitudes et distances au cm, pentes à 0,01 %, coordonnées à 1e-6° **[C]**), ce qui
-absorbe les écarts flottants entre machines (T05 §10, point 5) ; `request_id` et `duration_ms` ajoutés par le handler, hors `RouteReport`. Seules
+absorbe les écarts flottants entre machines (T05 §10, point 4) ; `request_id` et `duration_ms` ajoutés par le handler, hors `RouteReport`. Seules
 causes de variation : externes et signalées (repli après panne, tuile IGN nouvellement publiée).
 Test : chaque parcours d'`ord-testkit` rejoué deux fois sur tuiles figées donne des réponses égales,
 ces deux champs retirés. **Idempotence** : aucun effet de bord observable (les caches chauffent
@@ -619,8 +533,14 @@ pour aws-lc, couche de dépendances séparée, `cargo build --release --locked -
 `gcr.io/distroless/cc-debian12:nonroot` (65532), binaire unique ; `/data` en **lecture seule**
 (`.versatiles`, couverture), `/var/cache/osm-route-details` **inscriptible** à part (doc 01 §8.1) ;
 `EXPOSE 8080` et `9090` (non publié) ; sonde `osm-route-details healthcheck` (pas de `curl` en
-distroless). Les fichiers de couverture viennent de `tools/fetch-coverage` et sont montés, pas
-intégrés à l'image : ils suivent les publications de l'IGN.
+distroless). Les fichiers de couverture Mapterhorn viennent de `tools/fetch-coverage` et sont
+montés, pas intégrés à l'image : ils suivent les publications de Mapterhorn. Le contour LiDAR HD (et
+zone France) est embarqué dans le binaire (T02 §7.1–7.2).
+
+**Déploiement : une seule instance** (décision doc 01 §10). La cadence IGN (20 req/s) et les budgets
+par hôte sont locaux au processus (§6, T02 §4.2) : deux réplicas derrière une même IP doubleraient
+la cadence vue par l'IGN. La v1 tourne donc en un seul conteneur ; la mise à l'échelle horizontale
+(cadence partagée ou divisée par réplica) est hors v1 (T07 §3).
 
 **OpenAPI** : `utoipa` dérive le contrat des DTO ; `osm-route-details openapi` écrit
 `contract/openapi.json`, et un test vérifie que le fichier versionné est celui du code, comme
@@ -633,23 +553,12 @@ intégrés à l'image : ils suivent les publications de l'IGN.
 1. **GPX et GeoJSON en entrée.** La consigne cite GPX et GeoJSON ; le contrat v1 n'accepte que
    `points` et `polyline` (GeoJSON en V1.x, GPX absent, doc 02 §3.1). Je garde le contrat ;
    `RouteInput` est extensible. Le GPX demanderait de trancher sa forme (média, une trace, `rtept`/`trkpt`).
-2. **Codes de protocole.** Le doc 02 §5.2 ne liste pas 404, 405 et 415 : j'ajoute `not_found`,
-   `method_not_allowed`, `unsupported_media_type`. Un corps trop gros reste sous 413
-   `route_too_large` (`details.limit = "body_bytes"`).
-3. **Budget contre cadence IGN partagée.** 20 req/s pour tout le processus : deux parcours froids
-   de 200 km simultanés prennent ≈ 40 s chacun et frôlent ou dépassent le budget (504), alors que
-   chacun seul passerait. Pistes : cadence FIFO équitable, `max_in_flight` bas, budget plus long.
-4. **MNS des heuristiques (V1)** : voir T02 §12, point 2 (≈ 800 tuiles, ≈ 40 s à froid).
-5. **`read_at` IGN** rend `data_versions` variable d'un jour à l'autre sans changement de contenu :
+2. **`read_at` IGN** rend `data_versions` variable d'un jour à l'autre sans changement de contenu :
    conforme au caractère indicatif (doc 02 §6), mais défavorable au cache client.
-6. **`/health/ready` et sources distantes.** J'exclus les pannes amont de la disponibilité, sinon le
+3. **`/health/ready` et sources distantes.** J'exclus les pannes amont de la disponibilité, sinon le
    service serait retiré du répartiteur au lieu de répondre ses 503 `Retry-After` et ses replis.
-7. **Mémoire sous concurrence.** Les `Arc` de tuiles tenus par une requête échappent à la borne du
+4. **Mémoire sous concurrence.** Les `Arc` de tuiles tenus par une requête échappent à la borne du
    LRU : jusqu'à ≈ 100 Mo de tuiles IGN par parcours froid de 200 km. Il faudra un plafond par
    requête ou un échantillonnage qui relâche les tuiles au fil de l'eau.
-8. **Annulation coopérative.** Le cœur lit une horloge monotone via `&dyn Budget` : seule entorse au
+5. **Annulation coopérative.** Le cœur lit une horloge monotone via `&dyn Budget` : seule entorse au
    « cœur sans effet », sans incidence sur le résultat.
-9. **Une tuile en panne suffit pour un 503.** La règle du §5.3 suit doc 01 §6 à la lettre : une seule
-   tuile VersaTiles ou MNT en échec, après relances, cache périmé et repli, rend tout le parcours 503
-   sans `accept_partial`. Les deux côtés en panne, même sur des plages disjointes, donnent un 503
-   toujours. Un seuil de longueur en panne serait plus tolérant, mais il contredirait le contrat.

@@ -28,8 +28,8 @@
 | Décodage | `tests/decode.rs` | tuiles réelles commitées (`tests/fixtures/tiles/`) | non | `cargo test`, CI |
 | Intégration hors ligne | `tests/api_*.rs` | cache pré-rempli + faux serveur local | boucle locale seulement | `cargo test`, CI |
 | Contrat HTTP/OpenAPI | `tests/contract.rs` | `openapi.json` commité | non | `cargo test`, CI |
-| Golden files | `tests/golden.rs` | `tests/golden/` + cache de banc | non | CI (job `bench-offline`) |
-| Banc qualité | binaire `ord-bench` | corpus `bench/corpus/` + cache de banc | non (sauf `fill-cache`) | CI (calibration), à la main (jugement) |
+| Golden files | `tests/golden.rs` | `tests/golden/` + cache de banc local (§5.3) | non | à la main, en local (`bench-offline`, §6) ; snapshots commités |
+| Banc qualité | binaire `ord-bench` | corpus `bench/corpus/` + cache de banc local | non (sauf `fill-cache`) | en local (calibration, jugement) ; rapport commité, vérifié en CI (§6) |
 | Live | `tests/live_*.rs`, feature `live-tests` | sources réelles | oui | à la main, CI planifiée non bloquante |
 
 ### 2.1 Unitaires purs du cœur
@@ -65,8 +65,10 @@ Par composant (noms de doc 01 §4), les cas qui **doivent** exister, en plus des
 - **Assembleur** : segments contigus de `0` à `length_m` ; coupure sur chaque attribut de doc 02 §4.3
   et **pas** sur `ele_method` seul ; statuts `structure_correction` (`applied`, `partial`, `none_found`,
   `disabled`, `unavailable`) ; `attribution` présente même avec `sections: ["elevation"]` ; `status`
-  à `partial` exactement quand l'un des quatre codes de T01 §5.4 est présent ; chaque code du contrat
-  vient de son seul producteur (table de T01 §5.4, test en table) ; ratios dans `[0, 1]`.
+  à `partial` exactement quand l'un des quatre codes de T06 §3 est présent ; chaque code du contrat
+  vient de son seul producteur (table de T06 §4, test en table) ; ratios dans `[0, 1]` ;
+  `summary.structures[].method = kept_ground` pour un pont sans sursol ; un ouvrage mixte donne une
+  entrée par type, contiguës ; un ouvrage `heuristic` non apparié garde `matched = false`.
 - **Accès données / caches** : repris d'`OS/tests/tiles.rs:79-133` : page d'erreur reçue en 200 jamais
   cachée ; fichier de cache empoisonné supprimé puis relu ; 404 = indisponible et rien n'est écrit ;
   204 = tuile vide (≠ introuvable) ; cache négatif court ; déduplication des chargements concurrents
@@ -347,7 +349,7 @@ distante avec `--url`.
 
 | Sous-commande | Rôle |
 |---|---|
-| `fill-cache --corpus <série>` | live : remplit le cache de banc, écrit `bench/cache.lock` (empreinte, taille) |
+| `fill-cache --corpus <série>` | live : remplit (ou régénère) le cache de banc local (`~/.cache/osm-route-details/bench`, §5.3), écrit `bench/cache.lock` (empreinte, taille, date) |
 | `run --corpus <séries> --offline` | calibration : calcule les métriques, exclut les rôles `holdout*` |
 | `judge --series <s>` | exige `ORD_JUDGE=1`, vérifie `holdout.lock`, jugement unique (§3.2) |
 | `baro ingest` / `baro compare` | §3.3 ; lit `ORD_BARO_DIR` |
@@ -368,10 +370,15 @@ Chaque passage écrit `bench/reports/<date>-<rules_version>/` : `results.json` (
 Coût à froid estimé d'après vcyclist (`ElevationBenchProbeTest.kt:64-67`) : ≈ 190 tuiles IGN
 (48 Mo) et 20 Mapterhorn pour les 4 routes, autant de MNS, ≈ 178 BIL (47 Mo) pour les contrôles de
 ponts, plus les tunnels ; ≈ 11 Mo de VersaTiles pour 185 km (`OS/README.md:177`) : **250 à 350 Mo**.
-En local, le cache vit dans `bench/data/heavy/` (déjà ignoré par git). Son archive
-`bench-cache-<n>.tar.zst` est stockée **hors dépôt** (asset de release privé, ou stockage personnel),
-référencée par `bench/cache.lock` (URL, SHA-256, `DataFingerprint`). En CI, restaurée par
-`actions/cache` sur la clé `DataFingerprint`, sinon téléchargée et vérifiée.
+
+**Décision** (doc 01 §10) : le cache de banc est **local, hors git**, dans
+`~/.cache/osm-route-details/bench` par défaut (`ORD_BENCH_CACHE` ou `--cache-dir` pour le déplacer),
+et **régénérable** par `ord-bench fill-cache`. Il n'est ni archivé ni stocké à distance (pas
+d'asset de release, pas de stockage objet) : aucune redistribution des tuiles (Etalab, ODbL, sources
+Mapterhorn), donc aucune question de licence. `bench/cache.lock` (commité) n'en garde que
+l'empreinte `DataFingerprint`, la taille et la date de remplissage. Une régénération lit des données
+vivantes : si l'empreinte change, c'est un **changement de données** au sens du §4 (nouveau
+`baseline.json`, golden régénérés dans une PR dédiée).
 
 ## 6. CI (GitHub Actions)
 
@@ -384,8 +391,14 @@ référencée par `bench/cache.lock` (URL, SHA-256, `DataFingerprint`). En CI, r
 | `test` | `cargo nextest run --workspace --locked` puis `cargo test --doc` ; `proptest` à 256 cas | oui |
 | `contract` | test §2.5 + `oasdiff breaking` contre `main` | oui |
 | `deny` | `cargo deny check` (licences, avis de sécurité, doublons) | oui |
-| `bench-offline` | restaure le cache de banc ; `cargo test --test golden` ; `ord-bench run --offline --corpus vc-routes,vc-structures,vc-decks,vc-tunnels,os-stadia,synthetic` ; `ord-bench compare` contre `baseline.json` ; règle du §4 ; rapport en artefact | oui |
+| `bench-report` | sans cache : vérifie que le `results.json` commité par la PR porte le `RulesFingerprint` courant et l'empreinte de `bench/cache.lock`, puis `ord-bench compare` contre `baseline.json` et règle du §4 | oui |
 | `docker` | construction de l'image, `/health/live` sur le conteneur | oui sur `main` |
+
+**`bench-offline` en local** (la CI n'a pas le cache, §5.3) : `cargo test --test golden` ;
+`ord-bench run --offline --corpus vc-routes,vc-structures,vc-decks,vc-tunnels,os-stadia,synthetic` ;
+`ord-bench compare` contre `baseline.json`. À lancer avant toute PR qui touche le cœur ; le
+`results.json` produit est commité dans `bench/reports/` et contrôlé par le job `bench-report`. Sans
+cache, les tests golden sont ignorés (et non verts).
 
 `live.yml`, planifié chaque semaine et à la demande, **non bloquant** : `cargo test --features
 live-tests`, `ord-bench latency --profile cold` sur `sample.gpx`, rapport en artefact. Ni `judge` ni
@@ -500,15 +513,12 @@ pub fn offline_sources(cache_dir: &Path) -> Sources;   // TileReader en mode Off
 3. **Q11 « aucune dépendance de fichiers entre projets »** contre doc 01 §8.5 « bancs de vcyclist » :
    résolu par une **copie gelée** avec manifeste et empreintes. Une régénération côté vcyclist ne nous
    atteint pas ; c'est voulu.
-4. **Cache de banc de 250–350 Mo** : trop gros pour le dépôt. Sa redistribution publique mêle des
-   licences (Etalab, ODbL, sources Mapterhorn CC BY et autres) : stockage privé recommandé. Le job
-   `bench-offline` dépend donc d'un téléchargement hors des sources de données.
-5. **Déterminisme flottant** : l'exigence « même réponse » (doc 02 §6) suppose une sérialisation
+4. **Déterminisme flottant** : l'exigence « même réponse » (doc 02 §6) suppose une sérialisation
    arrondie ou une arithmétique identique entre machines (FMA x86/ARM). Tranché par T01 §9 (arrondis
    de l'assembleur) ; reste un cas rare de valeur à cheval sur un arrondi, d'où la tolérance d'une unité.
-6. **A4 (≥ 9/11) et A3 (21/21)** sont des paris sur l'apport d'OSM : si l'appariement rate les tabliers
+5. **A4 (≥ 9/11) et A3 (21/21)** sont des paris sur l'apport d'OSM : si l'appariement rate les tabliers
    étroits, le seuil sera manqué et rapporté, pas abaissé.
-7. **A13 dépend du réseau** (IGN, 40 req/s/IP, pas de SLA) : critère mesuré en live, donc non
+6. **A13 dépend du réseau** (IGN, 40 req/s/IP, pas de SLA) : critère mesuré en live, donc non
    reproductible et non bloquant en CI.
-8. **Variante B (§7)** réutilise le constructeur de tablier sur une géométrie que la trace ne suit pas :
+7. **Variante B (§7)** réutilise le constructeur de tablier sur une géométrie que la trace ne suit pas :
    l'invariant 8 (même altitude dans les deux sens) doit être revérifié par `proptest` dans ce mode.
