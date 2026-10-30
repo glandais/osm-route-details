@@ -24,7 +24,7 @@
 |---|---|
 | `POST /v1/route-details` | Calcul principal. |
 | `GET /v1/capabilities` | Bornes de requête, valeurs d'enum (dont les raisons d'insertion des points), **valeurs par défaut appliquées** (dont les seuils de sélection des points de rupture), zone de qualité maximale (France), capacités des données actives (gué détectable ? `surface.detail` disponible ? MNS des ponts actif ? heuristiques actives ?), sources d'élévation (IGN LiDAR HD, Mapterhorn), leur zoom et leur repli, versions. |
-| `GET /v1/attribution` | Liste complète des attributions des sources configurées : OSM (ODbL), IGN LiDAR HD (Etalab 2.0), sources Mapterhorn, OpenMapTiles si actif. Accessible sans authentification : les clients y renvoient leurs utilisateurs. |
+| `GET /v1/attribution` | Liste complète des attributions des sources configurées : OSM (ODbL), ESA WorldCover (CC BY 4.0, variante VersaTiles servie), IGN LiDAR HD (Etalab 2.0), sources Mapterhorn, OpenMapTiles si actif. Accessible sans authentification : les clients y renvoient leurs utilisateurs. |
 | `GET /health/live` | Le processus répond. |
 | `GET /health/ready` | Les données configurées sont lisibles. |
 | `GET /metrics` | Métriques, sur un **port interne** seulement. |

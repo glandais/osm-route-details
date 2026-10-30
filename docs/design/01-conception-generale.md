@@ -600,7 +600,10 @@ mentionne que les sources effectivement configurées.
   par tronçon permet de savoir si l'IGN ou Mapterhorn ont servi ; à l'intérieur de Mapterhorn, le
   filtrage attend une provenance par pixel qui n'existe pas.
 - **OpenMapTiles (CC-BY 4.0)** : « © OpenMapTiles » à ajouter si l'adaptateur OpenFreeMap est actif.
-- **VersaTiles** : ODbL seul, aucune mention supplémentaire requise par l'exploration.
+- **VersaTiles** : le serveur public sert la variante osm-landcover, qui fusionne OSM (ODbL) et ESA
+  WorldCover (CC BY 4.0). Le service n'exploite que la couche `streets`, issue d'OSM : la mention
+  ODbL suffit pour ce qu'on en tire, mais WorldCover est cité dans `/v1/attribution` par prudence
+  (exploration 06). Mentionner « VersaTiles » est facultatif.
 - **Exclusions de licence** : FABDEM (non commercial) ne doit jamais entrer, même comme repli.
 
 ## 9. Risques
@@ -654,17 +657,30 @@ ouvertes de la révision précédente (numéro d'origine entre parenthèses).
 | IGN en production (Q16) | WMS-R en direct, cache disque et repli Mapterhorn : acceptable. | Mode sobre et dalles locales restent des options, pas le défaut (§5.1, §7). |
 | Ouvrage vu par l'heuristique seule (Q17) | Corrigé, sur terrain mesuré seulement, `structure_source = heuristic`. | Avertissement `structure_untagged` ; risque de faux positif suivi (§5.5, §9). |
 
-## 11. Vérifications à faire
+## 11. Vérifications
 
-1. **Emprises GLO-30 (ex-Q13)** : le catalogue Mapterhorn fournit-il des emprises par source
-   exploitables pour détecter les plages où il retombe sur GLO-30 ? C'est désormais nécessaire pour
-   adapter le seuil de D+ et émettre `dsm_source`. Sinon : carte à gros grain maintenue à la main
-   (le contour LiDAR HD, lui, est repris de vcyclist).
-2. **MNS sur la trace ou sur la géométrie OSM du pont (ex-Q18)** : quand la trace GPS passe à côté du
+### 11.1 Faites
+
+1. **Emprises GLO-30 (ex-Q13)** — *oui, reconstituables* (exploration 05). Mapterhorn publie
+   `coverage-index.pmtiles` (sources présentes par tuile z4–z12) et `coverage.pmtiles` (polygone de
+   données valides par source). La source d'un point se déduit de la règle de fusion du pipeline
+   (maxzoom le plus élevé gagne, GLO-30 fixé à z12). Un 404 en z13 sur l'API signale de façon fiable
+   une zone GLO-30 seul. En métropole, GLO-30 ne sert qu'en bordure côtière et dans les trous. Le
+   référentiel de couverture s'appuie donc sur ces fichiers, pas sur une carte maintenue à la main.
+   Réserve : bug de fusion de polygones ouvert (issue #340), à contrôler par source utilisée.
+2. **API publique VersaTiles** — *acceptable pour le MVP* (exploration 06). Serveur de démonstration
+   sans garantie, aucune interdiction d'usage automatisé, 200 req/s par IP puis `429`. Conditions :
+   User-Agent identifiable, cache 7 j avec revalidation ETag, backoff sur `429`, pas de pré-chargement
+   massif. Données servies vieilles d'environ 5 mois. Bascule sur un extrait France local
+   (≈ 4–5 Go) au premier `429`, si la fraîcheur ou la disponibilité devient critique, ou si le
+   volume grossit.
+3. **API publique Mapterhorn** — *autorisée* (exploration 05). Ni CGU ni quota publiés ; le
+   mainteneur autorise le stockage des tuiles avec attribution et recommande les extraits PMTiles.
+   `Cache-Control` de 7 jours. Un seul mainteneur, pas de SLA. Conditions : User-Agent identifiable,
+   peu de requêtes simultanées, cache disque, lien vers mapterhorn.com/attribution.
+
+### 11.2 Restant
+
+1. **MNS sur la trace ou sur la géométrie OSM du pont (ex-Q18)** : quand la trace GPS passe à côté du
    tablier, laquelle donne le meilleur profil ? À mesurer sur les bancs avant la V1.x ; la lecture sur
    la géométrie OSM n'est retenue que si elle gagne.
-3. **Conditions d'usage de l'API publique VersaTiles** : l'exploration ne documente que la politique
-   de téléchargement. À confirmer avant de l'utiliser hors développement, et pour fixer le moment de
-   bascule sur le fichier local.
-4. **Conditions d'usage de l'API publique Mapterhorn** pour un faible volume avec cache (elle
-   décourage l'usage automatisé massif) : à confirmer, puisque l'auto-hébergement est repoussé.

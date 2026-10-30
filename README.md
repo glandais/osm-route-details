@@ -20,6 +20,8 @@ Aucun code pour l'instant : phase d'exploration puis de conception.
 | [02-osm-surface-typologie](docs/exploration/02-osm-surface-typologie.md) | osm-surface : tuiles VersaTiles, map-matching HMM tiles-only, attributs |
 | [03-sources-tuiles-vectorielles](docs/exploration/03-sources-tuiles-vectorielles.md) | VersaTiles, OSMF, OpenFreeMap, Protomaps, Planetiler sur mesure |
 | [04-sources-elevation](docs/exploration/04-sources-elevation.md) | Mapterhorn, IGN (LiDAR HD, RGE ALTI, API alti), MNT nationaux, globaux |
+| [05-mapterhorn-emprises-et-usage](docs/exploration/05-mapterhorn-emprises-et-usage.md) | Emprises des sources Mapterhorn (détection GLO-30), conditions d'usage de l'API |
+| [06-versatiles-conditions-usage](docs/exploration/06-versatiles-conditions-usage.md) | Conditions d'usage de l'API publique VersaTiles, extrait France local |
 
 ### Synthèse
 
