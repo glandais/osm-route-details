@@ -5,6 +5,13 @@ Microservice Rust (à venir) : en entrée un parcours, en sortie l'**élévation
 
 Aucun code pour l'instant : phase d'exploration puis de conception.
 
+## Conception
+
+| Doc | Sujet |
+|-----|-------|
+| [01-conception-generale](docs/design/01-conception-generale.md) | Vision, périmètre, composants, stratégie de données, enums, modes dégradés, trajectoire, exploitation, questions ouvertes |
+| [02-contrat-interface](docs/design/02-contrat-interface.md) | Contrat d'API grosse maille : endpoints, entrée, sortie (points/segments/résumé/qualité/attribution), erreurs, versionnage |
+
 ## Exploration
 
 | Doc | Sujet |
