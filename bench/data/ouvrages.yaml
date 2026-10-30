@@ -12,6 +12,13 @@ sources:
   ign_alti: {api: "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json", licence: "Etalab 2.0 (Licence Ouverte)",
              ressources_utilisees: [ign_rge_alti_wld, ign_lidar_hd_mnx_multi_wld],
              liste_ressources: "https://data.geopf.fr/altimetrie/resources (GET, 200) ; /altimetrie/1.0/calcul/resources renvoie 405"}
+reference_tablier: >-
+  `milieu_mns_mediane_25m` (ajouté le 2026-10-30, tools/ouvrages/mns_median25.py) : médiane du MNS
+  LiDAR HD (ign_lidar_hd_mnx_multi_wld) sur 11 points de −12,5 à +12,5 m le long de l'axe OSM, au
+  milieu du tablier. C'est une référence de COHÉRENCE : elle vient de la même famille de données que
+  celle que lit le service, et ne prouve pas l'exactitude du tablier. La seule référence indépendante
+  d'un tablier est le baromètre d'une trace qui le franchit (bench/data/deck_baro_vs_lidar.csv).
+  La lecture ponctuelle `lidar_mns` est conservée.
 methode_reference_defaut: >-
   IGN altimétrie REST elevation.json, une requête par lot de ≤30 points séparés par |, ≤ 2 req/s.
   (1) resource=ign_rge_alti_wld&zonly=true → `rge_alti_mnt` (MNT RGE ALTI, sol nu).
@@ -43,6 +50,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 7.47, "lidar_mnt": 6.83, "lidar_mns": 8.25, "lidar_mnh": 1.42}
         milieu: {"rge_alti_mnt": 0.05, "lidar_mnt": -2.18, "lidar_mns": 33.49, "lidar_mnh": 35.68}
+        milieu_mns_mediane_25m: {valeur: 33.49, n: 11, pas_m: 2.5, min: 32.81, max: 34.15, role: coherence}
         B: {"rge_alti_mnt": -0.45, "lidar_mnt": -1.22, "lidar_mns": 50.9, "lidar_mnh": 52.12}
       mapterhorn_z13_milieu: "z13=200"
       date_mesure: "2026-10-30"
@@ -70,6 +78,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": -0.45, "lidar_mnt": -1.22, "lidar_mns": 50.9, "lidar_mnh": 52.12}
         milieu: {"rge_alti_mnt": 3.18, "lidar_mnt": 3.07, "lidar_mns": 22.8, "lidar_mnh": 19.73}
+        milieu_mns_mediane_25m: {valeur: 22.8, n: 11, pas_m: 2.5, min: 22.25, max: 23.34, role: coherence}
         B: {"rge_alti_mnt": 6.99, "lidar_mnt": 7.02, "lidar_mns": 7.13, "lidar_mnh": 0.11}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test1 : le span « tablier » de vcyclist s'étend jusqu'au bout nord de 47405821 ; ligne « missed » D 213 voisine"
@@ -101,6 +110,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 21.57, "lidar_mnt": 21.41, "lidar_mns": 21.41, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -3.44, "lidar_mnt": -3.3, "lidar_mns": 66.34, "lidar_mnh": 69.64}
+        milieu_mns_mediane_25m: {valeur: 66.37, n: 11, pas_m: 2.5, min: 66.2, max: 66.52, role: coherence}
         B: {"rge_alti_mnt": 7.28, "lidar_mnt": 10.26, "lidar_mns": 10.26, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: null
@@ -130,6 +140,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 27.94, "lidar_mnt": 26.72, "lidar_mns": 29.05, "lidar_mnh": 2.33}
         milieu: {"rge_alti_mnt": 6.03, "lidar_mnt": 6.13, "lidar_mns": 58.88, "lidar_mnh": 52.75}
+        milieu_mns_mediane_25m: {valeur: 58.88, n: 11, pas_m: 2.5, min: 58.43, max: 59.26, role: coherence}
         B: {"rge_alti_mnt": 10.0, "lidar_mnt": 10.09, "lidar_mns": 10.09, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: null
@@ -182,6 +193,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 12.56, "lidar_mnt": 12.54, "lidar_mns": 12.54, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": 7.83, "lidar_mnt": 7.81, "lidar_mns": 10.36, "lidar_mnh": 2.56}
+        milieu_mns_mediane_25m: {valeur: 13.77, n: 11, pas_m: 2.5, min: 7.89, max: 14.48, role: coherence}
         B: {"rge_alti_mnt": 9.88, "lidar_mnt": 9.85, "lidar_mns": 9.85, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 « Pont de la Rotonde » (interpolation linéaire)"
@@ -236,6 +248,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 11.02, "lidar_mnt": 11.17, "lidar_mns": 11.17, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": null, "lidar_mnt": 1.02, "lidar_mns": 39.77, "lidar_mnh": 38.75}
+        milieu_mns_mediane_25m: {valeur: 39.77, n: 11, pas_m: 2.5, min: 39.61, max: 39.92, role: coherence}
         B: {"rge_alti_mnt": 9.78, "lidar_mnt": 9.99, "lidar_mns": 9.99, "lidar_mnh": 0.0}
       mapterhorn_z13_milieu: "z13=200"
       date_mesure: "2026-10-30"
@@ -261,6 +274,7 @@ ouvrages:
       methode: methode_reference_defaut
       valeurs:
         depart_sur_tablier: {"rge_alti_mnt": null, "lidar_mnt": 1.02, "lidar_mns": 39.77, "lidar_mnh": 38.75}
+        milieu_mns_mediane_25m: {valeur: 39.77, n: 11, pas_m: 2.5, min: 39.61, max: 39.92, role: coherence}
         B: {"rge_alti_mnt": 9.78, "lidar_mnt": 9.99, "lidar_mns": 9.99, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: null
@@ -286,6 +300,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 11.86, "lidar_mnt": 12.03, "lidar_mns": 12.03, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.47, "lidar_mnt": 3.35, "lidar_mns": 14.03, "lidar_mnh": 10.68}
+        milieu_mns_mediane_25m: {valeur: 14.03, n: 11, pas_m: 2.5, min: 13.99, max: 14.13, role: coherence}
         B: {"rge_alti_mnt": 9.44, "lidar_mnt": 9.29, "lidar_mns": 9.29, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 « Pont de Bellevue » et way 362043805"
@@ -311,6 +326,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 8.07, "lidar_mnt": 8.06, "lidar_mns": 8.06, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.58, "lidar_mnt": 1.61, "lidar_mns": 12.11, "lidar_mnh": 10.5}
+        milieu_mns_mediane_25m: {valeur: 12.07, n: 11, pas_m: 2.5, min: 12.01, max: 12.12, role: coherence}
         B: {"rge_alti_mnt": 6.77, "lidar_mnt": 8.11, "lidar_mns": 8.11, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (tablier)"
@@ -336,6 +352,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 6.96, "lidar_mnt": 8.54, "lidar_mns": 8.54, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.58, "lidar_mnt": 1.61, "lidar_mns": 11.31, "lidar_mnh": 9.7}
+        milieu_mns_mediane_25m: {valeur: 11.31, n: 11, pas_m: 2.5, min: 11.2, max: 11.41, role: coherence}
         B: {"rge_alti_mnt": 7.55, "lidar_mnt": 10.49, "lidar_mns": 10.49, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (tablier)"
@@ -363,6 +380,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 7.15, "lidar_mnt": 7.25, "lidar_mns": 7.25, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 2.29, "lidar_mns": 8.4, "lidar_mnh": 6.11}
+        milieu_mns_mediane_25m: {valeur: 8.31, n: 11, pas_m: 2.5, min: 7.96, max: 8.53, role: coherence}
         B: {"rge_alti_mnt": 3.42, "lidar_mnt": 3.56, "lidar_mns": 3.56, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 « way 1287936957; way 1287936958; way 1418371535 »"
@@ -388,6 +406,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 4.4, "lidar_mnt": 6.88, "lidar_mns": 10.26, "lidar_mnh": 3.38}
         milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.28, "lidar_mns": 12.36, "lidar_mnh": 11.08}
+        milieu_mns_mediane_25m: {valeur: 12.36, n: 11, pas_m: 2.5, min: 12.32, max: 12.37, role: coherence}
         B: {"rge_alti_mnt": -0.05, "lidar_mnt": 9.75, "lidar_mns": 10.22, "lidar_mnh": 0.46}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (tablier)"
@@ -414,6 +433,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 8.35, "lidar_mnt": 8.44, "lidar_mns": 8.44, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 1.31, "lidar_mns": 9.17, "lidar_mnh": 7.86}
+        milieu_mns_mediane_25m: {valeur: 9.14, n: 11, pas_m: 2.5, min: 9.02, max: 9.17, role: coherence}
         B: {"rge_alti_mnt": 8.47, "lidar_mnt": 8.71, "lidar_mns": 8.71, "lidar_mnh": 0.0}
         pirmil_extremite_sud: {"rge_alti_mnt": -0.05, "lidar_mnt": 9.75, "lidar_mns": 10.22, "lidar_mnh": 0.46}
         pirmil_milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.28, "lidar_mns": 12.36, "lidar_mnh": 11.08}
@@ -441,6 +461,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 8.09, "lidar_mnt": 8.36, "lidar_mns": 8.36, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.62, "lidar_mnt": 2.34, "lidar_mns": 12.49, "lidar_mnh": 10.15}
+        milieu_mns_mediane_25m: {valeur: 12.47, n: 11, pas_m: 2.5, min: 12.39, max: 12.5, role: coherence}
         B: {"rge_alti_mnt": 8.51, "lidar_mnt": 8.59, "lidar_mns": 8.59, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (tablier)"
@@ -469,6 +490,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 8.59, "lidar_mnt": 8.39, "lidar_mns": 8.39, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.61, "lidar_mnt": 1.42, "lidar_mns": 11.54, "lidar_mnh": 10.12}
+        milieu_mns_mediane_25m: {valeur: 11.54, n: 11, pas_m: 2.5, min: 11.23, max: 11.66, role: coherence}
         B: {"rge_alti_mnt": 7.59, "lidar_mnt": 7.59, "lidar_mns": 7.59, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (2 lignes, tablier)"
@@ -496,6 +518,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 10.8, "lidar_mnt": 10.79, "lidar_mns": 10.79, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": -0.6, "lidar_mnt": 1.52, "lidar_mns": 12.78, "lidar_mnh": 11.26}
+        milieu_mns_mediane_25m: {valeur: 12.76, n: 11, pas_m: 2.5, min: 12.7, max: 12.8, role: coherence}
         B: {"rge_alti_mnt": 7.22, "lidar_mnt": 9.93, "lidar_mns": 12.3, "lidar_mnh": 2.37}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test2 (tablier) et ligne « missed » (ways 1489503872/3)"
@@ -527,6 +550,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 10.56, "lidar_mnt": 10.77, "lidar_mns": 10.77, "lidar_mnh": -0.0}
         milieu: {"rge_alti_mnt": 2.52, "lidar_mnt": 4.4, "lidar_mns": 11.47, "lidar_mnh": 7.07}
+        milieu_mns_mediane_25m: {valeur: 11.47, n: 11, pas_m: 2.5, min: 11.33, max: 11.56, role: coherence}
         B: {"rge_alti_mnt": 11.43, "lidar_mnt": 11.58, "lidar_mns": 11.58, "lidar_mnh": 0.0}
         pont_nord_A: {"rge_alti_mnt": 9.9, "lidar_mnt": 11.17, "lidar_mns": 11.17, "lidar_mnh": 0.0}
         pont_nord_milieu: {"rge_alti_mnt": 0.47, "lidar_mnt": 4.6, "lidar_mns": 13.57, "lidar_mnh": 8.97}
@@ -556,6 +580,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 4.5, "lidar_mnt": 5.09, "lidar_mns": 5.09, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": 3.1, "lidar_mnt": -1.11, "lidar_mns": 5.01, "lidar_mnh": 6.13}
+        milieu_mns_mediane_25m: {valeur: 5.02, n: 11, pas_m: 2.5, min: 4.87, max: 5.15, role: coherence}
         B: {"rge_alti_mnt": 4.56, "lidar_mnt": 5.15, "lidar_mns": 5.15, "lidar_mnh": 0.0}
         pont_basculant_milieu: {"rge_alti_mnt": 3.1, "lidar_mnt": -1.0, "lidar_mns": 4.6, "lidar_mnh": 5.6}
         pont_tournant_milieu: {"rge_alti_mnt": 0.63, "lidar_mnt": 2.85, "lidar_mns": 4.64, "lidar_mnh": 1.79}
@@ -582,6 +607,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 310.63, "lidar_mnt": 310.79, "lidar_mns": 310.79, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": 302.1, "lidar_mnt": 302.08, "lidar_mns": 310.77, "lidar_mnh": 8.7}
+        milieu_mns_mediane_25m: {valeur: 310.79, n: 11, pas_m: 2.5, min: 310.75, max: 311.03, role: coherence}
         B: {"rge_alti_mnt": 310.25, "lidar_mnt": 310.64, "lidar_mns": 311.05, "lidar_mnh": 0.41}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: "structures.csv test4 « Le Pont d'Echevis »"
@@ -669,6 +695,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 595.33, "lidar_mnt": 593.41, "lidar_mns": 596.97, "lidar_mnh": 3.57}
         milieu: {"rge_alti_mnt": 625.92, "lidar_mnt": 625.93, "lidar_mns": 625.93, "lidar_mnh": 0.0}
+        milieu_mns_mediane_25m: {valeur: 625.93, n: 11, pas_m: 2.5, min: 625.27, max: 626.65, role: coherence}
         B: {"rge_alti_mnt": 658.44, "lidar_mnt": 742.12, "lidar_mns": 746.26, "lidar_mnh": 4.15}
         tunnel_aval_milieu: {"rge_alti_mnt": 692.57, "lidar_mnt": 692.7, "lidar_mns": 702.67, "lidar_mnh": 9.98}
       date_mesure: "2026-10-30"
@@ -874,6 +901,7 @@ ouvrages:
       valeurs:
         A: {"rge_alti_mnt": 952.45, "lidar_mnt": 952.29, "lidar_mns": 952.29, "lidar_mnh": 0.0}
         milieu: {"rge_alti_mnt": 890.63, "lidar_mnt": 888.94, "lidar_mns": 949.71, "lidar_mnh": 60.77}
+        milieu_mns_mediane_25m: {valeur: 949.6, n: 11, pas_m: 2.5, min: 949.13, max: 949.97, role: coherence}
         B: {"rge_alti_mnt": 947.36, "lidar_mnt": 947.27, "lidar_mns": 947.27, "lidar_mnh": 0.0}
       date_mesure: "2026-10-30"
     renvoi_vcyclist: null

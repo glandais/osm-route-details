@@ -1,7 +1,8 @@
 # Manifest du banc qualité d'osm-route-details.
 # Une entrée par cas. Les chemins relatifs partent de bench/. Les fichiers marqués `hors_git`
 # ne sont pas versionnés : leur empreinte sha256 permet de vérifier qu'on mesure bien la même chose.
-# Les séries `tenue_a_l_ecart` ne servent qu'au jugement final d'un incrément (README §2).
+# Les séries `tenue_a_l_ecart` ne servent qu'au jugement final d'un incrément (README §2) ;
+# elles sont tirées par tools/series_groups.py (groupes d'ouvrages, héritage, masquage).
 version: 1
 date: "2026-10-30"
 
@@ -116,11 +117,10 @@ ouvrages:
   reponses_brutes: data/ouvrages-osm/   # Overpass (ODbL) et API alti IGN (Etalab 2.0), 2026-10-30
   scripts: tools/ouvrages/              # à lancer depuis un dossier contenant raw/ (copie de data/ouvrages-osm)
   licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
-  reference: "MNT RGE ALTI + MNT/MNS/MNH LiDAR HD (ressource ign_lidar_hd_mnx_multi_wld) aux extrémités et au milieu ; baromètre corrigé quand une trace perso le traverse (data/deck_baro_vs_lidar.csv)"
-  serie_tenue_a_l_ecart: [stn-pont, stn-acces-nord, chevire-dessous, rotonde-dessous, re-depart-sur-pont,
-                          reze-ponts-successifs, mauves, grands-goulets-tunnel, moines, croix-rousse,
-                          voie-verte-24, donostia-zurriola]
-  regle_serie: "sha256('osm-route-details:' + id), premier chiffre hexadécimal dans 0–4"
+  reference: "Médiane MNS 25 m au milieu des ponts français (cohérence seulement) + MNT RGE ALTI + MNT/MNS/MNH LiDAR HD (ressource ign_lidar_hd_mnx_multi_wld) aux extrémités et au milieu ; baromètre corrigé quand une trace perso le traverse (data/deck_baro_vs_lidar.csv)"
+  serie_tenue_a_l_ecart: [donostia-zurriola, normandie, recoumene]
+  groupes: "private/series.csv n'est pas requis : tools/series_groups.py recalcule groupes et séries"
+  regle_serie: "par groupe d'ouvrages, voir README §2 et tools/series_groups.py"
 
 mesures_derivees:
   - id: deck-baro-vs-lidar
@@ -138,7 +138,7 @@ mesures_derivees:
 # qualification : sortie de tools/qualify_baro.py contre le MNT RGE ALTI (pas de 50 m).
 perso:
   hors_git: true
-  regle_serie: "sha256('osm-route-details:' + id), premier chiffre hexadécimal dans 0–4 ; négatifs et hors France en calibration"
+  regle_serie: "héritée des groupes d'ouvrages franchis, sinon sha256 de l'identifiant de trace ; passages mixtes masqués (README §2, tools/series_groups.py)"
   periode_exclue: "2015-05 → 2020-09 (baromètre KO en 2015-05/07, altitude bruitée jusqu'en 2020-08) ; voir README §1.3"
   traces:
     - id: perso-01
@@ -176,7 +176,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -13.18, drift_m: 42.4, noise_m: 0.86, p95_abs_m: 4.0, gain_baro_m: 1808, gain_mnt_m: 1964}
     - id: perso-04
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Moyenne montagne Cantal (voyage J4)"
       region: "Cantal"
       mois: "2026-08"
@@ -187,7 +187,7 @@ perso:
       qualification: {verdict: fiable, offset_m: 3.61, drift_m: 23.0, noise_m: 1.08, p95_abs_m: 3.4, gain_baro_m: 1187, gain_mnt_m: 1285}
     - id: perso-05
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Montagne Noire (Tarn)"
       region: "Tarn"
       mois: "2026-06"
@@ -198,7 +198,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -1.57, drift_m: 55.2, noise_m: 0.83, p95_abs_m: 2.7, gain_baro_m: 2413, gain_mnt_m: 2630}
     - id: perso-06
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Longue sortie gravel 205 km Loire/Anjou (dérive baro 62 m)"
       region: "Loire-Atlantique"
       mois: "2026-06"
@@ -209,7 +209,7 @@ perso:
       qualification: {verdict: suspect, offset_m: -26.43, drift_m: 62.4, noise_m: 0.81, p95_abs_m: 2.4, gain_baro_m: 2165, gain_mnt_m: 2276}
     - id: perso-07
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Préalpes de Haute-Provence"
       region: "Alpes-de-Haute-Provence"
       mois: "2023-04"
@@ -242,7 +242,7 @@ perso:
       qualification: {verdict: fiable, offset_m: 1.76, drift_m: 39.7, noise_m: 1.17, p95_abs_m: 5.1, gain_baro_m: 2301, gain_mnt_m: 2559}
     - id: perso-10
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Hautes-Pyrénées (haute montagne)"
       region: "Hautes Pyrenees"
       mois: "2023-05"
@@ -264,7 +264,7 @@ perso:
       qualification: {verdict: fiable, offset_m: 5.15, drift_m: 35.0, noise_m: 1.44, p95_abs_m: 4.9, gain_baro_m: 2422, gain_mnt_m: 2631}
     - id: perso-12
       groupe: dplus
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Vosges (Haut-Rhin)"
       region: "Haut-Rhin"
       mois: "2022-06"
@@ -275,7 +275,7 @@ perso:
       qualification: {verdict: fiable, offset_m: 6.95, drift_m: 18.1, noise_m: 0.87, p95_abs_m: 3.7, gain_baro_m: 1014, gain_mnt_m: 1045}
     - id: perso-13
       groupe: dplus
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Finistère (relief breton)"
       region: "Finistère"
       mois: "2022-07"
@@ -286,7 +286,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -2.58, drift_m: 43.9, noise_m: 0.9, p95_abs_m: 2.4, gain_baro_m: 2547, gain_mnt_m: 2600}
     - id: perso-14
       groupe: dplus
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Lot (causses)"
       region: "Lot"
       mois: "2022-08"
@@ -297,7 +297,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -15.87, drift_m: 16.2, noise_m: 1.73, p95_abs_m: 4.6, gain_baro_m: 3078, gain_mnt_m: 3028}
     - id: perso-15
       groupe: dplus
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Livradois-Forez (Puy-de-Dôme)"
       region: "Puy-de-Dôme"
       mois: "2022-10"
@@ -308,7 +308,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -0.08, drift_m: 7.2, noise_m: 0.7, p95_abs_m: 2.3, gain_baro_m: 2623, gain_mnt_m: 2653}
     - id: perso-16
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Chaîne des Puys (Puy-de-Dôme)"
       region: "Puy-de-Dôme"
       mois: "2024-03"
@@ -319,7 +319,7 @@ perso:
       qualification: {verdict: fiable, offset_m: 0.39, drift_m: 5.8, noise_m: 0.66, p95_abs_m: 1.6, gain_baro_m: 1424, gain_mnt_m: 1437}
     - id: perso-17
       groupe: dplus
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Cézallier (Puy-de-Dôme)"
       region: "Puy-de-Dôme"
       mois: "2025-06"
@@ -407,7 +407,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -4.71, drift_m: 8.2, noise_m: 0.47, p95_abs_m: 1.3, gain_baro_m: 421, gain_mnt_m: 419}
     - id: perso-25
       groupe: ouvrage
-      serie: tenue_a_l_ecart
+      serie: calibration
       cas: "Pont Audibert ; passage sous Cheviré"
       region: "Loire-Atlantique"
       mois: "2025-10"
@@ -473,7 +473,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -0.59, drift_m: 5.2, noise_m: 0.49, p95_abs_m: 1.3, gain_baro_m: 719, gain_mnt_m: 689}
     - id: perso-31
       groupe: plaine
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2026-05"
@@ -517,7 +517,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -7.67, drift_m: 6.2, noise_m: 0.86, p95_abs_m: 2.0, gain_baro_m: 711, gain_mnt_m: 721}
     - id: perso-35
       groupe: plaine
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2021-04"
@@ -528,7 +528,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -2.91, drift_m: 10.2, noise_m: 1.39, p95_abs_m: 3.6, gain_baro_m: 1338, gain_mnt_m: 1331}
     - id: perso-36
       groupe: plaine
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2020-12"
@@ -539,7 +539,7 @@ perso:
       qualification: {verdict: fiable, offset_m: -0.52, drift_m: 3.5, noise_m: 0.45, p95_abs_m: 1.3, gain_baro_m: 896, gain_mnt_m: 909}
     - id: perso-37
       groupe: hors_france
-      serie: calibration
+      serie: tenue_a_l_ecart
       cas: "Pays basque espagnol, pont de la Zurriola (hors LiDAR HD)"
       region: "Landes"
       mois: "2022-08"

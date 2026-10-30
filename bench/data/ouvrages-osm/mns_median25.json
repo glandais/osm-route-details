@@ -1,0 +1,169 @@
+{
+ "stn-pont": {
+  "mns_mediane_25m": 33.49,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 32.81,
+  "mns_max": 34.15
+ },
+ "stn-acces-nord": {
+  "mns_mediane_25m": 22.8,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 22.25,
+  "mns_max": 23.34
+ },
+ "normandie": {
+  "mns_mediane_25m": 66.37,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 66.2,
+  "mns_max": 66.52
+ },
+ "chevire": {
+  "mns_mediane_25m": 58.88,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 58.43,
+  "mns_max": 59.26
+ },
+ "rotonde-dessus": {
+  "mns_mediane_25m": 13.77,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 7.89,
+  "mns_max": 14.48
+ },
+ "re-pont": {
+  "mns_mediane_25m": 39.77,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 39.61,
+  "mns_max": 39.92
+ },
+ "re-depart-sur-pont": {
+  "mns_mediane_25m": 39.77,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 39.61,
+  "mns_max": 39.92
+ },
+ "nantes-bellevue": {
+  "mns_mediane_25m": 14.03,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 13.99,
+  "mns_max": 14.13
+ },
+ "nantes-senghor": {
+  "mns_mediane_25m": 12.07,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 12.01,
+  "mns_max": 12.12
+ },
+ "nantes-tabarly": {
+  "mns_mediane_25m": 11.31,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 11.2,
+  "mns_max": 11.41
+ },
+ "nantes-anne-de-bretagne": {
+  "mns_mediane_25m": 8.31,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 7.96,
+  "mns_max": 8.53
+ },
+ "nantes-pirmil": {
+  "mns_mediane_25m": 12.36,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 12.32,
+  "mns_max": 12.37
+ },
+ "reze-ponts-successifs": {
+  "mns_mediane_25m": 9.14,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 9.02,
+  "mns_max": 9.17
+ },
+ "nantes-haudaudine": {
+  "mns_mediane_25m": 12.47,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 12.39,
+  "mns_max": 12.5
+ },
+ "nantes-audibert": {
+  "mns_mediane_25m": 11.54,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 11.23,
+  "mns_max": 11.66
+ },
+ "nantes-briand": {
+  "mns_mediane_25m": 12.76,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 12.7,
+  "mns_max": 12.8
+ },
+ "mauves": {
+  "mns_mediane_25m": 11.47,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 11.33,
+  "mns_max": 11.56
+ },
+ "stn-ecluses": {
+  "mns_mediane_25m": 5.02,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 4.87,
+  "mns_max": 5.15
+ },
+ "echevis": {
+  "mns_mediane_25m": 310.79,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 310.75,
+  "mns_max": 311.03
+ },
+ "grands-goulets-ancienne": {
+  "mns_mediane_25m": 625.93,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 625.27,
+  "mns_max": 626.65
+ },
+ "recoumene": {
+  "mns_mediane_25m": 949.6,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 949.13,
+  "mns_max": 949.97
+ },
+ "liege-belle-liegeoise": {
+  "mns_mediane_25m": null,
+  "n": 0,
+  "pas_m": 2.5
+ },
+ "venise-liberta": {
+  "mns_mediane_25m": null,
+  "n": 0,
+  "pas_m": 2.5
+ },
+ "donostia-zurriola": {
+  "mns_mediane_25m": null,
+  "n": 0,
+  "pas_m": 2.5
+ },
+ "krk": {
+  "mns_mediane_25m": null,
+  "n": 0,
+  "pas_m": 2.5
+ }
+}

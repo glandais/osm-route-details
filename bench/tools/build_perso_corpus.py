@@ -4,15 +4,14 @@
 Pour chaque ligne de selection.csv (pseudo, strava_id, groupe, cas) :
 - écrit <pseudo>.gpx (trace entière) et <pseudo>.trim1km.gpx (1 km retiré à chaque bout) ;
 - calcule leur sha256 ;
-- attribue la série (calibration ou tenue à l'écart) par une règle fixée d'avance :
-  tenue à l'écart si le premier chiffre hexadécimal de sha256("osm-route-details:" + pseudo)
-  est dans 0–4 (environ 5/16 des cas). Les négatifs et le hors France restent en calibration ;
+- reprend la série et les passages masqués calculés par series_groups.py (--series=series.csv) ;
 - reprend les indicateurs de qualify_baro.py.
 
 Sorties : <dir>/perso-map.csv (avec l'identifiant Strava : reste hors git) et, sur la sortie
 standard, le fragment YAML du manifest (sans identifiant Strava, date au mois, département).
 
-Usage : build_perso_corpus.py selection.csv inventaire.json streams_dir traces_dir qualif1.csv [...]
+Usage : build_perso_corpus.py --series=series.csv selection.csv inventaire.json streams_dir traces_dir
+        qualif1.csv [...]
 """
 import csv
 import hashlib
@@ -32,14 +31,8 @@ def sha256(path):
     return h.hexdigest()
 
 
-def serie(pseudo, groupe):
-    if groupe in ("negatif", "hors_france"):
-        return "calibration"
-    d = hashlib.sha256(f"osm-route-details:{pseudo}".encode()).hexdigest()[0]
-    return "tenue_a_l_ecart" if d in "01234" else "calibration"
-
-
-def main(sel_path, inv_path, streams_dir, traces_dir, *qualif_paths):
+def main(series_arg, sel_path, inv_path, streams_dir, traces_dir, *qualif_paths):
+    series = {r["id"]: r for r in csv.DictReader(open(series_arg.split("=", 1)[1]))}
     inv = {a["id"]: a for a in json.load(open(inv_path))}
     q = {}
     for p in qualif_paths:
@@ -62,7 +55,7 @@ def main(sel_path, inv_path, streams_dir, traces_dir, *qualif_paths):
             mois=a.get("start_local", "")[:7],
             lieu=(a.get("location_summary") or "").split(", ")[-1],
             dist_km=qq.get("dist_km") or round(a.get("summary", {}).get("distance", 0) / 1000, 1),
-            serie=serie(pseudo, s["groupe"]),
+            serie=series[pseudo]["serie"], masques=series[pseudo]["passages_masques"],
             verdict=qq.get("verdict", ""), offset_m=qq.get("offset_m", ""),
             drift_m=qq.get("drift_m", ""), noise_m=qq.get("noise_m", ""),
             p95_abs_m=qq.get("p95_abs_m", ""), gain_rec_m=qq.get("gain_rec_m", ""),
@@ -79,6 +72,8 @@ def main(sel_path, inv_path, streams_dir, traces_dir, *qualif_paths):
         print(f"  - id: {r['pseudo']}")
         print(f"    groupe: {r['groupe']}")
         print(f"    serie: {r['serie']}")
+        if r["masques"]:
+            print(f"    passages_masques: [{', '.join(r['masques'].split())}]")
         print(f"    cas: \"{r['cas']}\"")
         print(f"    region: \"{r['lieu']}\"")
         print(f"    mois: \"{r['mois']}\"")

@@ -8,6 +8,7 @@ chaque incrément du MVP ait une cible mesurable. Le contrat mesuré est celui d
 | Fichier | Contenu |
 |---------|---------|
 | `manifest.yaml` | Une entrée par cas : fichier, région, ce qu'il teste, référence, licence, provenance, empreinte, série |
+| `criteria.yaml` | Forme machine des seuils du §4 (brouillon, gelé avant le premier passage) |
 | `data/ouvrages.yaml` | Corpus de 36 ouvrages (OSM way ids, tags, longueurs, MNT/MNS/MNH IGN aux extrémités et au milieu) |
 | `data/ouvrages-geom.json`, `data/ouvrages-osm/` | Géométrie et réponses brutes Overpass / IGN du corpus d'ouvrages |
 | `data/deck_baro_vs_lidar.csv` | Première mesure : baromètre corrigé vs MNS LiDAR au milieu des ouvrages traversés |
@@ -171,10 +172,17 @@ part et d'autre).
 | Audibert | 5 | −2,4 à −4,5 m |
 | Sous Cheviré | 3 | baro = sol (0,4–6,9 m), MNS 57–59 m |
 
-Le MNS LiDAR est une bonne vérité de tablier sur les grands ponts (≤ 1 m). Il ne l'est pas partout :
-à Audibert, le MNS ponctuel lit 2 à 4,5 m au-dessus du baromètre (superstructure, lampadaires ou
-véhicules) : la médiane sur 25 m est indispensable et le baromètre prime quand il existe. Le passage
-sous Cheviré confirme le piège du MNS lu au croisement (≈ 50 m d'erreur).
+Le MNS LiDAR est cohérent avec le baromètre sur les grands ponts (≤ 1 m). Il ne l'est pas partout :
+à Audibert, il lit 2 à 4,5 m au-dessus du baromètre, et la **médiane sur 25 m le long de l'axe OSM
+donne la même valeur** que la lecture ponctuelle (11,54 m, valeurs 11,2–11,7 m) : ce n'est pas un pixel
+isolé mais une surface cohérente plus haute que ce que voit le baromètre. Cause non élucidée (chaussée
+cyclable plus basse que la surface lue par le LiDAR, décalage local du baromètre ?). Conséquence : le
+MNS, ponctuel ou médian, n'est qu'une référence de **cohérence** ; la seule référence indépendante
+d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du MNS lu au croisement
+(≈ 50 m d'erreur).
+
+`data/ouvrages.yaml` porte, pour les 21 ponts français, `milieu_mns_mediane_25m` (11 points de −12,5 à
++12,5 m le long de l'axe OSM, `tools/ouvrages/mns_median25.py`) à côté de la lecture ponctuelle.
 
 ---
 
@@ -182,10 +190,32 @@ sous Cheviré confirme le piège du MNS lu au croisement (≈ 50 m d'erreur).
 
 **Discipline** (reprise de vcyclist, doc 01 §6.4) :
 
-1. Les **séries** sont fixées avant toute mesure du service, par une règle écrite :
-   `sha256("osm-route-details:" + id)`, premier chiffre hexadécimal dans 0–4 → tenue à l'écart
-   (≈ 5/16). Traces perso : 8 tenues à l'écart (7 `dplus`, 1 `ouvrage`). Ouvrages : 12 tenus à l'écart
-   (liste dans `manifest.yaml`). Négatifs et hors France : calibration.
+1. Les **séries** sont fixées avant toute mesure du service, par une règle écrite qui garantit
+   qu'un mètre de trace ou un ouvrage n'appartient qu'à une série (`tools/series_groups.py`) :
+   - **groupes d'ouvrages** : ouvrages dont des points de référence sont à moins de 150 m (même
+     ouvrage, dessus/dessous, ponts contigus), plus le lien déclaré Cheviré ↔ passage dessous. Série
+     du groupe : `sha256("osm-route-details:groupe:" + plus petit id)`, premier chiffre hexadécimal
+     dans 0–4 → tenue à l'écart ;
+   - **déjà vu ⇒ calibration** : tout groupe dont un ouvrage a un renvoi vcyclist, les traces `vc-*`
+     (vcyclist a réglé dessus ses détecteurs et son constructeur de tablier, dont le service
+     s'inspire), les traces `os-*` (chaîne typologie reprise d'osm-surface) et les négatifs ;
+   - **traces** : une trace (franchissement = passage à moins de 40 m de chaque point de référence de
+     l'ouvrage) hérite de la série des groupes qu'elle franchit s'ils sont tous de la même série ;
+     sinon `sha256("osm-route-details:trace:" + id)`, même critère ;
+   - **passage mixte** (trace et ouvrage de séries différentes) : exclu des métriques d'ouvrage des
+     deux séries, et masqué à ± 500 m dans les métriques de la trace (E1 ; E2 sommé sur les tronçons
+     restants, service et référence). Aucun aujourd'hui.
+
+   Résultat (2026-10-30) : 3 ouvrages tenus à l'écart sur 36 (`normandie`, `recoumene`,
+   `donostia-zurriola`), 8 traces perso sur 43 (`perso-12..15` relief, `perso-31`, `-35`, `-36`
+   plaine, `perso-37` Zurriola). 23 ouvrages sur 36 ont un renvoi vcyclist : la série tenue à l'écart
+   d'ouvrages est mince, et **aucun pont français tenu à l'écart n'a de trace baro**. Il faut l'étoffer
+   avec des ouvrages jamais vus par vcyclist (§6).
+
+   Sans la règle « déjà vu », la même construction donnait 9 ouvrages et 12 traces tenus à l'écart,
+   au prix d'une fuite : les ouvrages de `test1..4` ont réglé le constructeur de tablier de vcyclist.
+   La règle « composante connexe trace × ouvrage » pure soude 28 cas de Loire-Atlantique en un seul
+   groupe (`vc-test2` franchit 9 ponts nantais, `perso-20` 8), tout ou rien : écartée.
 2. Les **seuils** du §4 sont gelés dans ce fichier avant le premier passage du service. Toute
    modification est un commit séparé, motivé, antérieur à la mesure qu'elle concerne.
 3. La série tenue à l'écart est jugée **une seule fois par incrément** (MVP, V1…) : on note le commit
@@ -215,7 +245,7 @@ sous Cheviré confirme le piège du MNS lu au croisement (≈ 50 m d'erreur).
 |----|----------|------------|-----------|
 | **E1** | Erreur d'altitude hors ouvrage | RMSE et P95 de (service − baro), après décalage et retrait de tendance, sur les stations `ground` | traces `dplus`, `plaine` |
 | **E2** | D+ comparé au baro | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
-| **E3** | Erreur d'altitude sur tablier | Par pont : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier | baro corrigé localement ; à défaut, médiane MNS 25 m (`ouvrages.yaml`, vcyclist `B`) |
+| **E3** | Erreur d'altitude sur tablier | Par pont : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel | `ouvrages.yaml`, vcyclist `N` |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
 | **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels du corpus typés `bridge`/`tunnel` par le service ÷ longueur de référence | `ouvrages.yaml`, `structures.csv` |
@@ -287,7 +317,9 @@ Complément sans baro : ponts de `test1..3` de vcyclist (référence MNS seule, 
 **Règle de décision, écrite avant la mesure.** B est retenue si, sur la calibration :
 RMSE médiane(B) ≤ RMSE médiane(A) − 0,3 m, aucun pont n'est dégradé de plus de 0,5 m en erreur max,
 et B gagne dans la classe > 5 m d'écart latéral. Puis une seule vérification sur la série tenue à
-l'écart (Saint-Nazaire, Mauves) : B ne doit pas y perdre. Sinon A reste (doc 01 §11.2).
+l'écart : B ne doit pas y perdre. Sinon A reste (doc 01 §11.2). **Aujourd'hui, la série tenue à
+l'écart ne contient aucun pont français franchi par une trace baro** (Saint-Nazaire et Mauves sont
+passés en calibration avec la règle par groupes) : la vérification attend les nouveaux ouvrages du §6.
 
 ---
 
@@ -301,7 +333,30 @@ l'écart (Saint-Nazaire, Mauves) : B ne doit pas y perdre. Sinon A reste (doc 01
   d'osm-surface avant toute copie de `testdata/`.
 - Vérifier l'accès vélo des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`), la source réelle
   GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
+- **Étoffer la série tenue à l'écart d'ouvrages** : ponts et tunnels jamais vus par vcyclist,
+  franchis par des traces perso fiables (Loire en amont de Mauves, Massif central, Vosges…), ajoutés
+  au corpus avant tout passage du service, puis séries recalculées par `tools/series_groups.py`.
 - Constituer une nouvelle série tenue à l'écart après le jugement du MVP.
+- Geler `criteria.yaml` (forme machine du §4) après les décisions en attente : E2 bloquant ou non,
+  traces enregistrées comme entrées du MVP ou seulement comme références.
+
+## 6 bis. Taille du cache de banc
+
+Comptage des tuiles distinctes (union de tous les cas, tampon de 2 px) le 2026-10-30, pour les
+traces perso (43 traces, 4 663 km), `test1..4` (156 km), osm-surface (185 km), les 65 témoins de
+vcyclist et les 36 ouvrages :
+
+| Source | Tuiles | Taille unitaire | Taille |
+|--------|--------|-----------------|--------|
+| IGN MNT z15 (BIL32 256 px, France) | 4 667 (dont 4 234 pour les traces perso ; 190 pour `test1..4`, comme vcyclist) | 256 Ko | ≈ 1,2 Go |
+| IGN MNS z15 (ponts seulement) | ≤ 4 667 | 256 Ko | 0,1 à 1,2 Go (borne basse : un pont toutes les ~10 tuiles) |
+| Mapterhorn z12 | 463 | ≈ 144 Ko (vcyclist : 2,3 Mo / 16) | ≈ 67 Mo |
+| VersaTiles z14 | 2 214 | 50 à 130 Ko (osm-surface : 11 Mo / 84 tuiles, urbain) | 0,1 à 0,3 Go |
+| **Total** | | | **≈ 1,5 à 2,8 Go, probablement ≈ 1,7 Go** |
+
+Sans les traces perso : ≈ 650 tuiles IGN, soit ≈ 250–350 Mo comme prévu. Les traces perso
+représentent 90 % du cache ; il croît à peu près linéairement avec les kilomètres de zones nouvelles
+(les boucles nantaises se recouvrent). Mesure exacte au premier `fill-cache`.
 
 ## 7. Outils
 
@@ -312,7 +367,8 @@ l'écart (Saint-Nazaire, Mauves) : B ne doit pas y perdre. Sinon A reste (doc 01
 | `tools/stream_to_gpx.py` | Stream Strava → GPX, rognage optionnel des extrémités |
 | `tools/build_perso_corpus.py` | Sélection → GPX, empreintes, séries, fragment du manifest |
 | `tools/deck_baro_vs_lidar.py` | Baro corrigé vs MNS LiDAR au milieu des ouvrages |
-| `tools/ouvrages/` | Requêtes Overpass et scripts de constitution de `data/ouvrages.yaml` |
+| `tools/series_groups.py` | Groupes d'ouvrages, séries, passages masqués (§2) |
+| `tools/ouvrages/` | Requêtes Overpass et scripts de constitution de `data/ouvrages.yaml` ; `mns_median25.py` |
 
 API utilisées : Géoplateforme altimétrie (`data.geopf.fr/altimetrie`, ≤ 4 req/s, User-Agent
 identifiable), Overpass (quelques requêtes), MCP Strava (lecture seule).
