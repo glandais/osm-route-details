@@ -11,6 +11,7 @@ Aucun code pour l'instant : phase d'exploration puis de conception.
 |-----|-------|
 | [01-conception-generale](docs/design/01-conception-generale.md) | Vision, périmètre, composants, stratégie de données, enums, forme de sortie, modes dégradés, trajectoire, exploitation, décisions, vérifications à faire |
 | [02-contrat-interface](docs/design/02-contrat-interface.md) | Contrat d'API grosse maille : endpoints, entrée, sortie (points/segments/résumé/qualité/attribution), erreurs, versionnage |
+| [technique/](docs/design/technique/README.md) | Conception technique : architecture (crates, pipeline, erreurs), accès données et caches, typologie (graphe, HMM, règles), élévation (ouvrages, D+, points de rupture), qualité et tests, plan MVP en incréments |
 
 ## Exploration
 
