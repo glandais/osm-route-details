@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n14-strasbourg-under-a35</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n14-strasbourg-under-a35</name>
+  <trkseg>
+   <trkpt lat="48.5903662" lon="7.7287808"></trkpt>
+   <trkpt lat="48.5903646" lon="7.7289073"></trkpt>
+   <trkpt lat="48.5903704" lon="7.7290148"></trkpt>
+   <trkpt lat="48.5904507" lon="7.7297066"></trkpt>
+   <trkpt lat="48.5906568" lon="7.7308407"></trkpt>
+   <trkpt lat="48.5906875" lon="7.7309652"></trkpt>
+   <trkpt lat="48.5907177" lon="7.7310658"></trkpt>
+   <trkpt lat="48.5907915" lon="7.7313186"></trkpt>
+   <trkpt lat="48.5908877" lon="7.7318309"></trkpt>
+   <trkpt lat="48.5908928" lon="7.7318576"></trkpt>
+   <trkpt lat="48.5908973" lon="7.7319014"></trkpt>
+   <trkpt lat="48.5909503" lon="7.7321881"></trkpt>
+   <trkpt lat="48.5910407" lon="7.7327479"></trkpt>
+   <trkpt lat="48.5910998" lon="7.7332301"></trkpt>
+   <trkpt lat="48.5911184" lon="7.7334005"></trkpt>
+   <trkpt lat="48.5911210" lon="7.7334242"></trkpt>
+   <trkpt lat="48.5911337" lon="7.7336468"></trkpt>
+   <trkpt lat="48.5911205" lon="7.7337964"></trkpt>
+   <trkpt lat="48.5910897" lon="7.7339436"></trkpt>
+   <trkpt lat="48.5910069" lon="7.7341604"></trkpt>
+   <trkpt lat="48.5909155" lon="7.7343130"></trkpt>
+   <trkpt lat="48.5908480" lon="7.7343884"></trkpt>
+   <trkpt lat="48.5907839" lon="7.7344518"></trkpt>
+   <trkpt lat="48.5906836" lon="7.7345603"></trkpt>
+   <trkpt lat="48.5905417" lon="7.7346891"></trkpt>
+   <trkpt lat="48.5905339" lon="7.7346986"></trkpt>
+   <trkpt lat="48.5903701" lon="7.7348426"></trkpt>
+   <trkpt lat="48.5903140" lon="7.7348863"></trkpt>
+   <trkpt lat="48.5901977" lon="7.7348821"></trkpt>
+   <trkpt lat="48.5900941" lon="7.7348909"></trkpt>
+   <trkpt lat="48.5900417" lon="7.7349047"></trkpt>
+   <trkpt lat="48.5899970" lon="7.7349198"></trkpt>
+   <trkpt lat="48.5897718" lon="7.7350291"></trkpt>
+   <trkpt lat="48.5896405" lon="7.7351176"></trkpt>
+   <trkpt lat="48.5895235" lon="7.7352484"></trkpt>
+   <trkpt lat="48.5894431" lon="7.7353749"></trkpt>
+   <trkpt lat="48.5894194" lon="7.7354123"></trkpt>
+   <trkpt lat="48.5893681" lon="7.7354689"></trkpt>
+   <trkpt lat="48.5893636" lon="7.7355270"></trkpt>
+   <trkpt lat="48.5893497" lon="7.7355907"></trkpt>
+   <trkpt lat="48.5893157" lon="7.7356467"></trkpt>
+   <trkpt lat="48.5892881" lon="7.7356761"></trkpt>
+   <trkpt lat="48.5892712" lon="7.7356938"></trkpt>
+   <trkpt lat="48.5890511" lon="7.7359283"></trkpt>
+   <trkpt lat="48.5889386" lon="7.7360518"></trkpt>
+   <trkpt lat="48.5888699" lon="7.7361298"></trkpt>
+   <trkpt lat="48.5887885" lon="7.7362399"></trkpt>
+   <trkpt lat="48.5887725" lon="7.7362674"></trkpt>
+   <trkpt lat="48.5887578" lon="7.7362927"></trkpt>
+   <trkpt lat="48.5886786" lon="7.7364323"></trkpt>
+   <trkpt lat="48.5883088" lon="7.7372040"></trkpt>
+   <trkpt lat="48.5881947" lon="7.7373550"></trkpt>
+   <trkpt lat="48.5881264" lon="7.7374839"></trkpt>
+   <trkpt lat="48.5880478" lon="7.7376551"></trkpt>
+   <trkpt lat="48.5879813" lon="7.7377616"></trkpt>
+   <trkpt lat="48.5876730" lon="7.7383846"></trkpt>
+   <trkpt lat="48.5876220" lon="7.7384813"></trkpt>
+   <trkpt lat="48.5875918" lon="7.7385284"></trkpt>
+   <trkpt lat="48.5875041" lon="7.7386652"></trkpt>
+   <trkpt lat="48.5874657" lon="7.7387109"></trkpt>
+   <trkpt lat="48.5874296" lon="7.7387453"></trkpt>
+   <trkpt lat="48.5873987" lon="7.7387680"></trkpt>
+   <trkpt lat="48.5873753" lon="7.7387849"></trkpt>
+   <trkpt lat="48.5872721" lon="7.7388584"></trkpt>
+   <trkpt lat="48.5872335" lon="7.7388859"></trkpt>
+   <trkpt lat="48.5870886" lon="7.7389891"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

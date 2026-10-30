@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tn05-montmartre</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tn05-montmartre</name>
+  <trkseg>
+   <trkpt lat="48.8836717" lon="2.3326585"></trkpt>
+   <trkpt lat="48.8836891" lon="2.3326761"></trkpt>
+   <trkpt lat="48.8837535" lon="2.3327152"></trkpt>
+   <trkpt lat="48.8837859" lon="2.3327347"></trkpt>
+   <trkpt lat="48.8838084" lon="2.3327484"></trkpt>
+   <trkpt lat="48.8838374" lon="2.3327660"></trkpt>
+   <trkpt lat="48.8838764" lon="2.3327896"></trkpt>
+   <trkpt lat="48.8839017" lon="2.3328896"></trkpt>
+   <trkpt lat="48.8839227" lon="2.3329725"></trkpt>
+   <trkpt lat="48.8841445" lon="2.3338527"></trkpt>
+   <trkpt lat="48.8841625" lon="2.3339205"></trkpt>
+   <trkpt lat="48.8846252" lon="2.3336351"></trkpt>
+   <trkpt lat="48.8846801" lon="2.3336001"></trkpt>
+   <trkpt lat="48.8847725" lon="2.3336965"></trkpt>
+   <trkpt lat="48.8848042" lon="2.3337289"></trkpt>
+   <trkpt lat="48.8850843" lon="2.3340197"></trkpt>
+   <trkpt lat="48.8851195" lon="2.3340570"></trkpt>
+   <trkpt lat="48.8853536" lon="2.3342994"></trkpt>
+   <trkpt lat="48.8853895" lon="2.3343366"></trkpt>
+   <trkpt lat="48.8857819" lon="2.3347438"></trkpt>
+   <trkpt lat="48.8858272" lon="2.3347910"></trkpt>
+   <trkpt lat="48.8858839" lon="2.3347036"></trkpt>
+   <trkpt lat="48.8860891" lon="2.3343900"></trkpt>
+   <trkpt lat="48.8861561" lon="2.3342877"></trkpt>
+   <trkpt lat="48.8861839" lon="2.3342430"></trkpt>
+   <trkpt lat="48.8863168" lon="2.3340388"></trkpt>
+   <trkpt lat="48.8863640" lon="2.3339657"></trkpt>
+   <trkpt lat="48.8864116" lon="2.3339027"></trkpt>
+   <trkpt lat="48.8864553" lon="2.3338611"></trkpt>
+   <trkpt lat="48.8864980" lon="2.3338269"></trkpt>
+   <trkpt lat="48.8865523" lon="2.3338055"></trkpt>
+   <trkpt lat="48.8866180" lon="2.3337968"></trkpt>
+   <trkpt lat="48.8868010" lon="2.3338263"></trkpt>
+   <trkpt lat="48.8869795" lon="2.3338685"></trkpt>
+   <trkpt lat="48.8870677" lon="2.3338908"></trkpt>
+   <trkpt lat="48.8871187" lon="2.3339120"></trkpt>
+   <trkpt lat="48.8873331" lon="2.3340666"></trkpt>
+   <trkpt lat="48.8874290" lon="2.3341357"></trkpt>
+   <trkpt lat="48.8875247" lon="2.3342219"></trkpt>
+   <trkpt lat="48.8875798" lon="2.3342708"></trkpt>
+   <trkpt lat="48.8876235" lon="2.3343228"></trkpt>
+   <trkpt lat="48.8876482" lon="2.3343620"></trkpt>
+   <trkpt lat="48.8876685" lon="2.3344083"></trkpt>
+   <trkpt lat="48.8876894" lon="2.3344727"></trkpt>
+   <trkpt lat="48.8877059" lon="2.3345562"></trkpt>
+   <trkpt lat="48.8877084" lon="2.3346172"></trkpt>
+   <trkpt lat="48.8877022" lon="2.3346903"></trkpt>
+   <trkpt lat="48.8876912" lon="2.3347681"></trkpt>
+   <trkpt lat="48.8875305" lon="2.3352629"></trkpt>
+   <trkpt lat="48.8875115" lon="2.3353293"></trkpt>
+   <trkpt lat="48.8874936" lon="2.3353923"></trkpt>
+   <trkpt lat="48.8874454" lon="2.3355613"></trkpt>
+   <trkpt lat="48.8874206" lon="2.3356584"></trkpt>
+   <trkpt lat="48.8873829" lon="2.3358448"></trkpt>
+   <trkpt lat="48.8873510" lon="2.3361399"></trkpt>
+   <trkpt lat="48.8873384" lon="2.3363008"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

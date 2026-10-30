@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n12-toulouse-brienne</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n12-toulouse-brienne</name>
+  <trkseg>
+   <trkpt lat="43.6104733" lon="1.4182341"></trkpt>
+   <trkpt lat="43.6104335" lon="1.4185104"></trkpt>
+   <trkpt lat="43.6104151" lon="1.4186069"></trkpt>
+   <trkpt lat="43.6103898" lon="1.4186928"></trkpt>
+   <trkpt lat="43.6103388" lon="1.4188275"></trkpt>
+   <trkpt lat="43.6102255" lon="1.4191568"></trkpt>
+   <trkpt lat="43.6102073" lon="1.4192063"></trkpt>
+   <trkpt lat="43.6101665" lon="1.4193201"></trkpt>
+   <trkpt lat="43.6101201" lon="1.4194434"></trkpt>
+   <trkpt lat="43.6099446" lon="1.4199399"></trkpt>
+   <trkpt lat="43.6098713" lon="1.4201418"></trkpt>
+   <trkpt lat="43.6098380" lon="1.4202336"></trkpt>
+   <trkpt lat="43.6097439" lon="1.4205047"></trkpt>
+   <trkpt lat="43.6096547" lon="1.4207540"></trkpt>
+   <trkpt lat="43.6092394" lon="1.4219144"></trkpt>
+   <trkpt lat="43.6089074" lon="1.4228272"></trkpt>
+   <trkpt lat="43.6087328" lon="1.4233149"></trkpt>
+   <trkpt lat="43.6085757" lon="1.4237564"></trkpt>
+   <trkpt lat="43.6084662" lon="1.4240642"></trkpt>
+   <trkpt lat="43.6084392" lon="1.4241367"></trkpt>
+   <trkpt lat="43.6082814" lon="1.4245806"></trkpt>
+   <trkpt lat="43.6081103" lon="1.4250513"></trkpt>
+   <trkpt lat="43.6079413" lon="1.4255203"></trkpt>
+   <trkpt lat="43.6076509" lon="1.4263348"></trkpt>
+   <trkpt lat="43.6075621" lon="1.4265798"></trkpt>
+   <trkpt lat="43.6074238" lon="1.4269479"></trkpt>
+   <trkpt lat="43.6071222" lon="1.4277747"></trkpt>
+   <trkpt lat="43.6071010" lon="1.4280115"></trkpt>
+   <trkpt lat="43.6069382" lon="1.4284586"></trkpt>
+   <trkpt lat="43.6064260" lon="1.4297153"></trkpt>
+   <trkpt lat="43.6063459" lon="1.4299731"></trkpt>
+   <trkpt lat="43.6063296" lon="1.4300382"></trkpt>
+   <trkpt lat="43.6063262" lon="1.4300888"></trkpt>
+   <trkpt lat="43.6063099" lon="1.4301552"></trkpt>
+   <trkpt lat="43.6062954" lon="1.4301968"></trkpt>
+   <trkpt lat="43.6062681" lon="1.4302477"></trkpt>
+   <trkpt lat="43.6062352" lon="1.4302940"></trkpt>
+   <trkpt lat="43.6061944" lon="1.4303919"></trkpt>
+   <trkpt lat="43.6060619" lon="1.4307665"></trkpt>
+   <trkpt lat="43.6060256" lon="1.4308649"></trkpt>
+   <trkpt lat="43.6059976" lon="1.4309407"></trkpt>
+   <trkpt lat="43.6057673" lon="1.4315650"></trkpt>
+   <trkpt lat="43.6056442" lon="1.4318986"></trkpt>
+   <trkpt lat="43.6054123" lon="1.4325271"></trkpt>
+   <trkpt lat="43.6053857" lon="1.4325992"></trkpt>
+   <trkpt lat="43.6053308" lon="1.4327461"></trkpt>
+   <trkpt lat="43.6052998" lon="1.4328291"></trkpt>
+   <trkpt lat="43.6049107" lon="1.4338695"></trkpt>
+   <trkpt lat="43.6048549" lon="1.4339526"></trkpt>
+   <trkpt lat="43.6048055" lon="1.4340162"></trkpt>
+   <trkpt lat="43.6047619" lon="1.4340714"></trkpt>
+   <trkpt lat="43.6047367" lon="1.4341020"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

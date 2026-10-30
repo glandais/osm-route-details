@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n02-nantes-chevire-under</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n02-nantes-chevire-under</name>
+  <trkseg>
+   <trkpt lat="47.1907030" lon="-1.6030563"></trkpt>
+   <trkpt lat="47.1907045" lon="-1.6031571"></trkpt>
+   <trkpt lat="47.1907078" lon="-1.6032565"></trkpt>
+   <trkpt lat="47.1907200" lon="-1.6034457"></trkpt>
+   <trkpt lat="47.1907451" lon="-1.6038343"></trkpt>
+   <trkpt lat="47.1907933" lon="-1.6046117"></trkpt>
+   <trkpt lat="47.1908895" lon="-1.6061662"></trkpt>
+   <trkpt lat="47.1910763" lon="-1.6091354"></trkpt>
+   <trkpt lat="47.1911337" lon="-1.6100517"></trkpt>
+   <trkpt lat="47.1911693" lon="-1.6106203"></trkpt>
+   <trkpt lat="47.1911827" lon="-1.6108328"></trkpt>
+   <trkpt lat="47.1911974" lon="-1.6110661"></trkpt>
+   <trkpt lat="47.1912161" lon="-1.6113625"></trkpt>
+   <trkpt lat="47.1912448" lon="-1.6118064"></trkpt>
+   <trkpt lat="47.1912641" lon="-1.6121038"></trkpt>
+   <trkpt lat="47.1912673" lon="-1.6121935"></trkpt>
+   <trkpt lat="47.1912691" lon="-1.6122865"></trkpt>
+   <trkpt lat="47.1912676" lon="-1.6124688"></trkpt>
+   <trkpt lat="47.1912639" lon="-1.6125738"></trkpt>
+   <trkpt lat="47.1912582" lon="-1.6126780"></trkpt>
+   <trkpt lat="47.1912494" lon="-1.6127712"></trkpt>
+   <trkpt lat="47.1912382" lon="-1.6128619"></trkpt>
+   <trkpt lat="47.1912171" lon="-1.6129991"></trkpt>
+   <trkpt lat="47.1911921" lon="-1.6131344"></trkpt>
+   <trkpt lat="47.1911648" lon="-1.6132600"></trkpt>
+   <trkpt lat="47.1911326" lon="-1.6133850"></trkpt>
+   <trkpt lat="47.1910472" lon="-1.6136976"></trkpt>
+   <trkpt lat="47.1909436" lon="-1.6140766"></trkpt>
+   <trkpt lat="47.1909122" lon="-1.6141917"></trkpt>
+   <trkpt lat="47.1908885" lon="-1.6142919"></trkpt>
+   <trkpt lat="47.1908681" lon="-1.6143936"></trkpt>
+   <trkpt lat="47.1908489" lon="-1.6144998"></trkpt>
+   <trkpt lat="47.1908334" lon="-1.6146053"></trkpt>
+   <trkpt lat="47.1908191" lon="-1.6147239"></trkpt>
+   <trkpt lat="47.1908093" lon="-1.6148417"></trkpt>
+   <trkpt lat="47.1908032" lon="-1.6149587"></trkpt>
+   <trkpt lat="47.1908024" lon="-1.6150745"></trkpt>
+   <trkpt lat="47.1908057" lon="-1.6151882"></trkpt>
+   <trkpt lat="47.1908117" lon="-1.6153017"></trkpt>
+   <trkpt lat="47.1908255" lon="-1.6155286"></trkpt>
+   <trkpt lat="47.1908434" lon="-1.6158139"></trkpt>
+   <trkpt lat="47.1908539" lon="-1.6159811"></trkpt>
+   <trkpt lat="47.1909116" lon="-1.6169671"></trkpt>
+   <trkpt lat="47.1909605" lon="-1.6177262"></trkpt>
+   <trkpt lat="47.1909967" lon="-1.6183332"></trkpt>
+   <trkpt lat="47.1910413" lon="-1.6190420"></trkpt>
+   <trkpt lat="47.1910625" lon="-1.6193805"></trkpt>
+   <trkpt lat="47.1910766" lon="-1.6197198"></trkpt>
+   <trkpt lat="47.1910880" lon="-1.6203612"></trkpt>
+   <trkpt lat="47.1910937" lon="-1.6208191"></trkpt>
+   <trkpt lat="47.1910960" lon="-1.6210019"></trkpt>
+   <trkpt lat="47.1910957" lon="-1.6210726"></trkpt>
+   <trkpt lat="47.1910921" lon="-1.6221305"></trkpt>
+   <trkpt lat="47.1910869" lon="-1.6227249"></trkpt>
+   <trkpt lat="47.1910817" lon="-1.6230215"></trkpt>
+   <trkpt lat="47.1910715" lon="-1.6233176"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

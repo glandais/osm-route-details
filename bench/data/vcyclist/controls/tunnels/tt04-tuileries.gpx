@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tt04-tuileries</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tt04-tuileries</name>
+  <trkseg>
+   <trkpt lat="48.8625679" lon="2.3251277"></trkpt>
+   <trkpt lat="48.8625055" lon="2.3253233"></trkpt>
+   <trkpt lat="48.8617117" lon="2.3277498"></trkpt>
+   <trkpt lat="48.8612792" lon="2.3290501"></trkpt>
+   <trkpt lat="48.8605042" lon="2.3312638"></trkpt>
+   <trkpt lat="48.8594878" lon="2.3357377"></trkpt>
+   <trkpt lat="48.8591843" lon="2.3377440"></trkpt>
+   <trkpt lat="48.8590929" lon="2.3389640"></trkpt>
+   <trkpt lat="48.8590593" lon="2.3392242"></trkpt>
+   <trkpt lat="48.8589980" lon="2.3395454"></trkpt>
+   <trkpt lat="48.8589160" lon="2.3398475"></trkpt>
+   <trkpt lat="48.8588174" lon="2.3400608"></trkpt>
+   <trkpt lat="48.8587529" lon="2.3402149"></trkpt>
+   <trkpt lat="48.8587293" lon="2.3402902"></trkpt>
+   <trkpt lat="48.8586308" lon="2.3406480"></trkpt>
+   <trkpt lat="48.8585123" lon="2.3413054"></trkpt>
+   <trkpt lat="48.8583253" lon="2.3423311"></trkpt>
+   <trkpt lat="48.8581235" lon="2.3430953"></trkpt>
+   <trkpt lat="48.8578508" lon="2.3440478"></trkpt>
+   <trkpt lat="48.8578069" lon="2.3441928"></trkpt>
+   <trkpt lat="48.8576463" lon="2.3447355"></trkpt>
+   <trkpt lat="48.8574958" lon="2.3452438"></trkpt>
+   <trkpt lat="48.8572737" lon="2.3462346"></trkpt>
+   <trkpt lat="48.8571102" lon="2.3468026"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

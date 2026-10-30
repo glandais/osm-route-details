@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p17-strasbourg-ill</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p17-strasbourg-ill</name>
+  <trkseg>
+   <trkpt lat="48.5827442" lon="7.7525889"></trkpt>
+   <trkpt lat="48.5827536" lon="7.7526189"></trkpt>
+   <trkpt lat="48.5828008" lon="7.7527702"></trkpt>
+   <trkpt lat="48.5828471" lon="7.7529232"></trkpt>
+   <trkpt lat="48.5828852" lon="7.7530505"></trkpt>
+   <trkpt lat="48.5829654" lon="7.7533405"></trkpt>
+   <trkpt lat="48.5830080" lon="7.7535076"></trkpt>
+   <trkpt lat="48.5830131" lon="7.7535299"></trkpt>
+   <trkpt lat="48.5830185" lon="7.7535710"></trkpt>
+   <trkpt lat="48.5830674" lon="7.7541322"></trkpt>
+   <trkpt lat="48.5830657" lon="7.7541951"></trkpt>
+   <trkpt lat="48.5830625" lon="7.7543150"></trkpt>
+   <trkpt lat="48.5830687" lon="7.7544113"></trkpt>
+   <trkpt lat="48.5830796" lon="7.7545014"></trkpt>
+   <trkpt lat="48.5831057" lon="7.7546657"></trkpt>
+   <trkpt lat="48.5831328" lon="7.7547433"></trkpt>
+   <trkpt lat="48.5831651" lon="7.7548012"></trkpt>
+   <trkpt lat="48.5831989" lon="7.7548281"></trkpt>
+   <trkpt lat="48.5832409" lon="7.7548598"></trkpt>
+   <trkpt lat="48.5832709" lon="7.7548903"></trkpt>
+   <trkpt lat="48.5832990" lon="7.7549218"></trkpt>
+   <trkpt lat="48.5833540" lon="7.7550055"></trkpt>
+   <trkpt lat="48.5833834" lon="7.7550513"></trkpt>
+   <trkpt lat="48.5835577" lon="7.7554046"></trkpt>
+   <trkpt lat="48.5836203" lon="7.7555404"></trkpt>
+   <trkpt lat="48.5837927" lon="7.7558908"></trkpt>
+   <trkpt lat="48.5838171" lon="7.7559414"></trkpt>
+   <trkpt lat="48.5838466" lon="7.7560006"></trkpt>
+   <trkpt lat="48.5838696" lon="7.7560468"></trkpt>
+   <trkpt lat="48.5840872" lon="7.7564869"></trkpt>
+   <trkpt lat="48.5840994" lon="7.7565137"></trkpt>
+   <trkpt lat="48.5842465" lon="7.7568321"></trkpt>
+   <trkpt lat="48.5844698" lon="7.7572757"></trkpt>
+   <trkpt lat="48.5845988" lon="7.7575416"></trkpt>
+   <trkpt lat="48.5846227" lon="7.7575904"></trkpt>
+   <trkpt lat="48.5846249" lon="7.7576362"></trkpt>
+   <trkpt lat="48.5846281" lon="7.7577028"></trkpt>
+   <trkpt lat="48.5846347" lon="7.7578387"></trkpt>
+   <trkpt lat="48.5846012" lon="7.7579218"></trkpt>
+   <trkpt lat="48.5845768" lon="7.7579823"></trkpt>
+   <trkpt lat="48.5845665" lon="7.7580078"></trkpt>
+   <trkpt lat="48.5845351" lon="7.7580877"></trkpt>
+   <trkpt lat="48.5842924" lon="7.7587057"></trkpt>
+   <trkpt lat="48.5842674" lon="7.7587693"></trkpt>
+   <trkpt lat="48.5842194" lon="7.7589079"></trkpt>
+   <trkpt lat="48.5841913" lon="7.7588782"></trkpt>
+   <trkpt lat="48.5841518" lon="7.7588379"></trkpt>
+   <trkpt lat="48.5841144" lon="7.7587992"></trkpt>
+   <trkpt lat="48.5840594" lon="7.7587423"></trkpt>
+   <trkpt lat="48.5838783" lon="7.7585641"></trkpt>
+   <trkpt lat="48.5832941" lon="7.7580178"></trkpt>
+   <trkpt lat="48.5831282" lon="7.7578627"></trkpt>
+   <trkpt lat="48.5830659" lon="7.7578040"></trkpt>
+   <trkpt lat="48.5829879" lon="7.7577337"></trkpt>
+   <trkpt lat="48.5827831" lon="7.7575420"></trkpt>
+   <trkpt lat="48.5827064" lon="7.7574702"></trkpt>
+   <trkpt lat="48.5825671" lon="7.7573504"></trkpt>
+   <trkpt lat="48.5825335" lon="7.7573195"></trkpt>
+   <trkpt lat="48.5824968" lon="7.7572786"></trkpt>
+   <trkpt lat="48.5824671" lon="7.7572373"></trkpt>
+   <trkpt lat="48.5824474" lon="7.7571989"></trkpt>
+   <trkpt lat="48.5824288" lon="7.7571541"></trkpt>
+   <trkpt lat="48.5824022" lon="7.7571849"></trkpt>
+   <trkpt lat="48.5823923" lon="7.7571959"></trkpt>
+   <trkpt lat="48.5823487" lon="7.7572443"></trkpt>
+   <trkpt lat="48.5823127" lon="7.7573448"></trkpt>
+   <trkpt lat="48.5823049" lon="7.7573664"></trkpt>
+   <trkpt lat="48.5820915" lon="7.7579602"></trkpt>
+   <trkpt lat="48.5819993" lon="7.7582239"></trkpt>
+   <trkpt lat="48.5819086" lon="7.7585126"></trkpt>
+   <trkpt lat="48.5818333" lon="7.7587362"></trkpt>
+   <trkpt lat="48.5818050" lon="7.7588071"></trkpt>
+   <trkpt lat="48.5817240" lon="7.7588059"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

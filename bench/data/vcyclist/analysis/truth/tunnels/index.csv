@@ -1,0 +1,33 @@
+id,role,category,n,length_m,G,O,L,X,x,N,place
+tt01-galibier,tunnel-tuning,mountain-tunnel-under-col,219,1091.9,132,0,0,0,14,73,Tunnel du Galibier D 902 under the Col du Galibier (Savoie / Hautes-Alpes)
+tt02-croix-rousse,tunnel-tuning,urban-bored-tunnel-under-hill,517,2582.1,149,0,0,0,14,354,Lyon Tunnel de la Croix-Rousse bus / foot / cycle tube under the Croix-Rousse hill
+tt03-lioran,tunnel-tuning,long-mountain-tunnel-under-col,455,2272.0,114,0,5,8,28,300,Tunnel du Lioran N 122 under the Col de Font de Cere (Cantal)
+tt04-tuileries,tunnel-tuning,urban-cut-and-cover-flat-above,342,1707.4,135,12,0,2,22,171,Paris Tunnel des Tuileries (former Voie Georges-Pompidou) under the Tuileries quay and garden
+tt05-rousset,tunnel-tuning,mountain-tunnel-under-col,309,1543.8,155,0,0,0,14,140,Tunnel du Col de Rousset D 518 (Drome)
+tt06-nesque,tunnel-tuning,short-gorge-tunnels,209,1040.8,150,0,0,0,28,31,Gorges de la Nesque D 942 tunnels (Vaucluse)
+tt07-petit-frou,tunnel-tuning,balcony-gorge-tunnel,216,1078.6,157,0,0,0,14,45,Gorges du Guiers Vif D 520C Tunnel du Petit Frou (Isere / Savoie)
+tt08-arly-cliets,tunnel-tuning,gorge-tunnel-among-avalanche-galleries,242,1209.4,125,0,0,37,32,48,Gorges de l Arly D 1212 Tunnel des Cliets between avalanche galleries (Savoie)
+tn01-alpe-huez,tunnel-negative,hairpin-climb,595,2972.5,595,0,0,0,0,0,Alpe d Huez D 211 lacets above Le Bourg-d Oisans (Isere)
+tn02-montvernier,tunnel-negative,hairpin-climb-on-cliff,397,1980.7,380,0,0,3,14,0,Lacets de Montvernier (Savoie)
+tn03-galibier-col,tunnel-negative,road-over-col-above-tunnel,239,1192.8,239,0,0,0,0,0,Col du Galibier D 902 over the col  above the Tunnel du Galibier (Savoie / Hautes-Alpes)
+tn04-ventoux,tunnel-negative,steep-summit-climb,596,2978.1,596,0,0,0,0,0,Mont Ventoux D 974 from below Chalet Reynard to the summit (Vaucluse)
+tn05-montmartre,tunnel-negative,steep-urban-ramp-over-crest,145,721.7,145,0,0,0,0,0,Paris Montmartre rue Lepic from Place Blanche over the butte
+tn06-lyon-boucle,tunnel-negative,steep-urban-hairpin-ramp,99,492.0,87,6,6,0,0,0,Lyon Montee de la Boucle from the Rhone to the Croix-Rousse plateau
+tn07-lyon-st-sebastien,tunnel-negative,steep-urban-ramp,316,1579.7,265,0,7,23,21,0,Lyon from Place Croix-Paquet to the Croix-Rousse plateau by the quays and Montee Bonafous
+tn08-bourne,tunnel-negative,balcony-under-cliff,598,2989.6,482,0,0,51,65,0,Gorges de la Bourne D 531 balcony road (Isere)
+tn09-verdon-cretes,tunnel-negative,balcony-over-gorge,357,1784.5,342,0,0,1,14,0,Gorges du Verdon Route des Cretes D 23 (Alpes-de-Haute-Provence)
+tn10-roselend,tunnel-negative,dam-crest-road,279,1392.7,143,0,0,129,7,0,Barrage de Roselend Route du Barrage over the dam (Savoie)
+tn11-serre-poncon,tunnel-negative,dam-crest-road,148,739.1,137,0,0,4,7,0,Barrage de Serre-Poncon Route du Barrage (Hautes-Alpes)
+tn12-arly-galleries,tunnel-negative,avalanche-galleries,278,1388.8,217,0,0,39,22,0,Gorges de l Arly D 1212 south of the Tunnel des Cliets under avalanche galleries (Savoie)
+tn13-cutting-isere,tunnel-negative,road-in-cutting,240,1197.1,240,0,0,0,0,0,Longest cutting=yes road chain of the classes around Grenoble (Isere)
+th01-cians,tunnel-holdout,short-gorge-tunnel,256,1276.7,154,0,0,0,14,88,Gorges du Cians D 28 longest tunnel between Touet-sur-Var and Beuil (Alpes-Maritimes)
+th02-pierre-lys,tunnel-holdout,short-gorge-tunnel,181,902.3,148,0,0,0,14,19,Defile de Pierre-Lys D 117 longest tunnel (Aude)
+th03-tunnel-09,tunnel-holdout,medium-tunnel,200,999.3,143,0,0,0,14,43,Ariege the longest 200-700 m tunnel
+th08-voie-verte-24,tunnel-holdout,greenway-in-rail-tunnel,300,1499.1,192,0,0,0,14,94,Dordogne the longest 100-2500 m highway=cycleway tunnel
+hn01-aubisque,tunnel-holdout-negative,hairpin-climb,475,2371.5,439,0,0,8,28,0,Col d Aubisque D 918 lacets below Gourette on the Eaux-Bonnes side (Pyrenees-Atlantiques)
+hn02-aveyron,tunnel-holdout-negative,balcony-under-cliff,477,2380.8,461,0,0,2,14,0,Gorges de l Aveyron D 115 between Saint-Antonin-Noble-Val and Cazals (Tarn-et-Garonne)
+hn03-boulogne,tunnel-holdout-negative,steep-urban-ramp,139,691.8,106,0,0,5,28,0,Boulogne-sur-Mer (Pas-de-Calais) streets from the lower town to the upper town
+hn06-bavella,tunnel-holdout-negative,road-over-col,596,2979.8,581,0,0,1,14,0,Col de Bavella D 268 on both sides of the col (Corse-du-Sud)
+th09-tunnel-07,tunnel-holdout,tunnel,276,1378.8,166,0,0,8,28,74,Ardeche the longest 50-2500 m tunnel
+th09-tunnel-2b,tunnel-holdout,tunnel,274,1369.9,184,0,0,0,14,76,Haute-Corse the longest 50-2500 m tunnel
+th09-tunnel-81,tunnel-holdout,tunnel,357,1780.9,155,0,0,0,14,188,Tarn the longest 50-2500 m tunnel

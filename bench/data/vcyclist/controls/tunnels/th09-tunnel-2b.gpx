@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>th09-tunnel-2b</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>th09-tunnel-2b</name>
+  <trkseg>
+   <trkpt lat="42.0983438" lon="9.2779890"></trkpt>
+   <trkpt lat="42.0981101" lon="9.2781795"></trkpt>
+   <trkpt lat="42.0977766" lon="9.2785522"></trkpt>
+   <trkpt lat="42.0972711" lon="9.2792577"></trkpt>
+   <trkpt lat="42.0968253" lon="9.2796761"></trkpt>
+   <trkpt lat="42.0965884" lon="9.2798182"></trkpt>
+   <trkpt lat="42.0964252" lon="9.2799577"></trkpt>
+   <trkpt lat="42.0959757" lon="9.2804875"></trkpt>
+   <trkpt lat="42.0958859" lon="9.2806739"></trkpt>
+   <trkpt lat="42.0958390" lon="9.2808416"></trkpt>
+   <trkpt lat="42.0957824" lon="9.2810440"></trkpt>
+   <trkpt lat="42.0957247" lon="9.2811808"></trkpt>
+   <trkpt lat="42.0956326" lon="9.2813402"></trkpt>
+   <trkpt lat="42.0955774" lon="9.2814356"></trkpt>
+   <trkpt lat="42.0955196" lon="9.2815936"></trkpt>
+   <trkpt lat="42.0954679" lon="9.2820981"></trkpt>
+   <trkpt lat="42.0954620" lon="9.2822778"></trkpt>
+   <trkpt lat="42.0954896" lon="9.2824285"></trkpt>
+   <trkpt lat="42.0965507" lon="9.2868257"></trkpt>
+   <trkpt lat="42.0966302" lon="9.2870709"></trkpt>
+   <trkpt lat="42.0969301" lon="9.2876412"></trkpt>
+   <trkpt lat="42.0974432" lon="9.2884742"></trkpt>
+   <trkpt lat="42.0975450" lon="9.2886829"></trkpt>
+   <trkpt lat="42.0975657" lon="9.2888349"></trkpt>
+   <trkpt lat="42.0975368" lon="9.2890257"></trkpt>
+   <trkpt lat="42.0974308" lon="9.2893141"></trkpt>
+   <trkpt lat="42.0972731" lon="9.2897290"></trkpt>
+   <trkpt lat="42.0971336" lon="9.2899938"></trkpt>
+   <trkpt lat="42.0969401" lon="9.2903062"></trkpt>
+   <trkpt lat="42.0968770" lon="9.2905471"></trkpt>
+   <trkpt lat="42.0968634" lon="9.2906619"></trkpt>
+   <trkpt lat="42.0969116" lon="9.2909800"></trkpt>
+   <trkpt lat="42.0969408" lon="9.2912507"></trkpt>
+   <trkpt lat="42.0969270" lon="9.2914603"></trkpt>
+   <trkpt lat="42.0968233" lon="9.2918694"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

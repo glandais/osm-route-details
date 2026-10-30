@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>th09-tunnel-81</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>th09-tunnel-81</name>
+  <trkseg>
+   <trkpt lat="43.9320087" lon="2.2654135"></trkpt>
+   <trkpt lat="43.9321454" lon="2.2662469"></trkpt>
+   <trkpt lat="43.9325128" lon="2.2681320"></trkpt>
+   <trkpt lat="43.9328132" lon="2.2692308"></trkpt>
+   <trkpt lat="43.9331018" lon="2.2699163"></trkpt>
+   <trkpt lat="43.9334632" lon="2.2705502"></trkpt>
+   <trkpt lat="43.9335861" lon="2.2708077"></trkpt>
+   <trkpt lat="43.9336942" lon="2.2710343"></trkpt>
+   <trkpt lat="43.9338801" lon="2.2715379"></trkpt>
+   <trkpt lat="43.9339246" lon="2.2720476"></trkpt>
+   <trkpt lat="43.9338688" lon="2.2726175"></trkpt>
+   <trkpt lat="43.9324042" lon="2.2809225"></trkpt>
+   <trkpt lat="43.9321004" lon="2.2820405"></trkpt>
+   <trkpt lat="43.9317168" lon="2.2827441"></trkpt>
+   <trkpt lat="43.9314810" lon="2.2830828"></trkpt>
+   <trkpt lat="43.9310588" lon="2.2835544"></trkpt>
+   <trkpt lat="43.9306573" lon="2.2839388"></trkpt>
+   <trkpt lat="43.9303738" lon="2.2843336"></trkpt>
+   <trkpt lat="43.9301484" lon="2.2846982"></trkpt>
+   <trkpt lat="43.9300657" lon="2.2848368"></trkpt>
+   <trkpt lat="43.9299671" lon="2.2851202"></trkpt>
+   <trkpt lat="43.9299264" lon="2.2852257"></trkpt>
+   <trkpt lat="43.9298578" lon="2.2854431"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>th02-pierre-lys</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>th02-pierre-lys</name>
+  <trkseg>
+   <trkpt lat="42.8350674" lon="2.2051488"></trkpt>
+   <trkpt lat="42.8349344" lon="2.2052618"></trkpt>
+   <trkpt lat="42.8348060" lon="2.2053899"></trkpt>
+   <trkpt lat="42.8346639" lon="2.2055527"></trkpt>
+   <trkpt lat="42.8343244" lon="2.2060277"></trkpt>
+   <trkpt lat="42.8341095" lon="2.2063132"></trkpt>
+   <trkpt lat="42.8337546" lon="2.2068301"></trkpt>
+   <trkpt lat="42.8334985" lon="2.2071899"></trkpt>
+   <trkpt lat="42.8332024" lon="2.2075640"></trkpt>
+   <trkpt lat="42.8330390" lon="2.2077582"></trkpt>
+   <trkpt lat="42.8329619" lon="2.2078290"></trkpt>
+   <trkpt lat="42.8328875" lon="2.2078768"></trkpt>
+   <trkpt lat="42.8327112" lon="2.2079755"></trkpt>
+   <trkpt lat="42.8326083" lon="2.2080390"></trkpt>
+   <trkpt lat="42.8325118" lon="2.2081209"></trkpt>
+   <trkpt lat="42.8324040" lon="2.2082389"></trkpt>
+   <trkpt lat="42.8321082" lon="2.2086177"></trkpt>
+   <trkpt lat="42.8320342" lon="2.2086972"></trkpt>
+   <trkpt lat="42.8317248" lon="2.2089894"></trkpt>
+   <trkpt lat="42.8316381" lon="2.2091109"></trkpt>
+   <trkpt lat="42.8311116" lon="2.2099795"></trkpt>
+   <trkpt lat="42.8310111" lon="2.2101689"></trkpt>
+   <trkpt lat="42.8307206" lon="2.2106078"></trkpt>
+   <trkpt lat="42.8304742" lon="2.2109205"></trkpt>
+   <trkpt lat="42.8303032" lon="2.2111135"></trkpt>
+   <trkpt lat="42.8301832" lon="2.2112783"></trkpt>
+   <trkpt lat="42.8300589" lon="2.2114701"></trkpt>
+   <trkpt lat="42.8299670" lon="2.2116461"></trkpt>
+   <trkpt lat="42.8298033" lon="2.2119875"></trkpt>
+   <trkpt lat="42.8296940" lon="2.2122643"></trkpt>
+   <trkpt lat="42.8296201" lon="2.2124847"></trkpt>
+   <trkpt lat="42.8295568" lon="2.2127066"></trkpt>
+   <trkpt lat="42.8294945" lon="2.2129651"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

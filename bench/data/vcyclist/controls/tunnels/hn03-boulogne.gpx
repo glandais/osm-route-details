@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>hn03-boulogne</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>hn03-boulogne</name>
+  <trkseg>
+   <trkpt lat="50.7248156" lon="1.6058889"></trkpt>
+   <trkpt lat="50.7249244" lon="1.6061182"></trkpt>
+   <trkpt lat="50.7249427" lon="1.6061470"></trkpt>
+   <trkpt lat="50.7249629" lon="1.6061654"></trkpt>
+   <trkpt lat="50.7249825" lon="1.6061787"></trkpt>
+   <trkpt lat="50.7250046" lon="1.6061830"></trkpt>
+   <trkpt lat="50.7250288" lon="1.6061779"></trkpt>
+   <trkpt lat="50.7250514" lon="1.6061665"></trkpt>
+   <trkpt lat="50.7250716" lon="1.6061482"></trkpt>
+   <trkpt lat="50.7250992" lon="1.6061126"></trkpt>
+   <trkpt lat="50.7253514" lon="1.6066357"></trkpt>
+   <trkpt lat="50.7253712" lon="1.6066728"></trkpt>
+   <trkpt lat="50.7251836" lon="1.6068796"></trkpt>
+   <trkpt lat="50.7247072" lon="1.6074042"></trkpt>
+   <trkpt lat="50.7246861" lon="1.6074255"></trkpt>
+   <trkpt lat="50.7248226" lon="1.6077963"></trkpt>
+   <trkpt lat="50.7249448" lon="1.6081422"></trkpt>
+   <trkpt lat="50.7249655" lon="1.6081981"></trkpt>
+   <trkpt lat="50.7250033" lon="1.6083010"></trkpt>
+   <trkpt lat="50.7250257" lon="1.6083708"></trkpt>
+   <trkpt lat="50.7250462" lon="1.6084351"></trkpt>
+   <trkpt lat="50.7254798" lon="1.6097621"></trkpt>
+   <trkpt lat="50.7255152" lon="1.6098759"></trkpt>
+   <trkpt lat="50.7255378" lon="1.6099485"></trkpt>
+   <trkpt lat="50.7255556" lon="1.6100048"></trkpt>
+   <trkpt lat="50.7255910" lon="1.6101164"></trkpt>
+   <trkpt lat="50.7258053" lon="1.6107917"></trkpt>
+   <trkpt lat="50.7258104" lon="1.6108618"></trkpt>
+   <trkpt lat="50.7258109" lon="1.6109087"></trkpt>
+   <trkpt lat="50.7258079" lon="1.6109490"></trkpt>
+   <trkpt lat="50.7258022" lon="1.6109981"></trkpt>
+   <trkpt lat="50.7257936" lon="1.6110364"></trkpt>
+   <trkpt lat="50.7257811" lon="1.6110731"></trkpt>
+   <trkpt lat="50.7257672" lon="1.6111025"></trkpt>
+   <trkpt lat="50.7257504" lon="1.6111261"></trkpt>
+   <trkpt lat="50.7257326" lon="1.6111491"></trkpt>
+   <trkpt lat="50.7257135" lon="1.6111667"></trkpt>
+   <trkpt lat="50.7256912" lon="1.6111822"></trkpt>
+   <trkpt lat="50.7256641" lon="1.6111967"></trkpt>
+   <trkpt lat="50.7255184" lon="1.6112662"></trkpt>
+   <trkpt lat="50.7255114" lon="1.6113538"></trkpt>
+   <trkpt lat="50.7255084" lon="1.6113964"></trkpt>
+   <trkpt lat="50.7255031" lon="1.6114385"></trkpt>
+   <trkpt lat="50.7254982" lon="1.6114656"></trkpt>
+   <trkpt lat="50.7254913" lon="1.6114889"></trkpt>
+   <trkpt lat="50.7254797" lon="1.6115173"></trkpt>
+   <trkpt lat="50.7254430" lon="1.6115916"></trkpt>
+   <trkpt lat="50.7253733" lon="1.6117189"></trkpt>
+   <trkpt lat="50.7253477" lon="1.6117675"></trkpt>
+   <trkpt lat="50.7253247" lon="1.6118160"></trkpt>
+   <trkpt lat="50.7252259" lon="1.6120420"></trkpt>
+   <trkpt lat="50.7252092" lon="1.6120816"></trkpt>
+   <trkpt lat="50.7251490" lon="1.6122354"></trkpt>
+   <trkpt lat="50.7253452" lon="1.6124566"></trkpt>
+   <trkpt lat="50.7253590" lon="1.6124674"></trkpt>
+   <trkpt lat="50.7253778" lon="1.6124721"></trkpt>
+   <trkpt lat="50.7254252" lon="1.6124785"></trkpt>
+   <trkpt lat="50.7254512" lon="1.6124780"></trkpt>
+   <trkpt lat="50.7254758" lon="1.6124815"></trkpt>
+   <trkpt lat="50.7255088" lon="1.6124920"></trkpt>
+   <trkpt lat="50.7255400" lon="1.6125061"></trkpt>
+   <trkpt lat="50.7255760" lon="1.6125301"></trkpt>
+   <trkpt lat="50.7256005" lon="1.6125504"></trkpt>
+   <trkpt lat="50.7256298" lon="1.6125782"></trkpt>
+   <trkpt lat="50.7259557" lon="1.6129505"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

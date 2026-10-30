@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n15-lyon-berges-rhone</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n15-lyon-berges-rhone</name>
+  <trkseg>
+   <trkpt lat="45.7526614" lon="4.8367722"></trkpt>
+   <trkpt lat="45.7538319" lon="4.8376824"></trkpt>
+   <trkpt lat="45.7542625" lon="4.8379883"></trkpt>
+   <trkpt lat="45.7548230" lon="4.8383759"></trkpt>
+   <trkpt lat="45.7551729" lon="4.8385953"></trkpt>
+   <trkpt lat="45.7553376" lon="4.8386953"></trkpt>
+   <trkpt lat="45.7553970" lon="4.8387481"></trkpt>
+   <trkpt lat="45.7555305" lon="4.8389100"></trkpt>
+   <trkpt lat="45.7556067" lon="4.8389633"></trkpt>
+   <trkpt lat="45.7556480" lon="4.8389921"></trkpt>
+   <trkpt lat="45.7562891" lon="4.8393471"></trkpt>
+   <trkpt lat="45.7566464" lon="4.8395334"></trkpt>
+   <trkpt lat="45.7570747" lon="4.8397581"></trkpt>
+   <trkpt lat="45.7574633" lon="4.8399439"></trkpt>
+   <trkpt lat="45.7578097" lon="4.8400950"></trkpt>
+   <trkpt lat="45.7584360" lon="4.8403253"></trkpt>
+   <trkpt lat="45.7591573" lon="4.8405325"></trkpt>
+   <trkpt lat="45.7592503" lon="4.8405538"></trkpt>
+   <trkpt lat="45.7595797" lon="4.8406065"></trkpt>
+   <trkpt lat="45.7596195" lon="4.8406127"></trkpt>
+   <trkpt lat="45.7598414" lon="4.8406489"></trkpt>
+   <trkpt lat="45.7598433" lon="4.8406492"></trkpt>
+   <trkpt lat="45.7598893" lon="4.8406566"></trkpt>
+   <trkpt lat="45.7599480" lon="4.8406642"></trkpt>
+   <trkpt lat="45.7604157" lon="4.8406995"></trkpt>
+   <trkpt lat="45.7604591" lon="4.8407026"></trkpt>
+   <trkpt lat="45.7607873" lon="4.8407257"></trkpt>
+   <trkpt lat="45.7608121" lon="4.8407274"></trkpt>
+   <trkpt lat="45.7608210" lon="4.8407280"></trkpt>
+   <trkpt lat="45.7611826" lon="4.8407601"></trkpt>
+   <trkpt lat="45.7613184" lon="4.8407722"></trkpt>
+   <trkpt lat="45.7618075" lon="4.8408228"></trkpt>
+   <trkpt lat="45.7625098" lon="4.8408993"></trkpt>
+   <trkpt lat="45.7628714" lon="4.8409343"></trkpt>
+   <trkpt lat="45.7631228" lon="4.8409569"></trkpt>
+   <trkpt lat="45.7631793" lon="4.8409620"></trkpt>
+   <trkpt lat="45.7634971" lon="4.8409570"></trkpt>
+   <trkpt lat="45.7636750" lon="4.8409541"></trkpt>
+   <trkpt lat="45.7637074" lon="4.8409320"></trkpt>
+   <trkpt lat="45.7638036" lon="4.8409292"></trkpt>
+   <trkpt lat="45.7641354" lon="4.8409390"></trkpt>
+   <trkpt lat="45.7642508" lon="4.8409434"></trkpt>
+   <trkpt lat="45.7644583" lon="4.8409487"></trkpt>
+   <trkpt lat="45.7645653" lon="4.8409549"></trkpt>
+   <trkpt lat="45.7647879" lon="4.8409641"></trkpt>
+   <trkpt lat="45.7650190" lon="4.8409711"></trkpt>
+   <trkpt lat="45.7651940" lon="4.8409817"></trkpt>
+   <trkpt lat="45.7655257" lon="4.8409917"></trkpt>
+   <trkpt lat="45.7656366" lon="4.8410129"></trkpt>
+   <trkpt lat="45.7656390" lon="4.8410127"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

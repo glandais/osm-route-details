@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n07-landes-velodyssee</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n07-landes-velodyssee</name>
+  <trkseg>
+   <trkpt lat="43.9717255" lon="-1.3455762"></trkpt>
+   <trkpt lat="43.9720006" lon="-1.3453609"></trkpt>
+   <trkpt lat="43.9729717" lon="-1.3446266"></trkpt>
+   <trkpt lat="43.9733409" lon="-1.3444036"></trkpt>
+   <trkpt lat="43.9738063" lon="-1.3442474"></trkpt>
+   <trkpt lat="43.9740471" lon="-1.3441805"></trkpt>
+   <trkpt lat="43.9745399" lon="-1.3440368"></trkpt>
+   <trkpt lat="43.9776424" lon="-1.3431323"></trkpt>
+   <trkpt lat="43.9789073" lon="-1.3427787"></trkpt>
+   <trkpt lat="43.9805152" lon="-1.3423293"></trkpt>
+   <trkpt lat="43.9819757" lon="-1.3419279"></trkpt>
+   <trkpt lat="43.9829386" lon="-1.3416156"></trkpt>
+   <trkpt lat="43.9833277" lon="-1.3414632"></trkpt>
+   <trkpt lat="43.9839844" lon="-1.3410928"></trkpt>
+   <trkpt lat="43.9842141" lon="-1.3408179"></trkpt>
+   <trkpt lat="43.9853753" lon="-1.3385319"></trkpt>
+   <trkpt lat="43.9854959" lon="-1.3382675"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

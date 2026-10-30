@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tn09-verdon-cretes</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tn09-verdon-cretes</name>
+  <trkseg>
+   <trkpt lat="43.7791140" lon="6.3746170"></trkpt>
+   <trkpt lat="43.7790547" lon="6.3744655"></trkpt>
+   <trkpt lat="43.7790260" lon="6.3743920"></trkpt>
+   <trkpt lat="43.7788730" lon="6.3739520"></trkpt>
+   <trkpt lat="43.7788200" lon="6.3737340"></trkpt>
+   <trkpt lat="43.7787900" lon="6.3735120"></trkpt>
+   <trkpt lat="43.7787740" lon="6.3732820"></trkpt>
+   <trkpt lat="43.7787740" lon="6.3730450"></trkpt>
+   <trkpt lat="43.7788010" lon="6.3723330"></trkpt>
+   <trkpt lat="43.7788050" lon="6.3718940"></trkpt>
+   <trkpt lat="43.7787970" lon="6.3716840"></trkpt>
+   <trkpt lat="43.7787780" lon="6.3714810"></trkpt>
+   <trkpt lat="43.7787440" lon="6.3712810"></trkpt>
+   <trkpt lat="43.7786060" lon="6.3706580"></trkpt>
+   <trkpt lat="43.7784880" lon="6.3702360"></trkpt>
+   <trkpt lat="43.7782250" lon="6.3694200"></trkpt>
+   <trkpt lat="43.7780840" lon="6.3690050"></trkpt>
+   <trkpt lat="43.7778590" lon="6.3683890"></trkpt>
+   <trkpt lat="43.7777940" lon="6.3681830"></trkpt>
+   <trkpt lat="43.7777400" lon="6.3679820"></trkpt>
+   <trkpt lat="43.7777060" lon="6.3677790"></trkpt>
+   <trkpt lat="43.7776950" lon="6.3675840"></trkpt>
+   <trkpt lat="43.7777140" lon="6.3673870"></trkpt>
+   <trkpt lat="43.7777600" lon="6.3671930"></trkpt>
+   <trkpt lat="43.7778240" lon="6.3670100"></trkpt>
+   <trkpt lat="43.7780690" lon="6.3664900"></trkpt>
+   <trkpt lat="43.7782614" lon="6.3661210"></trkpt>
+   <trkpt lat="43.7783465" lon="6.3659459"></trkpt>
+   <trkpt lat="43.7783797" lon="6.3658778"></trkpt>
+   <trkpt lat="43.7784170" lon="6.3658011"></trkpt>
+   <trkpt lat="43.7790600" lon="6.3645180"></trkpt>
+   <trkpt lat="43.7792360" lon="6.3641480"></trkpt>
+   <trkpt lat="43.7793406" lon="6.3639325"></trkpt>
+   <trkpt lat="43.7793707" lon="6.3638585"></trkpt>
+   <trkpt lat="43.7793901" lon="6.3637834"></trkpt>
+   <trkpt lat="43.7794115" lon="6.3636806"></trkpt>
+   <trkpt lat="43.7794257" lon="6.3635724"></trkpt>
+   <trkpt lat="43.7794330" lon="6.3634321"></trkpt>
+   <trkpt lat="43.7794281" lon="6.3627878"></trkpt>
+   <trkpt lat="43.7793986" lon="6.3600427"></trkpt>
+   <trkpt lat="43.7794000" lon="6.3596230"></trkpt>
+   <trkpt lat="43.7794158" lon="6.3593807"></trkpt>
+   <trkpt lat="43.7794925" lon="6.3587971"></trkpt>
+   <trkpt lat="43.7795182" lon="6.3585710"></trkpt>
+   <trkpt lat="43.7795229" lon="6.3583766"></trkpt>
+   <trkpt lat="43.7795205" lon="6.3575439"></trkpt>
+   <trkpt lat="43.7795302" lon="6.3574081"></trkpt>
+   <trkpt lat="43.7795333" lon="6.3573911"></trkpt>
+   <trkpt lat="43.7795648" lon="6.3572198"></trkpt>
+   <trkpt lat="43.7796319" lon="6.3567712"></trkpt>
+   <trkpt lat="43.7797218" lon="6.3562038"></trkpt>
+   <trkpt lat="43.7797551" lon="6.3559935"></trkpt>
+   <trkpt lat="43.7798500" lon="6.3553670"></trkpt>
+   <trkpt lat="43.7799485" lon="6.3547770"></trkpt>
+   <trkpt lat="43.7801164" lon="6.3537683"></trkpt>
+   <trkpt lat="43.7801236" lon="6.3537279"></trkpt>
+   <trkpt lat="43.7801477" lon="6.3536598"></trkpt>
+   <trkpt lat="43.7801844" lon="6.3536371"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

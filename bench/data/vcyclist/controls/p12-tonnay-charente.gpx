@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p12-tonnay-charente</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p12-tonnay-charente</name>
+  <trkseg>
+   <trkpt lat="45.9452101" lon="-0.8826165"></trkpt>
+   <trkpt lat="45.9448602" lon="-0.8829825"></trkpt>
+   <trkpt lat="45.9447092" lon="-0.8831030"></trkpt>
+   <trkpt lat="45.9445455" lon="-0.8832026"></trkpt>
+   <trkpt lat="45.9441910" lon="-0.8833595"></trkpt>
+   <trkpt lat="45.9441268" lon="-0.8833925"></trkpt>
+   <trkpt lat="45.9439845" lon="-0.8834656"></trkpt>
+   <trkpt lat="45.9435323" lon="-0.8837772"></trkpt>
+   <trkpt lat="45.9432299" lon="-0.8839913"></trkpt>
+   <trkpt lat="45.9430097" lon="-0.8841473"></trkpt>
+   <trkpt lat="45.9427360" lon="-0.8843242"></trkpt>
+   <trkpt lat="45.9426737" lon="-0.8843778"></trkpt>
+   <trkpt lat="45.9426237" lon="-0.8844166"></trkpt>
+   <trkpt lat="45.9423534" lon="-0.8846263"></trkpt>
+   <trkpt lat="45.9422130" lon="-0.8847479"></trkpt>
+   <trkpt lat="45.9419588" lon="-0.8849680"></trkpt>
+   <trkpt lat="45.9419164" lon="-0.8850169"></trkpt>
+   <trkpt lat="45.9418352" lon="-0.8851103"></trkpt>
+   <trkpt lat="45.9418016" lon="-0.8851473"></trkpt>
+   <trkpt lat="45.9417521" lon="-0.8852093"></trkpt>
+   <trkpt lat="45.9416514" lon="-0.8853168"></trkpt>
+   <trkpt lat="45.9416218" lon="-0.8853920"></trkpt>
+   <trkpt lat="45.9415950" lon="-0.8853736"></trkpt>
+   <trkpt lat="45.9414713" lon="-0.8852887"></trkpt>
+   <trkpt lat="45.9414102" lon="-0.8852622"></trkpt>
+   <trkpt lat="45.9413238" lon="-0.8852596"></trkpt>
+   <trkpt lat="45.9412885" lon="-0.8852738"></trkpt>
+   <trkpt lat="45.9412485" lon="-0.8852899"></trkpt>
+   <trkpt lat="45.9411956" lon="-0.8853194"></trkpt>
+   <trkpt lat="45.9409801" lon="-0.8854539"></trkpt>
+   <trkpt lat="45.9405877" lon="-0.8857005"></trkpt>
+   <trkpt lat="45.9404149" lon="-0.8858204"></trkpt>
+   <trkpt lat="45.9401283" lon="-0.8860076"></trkpt>
+   <trkpt lat="45.9398949" lon="-0.8861601"></trkpt>
+   <trkpt lat="45.9392973" lon="-0.8865422"></trkpt>
+   <trkpt lat="45.9387762" lon="-0.8868853"></trkpt>
+   <trkpt lat="45.9377046" lon="-0.8875663"></trkpt>
+   <trkpt lat="45.9364876" lon="-0.8883344"></trkpt>
+   <trkpt lat="45.9360666" lon="-0.8886001"></trkpt>
+   <trkpt lat="45.9359794" lon="-0.8886705"></trkpt>
+   <trkpt lat="45.9356420" lon="-0.8888710"></trkpt>
+   <trkpt lat="45.9355934" lon="-0.8889011"></trkpt>
+   <trkpt lat="45.9337752" lon="-0.8900531"></trkpt>
+   <trkpt lat="45.9326597" lon="-0.8907688"></trkpt>
+   <trkpt lat="45.9325670" lon="-0.8908283"></trkpt>
+   <trkpt lat="45.9317389" lon="-0.8913994"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

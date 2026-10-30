@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p13-chalon-bourgogne</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p13-chalon-bourgogne</name>
+  <trkseg>
+   <trkpt lat="46.7800288" lon="4.8762962"></trkpt>
+   <trkpt lat="46.7802752" lon="4.8760754"></trkpt>
+   <trkpt lat="46.7806057" lon="4.8757225"></trkpt>
+   <trkpt lat="46.7808756" lon="4.8753866"></trkpt>
+   <trkpt lat="46.7810785" lon="4.8751184"></trkpt>
+   <trkpt lat="46.7813860" lon="4.8746499"></trkpt>
+   <trkpt lat="46.7827489" lon="4.8725839"></trkpt>
+   <trkpt lat="46.7833449" lon="4.8716840"></trkpt>
+   <trkpt lat="46.7855583" lon="4.8683357"></trkpt>
+   <trkpt lat="46.7858771" lon="4.8678405"></trkpt>
+   <trkpt lat="46.7862115" lon="4.8674208"></trkpt>
+   <trkpt lat="46.7862957" lon="4.8673267"></trkpt>
+   <trkpt lat="46.7867482" lon="4.8668211"></trkpt>
+   <trkpt lat="46.7869929" lon="4.8665326"></trkpt>
+   <trkpt lat="46.7874576" lon="4.8660280"></trkpt>
+   <trkpt lat="46.7876968" lon="4.8657518"></trkpt>
+   <trkpt lat="46.7878968" lon="4.8655618"></trkpt>
+   <trkpt lat="46.7879737" lon="4.8654519"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

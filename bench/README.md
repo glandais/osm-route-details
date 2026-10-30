@@ -19,9 +19,10 @@ chaque incrément du MVP ait une cible mesurable. Le contrat mesuré est celui d
 
 ## 1. Corpus
 
-### 1.1 Bancs de vcyclist (référencés, non copiés)
+### 1.1 Bancs de vcyclist (copiés dans `data/vcyclist/`)
 
-vcyclist 6.11.0-1 (`4dfd6c5`, à jour le 2026-10-30), `docs/deck-strava-data/` :
+vcyclist 6.11.0-1 (`4dfd6c5`, à jour le 2026-10-30), `docs/deck-strava-data/`, copié une fois sans
+modification dans `data/vcyclist/` (Apache-2.0 ; `LICENSE`, `PROVENANCE.md` et `SHA256SUMS` à côté) :
 
 - `test1..4.gpx` : Saint-Nazaire 10 km, Nantes 25 km (16 ponts de Loire), Mauves 10 km, Vercors
   111 km (4 tunnels dont les Grands Goulets, balcons). Altitude `<ele>` = fond Strava.
@@ -58,7 +59,7 @@ Chiffres de référence (ligne de base à égaler, pas à reproduire) :
 4. Toujours citer la convention de pixel (coins ou centres) avec un chiffre issu de vcyclist.
 5. L'IGN (Etalab 2.0) n'est pas mentionné dans vcyclist : l'attribution est à notre charge.
 
-### 1.2 Éval d'osm-surface (référencée, non copiée)
+### 1.2 Éval d'osm-surface (non copiée : pas de licence déclarée, copie sur accord de l'utilisateur)
 
 osm-surface (`44e5da6`, pas de branche amont configurée : fraîcheur non vérifiable). Trois parcours
 autour de Nantes, 185,2 km (`testdata/*.gpx` + `*.route.json`). La référence est la classe de
@@ -124,7 +125,8 @@ plaine.
 **Vie privée.** Les traces révèlent le domicile et les habitudes : elles restent dans `private/`
 (gitignoré) sous pseudonyme `perso-NN`. Le manifest versionné ne porte que le département, le mois,
 la distance et l'empreinte sha256 (trace entière et trace rognée de 1 km à chaque bout,
-`*.trim1km.gpx`). Aucune trace n'est versionnée sans accord explicite de l'utilisateur.
+`*.trim1km.gpx`). **Les traces perso et tout ce qui en dérive (parcours recalés, réponses Stadia)
+restent hors git, sans exception** (décision de l'utilisateur, 2026-10-30).
 
 **Reconstituer `private/`** : récupérer les streams par le MCP Strava (identifiants dans
 `private/perso-map.csv`, à conserver hors dépôt), les ranger en `private/strava/streams/<id>.json`,
@@ -224,9 +226,36 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
 4. Les données externes sont figées par empreinte (manifest) : un fichier dont le sha256 a changé
    invalide la comparaison.
 
-**Campagne de mesure** (une par incrément) :
+### 2.1 Traces enregistrées : recalage, service, comparaison
 
-1. Vérifier les empreintes du manifest (traces privées comprises).
+Les traces perso sont des traces GPS enregistrées, pas des itinéraires planifiés : leur géométrie
+porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-30) :
+
+1. **Recalage** sur la route par Stadia Maps (`trace_attributes`, Valhalla, `costing: bicycle`,
+   `shape_match: map_snap`), sur la trace rognée de 1 km à chaque bout (`*.trim1km.gpx`, pour ne pas
+   envoyer les abords du domicile), rééchantillonnée à 25 m, par tronçons de 2 000 points
+   chevauchants (`tools/stadia_match.py`). Sorties dans `private/recales/` : géométrie recalée
+   (`<id>.gpx`, sans altitude), baro transporté (`<id>.baro.csv`), revêtement Stadia
+   (`<id>.surface.csv`, référence R3) et réponses brutes (`brut/`).
+2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
+   16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
+   aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie
+   n'est pas bornée.
+3. **Comparaison au baro sur la géométrie recalée.** Chaque point d'origine apparié par Stadia est
+   projeté sur la géométrie recalée ; son abscisse y porte l'altitude baro. Les points non appariés,
+   ou à plus de 30 m de leur point apparié, sont écartés. Pourquoi la géométrie recalée plutôt que
+   l'originale : (a) c'est celle que lit le service, donc la seule où service et MNT brut sont
+   comparables point à point ; (b) le vélo roulait sur la route, et le baromètre mesure l'altitude de
+   la route ; (c) lire le relief sur la géométrie d'origine ajouterait l'erreur latérale du GPS
+   multipliée par la pente transversale (5 m d'écart sur un dévers à 30 % ≈ 1,5 m), et sur un pont la
+   trace d'origine peut sortir du tablier. La géométrie d'origine ne sert qu'au transport du baro.
+
+Dépendance : tant que le recalage n'a pas tourné, E1, E2, E2b et R3 ne sont pas mesurables sur
+les traces perso.
+
+### 2.2 Campagne de mesure (une par incrément)
+
+1. Vérifier les empreintes du manifest (traces privées comprises) et recaler les traces perso (§2.1).
 2. Envoyer chaque parcours au service (`sampling.mode = distance`, pas 5 m, et le mode par défaut
    `input_with_breakpoints`), à froid (cache vidé) puis à chaud.
 3. Rééchantillonner service et référence sur la même grille curviligne de 5 m.
@@ -244,7 +273,8 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
 | Id | Métrique | Définition | Référence |
 |----|----------|------------|-----------|
 | **E1** | Erreur d'altitude hors ouvrage | RMSE et P95 de (service − baro), après décalage et retrait de tendance, sur les stations `ground` | traces `dplus`, `plaine` |
-| **E2** | D+ comparé au baro | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
+| **E2** | D+ comparé au baro (indicatif) | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
+| **E2b** | Ne pas dégrader vs MNT brut | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ MNT brut / D+ baro)\| ; MNT brut = RGE ALTI tous les 5 m sur la géométrie recalée, sans correction ni lissage, preset `dem` | idem |
 | **E3** | Erreur d'altitude sur tablier | Par pont : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel | `ouvrages.yaml`, vcyclist `N` |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
@@ -253,7 +283,7 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
 | **S3** | Ouvrage non tagué | MVP : altitude au milieu de `stn-acces-nord` (mesurée, signalée, pas de seuil). V1 : détecté oui/non | baro `perso-20..22` |
 | **R1** | Accord du revêtement vs Stadia | Part de longueur où `surface.class` = classe Stadia ; variante hors inconnu Stadia | osm-surface |
 | **R2** | Accord revêtu / non revêtu | Idem sur la partition binaire, mètres classables des deux côtés | osm-surface |
-| **R3** | Accord vs vérité terrain | Idem contre un relevé terrain, quand il existe (aucun pour l'instant) | à constituer |
+| **R3** | Accord vs Stadia sur les traces perso | Comme R1 et R2, référence = `edge.surface` de la réponse `trace_attributes` de Stadia Maps | traces perso recalées (§2.1) |
 | **M1** | Taux d'appariement | 1 − (longueur non appariée ÷ longueur totale) ; part `unknown` | osm-surface, toutes traces |
 | **L1** | Latence à froid | p50, p95 d'une requête de 100 km, caches disque vidés (IGN, Mapterhorn, VersaTiles) | traces de 90–130 km |
 | **L2** | Latence à chaud | p50, p95 de la même requête rejouée | idem |
@@ -268,7 +298,8 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | Id | Seuil MVP | Justification |
 |----|-----------|---------------|
 | E1 | RMSE ≤ 1,5 m en plaine, ≤ 3,0 m en relief ; P95 ≤ 4 m / 8 m | Baro vs MNT au pas de 50 m : bruit médian 0,6 m (plaine), 1,1 m (relief), p95 médian 1,6 / 3,5 m ; vcyclist Strava vs MNT 0,75–0,85 m / 2,31 m |
-| E2 | Par trace, D+ service / D+ baro dans [0,90 ; 1,20] ; médiane du groupe dans [0,95 ; 1,12] | MNT brut / baro mesuré : 0,96–1,21 (médianes 1,00 plaine, 1,07 relief) ; vcyclist +12 % ; critère vcyclist [0,8 ; 1,2] resserré car notre référence est un baromètre |
+| E2 | **Indicatif** (suivi en non-régression) : par trace dans [0,90 ; 1,20] ; médiane du groupe dans [0,95 ; 1,12] | MNT brut / baro mesuré : 0,96–1,21 (médianes 1,00 plaine, 1,07 relief) ; vcyclist +12 % ; critère vcyclist [0,8 ; 1,2] resserré car notre référence est un baromètre |
+| E2b | **Bloquant** : pour chaque groupe, médiane \|ln(D+ service / D+ baro)\| ≤ même médiane pour le MNT brut | Le service corrige les ouvrages et lisse : il ne doit pas éloigner le D+ du baromètre par rapport au MNT qu'il lit (décision de l'utilisateur, 2026-10-30) |
 | E3 | France, pont tagué : \|erreur au milieu\| ≤ 2 m et max ≤ 3 m (ponts < 300 m), ≤ 5 m (grands ponts) ; ≥ 90 % des ponts du corpus passent | vcyclist : ≤ 2 m Nantes, ≤ 5 m Saint-Nazaire, 18/21 = 86 % ; baro − MNS mesuré ≤ 1 m sur Saint-Nazaire, Pirmil, Mauves |
 | E3 hors France | Mesuré et rapporté, pas de seuil (pont interpolé, `interpolated_structure`) | 22–40 m d'erreur attendus sur grands ponts bombés (doc 01 §9) |
 | E4 | \|erreur max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel ; ≥ 6/7 des tunnels tagués | Critère Grands Goulets de vcyclist ; 6/7 hors échantillon ; Strava : +190 m d'erreur, +112 m de D+ fictif aux Grands Goulets |
@@ -278,6 +309,7 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | S3 | Pas de seuil au MVP (limite documentée, `structure: ground`) ; V1 : détecté | doc 01 §5.5 |
 | R1 | ≥ 85 % par parcours (classe), ≥ 85 % hors inconnu | osm-surface 86,0–93,5 % ; ne pas régresser sous le pire cas |
 | R2 | ≥ 97 % par parcours | osm-surface 98,1–99,3 % |
+| R3 | Comme R1 et R2 (classe ≥ 85 %, revêtu / non revêtu ≥ 97 %) par trace perso recalée, contre Stadia `trace_attributes` | Même nature de référence que R1/R2 (Stadia/Valhalla), sur 4 600 km de régions variées |
 | M1 | Non apparié ≤ 1 % de la longueur ; `unknown` ≤ 2 % | osm-surface : 0–8 points non appariés, inconnu 0–1,3 % |
 | L1 | p95 ≤ 20 s pour 100 km en France à froid ; ≤ 5 s hors France | vcyclist : 130 km IGN à froid 19 s / 264 tuiles, Mapterhorn 3 s / 16 tuiles |
 | L2 | p95 ≤ 500 ms pour 100 km à chaud | osm-surface : 55–77 ms pour la typologie ; marge pour l'élévation et l'assemblage |
@@ -325,12 +357,11 @@ passés en calibration avec la règle par groupes) : la vérification attend les
 
 ## 6. Reste à faire, et à fournir par l'utilisateur
 
-- **Accord de l'utilisateur** pour versionner tout ou partie des traces (entières ou rognées de 1 km),
-  ou pour garder les identifiants Strava hors dépôt. Par défaut : rien de personnel n'est versionné.
+- **Autoriser l'envoi des traces perso (rognées) à Stadia Maps** pour le recalage (§2.1) : bloqué
+  par le contrôle des permissions de la session, en attente de l'utilisateur.
 - Qualifier les 3 traces hors France contre Mapterhorn (pas de MNT IGN).
-- Vérité terrain du revêtement (R3) : aucune pour l'instant (relevé sur un parcours connu ?).
-- Vérifier les conditions de réutilisation de la référence Stadia et l'absence de licence
-  d'osm-surface avant toute copie de `testdata/`.
+- Conditions de Stadia Maps sur le stockage des réponses : dans le doute, hors git et régénérables.
+- Licence d'osm-surface : accord de l'utilisateur avant toute copie de `testdata/`.
 - Vérifier l'accès vélo des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`), la source réelle
   GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
 - **Étoffer la série tenue à l'écart d'ouvrages** : ponts et tunnels jamais vus par vcyclist,
@@ -365,6 +396,7 @@ représentent 90 % du cache ; il croît à peu près linéairement avec les kilo
 | `tools/strava_scan_dplus.py` | Balayage grossier de l'inventaire : D+ Strava vs D+ RGE ALTI sur polyligne réduite |
 | `tools/qualify_baro.py` | Qualification d'une altitude enregistrée contre le MNT (décalage, dérive, bruit, D+) |
 | `tools/stream_to_gpx.py` | Stream Strava → GPX, rognage optionnel des extrémités |
+| `tools/stadia_match.py` | Recalage Stadia, baro transporté, revêtement de référence, découpage ≤ 200 km (§2.1) |
 | `tools/build_perso_corpus.py` | Sélection → GPX, empreintes, séries, fragment du manifest |
 | `tools/deck_baro_vs_lidar.py` | Baro corrigé vs MNS LiDAR au milieu des ouvrages |
 | `tools/series_groups.py` | Groupes d'ouvrages, séries, passages masqués (§2) |

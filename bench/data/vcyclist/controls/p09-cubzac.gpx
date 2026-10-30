@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p09-cubzac</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p09-cubzac</name>
+  <trkseg>
+   <trkpt lat="44.9567744" lon="-0.4685561"></trkpt>
+   <trkpt lat="44.9571997" lon="-0.4686138"></trkpt>
+   <trkpt lat="44.9574648" lon="-0.4686290"></trkpt>
+   <trkpt lat="44.9577772" lon="-0.4685833"></trkpt>
+   <trkpt lat="44.9581122" lon="-0.4684562"></trkpt>
+   <trkpt lat="44.9584060" lon="-0.4682878"></trkpt>
+   <trkpt lat="44.9585897" lon="-0.4681336"></trkpt>
+   <trkpt lat="44.9588402" lon="-0.4678680"></trkpt>
+   <trkpt lat="44.9590231" lon="-0.4676095"></trkpt>
+   <trkpt lat="44.9591297" lon="-0.4674113"></trkpt>
+   <trkpt lat="44.9592188" lon="-0.4672273"></trkpt>
+   <trkpt lat="44.9603973" lon="-0.4646826"></trkpt>
+   <trkpt lat="44.9632160" lon="-0.4585961"></trkpt>
+   <trkpt lat="44.9641621" lon="-0.4565531"></trkpt>
+   <trkpt lat="44.9643244" lon="-0.4562577"></trkpt>
+   <trkpt lat="44.9644762" lon="-0.4560059"></trkpt>
+   <trkpt lat="44.9647325" lon="-0.4556797"></trkpt>
+   <trkpt lat="44.9649203" lon="-0.4554750"></trkpt>
+   <trkpt lat="44.9651081" lon="-0.4553103"></trkpt>
+   <trkpt lat="44.9653635" lon="-0.4551627"></trkpt>
+   <trkpt lat="44.9656448" lon="-0.4550463"></trkpt>
+   <trkpt lat="44.9659859" lon="-0.4549470"></trkpt>
+   <trkpt lat="44.9662970" lon="-0.4549016"></trkpt>
+   <trkpt lat="44.9665482" lon="-0.4548896"></trkpt>
+   <trkpt lat="44.9666901" lon="-0.4548970"></trkpt>
+   <trkpt lat="44.9668716" lon="-0.4549053"></trkpt>
+   <trkpt lat="44.9670990" lon="-0.4549323"></trkpt>
+   <trkpt lat="44.9676013" lon="-0.4549621"></trkpt>
+   <trkpt lat="44.9678830" lon="-0.4549521"></trkpt>
+   <trkpt lat="44.9681718" lon="-0.4549270"></trkpt>
+   <trkpt lat="44.9684658" lon="-0.4548772"></trkpt>
+   <trkpt lat="44.9687483" lon="-0.4548042"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

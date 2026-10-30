@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p06-normandie</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p06-normandie</name>
+  <trkseg>
+   <trkpt lat="49.4535213" lon="0.2714885"></trkpt>
+   <trkpt lat="49.4530141" lon="0.2714221"></trkpt>
+   <trkpt lat="49.4520581" lon="0.2713024"></trkpt>
+   <trkpt lat="49.4504156" lon="0.2713548"></trkpt>
+   <trkpt lat="49.4502360" lon="0.2713569"></trkpt>
+   <trkpt lat="49.4501856" lon="0.2713599"></trkpt>
+   <trkpt lat="49.4500855" lon="0.2713743"></trkpt>
+   <trkpt lat="49.4500057" lon="0.2713859"></trkpt>
+   <trkpt lat="49.4499252" lon="0.2713988"></trkpt>
+   <trkpt lat="49.4497444" lon="0.2714313"></trkpt>
+   <trkpt lat="49.4490830" lon="0.2715501"></trkpt>
+   <trkpt lat="49.4476665" lon="0.2718108"></trkpt>
+   <trkpt lat="49.4472315" lon="0.2718908"></trkpt>
+   <trkpt lat="49.4431499" lon="0.2724623"></trkpt>
+   <trkpt lat="49.4427219" lon="0.2725222"></trkpt>
+   <trkpt lat="49.4387082" lon="0.2730737"></trkpt>
+   <trkpt lat="49.4361067" lon="0.2734311"></trkpt>
+   <trkpt lat="49.4341197" lon="0.2737097"></trkpt>
+   <trkpt lat="49.4297738" lon="0.2743032"></trkpt>
+   <trkpt lat="49.4284068" lon="0.2744914"></trkpt>
+   <trkpt lat="49.4251597" lon="0.2749496"></trkpt>
+   <trkpt lat="49.4234622" lon="0.2751888"></trkpt>
+   <trkpt lat="49.4227777" lon="0.2752611"></trkpt>
+   <trkpt lat="49.4224359" lon="0.2753088"></trkpt>
+   <trkpt lat="49.4218211" lon="0.2753874"></trkpt>
+   <trkpt lat="49.4214069" lon="0.2754404"></trkpt>
+   <trkpt lat="49.4210776" lon="0.2754635"></trkpt>
+   <trkpt lat="49.4208333" lon="0.2754661"></trkpt>
+   <trkpt lat="49.4206322" lon="0.2754580"></trkpt>
+   <trkpt lat="49.4203231" lon="0.2754447"></trkpt>
+   <trkpt lat="49.4200613" lon="0.2754112"></trkpt>
+   <trkpt lat="49.4198245" lon="0.2753739"></trkpt>
+   <trkpt lat="49.4196684" lon="0.2753450"></trkpt>
+   <trkpt lat="49.4194720" lon="0.2753036"></trkpt>
+   <trkpt lat="49.4193549" lon="0.2752767"></trkpt>
+   <trkpt lat="49.4191181" lon="0.2752105"></trkpt>
+   <trkpt lat="49.4189392" lon="0.2751485"></trkpt>
+   <trkpt lat="49.4187683" lon="0.2750885"></trkpt>
+   <trkpt lat="49.4185449" lon="0.2750037"></trkpt>
+   <trkpt lat="49.4183256" lon="0.2749127"></trkpt>
+   <trkpt lat="49.4180968" lon="0.2748030"></trkpt>
+   <trkpt lat="49.4178667" lon="0.2746851"></trkpt>
+   <trkpt lat="49.4175397" lon="0.2744990"></trkpt>
+   <trkpt lat="49.4172141" lon="0.2742901"></trkpt>
+   <trkpt lat="49.4168965" lon="0.2740625"></trkpt>
+   <trkpt lat="49.4166799" lon="0.2738909"></trkpt>
+   <trkpt lat="49.4164754" lon="0.2737171"></trkpt>
+   <trkpt lat="49.4164088" lon="0.2736613"></trkpt>
+   <trkpt lat="49.4163341" lon="0.2735971"></trkpt>
+   <trkpt lat="49.4159722" lon="0.2732591"></trkpt>
+   <trkpt lat="49.4156259" lon="0.2728989"></trkpt>
+   <trkpt lat="49.4153219" lon="0.2725557"></trkpt>
+   <trkpt lat="49.4144283" lon="0.2715596"></trkpt>
+   <trkpt lat="49.4139556" lon="0.2710348"></trkpt>
+   <trkpt lat="49.4137725" lon="0.2708340"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

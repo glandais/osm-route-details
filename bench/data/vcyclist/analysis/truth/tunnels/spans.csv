@@ -1,0 +1,47 @@
+id,kind,i0,i1,s0,s1,way,structure,name
+tt01-galibier,N,85,157,425,785,27415944,tunnel,Tunnel du Galibier
+tt02-croix-rousse,N,62,415,310,2075,250224690,tunnel,Tunnel bus-piétons-vélos de la Croix-Rousse; way 1453890251
+tt03-lioran,L,0,4,0,20,0,,N 122
+tt03-lioran,N,92,391,460,1955,4902725,tunnel,Tunnel du Lioran
+tt03-lioran,X,435,442,2175,2210,88691186,underpass,under Ligne de Figeac à Arvant
+tt04-tuileries,X,1,2,5,10,232304463,underpass,under way 232304463
+tt04-tuileries,N,65,235,325,1175,4294224,tunnel,Tunnel des Tuileries
+tt04-tuileries,O,265,276,1325,1380,0,,way 1163484885; Pont Neuf; way 1163484884
+tt05-rousset,N,61,200,305,1000,56415172,tunnel,Route du Col de Rousset
+tt06-nesque,N,47,56,235,280,135975453,tunnel,Route de la Nesque
+tt06-nesque,N,108,128,540,640,127459865,tunnel,Route de la Nesque
+tt07-petit-frou,N,110,154,550,770,59663343,tunnel,Tunnel du Petit Frou
+tt08-arly-cliets,X,62,65,310,325,236377208,gallery,Route des Gorges
+tt08-arly-cliets,X,81,106,405,530,236377214,gallery,Route des Gorges; Gorges de l'Arly
+tt08-arly-cliets,N,110,157,550,785,922716048,tunnel,Route des Gorges
+tt08-arly-cliets,X,159,165,795,825,922716049,bridge,Route des Gorges
+tn02-montvernier,X,82,84,410,420,165305346,bridge,Pont de la Gare
+tn06-lyon-boucle,O,36,41,180,205,0,,Rue de la Fontaine
+tn06-lyon-boucle,L,55,60,275,300,0,,way 535357503
+tn07-lyon-st-sebastien,X,0,7,0,35,850918867,underpass,under Ligne C
+tn07-lyon-st-sebastien,L,31,37,155,185,0,,way 858424666
+tn07-lyon-st-sebastien,X,89,103,445,515,22768010,tunnel,Quai André Lassagne
+tn08-bourne,X,188,194,940,970,1391035951,tunnel,Route de Villard-de-Lans
+tn08-bourne,X,306,333,1530,1665,261949130,tunnel,Tunnel d'Arbois
+tn08-bourne,X,433,440,2165,2200,1391029801,gallery,Route de Villard-de-Lans
+tn08-bourne,X,520,525,2600,2625,1391029807,tunnel,Route de Villard-de-Lans
+tn08-bourne,X,535,536,2675,2680,1391029805,gallery,Route de Villard-de-Lans
+tn09-verdon-cretes,X,152,152,760,760,713434857,bridge,Route des Crêtes
+tn10-roselend,X,150,278,750,1390,531946485,bridge,Route du Barrage
+tn11-serre-poncon,X,144,147,720,735,111769036,bridge,Route du Barrage
+tn12-arly-galleries,X,93,98,465,490,32572241,bridge,Route des Gorges
+tn12-arly-galleries,X,107,139,535,695,236377202,gallery,Route des Gorges
+th01-cians,N,107,194,535,970,173944928,tunnel,Tunnel des Traverses
+th02-pierre-lys,N,101,119,505,595,40885827,tunnel,Défilé de la Pierre Lys
+th03-tunnel-09,N,87,129,435,645,25024680,tunnel,D 3
+th08-voie-verte-24,N,109,202,545,1010,668765888,tunnel,way 668765888; Voie Verte - Véloroute (en Tunnel Eclairé)
+hn01-aubisque,X,103,107,515,535,252940709,bridge,D 918
+hn01-aubisque,X,309,311,1545,1555,156026284,bridge,Pont du Goua
+hn02-aveyron,X,56,57,280,285,1367329285,underpass,under way 1367329285
+hn03-boulogne,X,86,88,430,440,291944839,underpass,under Ligne de Boulogne-Ville à Calais-Maritime
+hn03-boulogne,X,107,108,535,540,65620908,tunnel,Porte des Dunes
+hn06-bavella,X,110,110,550,550,1293763781,bridge,Strada di Bavedda
+th09-tunnel-07,N,105,178,525,890,239917000,tunnel,Rue des Défilés
+th09-tunnel-07,X,227,234,1135,1170,807153570,bridge,Rue des Défilés
+th09-tunnel-2b,N,103,178,515,890,26842205,tunnel,D 344
+th09-tunnel-81,N,108,295,540,1475,81148851,tunnel,Tunnel de Pech Mergou

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p08-periph-overpass</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p08-periph-overpass</name>
+  <trkseg>
+   <trkpt lat="47.2510935" lon="-1.5172041"></trkpt>
+   <trkpt lat="47.2511748" lon="-1.5170918"></trkpt>
+   <trkpt lat="47.2513424" lon="-1.5170273"></trkpt>
+   <trkpt lat="47.2515128" lon="-1.5169538"></trkpt>
+   <trkpt lat="47.2516830" lon="-1.5168476"></trkpt>
+   <trkpt lat="47.2518153" lon="-1.5167155"></trkpt>
+   <trkpt lat="47.2518795" lon="-1.5166225"></trkpt>
+   <trkpt lat="47.2519030" lon="-1.5165884"></trkpt>
+   <trkpt lat="47.2519313" lon="-1.5165474"></trkpt>
+   <trkpt lat="47.2520657" lon="-1.5167881"></trkpt>
+   <trkpt lat="47.2520802" lon="-1.5168067"></trkpt>
+   <trkpt lat="47.2521025" lon="-1.5168389"></trkpt>
+   <trkpt lat="47.2521756" lon="-1.5169443"></trkpt>
+   <trkpt lat="47.2522842" lon="-1.5170949"></trkpt>
+   <trkpt lat="47.2523602" lon="-1.5171722"></trkpt>
+   <trkpt lat="47.2523829" lon="-1.5171952"></trkpt>
+   <trkpt lat="47.2524191" lon="-1.5172133"></trkpt>
+   <trkpt lat="47.2524592" lon="-1.5172322"></trkpt>
+   <trkpt lat="47.2527218" lon="-1.5173500"></trkpt>
+   <trkpt lat="47.2529570" lon="-1.5174257"></trkpt>
+   <trkpt lat="47.2534306" lon="-1.5175888"></trkpt>
+   <trkpt lat="47.2540044" lon="-1.5177828"></trkpt>
+   <trkpt lat="47.2540958" lon="-1.5178139"></trkpt>
+   <trkpt lat="47.2540947" lon="-1.5177957"></trkpt>
+   <trkpt lat="47.2540963" lon="-1.5177780"></trkpt>
+   <trkpt lat="47.2541003" lon="-1.5177612"></trkpt>
+   <trkpt lat="47.2541066" lon="-1.5177460"></trkpt>
+   <trkpt lat="47.2541149" lon="-1.5177331"></trkpt>
+   <trkpt lat="47.2541248" lon="-1.5177230"></trkpt>
+   <trkpt lat="47.2541360" lon="-1.5177161"></trkpt>
+   <trkpt lat="47.2541479" lon="-1.5177128"></trkpt>
+   <trkpt lat="47.2541600" lon="-1.5177133"></trkpt>
+   <trkpt lat="47.2541717" lon="-1.5177174"></trkpt>
+   <trkpt lat="47.2541826" lon="-1.5177251"></trkpt>
+   <trkpt lat="47.2541922" lon="-1.5177359"></trkpt>
+   <trkpt lat="47.2542001" lon="-1.5177494"></trkpt>
+   <trkpt lat="47.2542386" lon="-1.5176730"></trkpt>
+   <trkpt lat="47.2544625" lon="-1.5174802"></trkpt>
+   <trkpt lat="47.2547054" lon="-1.5172845"></trkpt>
+   <trkpt lat="47.2547454" lon="-1.5173065"></trkpt>
+   <trkpt lat="47.2550707" lon="-1.5170536"></trkpt>
+   <trkpt lat="47.2551365" lon="-1.5169991"></trkpt>
+   <trkpt lat="47.2553675" lon="-1.5168120"></trkpt>
+   <trkpt lat="47.2557613" lon="-1.5164836"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

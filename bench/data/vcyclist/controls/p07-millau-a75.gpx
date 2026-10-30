@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p07-millau-a75</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p07-millau-a75</name>
+  <trkseg>
+   <trkpt lat="44.1000192" lon="3.0220874"></trkpt>
+   <trkpt lat="44.0994908" lon="3.0217813"></trkpt>
+   <trkpt lat="44.0990023" lon="3.0215288"></trkpt>
+   <trkpt lat="44.0987140" lon="3.0214088"></trkpt>
+   <trkpt lat="44.0984349" lon="3.0213021"></trkpt>
+   <trkpt lat="44.0978654" lon="3.0211169"></trkpt>
+   <trkpt lat="44.0975454" lon="3.0210376"></trkpt>
+   <trkpt lat="44.0973173" lon="3.0209857"></trkpt>
+   <trkpt lat="44.0968896" lon="3.0209130"></trkpt>
+   <trkpt lat="44.0964890" lon="3.0208674"></trkpt>
+   <trkpt lat="44.0958648" lon="3.0208406"></trkpt>
+   <trkpt lat="44.0952561" lon="3.0208506"></trkpt>
+   <trkpt lat="44.0946620" lon="3.0208738"></trkpt>
+   <trkpt lat="44.0928533" lon="3.0209539"></trkpt>
+   <trkpt lat="44.0923974" lon="3.0209841"></trkpt>
+   <trkpt lat="44.0917474" lon="3.0210207"></trkpt>
+   <trkpt lat="44.0910166" lon="3.0210656"></trkpt>
+   <trkpt lat="44.0891350" lon="3.0212058"></trkpt>
+   <trkpt lat="44.0874148" lon="3.0213743"></trkpt>
+   <trkpt lat="44.0860847" lon="3.0215141"></trkpt>
+   <trkpt lat="44.0830509" lon="3.0218832"></trkpt>
+   <trkpt lat="44.0799528" lon="3.0223435"></trkpt>
+   <trkpt lat="44.0769031" lon="3.0228219"></trkpt>
+   <trkpt lat="44.0738415" lon="3.0234160"></trkpt>
+   <trkpt lat="44.0731360" lon="3.0235670"></trkpt>
+   <trkpt lat="44.0708265" lon="3.0240687"></trkpt>
+   <trkpt lat="44.0689639" lon="3.0245167"></trkpt>
+   <trkpt lat="44.0684667" lon="3.0246426"></trkpt>
+   <trkpt lat="44.0676789" lon="3.0248464"></trkpt>
+   <trkpt lat="44.0666908" lon="3.0251138"></trkpt>
+   <trkpt lat="44.0661190" lon="3.0252566"></trkpt>
+   <trkpt lat="44.0653918" lon="3.0254910"></trkpt>
+   <trkpt lat="44.0647294" lon="3.0257574"></trkpt>
+   <trkpt lat="44.0641718" lon="3.0260249"></trkpt>
+   <trkpt lat="44.0635099" lon="3.0263975"></trkpt>
+   <trkpt lat="44.0628499" lon="3.0268466"></trkpt>
+   <trkpt lat="44.0622311" lon="3.0273320"></trkpt>
+   <trkpt lat="44.0617085" lon="3.0277943"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

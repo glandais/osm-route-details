@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tn11-serre-poncon</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tn11-serre-poncon</name>
+  <trkseg>
+   <trkpt lat="44.4763522" lon="6.2724882"></trkpt>
+   <trkpt lat="44.4763937" lon="6.2725145"></trkpt>
+   <trkpt lat="44.4764607" lon="6.2725528"></trkpt>
+   <trkpt lat="44.4765612" lon="6.2725920"></trkpt>
+   <trkpt lat="44.4766213" lon="6.2726079"></trkpt>
+   <trkpt lat="44.4766771" lon="6.2726179"></trkpt>
+   <trkpt lat="44.4767321" lon="6.2726230"></trkpt>
+   <trkpt lat="44.4767830" lon="6.2726237"></trkpt>
+   <trkpt lat="44.4768455" lon="6.2726180"></trkpt>
+   <trkpt lat="44.4769080" lon="6.2726078"></trkpt>
+   <trkpt lat="44.4770451" lon="6.2725705"></trkpt>
+   <trkpt lat="44.4773649" lon="6.2724713"></trkpt>
+   <trkpt lat="44.4777740" lon="6.2723393"></trkpt>
+   <trkpt lat="44.4780094" lon="6.2722693"></trkpt>
+   <trkpt lat="44.4782854" lon="6.2721856"></trkpt>
+   <trkpt lat="44.4794681" lon="6.2718257"></trkpt>
+   <trkpt lat="44.4799660" lon="6.2716822"></trkpt>
+   <trkpt lat="44.4801486" lon="6.2716191"></trkpt>
+   <trkpt lat="44.4802931" lon="6.2715316"></trkpt>
+   <trkpt lat="44.4804083" lon="6.2714195"></trkpt>
+   <trkpt lat="44.4804900" lon="6.2712757"></trkpt>
+   <trkpt lat="44.4805470" lon="6.2711146"></trkpt>
+   <trkpt lat="44.4805748" lon="6.2709577"></trkpt>
+   <trkpt lat="44.4805844" lon="6.2707660"></trkpt>
+   <trkpt lat="44.4805729" lon="6.2703891"></trkpt>
+   <trkpt lat="44.4805748" lon="6.2701584"></trkpt>
+   <trkpt lat="44.4806217" lon="6.2699331"></trkpt>
+   <trkpt lat="44.4806934" lon="6.2697668"></trkpt>
+   <trkpt lat="44.4807844" lon="6.2696327"></trkpt>
+   <trkpt lat="44.4808925" lon="6.2695187"></trkpt>
+   <trkpt lat="44.4810178" lon="6.2694436"></trkpt>
+   <trkpt lat="44.4811154" lon="6.2694168"></trkpt>
+   <trkpt lat="44.4812513" lon="6.2694208"></trkpt>
+   <trkpt lat="44.4814171" lon="6.2694504"></trkpt>
+   <trkpt lat="44.4816273" lon="6.2694915"></trkpt>
+   <trkpt lat="44.4818160" lon="6.2695382"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

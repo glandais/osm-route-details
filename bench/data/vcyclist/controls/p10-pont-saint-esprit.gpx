@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p10-pont-saint-esprit</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p10-pont-saint-esprit</name>
+  <trkseg>
+   <trkpt lat="44.2618352" lon="4.6649220"></trkpt>
+   <trkpt lat="44.2615931" lon="4.6639454"></trkpt>
+   <trkpt lat="44.2614961" lon="4.6636912"></trkpt>
+   <trkpt lat="44.2613680" lon="4.6634275"></trkpt>
+   <trkpt lat="44.2612731" lon="4.6631917"></trkpt>
+   <trkpt lat="44.2612547" lon="4.6631174"></trkpt>
+   <trkpt lat="44.2612761" lon="4.6629959"></trkpt>
+   <trkpt lat="44.2612746" lon="4.6628941"></trkpt>
+   <trkpt lat="44.2612506" lon="4.6627861"></trkpt>
+   <trkpt lat="44.2612438" lon="4.6627571"></trkpt>
+   <trkpt lat="44.2611968" lon="4.6626620"></trkpt>
+   <trkpt lat="44.2611628" lon="4.6624904"></trkpt>
+   <trkpt lat="44.2611371" lon="4.6622675"></trkpt>
+   <trkpt lat="44.2611019" lon="4.6619627"></trkpt>
+   <trkpt lat="44.2610527" lon="4.6617778"></trkpt>
+   <trkpt lat="44.2609424" lon="4.6612547"></trkpt>
+   <trkpt lat="44.2608831" lon="4.6609820"></trkpt>
+   <trkpt lat="44.2608547" lon="4.6608635"></trkpt>
+   <trkpt lat="44.2608230" lon="4.6607361"></trkpt>
+   <trkpt lat="44.2606718" lon="4.6600769"></trkpt>
+   <trkpt lat="44.2606369" lon="4.6599156"></trkpt>
+   <trkpt lat="44.2606179" lon="4.6597359"></trkpt>
+   <trkpt lat="44.2605072" lon="4.6574806"></trkpt>
+   <trkpt lat="44.2603934" lon="4.6563389"></trkpt>
+   <trkpt lat="44.2600985" lon="4.6552908"></trkpt>
+   <trkpt lat="44.2598818" lon="4.6544866"></trkpt>
+   <trkpt lat="44.2596589" lon="4.6536756"></trkpt>
+   <trkpt lat="44.2590991" lon="4.6515757"></trkpt>
+   <trkpt lat="44.2590981" lon="4.6515734"></trkpt>
+   <trkpt lat="44.2588386" lon="4.6506426"></trkpt>
+   <trkpt lat="44.2587546" lon="4.6503434"></trkpt>
+   <trkpt lat="44.2587359" lon="4.6502633"></trkpt>
+   <trkpt lat="44.2586368" lon="4.6498715"></trkpt>
+   <trkpt lat="44.2585864" lon="4.6496710"></trkpt>
+   <trkpt lat="44.2585570" lon="4.6495603"></trkpt>
+   <trkpt lat="44.2585516" lon="4.6495378"></trkpt>
+   <trkpt lat="44.2585446" lon="4.6493119"></trkpt>
+   <trkpt lat="44.2585437" lon="4.6490007"></trkpt>
+   <trkpt lat="44.2585626" lon="4.6487420"></trkpt>
+   <trkpt lat="44.2585684" lon="4.6486832"></trkpt>
+   <trkpt lat="44.2585766" lon="4.6486249"></trkpt>
+   <trkpt lat="44.2585976" lon="4.6485123"></trkpt>
+   <trkpt lat="44.2586117" lon="4.6484536"></trkpt>
+   <trkpt lat="44.2586346" lon="4.6483989"></trkpt>
+   <trkpt lat="44.2586621" lon="4.6483330"></trkpt>
+   <trkpt lat="44.2587082" lon="4.6482736"></trkpt>
+   <trkpt lat="44.2587429" lon="4.6481912"></trkpt>
+   <trkpt lat="44.2587549" lon="4.6481362"></trkpt>
+   <trkpt lat="44.2587559" lon="4.6481100"></trkpt>
+   <trkpt lat="44.2587567" lon="4.6480593"></trkpt>
+   <trkpt lat="44.2587382" lon="4.6479631"></trkpt>
+   <trkpt lat="44.2587181" lon="4.6479154"></trkpt>
+   <trkpt lat="44.2586818" lon="4.6478560"></trkpt>
+   <trkpt lat="44.2586412" lon="4.6478096"></trkpt>
+   <trkpt lat="44.2586349" lon="4.6477620"></trkpt>
+   <trkpt lat="44.2586369" lon="4.6476842"></trkpt>
+   <trkpt lat="44.2586516" lon="4.6476185"></trkpt>
+   <trkpt lat="44.2586645" lon="4.6475833"></trkpt>
+   <trkpt lat="44.2587495" lon="4.6474417"></trkpt>
+   <trkpt lat="44.2589504" lon="4.6471897"></trkpt>
+   <trkpt lat="44.2589822" lon="4.6471531"></trkpt>
+   <trkpt lat="44.2589952" lon="4.6471323"></trkpt>
+   <trkpt lat="44.2590023" lon="4.6471087"></trkpt>
+   <trkpt lat="44.2590084" lon="4.6470490"></trkpt>
+   <trkpt lat="44.2590068" lon="4.6469967"></trkpt>
+   <trkpt lat="44.2590000" lon="4.6469496"></trkpt>
+   <trkpt lat="44.2589888" lon="4.6469010"></trkpt>
+   <trkpt lat="44.2589863" lon="4.6467531"></trkpt>
+   <trkpt lat="44.2589858" lon="4.6467023"></trkpt>
+   <trkpt lat="44.2589760" lon="4.6458516"></trkpt>
+   <trkpt lat="44.2589655" lon="4.6452147"></trkpt>
+   <trkpt lat="44.2589558" lon="4.6449449"></trkpt>
+   <trkpt lat="44.2589416" lon="4.6447431"></trkpt>
+   <trkpt lat="44.2588694" lon="4.6443053"></trkpt>
+   <trkpt lat="44.2588117" lon="4.6439552"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

@@ -7,15 +7,18 @@ version: 1
 date: "2026-10-30"
 
 depots_externes:
-  vcyclist: {chemin: "/Volumes/Data/code/perso/vcyclist", commit: 4dfd6c5, version: "6.11.0-1", licence_code: "Apache-2.0"}
-  osm-surface: {chemin: "/Volumes/Data/code/perso/osm-surface", commit: 44e5da6, licence_code: "aucune déclarée (auteur = utilisateur ; demander avant copie)"}
+  vcyclist: {depot: "git@github.com:glandais/vcyclist.git", commit: 4dfd6c5, version: "6.11.0-1", licence_code: "Apache-2.0",
+             copie: data/vcyclist/, sommes: data/vcyclist/SHA256SUMS, sha256_sommes: b572a94f489c083d89be36e627e43cfb54eca0cc64fee20401d50b63c40f91ac}
+  osm-surface: {depot: "osm-surface (dépôt local de l'utilisateur, sans remote)", commit: 44e5da6,
+                licence_code: "aucune déclarée : non copié, en attente de l'accord de l'utilisateur"}
 
 # ---------------------------------------------------------------------------------------------
-# 1. Bancs de vcyclist (référencés, non copiés)
+# 1. Bancs de vcyclist (copiés dans data/vcyclist/, Apache-2.0, provenance dans PROVENANCE.md)
 # ---------------------------------------------------------------------------------------------
 vcyclist:
   - id: vc-test1
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test1.gpx"
+    fichier: "data/vcyclist/test1.gpx"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/test1.gpx"}
     sha256: 5a69e3afadfd16de33cfbea1be61ed58ccc9ac8c09606606f7d08cf595ceb108
     teste: "Saint-Nazaire 10 km : pont de Saint-Nazaire, écluses"
     reference: "analysis/truth/test1.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
@@ -23,7 +26,8 @@ vcyclist:
     provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
     serie: calibration
   - id: vc-test2
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test2.gpx"
+    fichier: "data/vcyclist/test2.gpx"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/test2.gpx"}
     sha256: a5488a73d7f63e0e503cab0322738f536616f6f1127bdf38d2982e91b7f57585
     teste: "Nantes 25 km : 16 ponts de Loire, D+ de plaine (37 m vrais)"
     reference: "analysis/truth/test2.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
@@ -31,7 +35,8 @@ vcyclist:
     provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
     serie: calibration
   - id: vc-test3
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test3.gpx"
+    fichier: "data/vcyclist/test3.gpx"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/test3.gpx"}
     sha256: 17922899583af54c70423abee82deeb0f1ca5179cfd02678db61e723ff054bba
     teste: "Mauves 10 km : ponts contigus, D+ de plaine"
     reference: "analysis/truth/test3.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
@@ -39,7 +44,8 @@ vcyclist:
     provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
     serie: calibration
   - id: vc-test4
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/test4.gpx"
+    fichier: "data/vcyclist/test4.gpx"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/test4.gpx"}
     sha256: 0ed92d597ab818c822dca2e5f617c0814d28efb03b5e4600b486132b2a527e8b
     teste: "Vercors 111 km : 4 tunnels (Grands Goulets), balcons, pont d'Échevis, D+ montagne"
     reference: "analysis/truth/test4.csv (pas 5 m, colonnes s,lat,lon,truth,mnt,kind ; T=MNT, B=médiane MNS 25 m, N=droite portails, S=Strava−offset) ; altitude <ele> = fond Strava"
@@ -47,7 +53,8 @@ vcyclist:
     provenance: "Itinéraires planifiés dans Strava par l'auteur de vcyclist, exportés en GPX"
     serie: calibration
   - id: vc-structures
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/analysis/truth/structures.csv"
+    fichier: "data/vcyclist/analysis/truth/structures.csv"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/analysis/truth/structures.csv"}
     sha256: 8f66abb27ea02f26cf62f27f1bf4cdcb7c94a336497774b605964a1e0629d285
     teste: "Inventaire des 21 ponts, 4 tunnels, 6 balcons et 15 ponts OSM non détectés des parcours test1..4"
     reference: "Sortie du détecteur Python de vcyclist sur MNS/MNT IGN : les 15 ponts « missed » gardent une vérité au MNT (fausse)"
@@ -55,7 +62,8 @@ vcyclist:
     provenance: "vcyclist analysis/export_truth.py"
     serie: calibration
   - id: vc-temoins-ponts
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/controls/ + analysis/truth/controls/"
+    fichier: "data/vcyclist/controls/ + analysis/truth/controls/"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/controls/ + analysis/truth/controls/"}
     sha256: index 626a5e951c58cba0dec87a3d78ce37a7dfd8bd49343d1001cd1b334a743f449f ; spans a96f04324d4bcdaff7f6d618b4617844fc0844398bdf0dcc6297d5c14185e6f0
     teste: "Témoins ponts p01..p17 et négatifs n01..n16 (détection, faux positifs)"
     reference: "Spans OSM (kind G/O/L/X/x/D), sans altitude : vérité recalculée à l'exécution"
@@ -63,7 +71,8 @@ vcyclist:
     provenance: "vcyclist analysis/controls.py ; p09..p17 déjà jugés (4/11) : plus hors échantillon pour nous"
     serie: calibration
   - id: vc-temoins-tunnels
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/controls/tunnels/ + analysis/truth/tunnels/"
+    fichier: "data/vcyclist/controls/tunnels/ + analysis/truth/tunnels/"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/controls/tunnels/ + analysis/truth/tunnels/"}
     sha256: index 4f243240162db9202c5e8b4967dce56f432cf41d607c03aceb1fd5e43b2806d7 ; spans 6c86e17020c9b4685097ebb97e35d92bed2d654e6218bdae98b5d305af764290
     teste: "Témoins tunnels th01..th09, tt01..tt08, négatifs hn01..hn06 (détection, faux tunnels)"
     reference: "Droite entre MNT des stations hors tunnel, calculée à l'exécution"
@@ -71,7 +80,8 @@ vcyclist:
     provenance: "vcyclist analysis/controls.py ; th*/hn* déjà jugés (6/7) : plus hors échantillon pour nous"
     serie: calibration
   - id: vc-results
-    fichier: "/Volumes/Data/code/perso/vcyclist/docs/deck-strava-data/analysis/results.json"
+    fichier: "data/vcyclist/analysis/results.json"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "docs/deck-strava-data/analysis/results.json"}
     sha256: bfd676d173d778e46ad8de429ed2ca9855bd1aa07cf69e26dd09be032f651287
     teste: "Chiffres de référence (RMSE, D+, tabliers) : ligne de base à égaler"
     reference: "—"
@@ -80,11 +90,12 @@ vcyclist:
     serie: calibration
 
 # ---------------------------------------------------------------------------------------------
-# 2. Éval d'osm-surface (référencée, non copiée)
+# 2. Éval d'osm-surface (non copiée : pas de licence déclarée ; `fichier` = chemin dans le dépôt d'origine)
 # ---------------------------------------------------------------------------------------------
 osm_surface:
   - id: os-graymond
-    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/graymond-ride-138.gpx"
+    fichier: null   # non copié
+    provenance_depot: {depot: osm-surface, commit: 44e5da6, chemin: "testdata/graymond-ride-138.gpx"}
     sha256: 9aee94b8da1f601bdddf43b0ef65f3190aeed247996a8e439968e01bae415ffc
     teste: "Revêtement et appariement, 90.2 km autour de Nantes (route + gravel)"
     reference: "graymond-ride-138.route.json (sha256 e421e8bbb1cea3e5fd9f5c6da1f1f267703e6d0509130783cd951e260107cf82) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"
@@ -92,7 +103,8 @@ osm_surface:
     provenance: "Parcours de groupe (N-Peloton) exportés de tribly/Pédalons"
     serie: calibration
   - id: os-np655
-    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/np-655-gravel.gpx"
+    fichier: null   # non copié
+    provenance_depot: {depot: osm-surface, commit: 44e5da6, chemin: "testdata/np-655-gravel.gpx"}
     sha256: 184833d75e548ce7c4e5260c615f6b5c0572614921dadab7bf2c7162f98b2f0e
     teste: "Revêtement et appariement, 52.2 km autour de Nantes (route + gravel)"
     reference: "np-655-gravel.route.json (sha256 3b54c229f809cdeeef96f3e5a9f2ef516f64644d1a46ae1a96861b88a1b3b12b) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"
@@ -100,7 +112,8 @@ osm_surface:
     provenance: "Parcours de groupe (N-Peloton) exportés de tribly/Pédalons"
     serie: calibration
   - id: os-np677
-    fichier: "/Volumes/Data/code/perso/osm-surface/testdata/np677-chill-gravel.gpx"
+    fichier: null   # non copié
+    provenance_depot: {depot: osm-surface, commit: 44e5da6, chemin: "testdata/np677-chill-gravel.gpx"}
     sha256: be68a330b9142457299e00632e217ea4fb1921f1519f22445743537a3213754e
     teste: "Revêtement et appariement, 42.8 km autour de Nantes (route + gravel)"
     reference: "np677-chill-gravel.route.json (sha256 07b8ddf3ae3418652f607cb7cb9f4f084f82b5f9fda6f13996dcb500538b0dff) : tracks[0].surfaces = classes Stadia/Valhalla calculées par tribly"

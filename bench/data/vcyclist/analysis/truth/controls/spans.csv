@@ -1,0 +1,78 @@
+id,kind,i0,i1,s0,s1,way,structure,name
+n01-paris-metro6,L,0,230,0,1150,0,,Métro 6; way 134765492; way 134765488
+n01-paris-metro6,L,238,383,1190,1915,0,,Métro 6
+n01-paris-metro6,O,384,390,1920,1950,0,,Métro 6
+n02-nantes-chevire-under,O,155,165,775,825,0,,Périphérique Intérieur - Pont de Cheviré; Périphérique Extérieur - Pont de Cheviré
+n03-millau-d992,X,11,12,55,60,157512472,underpass,under Route du Larzac
+n03-millau-d992,O,282,293,1410,1465,0,,Viaduc de Millau
+n04-nantes-periph-nord,O,1,12,5,60,0,,Route de Paris
+n04-nantes-periph-nord,O,36,41,180,205,0,,Boulevard Professeur René Auvigné
+n04-nantes-periph-nord,O,115,123,575,615,0,,Ligne 1; Avenue de la Gare de Saint-Joseph
+n04-nantes-periph-nord,O,224,237,1120,1185,0,,way 501448748; Route de Saint-Joseph
+n04-nantes-periph-nord,X,348,389,1740,1945,5939040,bridge,Périphérique Extérieur - Pont de la Beaujoire
+n04-nantes-periph-nord,L,416,421,2080,2105,0,,Ligne de Nantes-Orléans à Châteaubriant
+n04-nantes-periph-nord,O,422,437,2110,2185,0,,Ligne de Nantes-Orléans à Châteaubriant; Ligne 1; way 1384660895
+n04-nantes-periph-nord,X,634,635,3170,3175,83337598,underpass,under Le Gesvres
+n04-nantes-periph-nord,O,652,659,3260,3295,0,,Rond-Point de la Rivière
+n04-nantes-periph-nord,O,671,678,3355,3390,0,,Rond-Point de la Rivière; way 1070635321
+n04-nantes-periph-nord,X,762,763,3810,3815,419403514,underpass,under way 419403514
+n05-canal-midi-platanes,O,661,667,3305,3335,0,,Route de Labège
+n08-nantes-centre,X,204,227,1020,1135,121552274,bridge,Pont de la Rotonde
+n08-nantes-centre,X,436,448,2180,2240,112564826,tunnel,Quai André Morice
+n08-nantes-centre,O,515,520,2575,2600,0,,Quai André Morice
+n08-nantes-centre,O,525,534,2625,2670,0,,way 1512297096; Pont Haudaudine; way 1497733462
+n09-peage-lancon,O,140,149,700,745,0,,toll booth; Autoroute du Soleil
+n09-peage-lancon,O,441,446,2205,2230,0,,way 1409740514; Autoroute du Soleil
+n11-morlaix-viaduc,O,141,147,705,735,0,,Viaduc de Morlaix
+n11-morlaix-viaduc,X,195,196,975,980,38565698,underpass,under Le Queffleuth
+n11-morlaix-viaduc,X,212,213,1060,1065,38550142,underpass,under Le Jarlot
+n11-morlaix-viaduc,X,252,254,1260,1270,46410650,underpass,under Le Jarlot
+n12-toulouse-brienne,X,175,182,875,910,113628082,tunnel,Allée de Brienne
+n14-strasbourg-under-a35,O,73,88,365,440,0,,way 547656800; M 350; M 35
+n14-strasbourg-under-a35,X,96,99,480,495,25416039,bridge,Pont de la Porte de Saverne
+n14-strasbourg-under-a35,O,144,160,720,800,0,,way 88634125; 70000; Ligne de Noisy-le-sec à Strasbourg-Ville; 145000
+n15-lyon-berges-rhone,O,89,99,445,495,0,,Pont de la Guillotière
+n15-lyon-berges-rhone,O,172,180,860,900,0,,Pont Wilson; way 739013816
+n15-lyon-berges-rhone,O,251,260,1255,1300,0,,Pont Lafayette; way 1304437058
+p01-chevire,D,130,466,650,2330,293742439,bridge,Périphérique Intérieur - Pont de Cheviré
+p01-chevire,O,540,550,2700,2750,0,,way 30435586
+p01-chevire,X,595,596,2975,2980,43059332,underpass,under way 43059332
+p02-thouare,D,36,41,180,205,46543716,bridge,Rue des Ponts
+p02-thouare,D,145,224,725,1120,122851565,bridge,Pont de Thouaré
+p02-thouare,D,276,322,1380,1610,122851566,bridge,D 37
+p03-ancenis,D,105,190,525,950,26821117,bridge,Pont Bretagne-Anjou
+p04-langeais,D,42,119,210,595,23453430,bridge,D 57
+p05-saumur,X,76,76,380,380,724783030,underpass,under way 724783030
+p05-saumur,D,77,131,385,655,25347271,bridge,Pont Cessart
+p05-saumur,D,202,240,1010,1200,25195842,bridge,Pont des Cadets
+p05-saumur,D,253,258,1265,1290,183629153,bridge,Place de la Résistance
+p06-normandie,L,0,4,0,20,0,,N 1029
+p06-normandie,O,74,83,370,415,0,,toll booth; way 27756846; N 1029
+p06-normandie,L,138,192,690,960,0,,Pont de Normandie
+p06-normandie,D,242,671,1210,3355,1052637885,bridge,Pont de Normandie
+p06-normandie,D,735,741,3675,3705,175399626,bridge,N 1029
+p06-normandie,D,761,772,3805,3860,160516727,bridge,N 1029
+p07-millau-a75,D,58,62,290,310,854870987,bridge,La Méridienne
+p07-millau-a75,D,204,696,1020,3480,4296812,bridge,Viaduc de Millau
+p07-millau-a75,X,815,816,4075,4080,81088592,underpass,under way 81088592
+p08-periph-overpass,D,49,59,245,295,10315732,bridge,Boulevard Professeur René Auvigné
+p09-cubzac,D,63,273,315,1365,1202440422,bridge,Pont de Cubzac
+p10-pont-saint-esprit,D,88,244,440,1220,34977420,bridge,Pont du Saint-Esprit
+p11-sully,D,73,152,365,760,1374227449,bridge,Pont de Sully-sur-Loire
+p12-tonnay-charente,D,55,61,275,305,121688592,bridge,Rue de Lattre de Tassigny
+p12-tonnay-charente,X,92,101,460,505,285257598,layer,way 285257598
+p12-tonnay-charente,D,102,226,510,1130,121636941,bridge,Pont Suspendu de Tonnay-Charente
+p13-chalon-bourgogne,X,8,9,40,45,288457182,underpass,under way 288457182
+p13-chalon-bourgogne,D,103,173,515,865,157176480,bridge,Pont de Bourgogne
+p13-chalon-bourgogne,X,214,215,1070,1075,194011141,underpass,under way 194011141
+p14-saint-cloud,X,42,43,210,215,168754050,underpass,under way 168754050
+p14-saint-cloud,X,66,67,330,335,129307275,underpass,under way 129307275
+p14-saint-cloud,X,100,103,500,515,22062778,underpass,under Quai du Quatre Septembre
+p14-saint-cloud,X,106,109,530,545,22060613,underpass,under D 1
+p14-saint-cloud,D,110,142,550,710,22063856,bridge,Pont de Saint-Cloud
+p14-saint-cloud,X,143,146,715,730,151091931,underpass,under Quai Carnot
+p14-saint-cloud,X,153,155,765,775,92842577,underpass,under Tram T2
+p15-blois,D,104,160,520,800,19727454,bridge,Pont Jacques Gabriel
+p16-reims-a4,D,96,107,480,535,396421656,bridge,way 396421656
+p17-strasbourg-ill,D,59,66,295,330,14879071,bridge,Pont Saint-Étienne
+p17-strasbourg-ill,D,95,105,475,525,26306542,bridge,Pont Royal

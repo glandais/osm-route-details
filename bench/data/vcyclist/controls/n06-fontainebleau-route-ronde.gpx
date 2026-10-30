@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n06-fontainebleau-route-ronde</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n06-fontainebleau-route-ronde</name>
+  <trkseg>
+   <trkpt lat="48.4215808" lon="2.6526861"></trkpt>
+   <trkpt lat="48.4214802" lon="2.6525781"></trkpt>
+   <trkpt lat="48.4172716" lon="2.6480593"></trkpt>
+   <trkpt lat="48.4139453" lon="2.6445085"></trkpt>
+   <trkpt lat="48.4138344" lon="2.6443901"></trkpt>
+   <trkpt lat="48.4137454" lon="2.6442499"></trkpt>
+   <trkpt lat="48.4136474" lon="2.6441211"></trkpt>
+   <trkpt lat="48.4136213" lon="2.6440699"></trkpt>
+   <trkpt lat="48.4135932" lon="2.6440336"></trkpt>
+   <trkpt lat="48.4135299" lon="2.6440070"></trkpt>
+   <trkpt lat="48.4134187" lon="2.6439516"></trkpt>
+   <trkpt lat="48.4133775" lon="2.6439076"></trkpt>
+   <trkpt lat="48.4133059" lon="2.6438311"></trkpt>
+   <trkpt lat="48.4124596" lon="2.6429345"></trkpt>
+   <trkpt lat="48.4112764" lon="2.6416762"></trkpt>
+   <trkpt lat="48.4109981" lon="2.6413796"></trkpt>
+   <trkpt lat="48.4089440" lon="2.6391975"></trkpt>
+   <trkpt lat="48.4088111" lon="2.6390627"></trkpt>
+   <trkpt lat="48.4086932" lon="2.6389412"></trkpt>
+   <trkpt lat="48.4085303" lon="2.6387959"></trkpt>
+   <trkpt lat="48.4083980" lon="2.6386780"></trkpt>
+   <trkpt lat="48.4082595" lon="2.6385708"></trkpt>
+   <trkpt lat="48.4080263" lon="2.6383901"></trkpt>
+   <trkpt lat="48.4078627" lon="2.6383045"></trkpt>
+   <trkpt lat="48.4076649" lon="2.6382506"></trkpt>
+   <trkpt lat="48.4073064" lon="2.6382364"></trkpt>
+   <trkpt lat="48.4070456" lon="2.6382938"></trkpt>
+   <trkpt lat="48.4067900" lon="2.6383928"></trkpt>
+   <trkpt lat="48.4065910" lon="2.6385135"></trkpt>
+   <trkpt lat="48.4064040" lon="2.6386371"></trkpt>
+   <trkpt lat="48.4062737" lon="2.6387248"></trkpt>
+   <trkpt lat="48.4060925" lon="2.6388457"></trkpt>
+   <trkpt lat="48.4060164" lon="2.6388932"></trkpt>
+   <trkpt lat="48.4059567" lon="2.6389236"></trkpt>
+   <trkpt lat="48.4059067" lon="2.6389441"></trkpt>
+   <trkpt lat="48.4058528" lon="2.6389567"></trkpt>
+   <trkpt lat="48.4057934" lon="2.6389588"></trkpt>
+   <trkpt lat="48.4057305" lon="2.6389509"></trkpt>
+   <trkpt lat="48.4056824" lon="2.6389375"></trkpt>
+   <trkpt lat="48.4056020" lon="2.6389085"></trkpt>
+   <trkpt lat="48.4054416" lon="2.6387790"></trkpt>
+   <trkpt lat="48.4052775" lon="2.6386632"></trkpt>
+   <trkpt lat="48.4051054" lon="2.6385759"></trkpt>
+   <trkpt lat="48.4047578" lon="2.6385152"></trkpt>
+   <trkpt lat="48.4044083" lon="2.6383696"></trkpt>
+   <trkpt lat="48.4041753" lon="2.6381933"></trkpt>
+   <trkpt lat="48.4028338" lon="2.6371039"></trkpt>
+   <trkpt lat="48.4013000" lon="2.6358200"></trkpt>
+   <trkpt lat="48.4007323" lon="2.6353471"></trkpt>
+   <trkpt lat="48.4003124" lon="2.6350018"></trkpt>
+   <trkpt lat="48.3998454" lon="2.6346237"></trkpt>
+   <trkpt lat="48.3987959" lon="2.6337283"></trkpt>
+   <trkpt lat="48.3965592" lon="2.6318652"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

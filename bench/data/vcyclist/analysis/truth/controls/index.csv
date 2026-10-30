@@ -1,0 +1,34 @@
+id,role,category,n,length_m,G,O,L,X,x,D,place
+n01-paris-metro6,negative,elevated-rail-beside,396,1975.6,12,7,377,0,0,0,Paris 15e bd de Grenelle -> bd Garibaldi beside the aerial Metro 6
+n02-nantes-chevire-under,negative,under-viaduct-approach,309,1543.5,298,11,0,0,0,0,Nantes / Reze local road under the Pont de Chevire approach (N 844)
+n03-millau-d992,negative,valley-floor-under-high-viaduct,482,2406.2,454,12,0,2,14,0,Millau D 992 along the Tarn under the Viaduc de Millau (A 75)
+n04-nantes-periph-nord,negative,motorway-cutting-under-overpasses,801,4003.0,634,73,6,46,42,0,Nantes peripherique nord (N 844) Porte de la Chapelle -> Porte de Carquefou one carriageway
+n05-canal-midi-platanes,negative,plane-tree-towpath,735,3671.0,728,7,0,0,0,0,Canal du Midi towpath Ramonville -> Castanet (Toulouse)
+n06-fontainebleau-route-ronde,negative,forest-road,652,3258.8,652,0,0,0,0,0,Foret de Fontainebleau Route Ronde (D 301)
+n07-landes-velodyssee,negative,pine-forest-cycleway,340,1699.6,340,0,0,0,0,0,Piste de la Cote cycleway north of Saint-Girons-Plage (Landes)
+n08-nantes-centre,negative,urban-street-covered-carriageway,581,2901.6,500,16,0,37,28,0,Nantes centre rue de Strasbourg and cours John Kennedy then quai Andre Morice westbound through its tunnel and covered section
+n09-peage-lancon,negative,toll-plaza-canopy,518,2585.4,502,16,0,0,0,0,A7 barriere de peage de Lancon-Provence one carriageway
+n10-loire-levee,negative,road-on-levee,670,3345.3,670,0,0,0,0,0,Levee de la Loire D 952 west of Saint-Martin-de-la-Place
+n11-morlaix-viaduc,negative,town-under-stone-rail-viaduct,307,1533.9,251,7,0,7,42,0,Morlaix centre streets under and beside the railway viaduct
+n12-toulouse-brienne,negative,urban-plane-tree-alley,287,1432.6,265,0,0,8,14,0,Toulouse allees de Brienne along the canal de Brienne
+n13-morlaix-pennele,negative,ravine-merged-tall-runs,187,932.9,187,0,0,0,0,0,Morlaix path along the wooded Vallee de la Pennele
+n14-strasbourg-under-a35,negative,road-under-motorway,199,991.4,148,33,0,4,14,0,Strasbourg (Bas-Rhin) longest named street passing under the urban A 35 (now M 35)
+n15-lyon-berges-rhone,negative,quay-under-bridges,302,1506.4,272,30,0,0,0,0,Lyon left-bank lower quay of the Rhone (Voie Verte des Berges du Rhone) under Pont de la Guillotiere Pont Wilson and Pont Lafayette
+n16-cousin-d427,negative,wooded-valley-road,333,1664.3,333,0,0,0,0,0,Vallee du Cousin D 427 west of Avallon (Yonne)
+p01-chevire,held-out-positive,long-high-motorway-bridge,602,3007.9,226,11,0,2,26,337,Pont de Chevire Nantes N 844
+p02-thouare,held-out-positive,truss-bridge,368,1838.4,193,0,0,0,42,133,Pont de Thouare-sur-Loire to Saint-Julien-de-Concelles
+p03-ancenis,held-out-positive,suspension-bridge,298,1488.9,198,0,0,0,14,86,Pont d Ancenis D 723
+p04-langeais,held-out-positive,narrow-suspension-bridge,193,962.4,101,0,0,0,14,78,Pont de Langeais D 57
+p05-saumur,held-out-positive,stone-arches-across-island,291,1452.5,150,0,0,1,40,100,Saumur Pont Cessart and Pont des Cadets
+p06-normandie,held-out-positive,long-cable-stayed-bridge,905,4521.4,344,10,60,0,42,449,Pont de Normandie (N 1029) Le Havre to Honfleur one carriageway
+p07-millau-a75,held-out-positive,very-high-valley-viaduct,869,4340.7,327,0,0,2,42,498,Viaduc de Millau A 75 one carriageway
+p08-periph-overpass,held-out-positive,narrow-short-overpass,119,592.4,94,0,0,0,14,11,Nantes local road over the peripherique nord (selected from n04)
+p09-cubzac,holdout2,long-truss-bridge,374,1869.1,149,0,0,0,14,211,Pont de Cubzac D 1010 over the Dordogne (Gironde)
+p10-pont-saint-esprit,holdout2,long-masonry-arch-bridge,353,1763.7,182,0,0,0,14,157,Pont du Saint-Esprit D 994 over the Rhone (Gard / Vaucluse)
+p11-sully,holdout2,long-suspension-bridge,258,1289.3,164,0,0,0,14,80,Pont de Sully-sur-Loire D 948 (Loiret)
+p12-tonnay-charente,holdout2,long-suspension-cycle-bridge,332,1658.8,162,0,0,10,28,132,Pont suspendu de Tonnay-Charente over the Charente (Charente-Maritime) cycle and foot bridge
+p13-chalon-bourgogne,holdout2,long-cable-stayed-bridge,243,1212.7,126,0,0,4,42,71,Pont de Bourgogne D 5A over the Saone Chalon-sur-Saone (Saone-et-Loire)
+p14-saint-cloud,holdout2,medium-girder-bridge,252,1257.9,150,0,0,19,50,33,Pont de Saint-Cloud D 907 over the Seine (Hauts-de-Seine) one carriageway
+p15-blois,holdout2,medium-masonry-arch-bridge,222,1108.8,151,0,0,0,14,57,Pont Jacques-Gabriel D 956B over the Loire Blois (Loir-et-Cher)
+p16-reims-a4,holdout2,short-overpass-over-motorway,193,963.4,167,0,0,0,14,12,Reims (Marne) longest street or cycleway bridge of 25-80 m over the A 4
+p17-strasbourg-ill,holdout2,short-river-bridge,187,932.3,140,0,0,0,28,19,Strasbourg centre (Bas-Rhin) longest street bridge of 20-60 m over the Ill

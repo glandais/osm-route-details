@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n09-peage-lancon</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n09-peage-lancon</name>
+  <trkseg>
+   <trkpt lat="43.5964977" lon="5.1642560"></trkpt>
+   <trkpt lat="43.5959153" lon="5.1660771"></trkpt>
+   <trkpt lat="43.5956779" lon="5.1668878"></trkpt>
+   <trkpt lat="43.5955142" lon="5.1674577"></trkpt>
+   <trkpt lat="43.5954568" lon="5.1676576"></trkpt>
+   <trkpt lat="43.5953504" lon="5.1680283"></trkpt>
+   <trkpt lat="43.5951601" lon="5.1686907"></trkpt>
+   <trkpt lat="43.5950896" lon="5.1689363"></trkpt>
+   <trkpt lat="43.5942509" lon="5.1716792"></trkpt>
+   <trkpt lat="43.5940147" lon="5.1724517"></trkpt>
+   <trkpt lat="43.5939825" lon="5.1725570"></trkpt>
+   <trkpt lat="43.5939637" lon="5.1726232"></trkpt>
+   <trkpt lat="43.5938518" lon="5.1730150"></trkpt>
+   <trkpt lat="43.5938259" lon="5.1731060"></trkpt>
+   <trkpt lat="43.5929514" lon="5.1761841"></trkpt>
+   <trkpt lat="43.5923959" lon="5.1781038"></trkpt>
+   <trkpt lat="43.5922738" lon="5.1785258"></trkpt>
+   <trkpt lat="43.5918082" lon="5.1802586"></trkpt>
+   <trkpt lat="43.5913883" lon="5.1818240"></trkpt>
+   <trkpt lat="43.5909384" lon="5.1836981"></trkpt>
+   <trkpt lat="43.5905202" lon="5.1855079"></trkpt>
+   <trkpt lat="43.5900142" lon="5.1879605"></trkpt>
+   <trkpt lat="43.5896372" lon="5.1899133"></trkpt>
+   <trkpt lat="43.5895776" lon="5.1902229"></trkpt>
+   <trkpt lat="43.5887541" lon="5.1944763"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

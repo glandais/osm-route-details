@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tn10-roselend</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tn10-roselend</name>
+  <trkseg>
+   <trkpt lat="45.6832424" lon="6.6157477"></trkpt>
+   <trkpt lat="45.6831927" lon="6.6157839"></trkpt>
+   <trkpt lat="45.6831524" lon="6.6158362"></trkpt>
+   <trkpt lat="45.6831374" lon="6.6159140"></trkpt>
+   <trkpt lat="45.6831533" lon="6.6160025"></trkpt>
+   <trkpt lat="45.6832049" lon="6.6161272"></trkpt>
+   <trkpt lat="45.6833061" lon="6.6163525"></trkpt>
+   <trkpt lat="45.6833763" lon="6.6164370"></trkpt>
+   <trkpt lat="45.6834148" lon="6.6164987"></trkpt>
+   <trkpt lat="45.6834232" lon="6.6165537"></trkpt>
+   <trkpt lat="45.6834157" lon="6.6166086"></trkpt>
+   <trkpt lat="45.6833838" lon="6.6166462"></trkpt>
+   <trkpt lat="45.6833323" lon="6.6166422"></trkpt>
+   <trkpt lat="45.6832555" lon="6.6166086"></trkpt>
+   <trkpt lat="45.6831440" lon="6.6164839"></trkpt>
+   <trkpt lat="45.6830550" lon="6.6163458"></trkpt>
+   <trkpt lat="45.6828423" lon="6.6158831"></trkpt>
+   <trkpt lat="45.6827477" lon="6.6157168"></trkpt>
+   <trkpt lat="45.6826746" lon="6.6156189"></trkpt>
+   <trkpt lat="45.6825406" lon="6.6155224"></trkpt>
+   <trkpt lat="45.6823223" lon="6.6153882"></trkpt>
+   <trkpt lat="45.6822042" lon="6.6153319"></trkpt>
+   <trkpt lat="45.6811839" lon="6.6151924"></trkpt>
+   <trkpt lat="45.6808831" lon="6.6151388"></trkpt>
+   <trkpt lat="45.6806114" lon="6.6150516"></trkpt>
+   <trkpt lat="45.6805617" lon="6.6150624"></trkpt>
+   <trkpt lat="45.6805341" lon="6.6150959"></trkpt>
+   <trkpt lat="45.6805304" lon="6.6151596"></trkpt>
+   <trkpt lat="45.6805528" lon="6.6151965"></trkpt>
+   <trkpt lat="45.6808971" lon="6.6153440"></trkpt>
+   <trkpt lat="45.6811064" lon="6.6154551"></trkpt>
+   <trkpt lat="45.6812808" lon="6.6155635"></trkpt>
+   <trkpt lat="45.6814399" lon="6.6157119"></trkpt>
+   <trkpt lat="45.6818830" lon="6.6160983"></trkpt>
+   <trkpt lat="45.6824385" lon="6.6166377"></trkpt>
+   <trkpt lat="45.6825913" lon="6.6167938"></trkpt>
+   <trkpt lat="45.6827742" lon="6.6170415"></trkpt>
+   <trkpt lat="45.6828504" lon="6.6171564"></trkpt>
+   <trkpt lat="45.6829091" lon="6.6172413"></trkpt>
+   <trkpt lat="45.6835842" lon="6.6185195"></trkpt>
+   <trkpt lat="45.6844066" lon="6.6203053"></trkpt>
+   <trkpt lat="45.6851457" lon="6.6219095"></trkpt>
+   <trkpt lat="45.6853840" lon="6.6224283"></trkpt>
+   <trkpt lat="45.6857082" lon="6.6229594"></trkpt>
+   <trkpt lat="45.6858761" lon="6.6231999"></trkpt>
+   <trkpt lat="45.6862648" lon="6.6236604"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

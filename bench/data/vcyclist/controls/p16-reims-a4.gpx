@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p16-reims-a4</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p16-reims-a4</name>
+  <trkseg>
+   <trkpt lat="49.2043161" lon="4.0693065"></trkpt>
+   <trkpt lat="49.2068529" lon="4.0719790"></trkpt>
+   <trkpt lat="49.2078692" lon="4.0729661"></trkpt>
+   <trkpt lat="49.2083318" lon="4.0734381"></trkpt>
+   <trkpt lat="49.2104398" lon="4.0756102"></trkpt>
+   <trkpt lat="49.2113037" lon="4.0764690"></trkpt>
+   <trkpt lat="49.2115469" lon="4.0765779"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

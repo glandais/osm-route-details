@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tt03-lioran</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tt03-lioran</name>
+  <trkseg>
+   <trkpt lat="45.0760928" lon="2.7249675"></trkpt>
+   <trkpt lat="45.0763514" lon="2.7258351"></trkpt>
+   <trkpt lat="45.0765057" lon="2.7262777"></trkpt>
+   <trkpt lat="45.0767378" lon="2.7270421"></trkpt>
+   <trkpt lat="45.0769511" lon="2.7277598"></trkpt>
+   <trkpt lat="45.0770304" lon="2.7280198"></trkpt>
+   <trkpt lat="45.0772217" lon="2.7286327"></trkpt>
+   <trkpt lat="45.0773628" lon="2.7290176"></trkpt>
+   <trkpt lat="45.0775737" lon="2.7296077"></trkpt>
+   <trkpt lat="45.0777443" lon="2.7299732"></trkpt>
+   <trkpt lat="45.0778556" lon="2.7302117"></trkpt>
+   <trkpt lat="45.0785239" lon="2.7314903"></trkpt>
+   <trkpt lat="45.0857186" lon="2.7420961"></trkpt>
+   <trkpt lat="45.0862298" lon="2.7429057"></trkpt>
+   <trkpt lat="45.0866950" lon="2.7437478"></trkpt>
+   <trkpt lat="45.0869252" lon="2.7443099"></trkpt>
+   <trkpt lat="45.0870519" lon="2.7446357"></trkpt>
+   <trkpt lat="45.0874159" lon="2.7455720"></trkpt>
+   <trkpt lat="45.0880594" lon="2.7472749"></trkpt>
+   <trkpt lat="45.0881152" lon="2.7474095"></trkpt>
+   <trkpt lat="45.0881645" lon="2.7475114"></trkpt>
+   <trkpt lat="45.0882489" lon="2.7476678"></trkpt>
+   <trkpt lat="45.0883349" lon="2.7477823"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>th08-voie-verte-24</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>th08-voie-verte-24</name>
+  <trkseg>
+   <trkpt lat="44.8559705" lon="1.3409295"></trkpt>
+   <trkpt lat="44.8561455" lon="1.3412521"></trkpt>
+   <trkpt lat="44.8563208" lon="1.3415583"></trkpt>
+   <trkpt lat="44.8565123" lon="1.3419470"></trkpt>
+   <trkpt lat="44.8565672" lon="1.3420657"></trkpt>
+   <trkpt lat="44.8566785" lon="1.3423290"></trkpt>
+   <trkpt lat="44.8568155" lon="1.3426770"></trkpt>
+   <trkpt lat="44.8569726" lon="1.3431506"></trkpt>
+   <trkpt lat="44.8574007" lon="1.3446594"></trkpt>
+   <trkpt lat="44.8575146" lon="1.3449500"></trkpt>
+   <trkpt lat="44.8576402" lon="1.3452694"></trkpt>
+   <trkpt lat="44.8577976" lon="1.3455726"></trkpt>
+   <trkpt lat="44.8579646" lon="1.3458726"></trkpt>
+   <trkpt lat="44.8582758" lon="1.3463182"></trkpt>
+   <trkpt lat="44.8584133" lon="1.3464729"></trkpt>
+   <trkpt lat="44.8585928" lon="1.3466551"></trkpt>
+   <trkpt lat="44.8588301" lon="1.3469309"></trkpt>
+   <trkpt lat="44.8620533" lon="1.3500693"></trkpt>
+   <trkpt lat="44.8621314" lon="1.3501530"></trkpt>
+   <trkpt lat="44.8621877" lon="1.3502193"></trkpt>
+   <trkpt lat="44.8622743" lon="1.3503264"></trkpt>
+   <trkpt lat="44.8623442" lon="1.3504226"></trkpt>
+   <trkpt lat="44.8625937" lon="1.3507882"></trkpt>
+   <trkpt lat="44.8627698" lon="1.3510940"></trkpt>
+   <trkpt lat="44.8632126" lon="1.3519669"></trkpt>
+   <trkpt lat="44.8633563" lon="1.3522477"></trkpt>
+   <trkpt lat="44.8635158" lon="1.3525836"></trkpt>
+   <trkpt lat="44.8636737" lon="1.3529206"></trkpt>
+   <trkpt lat="44.8639512" lon="1.3534282"></trkpt>
+   <trkpt lat="44.8641957" lon="1.3538755"></trkpt>
+   <trkpt lat="44.8642752" lon="1.3540136"></trkpt>
+   <trkpt lat="44.8644521" lon="1.3542746"></trkpt>
+   <trkpt lat="44.8645742" lon="1.3544456"></trkpt>
+   <trkpt lat="44.8648405" lon="1.3547660"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n16-cousin-d427</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n16-cousin-d427</name>
+  <trkseg>
+   <trkpt lat="47.4839721" lon="3.8843697"></trkpt>
+   <trkpt lat="47.4844081" lon="3.8835651"></trkpt>
+   <trkpt lat="47.4845187" lon="3.8833854"></trkpt>
+   <trkpt lat="47.4847853" lon="3.8831293"></trkpt>
+   <trkpt lat="47.4848948" lon="3.8829602"></trkpt>
+   <trkpt lat="47.4849673" lon="3.8827416"></trkpt>
+   <trkpt lat="47.4850017" lon="3.8825538"></trkpt>
+   <trkpt lat="47.4850796" lon="3.8819571"></trkpt>
+   <trkpt lat="47.4851296" lon="3.8814448"></trkpt>
+   <trkpt lat="47.4851359" lon="3.8811577"></trkpt>
+   <trkpt lat="47.4851268" lon="3.8807125"></trkpt>
+   <trkpt lat="47.4851404" lon="3.8804725"></trkpt>
+   <trkpt lat="47.4851821" lon="3.8802686"></trkpt>
+   <trkpt lat="47.4853361" lon="3.8799575"></trkpt>
+   <trkpt lat="47.4855388" lon="3.8796128"></trkpt>
+   <trkpt lat="47.4858770" lon="3.8789622"></trkpt>
+   <trkpt lat="47.4858908" lon="3.8789356"></trkpt>
+   <trkpt lat="47.4859542" lon="3.8788041"></trkpt>
+   <trkpt lat="47.4860068" lon="3.8786700"></trkpt>
+   <trkpt lat="47.4862415" lon="3.8777447"></trkpt>
+   <trkpt lat="47.4863911" lon="3.8773316"></trkpt>
+   <trkpt lat="47.4864799" lon="3.8771117"></trkpt>
+   <trkpt lat="47.4865306" lon="3.8768756"></trkpt>
+   <trkpt lat="47.4865904" lon="3.8764545"></trkpt>
+   <trkpt lat="47.4867354" lon="3.8757800"></trkpt>
+   <trkpt lat="47.4867453" lon="3.8757223"></trkpt>
+   <trkpt lat="47.4868206" lon="3.8752824"></trkpt>
+   <trkpt lat="47.4868723" lon="3.8748921"></trkpt>
+   <trkpt lat="47.4868895" lon="3.8746118"></trkpt>
+   <trkpt lat="47.4868804" lon="3.8744616"></trkpt>
+   <trkpt lat="47.4868515" lon="3.8742886"></trkpt>
+   <trkpt lat="47.4867690" lon="3.8738340"></trkpt>
+   <trkpt lat="47.4867518" lon="3.8735872"></trkpt>
+   <trkpt lat="47.4867626" lon="3.8733485"></trkpt>
+   <trkpt lat="47.4867998" lon="3.8731219"></trkpt>
+   <trkpt lat="47.4868633" lon="3.8728344"></trkpt>
+   <trkpt lat="47.4870333" lon="3.8723366"></trkpt>
+   <trkpt lat="47.4871233" lon="3.8720812"></trkpt>
+   <trkpt lat="47.4871940" lon="3.8719001"></trkpt>
+   <trkpt lat="47.4873136" lon="3.8716829"></trkpt>
+   <trkpt lat="47.4873943" lon="3.8715059"></trkpt>
+   <trkpt lat="47.4874164" lon="3.8714311"></trkpt>
+   <trkpt lat="47.4874514" lon="3.8713128"></trkpt>
+   <trkpt lat="47.4876278" lon="3.8704458"></trkpt>
+   <trkpt lat="47.4876758" lon="3.8701323"></trkpt>
+   <trkpt lat="47.4876945" lon="3.8699461"></trkpt>
+   <trkpt lat="47.4876920" lon="3.8696300"></trkpt>
+   <trkpt lat="47.4876830" lon="3.8694065"></trkpt>
+   <trkpt lat="47.4876945" lon="3.8692134"></trkpt>
+   <trkpt lat="47.4877476" lon="3.8690812"></trkpt>
+   <trkpt lat="47.4878271" lon="3.8689452"></trkpt>
+   <trkpt lat="47.4881145" lon="3.8687077"></trkpt>
+   <trkpt lat="47.4887308" lon="3.8682316"></trkpt>
+   <trkpt lat="47.4887590" lon="3.8682098"></trkpt>
+   <trkpt lat="47.4888763" lon="3.8681192"></trkpt>
+   <trkpt lat="47.4889512" lon="3.8680632"></trkpt>
+   <trkpt lat="47.4890129" lon="3.8679943"></trkpt>
+   <trkpt lat="47.4890790" lon="3.8678621"></trkpt>
+   <trkpt lat="47.4891319" lon="3.8677169"></trkpt>
+   <trkpt lat="47.4892072" lon="3.8674875"></trkpt>
+   <trkpt lat="47.4892776" lon="3.8672729"></trkpt>
+   <trkpt lat="47.4893853" lon="3.8668985"></trkpt>
+   <trkpt lat="47.4894043" lon="3.8667905"></trkpt>
+   <trkpt lat="47.4894052" lon="3.8666497"></trkpt>
+   <trkpt lat="47.4894005" lon="3.8664162"></trkpt>
+   <trkpt lat="47.4894145" lon="3.8662985"></trkpt>
+   <trkpt lat="47.4894425" lon="3.8661969"></trkpt>
+   <trkpt lat="47.4896101" lon="3.8658428"></trkpt>
+   <trkpt lat="47.4897813" lon="3.8655363"></trkpt>
+   <trkpt lat="47.4899297" lon="3.8653666"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

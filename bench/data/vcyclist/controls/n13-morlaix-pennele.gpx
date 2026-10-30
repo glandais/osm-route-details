@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>n13-morlaix-pennele</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>n13-morlaix-pennele</name>
+  <trkseg>
+   <trkpt lat="48.5818155" lon="-3.8461566"></trkpt>
+   <trkpt lat="48.5818739" lon="-3.8460283"></trkpt>
+   <trkpt lat="48.5819520" lon="-3.8460256"></trkpt>
+   <trkpt lat="48.5820327" lon="-3.8460571"></trkpt>
+   <trkpt lat="48.5822315" lon="-3.8460699"></trkpt>
+   <trkpt lat="48.5823885" lon="-3.8460712"></trkpt>
+   <trkpt lat="48.5825109" lon="-3.8460544"></trkpt>
+   <trkpt lat="48.5826651" lon="-3.8459902"></trkpt>
+   <trkpt lat="48.5829459" lon="-3.8458689"></trkpt>
+   <trkpt lat="48.5830818" lon="-3.8458083"></trkpt>
+   <trkpt lat="48.5832654" lon="-3.8457198"></trkpt>
+   <trkpt lat="48.5832208" lon="-3.8456020"></trkpt>
+   <trkpt lat="48.5831973" lon="-3.8454947"></trkpt>
+   <trkpt lat="48.5831764" lon="-3.8454028"></trkpt>
+   <trkpt lat="48.5831374" lon="-3.8453094"></trkpt>
+   <trkpt lat="48.5833671" lon="-3.8450220"></trkpt>
+   <trkpt lat="48.5834513" lon="-3.8449167"></trkpt>
+   <trkpt lat="48.5834939" lon="-3.8448752"></trkpt>
+   <trkpt lat="48.5836235" lon="-3.8446996"></trkpt>
+   <trkpt lat="48.5837140" lon="-3.8446271"></trkpt>
+   <trkpt lat="48.5837741" lon="-3.8445796"></trkpt>
+   <trkpt lat="48.5838550" lon="-3.8445248"></trkpt>
+   <trkpt lat="48.5839055" lon="-3.8444672"></trkpt>
+   <trkpt lat="48.5839920" lon="-3.8443348"></trkpt>
+   <trkpt lat="48.5841127" lon="-3.8441138"></trkpt>
+   <trkpt lat="48.5842201" lon="-3.8439023"></trkpt>
+   <trkpt lat="48.5843485" lon="-3.8436188"></trkpt>
+   <trkpt lat="48.5843771" lon="-3.8434969"></trkpt>
+   <trkpt lat="48.5843895" lon="-3.8433913"></trkpt>
+   <trkpt lat="48.5843904" lon="-3.8431851"></trkpt>
+   <trkpt lat="48.5843930" lon="-3.8430919"></trkpt>
+   <trkpt lat="48.5844148" lon="-3.8430084"></trkpt>
+   <trkpt lat="48.5844548" lon="-3.8428831"></trkpt>
+   <trkpt lat="48.5846925" lon="-3.8423182"></trkpt>
+   <trkpt lat="48.5847085" lon="-3.8422795"></trkpt>
+   <trkpt lat="48.5847440" lon="-3.8421816"></trkpt>
+   <trkpt lat="48.5848025" lon="-3.8419852"></trkpt>
+   <trkpt lat="48.5848033" lon="-3.8418819"></trkpt>
+   <trkpt lat="48.5848011" lon="-3.8418014"></trkpt>
+   <trkpt lat="48.5848246" lon="-3.8417521"></trkpt>
+   <trkpt lat="48.5848384" lon="-3.8417367"></trkpt>
+   <trkpt lat="48.5848716" lon="-3.8417213"></trkpt>
+   <trkpt lat="48.5849534" lon="-3.8417054"></trkpt>
+   <trkpt lat="48.5850677" lon="-3.8416354"></trkpt>
+   <trkpt lat="48.5851237" lon="-3.8415311"></trkpt>
+   <trkpt lat="48.5853561" lon="-3.8411069"></trkpt>
+   <trkpt lat="48.5856857" lon="-3.8402644"></trkpt>
+   <trkpt lat="48.5859308" lon="-3.8395767"></trkpt>
+   <trkpt lat="48.5859856" lon="-3.8392765"></trkpt>
+   <trkpt lat="48.5860363" lon="-3.8386437"></trkpt>
+   <trkpt lat="48.5860945" lon="-3.8382274"></trkpt>
+   <trkpt lat="48.5862474" lon="-3.8377879"></trkpt>
+   <trkpt lat="48.5863755" lon="-3.8377235"></trkpt>
+   <trkpt lat="48.5863988" lon="-3.8377118"></trkpt>
+   <trkpt lat="48.5864538" lon="-3.8377654"></trkpt>
+   <trkpt lat="48.5864343" lon="-3.8379049"></trkpt>
+   <trkpt lat="48.5864910" lon="-3.8380255"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

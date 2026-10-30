@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p14-saint-cloud</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p14-saint-cloud</name>
+  <trkseg>
+   <trkpt lat="48.8404363" lon="2.2317761"></trkpt>
+   <trkpt lat="48.8404495" lon="2.2316167"></trkpt>
+   <trkpt lat="48.8405049" lon="2.2314685"></trkpt>
+   <trkpt lat="48.8406011" lon="2.2304391"></trkpt>
+   <trkpt lat="48.8406063" lon="2.2303849"></trkpt>
+   <trkpt lat="48.8406100" lon="2.2303439"></trkpt>
+   <trkpt lat="48.8406220" lon="2.2302158"></trkpt>
+   <trkpt lat="48.8406310" lon="2.2301184"></trkpt>
+   <trkpt lat="48.8406711" lon="2.2296833"></trkpt>
+   <trkpt lat="48.8407192" lon="2.2291686"></trkpt>
+   <trkpt lat="48.8407226" lon="2.2291287"></trkpt>
+   <trkpt lat="48.8407268" lon="2.2290803"></trkpt>
+   <trkpt lat="48.8407447" lon="2.2288968"></trkpt>
+   <trkpt lat="48.8407928" lon="2.2288855"></trkpt>
+   <trkpt lat="48.8408284" lon="2.2288688"></trkpt>
+   <trkpt lat="48.8408681" lon="2.2288392"></trkpt>
+   <trkpt lat="48.8409244" lon="2.2287667"></trkpt>
+   <trkpt lat="48.8409493" lon="2.2287135"></trkpt>
+   <trkpt lat="48.8409659" lon="2.2286543"></trkpt>
+   <trkpt lat="48.8409751" lon="2.2285685"></trkpt>
+   <trkpt lat="48.8409828" lon="2.2284939"></trkpt>
+   <trkpt lat="48.8409563" lon="2.2283535"></trkpt>
+   <trkpt lat="48.8408962" lon="2.2282394"></trkpt>
+   <trkpt lat="48.8408266" lon="2.2281752"></trkpt>
+   <trkpt lat="48.8408627" lon="2.2279087"></trkpt>
+   <trkpt lat="48.8410714" lon="2.2264329"></trkpt>
+   <trkpt lat="48.8411327" lon="2.2261047"></trkpt>
+   <trkpt lat="48.8411722" lon="2.2259287"></trkpt>
+   <trkpt lat="48.8411842" lon="2.2258308"></trkpt>
+   <trkpt lat="48.8411932" lon="2.2257582"></trkpt>
+   <trkpt lat="48.8411985" lon="2.2257151"></trkpt>
+   <trkpt lat="48.8412053" lon="2.2256600"></trkpt>
+   <trkpt lat="48.8412275" lon="2.2253582"></trkpt>
+   <trkpt lat="48.8412314" lon="2.2252418"></trkpt>
+   <trkpt lat="48.8412537" lon="2.2249074"></trkpt>
+   <trkpt lat="48.8412669" lon="2.2247185"></trkpt>
+   <trkpt lat="48.8413293" lon="2.2237846"></trkpt>
+   <trkpt lat="48.8414087" lon="2.2227064"></trkpt>
+   <trkpt lat="48.8414635" lon="2.2224945"></trkpt>
+   <trkpt lat="48.8415288" lon="2.2222732"></trkpt>
+   <trkpt lat="48.8415804" lon="2.2220593"></trkpt>
+   <trkpt lat="48.8415916" lon="2.2220209"></trkpt>
+   <trkpt lat="48.8416245" lon="2.2219100"></trkpt>
+   <trkpt lat="48.8416934" lon="2.2217090"></trkpt>
+   <trkpt lat="48.8417810" lon="2.2215779"></trkpt>
+   <trkpt lat="48.8418299" lon="2.2214920"></trkpt>
+   <trkpt lat="48.8418464" lon="2.2214717"></trkpt>
+   <trkpt lat="48.8420232" lon="2.2213548"></trkpt>
+   <trkpt lat="48.8420462" lon="2.2213441"></trkpt>
+   <trkpt lat="48.8423930" lon="2.2211823"></trkpt>
+   <trkpt lat="48.8426981" lon="2.2210399"></trkpt>
+   <trkpt lat="48.8427236" lon="2.2210280"></trkpt>
+   <trkpt lat="48.8427903" lon="2.2209969"></trkpt>
+   <trkpt lat="48.8428336" lon="2.2209748"></trkpt>
+   <trkpt lat="48.8428785" lon="2.2209552"></trkpt>
+   <trkpt lat="48.8428944" lon="2.2209471"></trkpt>
+   <trkpt lat="48.8429205" lon="2.2209349"></trkpt>
+   <trkpt lat="48.8432074" lon="2.2208009"></trkpt>
+   <trkpt lat="48.8435713" lon="2.2206264"></trkpt>
+   <trkpt lat="48.8437707" lon="2.2205416"></trkpt>
+   <trkpt lat="48.8437951" lon="2.2205313"></trkpt>
+   <trkpt lat="48.8439006" lon="2.2204864"></trkpt>
+   <trkpt lat="48.8440017" lon="2.2204678"></trkpt>
+   <trkpt lat="48.8440338" lon="2.2204619"></trkpt>
+   <trkpt lat="48.8445086" lon="2.2203744"></trkpt>
+   <trkpt lat="48.8448604" lon="2.2203096"></trkpt>
+   <trkpt lat="48.8451006" lon="2.2202669"></trkpt>
+   <trkpt lat="48.8458573" lon="2.2201263"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

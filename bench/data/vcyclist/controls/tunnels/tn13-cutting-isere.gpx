@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>tn13-cutting-isere</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>tn13-cutting-isere</name>
+  <trkseg>
+   <trkpt lat="45.1326373" lon="5.7505755"></trkpt>
+   <trkpt lat="45.1330828" lon="5.7502768"></trkpt>
+   <trkpt lat="45.1333476" lon="5.7500177"></trkpt>
+   <trkpt lat="45.1334908" lon="5.7498997"></trkpt>
+   <trkpt lat="45.1335798" lon="5.7498421"></trkpt>
+   <trkpt lat="45.1336479" lon="5.7498099"></trkpt>
+   <trkpt lat="45.1337472" lon="5.7498139"></trkpt>
+   <trkpt lat="45.1339095" lon="5.7498325"></trkpt>
+   <trkpt lat="45.1341209" lon="5.7497603"></trkpt>
+   <trkpt lat="45.1342680" lon="5.7495924"></trkpt>
+   <trkpt lat="45.1343208" lon="5.7495999"></trkpt>
+   <trkpt lat="45.1343425" lon="5.7496428"></trkpt>
+   <trkpt lat="45.1343376" lon="5.7497030"></trkpt>
+   <trkpt lat="45.1340995" lon="5.7501088"></trkpt>
+   <trkpt lat="45.1340874" lon="5.7501559"></trkpt>
+   <trkpt lat="45.1340918" lon="5.7502128"></trkpt>
+   <trkpt lat="45.1341569" lon="5.7506474"></trkpt>
+   <trkpt lat="45.1341970" lon="5.7508208"></trkpt>
+   <trkpt lat="45.1342126" lon="5.7508430"></trkpt>
+   <trkpt lat="45.1342430" lon="5.7508546"></trkpt>
+   <trkpt lat="45.1342803" lon="5.7508361"></trkpt>
+   <trkpt lat="45.1343769" lon="5.7507539"></trkpt>
+   <trkpt lat="45.1345750" lon="5.7505416"></trkpt>
+   <trkpt lat="45.1347623" lon="5.7502946"></trkpt>
+   <trkpt lat="45.1348276" lon="5.7501720"></trkpt>
+   <trkpt lat="45.1348904" lon="5.7499871"></trkpt>
+   <trkpt lat="45.1349640" lon="5.7496963"></trkpt>
+   <trkpt lat="45.1350497" lon="5.7493544"></trkpt>
+   <trkpt lat="45.1351365" lon="5.7493680"></trkpt>
+   <trkpt lat="45.1352085" lon="5.7493601"></trkpt>
+   <trkpt lat="45.1353774" lon="5.7493140"></trkpt>
+   <trkpt lat="45.1355796" lon="5.7492596"></trkpt>
+   <trkpt lat="45.1358380" lon="5.7492123"></trkpt>
+   <trkpt lat="45.1359456" lon="5.7491799"></trkpt>
+   <trkpt lat="45.1360837" lon="5.7490840"></trkpt>
+   <trkpt lat="45.1361527" lon="5.7490029"></trkpt>
+   <trkpt lat="45.1362914" lon="5.7488398"></trkpt>
+   <trkpt lat="45.1363886" lon="5.7487491"></trkpt>
+   <trkpt lat="45.1364488" lon="5.7487092"></trkpt>
+   <trkpt lat="45.1366176" lon="5.7486703"></trkpt>
+   <trkpt lat="45.1367211" lon="5.7486574"></trkpt>
+   <trkpt lat="45.1367537" lon="5.7486533"></trkpt>
+   <trkpt lat="45.1368356" lon="5.7486580"></trkpt>
+   <trkpt lat="45.1369221" lon="5.7486699"></trkpt>
+   <trkpt lat="45.1370680" lon="5.7486927"></trkpt>
+   <trkpt lat="45.1372413" lon="5.7486675"></trkpt>
+   <trkpt lat="45.1372978" lon="5.7486367"></trkpt>
+   <trkpt lat="45.1374545" lon="5.7485433"></trkpt>
+   <trkpt lat="45.1375181" lon="5.7483598"></trkpt>
+   <trkpt lat="45.1378247" lon="5.7482180"></trkpt>
+   <trkpt lat="45.1377619" lon="5.7481106"></trkpt>
+   <trkpt lat="45.1377276" lon="5.7480344"></trkpt>
+   <trkpt lat="45.1376956" lon="5.7478557"></trkpt>
+   <trkpt lat="45.1376742" lon="5.7477224"></trkpt>
+   <trkpt lat="45.1376419" lon="5.7475374"></trkpt>
+   <trkpt lat="45.1375479" lon="5.7469924"></trkpt>
+   <trkpt lat="45.1375038" lon="5.7467779"></trkpt>
+   <trkpt lat="45.1374950" lon="5.7466999"></trkpt>
+   <trkpt lat="45.1374912" lon="5.7466167"></trkpt>
+   <trkpt lat="45.1375095" lon="5.7465192"></trkpt>
+   <trkpt lat="45.1374804" lon="5.7464987"></trkpt>
+   <trkpt lat="45.1374657" lon="5.7464806"></trkpt>
+   <trkpt lat="45.1374543" lon="5.7464571"></trkpt>
+   <trkpt lat="45.1374387" lon="5.7463793"></trkpt>
+   <trkpt lat="45.1373642" lon="5.7458839"></trkpt>
+   <trkpt lat="45.1372532" lon="5.7451924"></trkpt>
+   <trkpt lat="45.1372214" lon="5.7449965"></trkpt>
+   <trkpt lat="45.1372005" lon="5.7449230"></trkpt>
+   <trkpt lat="45.1371334" lon="5.7447225"></trkpt>
+   <trkpt lat="45.1370561" lon="5.7445810"></trkpt>
+   <trkpt lat="45.1370012" lon="5.7444956"></trkpt>
+   <trkpt lat="45.1369004" lon="5.7443610"></trkpt>
+   <trkpt lat="45.1368299" lon="5.7442247"></trkpt>
+   <trkpt lat="45.1367708" lon="5.7440740"></trkpt>
+   <trkpt lat="45.1367171" lon="5.7438900"></trkpt>
+   <trkpt lat="45.1366914" lon="5.7436837"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>

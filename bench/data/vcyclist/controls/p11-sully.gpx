@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="vcyclist controls.py" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata>
+  <name>p11-sully</name>
+  <copyright author="OpenStreetMap contributors">
+   <license>https://www.openstreetmap.org/copyright</license>
+  </copyright>
+ </metadata>
+ <trk>
+  <name>p11-sully</name>
+  <trkseg>
+   <trkpt lat="47.7670043" lon="2.3696131"></trkpt>
+   <trkpt lat="47.7670858" lon="2.3699938"></trkpt>
+   <trkpt lat="47.7672256" lon="2.3705505"></trkpt>
+   <trkpt lat="47.7673685" lon="2.3710620"></trkpt>
+   <trkpt lat="47.7674577" lon="2.3715488"></trkpt>
+   <trkpt lat="47.7675731" lon="2.3720484"></trkpt>
+   <trkpt lat="47.7679101" lon="2.3735074"></trkpt>
+   <trkpt lat="47.7679637" lon="2.3737350"></trkpt>
+   <trkpt lat="47.7679805" lon="2.3738120"></trkpt>
+   <trkpt lat="47.7680353" lon="2.3738765"></trkpt>
+   <trkpt lat="47.7681240" lon="2.3738288"></trkpt>
+   <trkpt lat="47.7681518" lon="2.3738148"></trkpt>
+   <trkpt lat="47.7681914" lon="2.3737948"></trkpt>
+   <trkpt lat="47.7682316" lon="2.3737751"></trkpt>
+   <trkpt lat="47.7686859" lon="2.3735475"></trkpt>
+   <trkpt lat="47.7695805" lon="2.3731128"></trkpt>
+   <trkpt lat="47.7716430" lon="2.3720940"></trkpt>
+   <trkpt lat="47.7717100" lon="2.3720520"></trkpt>
+   <trkpt lat="47.7718767" lon="2.3719954"></trkpt>
+   <trkpt lat="47.7719827" lon="2.3719657"></trkpt>
+   <trkpt lat="47.7721388" lon="2.3718907"></trkpt>
+   <trkpt lat="47.7721719" lon="2.3718747"></trkpt>
+   <trkpt lat="47.7722503" lon="2.3718010"></trkpt>
+   <trkpt lat="47.7722702" lon="2.3717317"></trkpt>
+   <trkpt lat="47.7723010" lon="2.3716719"></trkpt>
+   <trkpt lat="47.7723408" lon="2.3716253"></trkpt>
+   <trkpt lat="47.7724013" lon="2.3715895"></trkpt>
+   <trkpt lat="47.7724664" lon="2.3715842"></trkpt>
+   <trkpt lat="47.7725291" lon="2.3716099"></trkpt>
+   <trkpt lat="47.7725868" lon="2.3716690"></trkpt>
+   <trkpt lat="47.7727033" lon="2.3716595"></trkpt>
+   <trkpt lat="47.7728826" lon="2.3716661"></trkpt>
+   <trkpt lat="47.7730316" lon="2.3717345"></trkpt>
+   <trkpt lat="47.7730883" lon="2.3717544"></trkpt>
+   <trkpt lat="47.7733540" lon="2.3718714"></trkpt>
+   <trkpt lat="47.7745088" lon="2.3724898"></trkpt>
+   <trkpt lat="47.7745549" lon="2.3725145"></trkpt>
+   <trkpt lat="47.7747134" lon="2.3725942"></trkpt>
+   <trkpt lat="47.7748012" lon="2.3726519"></trkpt>
+   <trkpt lat="47.7748721" lon="2.3726934"></trkpt>
+   <trkpt lat="47.7749321" lon="2.3727251"></trkpt>
+   <trkpt lat="47.7749626" lon="2.3727412"></trkpt>
+   <trkpt lat="47.7754309" lon="2.3729830"></trkpt>
+   <trkpt lat="47.7757810" lon="2.3731195"></trkpt>
+   <trkpt lat="47.7760925" lon="2.3732172"></trkpt>
+  </trkseg>
+ </trk>
+</gpx>
