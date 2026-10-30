@@ -1,0 +1,3 @@
+# Secrets locaux (clé Stadia Maps…) : jamais versionnés.
+.env
+.env.*
