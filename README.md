@@ -16,19 +16,25 @@ Aucun code pour l'instant : phase d'exploration puis de conception.
 
 | Doc | Sujet |
 |-----|-------|
-| [01-vcyclist-elevation](docs/exploration/01-vcyclist-elevation.md) | Chaîne d'élévation de vcyclist (Mapterhorn, bilinéaire, lissage, D+) |
+| [01-vcyclist-elevation](docs/exploration/01-vcyclist-elevation.md) | vcyclist 6.11 : IGN LiDAR HD + repli Mapterhorn, détection ponts (MNS) et tunnels, provenance, D+ |
 | [02-osm-surface-typologie](docs/exploration/02-osm-surface-typologie.md) | osm-surface : tuiles VersaTiles, map-matching HMM tiles-only, attributs |
 | [03-sources-tuiles-vectorielles](docs/exploration/03-sources-tuiles-vectorielles.md) | VersaTiles, OSMF, OpenFreeMap, Protomaps, Planetiler sur mesure |
 | [04-sources-elevation](docs/exploration/04-sources-elevation.md) | Mapterhorn, IGN (LiDAR HD, RGE ALTI, API alti), MNT nationaux, globaux |
 
 ### Synthèse
 
-- **Élévation** : Mapterhorn (MNT, agrège déjà LiDAR HD / RGE ALTI en France, Terrarium WebP)
-  est la source principale naturelle ; repli global Copernicus GLO-30 (MNS). Référentiels
-  verticaux non harmonisés entre pays. vcyclist ne traite ni ponts/tunnels ni no-data.
-- **Ponts/tunnels** : un MNT donne le sol sous le pont / le relief au-dessus du tunnel ;
-  pratique courante (GraphHopper, Valhalla) = interpolation entre extrémités. Piste France :
-  MNS LiDAR HD sur l'axe des ponts. La typologie OSM sert donc aussi à corriger l'élévation.
+- **Élévation** : en France, IGN LiDAR HD en direct (MNT par la Géoplateforme WMS-R, BIL
+  float32, z15), comme vcyclist 6.11 ; Mapterhorn (Terrarium, qui sert d'ailleurs du LiDAR HD
+  en France jusqu'à z17) en repli point par point et partout ailleurs, avec GLO-30 (MNS) comme
+  fond mondial. Provenance du terrain exposée par tronçon. Référentiels verticaux non
+  harmonisés entre pays. Dépendance au WMS-R (40 req/s/IP, pas de SLA) : cache disque et repli.
+- **Ponts/tunnels** : un MNT donne le sol sous le pont / le relief au-dessus du tunnel.
+  vcyclist les corrige déjà par heuristiques sur le LiDAR seul (MNS pour les tabliers, forme du
+  MNT pour les tunnels), mais en rate beaucoup (hors échantillon : 4 ponts sur 11). Ici : OSM
+  pour l'emprise et le type, LiDAR pour l'altitude (MNS sur le tablier dès le MVP, droite entre
+  portails pour les tunnels) ; l'interpolation entre culées (GraphHopper, Valhalla) n'est qu'un
+  repli, 22–40 m d'erreur sur les grands ponts bombés. Heuristiques portées en contrôle croisé
+  et pour les ouvrages absents d'OSM (V1).
 - **Typologie** : aucune source de tuiles publique ne fournit `surface` brut
   (VersaTiles/OpenFreeMap : paved/unpaved ; OSMF et Protomaps : rien). Pont/tunnel disponibles
   partout ; gué et `layer` seulement dans OpenMapTiles. Pour un revêtement fin : générer ses
@@ -36,4 +42,5 @@ Aucun code pour l'instant : phase d'exploration puis de conception.
   `highway`/`tracktype` nécessaire.
 - **Map-matching** : le HMM tiles-only d'osm-surface est réutilisable ; les niveaux
   sol/pont/tunnel déconnectés évitent d'apparier la route sous un pont.
-- **Licences** : ODbL (OSM), ~150 attributions Mapterhorn, FABDEM exclu (NC).
+- **Licences** : ODbL (OSM), IGN LiDAR HD (Licence Ouverte Etalab 2.0), ~150 attributions
+  Mapterhorn, FABDEM exclu (NC).
