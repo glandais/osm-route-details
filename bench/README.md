@@ -59,7 +59,7 @@ Chiffres de référence (ligne de base à égaler, pas à reproduire) :
 4. Toujours citer la convention de pixel (coins ou centres) avec un chiffre issu de vcyclist.
 5. L'IGN (Etalab 2.0) n'est pas mentionné dans vcyclist : l'attribution est à notre charge.
 
-### 1.2 Éval d'osm-surface (non copiée : pas de licence déclarée, copie sur accord de l'utilisateur)
+### 1.2 Éval d'osm-surface (copiée dans `data/osm-surface/`)
 
 osm-surface (`44e5da6`, pas de branche amont configurée : fraîcheur non vérifiable). Trois parcours
 autour de Nantes, 185,2 km (`testdata/*.gpx` + `*.route.json`). La référence est la classe de
@@ -72,9 +72,10 @@ revêtement **Stadia/Valhalla** calculée par tribly (`tracks[0].surfaces`), pas
 | np677-chill-gravel (43 km) | 93,5 % | 93,9 % | 99,3 % | 0,0 % | 0 pt | 55 ms |
 
 Écarts expliqués à 59 % par la réduction Shortbread à `paved`/`unpaved`, 14 % par l'âge des
-tuiles, ≈ 12 % par la référence elle-même. Réserves : conditions de réutilisation de Stadia à
-vérifier ; `.route.json` à expurger (métadonnées d'équipe, URL tribly) avant toute copie ; pas de
-licence de code déclarée.
+tuiles, ≈ 12 % par la référence elle-même. Copie (Apache-2.0, licence choisie par l'utilisateur le
+2026-10-30) : GPX sans modification, `.route.json` expurgés en `*.reference.json` par
+`tools/expurge_route_json.py` (équipe, URL tribly, médias, waypoints, tags retirés), rapport
+d'évaluation, `LICENSE`, `PROVENANCE.md`, `SHA256SUMS`.
 
 ### 1.3 Traces barométriques personnelles (hors git)
 
@@ -361,7 +362,6 @@ passés en calibration avec la règle par groupes) : la vérification attend les
   par le contrôle des permissions de la session, en attente de l'utilisateur.
 - Qualifier les 3 traces hors France contre Mapterhorn (pas de MNT IGN).
 - Conditions de Stadia Maps sur le stockage des réponses : dans le doute, hors git et régénérables.
-- Licence d'osm-surface : accord de l'utilisateur avant toute copie de `testdata/`.
 - Vérifier l'accès vélo des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`), la source réelle
   GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
 - **Étoffer la série tenue à l'écart d'ouvrages** : ponts et tunnels jamais vus par vcyclist,
@@ -396,6 +396,7 @@ représentent 90 % du cache ; il croît à peu près linéairement avec les kilo
 | `tools/strava_scan_dplus.py` | Balayage grossier de l'inventaire : D+ Strava vs D+ RGE ALTI sur polyligne réduite |
 | `tools/qualify_baro.py` | Qualification d'une altitude enregistrée contre le MNT (décalage, dérive, bruit, D+) |
 | `tools/stream_to_gpx.py` | Stream Strava → GPX, rognage optionnel des extrémités |
+| `tools/expurge_route_json.py` | Expurge un export tribly d'osm-surface (géométrie et revêtement seulement) |
 | `tools/stadia_match.py` | Recalage Stadia, baro transporté, revêtement de référence, découpage ≤ 200 km (§2.1) |
 | `tools/build_perso_corpus.py` | Sélection → GPX, empreintes, séries, fragment du manifest |
 | `tools/deck_baro_vs_lidar.py` | Baro corrigé vs MNS LiDAR au milieu des ouvrages |

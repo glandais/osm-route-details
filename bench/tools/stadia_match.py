@@ -183,9 +183,11 @@ def main(gpx, tid, outdir):
                 continue  # arête du chevauchement, déjà couverte par le tronçon précédent
             surf_rows.append((max(floor, b + offset), en + offset, e.get("surface", ""),
                               e.get("road_class", ""), e.get("use", ""), e.get("way_id", "")))
+        # chevauchement partagé à mi-chemin : chaque point d'origine n'est gardé qu'une fois
         skip = OVERLAP_PTS // 2 if k > 0 else 0
+        last = len(chunk) if st + len(chunk) >= len(pts) else len(chunk) - OVERLAP_PTS // 2
         for j, (p, m) in enumerate(zip(chunk, d["matched_points"])):
-            if j < skip or m.get("type") != "matched":
+            if j < skip or j >= last or m.get("type") != "matched":
                 continue
             baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", "")))
     cum = [0.0]
@@ -194,8 +196,12 @@ def main(gpx, tid, outdir):
     with open(os.path.join(outdir, f"{tid}.baro.csv"), "w") as f:
         f.write("s_recale_m,baro_m,s_origine_m,distance_au_trace_m\n")
         i = 0
+        last_s = -math.inf
         for s0, z, mp, dd in baro_rows:
             s, i = project_forward(poly, cum, mp, max(0, i - 5))
+            if s < last_s - 20:
+                continue  # projection ambiguë (lacet, boucle) : point écarté plutôt qu'un recul
+            last_s = max(last_s, s)
             f.write(f"{s:.1f},{z:.2f},{s0:.1f},{dd}\n")
     with open(os.path.join(outdir, f"{tid}.surface.csv"), "w") as f:
         f.write("s_debut_m,s_fin_m,surface,road_class,use,way_id\n")
