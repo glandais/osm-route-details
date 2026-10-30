@@ -202,23 +202,32 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
    - **déjà vu ⇒ calibration** : tout groupe dont un ouvrage a un renvoi vcyclist, les traces `vc-*`
      (vcyclist a réglé dessus ses détecteurs et son constructeur de tablier, dont le service
      s'inspire), les traces `os-*` (chaîne typologie reprise d'osm-surface) et les négatifs ;
-   - **traces** : une trace (franchissement = passage à moins de 40 m de chaque point de référence de
-     l'ouvrage) hérite de la série des groupes qu'elle franchit s'ils sont tous de la même série ;
-     sinon `sha256("osm-route-details:trace:" + id)`, même critère ;
-   - **passage mixte** (trace et ouvrage de séries différentes) : exclu des métriques d'ouvrage des
-     deux séries, et masqué à ± 500 m dans les métriques de la trace (E1 ; E2 sommé sur les tronçons
-     restants, service et référence). Aucun aujourd'hui.
+   - **traces** : `sha256("osm-route-details:trace:" + id)`, même critère ;
+   - **on partitionne les mètres, pas les traces** : la fenêtre de ± 500 m autour d'un ouvrage
+     franchi (passage à moins de 40 m de chacun de ses points de référence) appartient à la série de
+     l'**ouvrage** ; le passage y sert aux métriques d'ouvrage (E3, E4, E5, S*). Si cette série
+     diffère de celle de la trace, la fenêtre est masquée dans les métriques de la trace (E1 ; E2 et
+     E2b sommés sur les tronçons restants, pour le service comme pour ses références). Chaque mètre
+     n'appartient qu'à une série, et chaque ouvrage garde tous ses passages baro.
 
-   Résultat (2026-10-30) : 3 ouvrages tenus à l'écart sur 36 (`normandie`, `recoumene`,
-   `donostia-zurriola`), 8 traces perso sur 43 (`perso-12..15` relief, `perso-31`, `-35`, `-36`
-   plaine, `perso-37` Zurriola). 23 ouvrages sur 36 ont un renvoi vcyclist : la série tenue à l'écart
-   d'ouvrages est mince, et **aucun pont français tenu à l'écart n'a de trace baro**. Il faut l'étoffer
-   avec des ouvrages jamais vus par vcyclist (§6).
+   **Extension avant le premier passage** (décision de l'utilisateur, 2026-10-30) : 51 ouvrages
+   jamais vus par vcyclist et franchis par une trace perso fiable (46 ponts dont le MNH au milieu
+   dépasse 3 m, 5 tunnels), trouvés par `tools/ouvrages/candidats_traces.py` (Overpass sur la boîte
+   englobante de chaque trace rognée, sans envoyer la trace), puis sélectionnés mécaniquement : noms
+   et abords (< 100 m) d'ouvrages vcyclist exclus, chaussées parallèles et ways homonymes fusionnées,
+   au plus 3 ouvrages par trace (2 dans l'agglomération nantaise), les plus longs. Ils dérivent des
+   traces perso et dessineraient des trajets habituels : ils restent **hors git**
+   (`private/ouvrages-perso.json`, empreinte au manifest), comme les traces.
 
-   Sans la règle « déjà vu », la même construction donnait 9 ouvrages et 12 traces tenus à l'écart,
-   au prix d'une fuite : les ouvrages de `test1..4` ont réglé le constructeur de tablier de vcyclist.
-   La règle « composante connexe trace × ouvrage » pure soude 28 cas de Loire-Atlantique en un seul
-   groupe (`vc-test2` franchit 9 ponts nantais, `perso-20` 8), tout ou rien : écartée.
+   Résultat (2026-10-30) : **22 ouvrages tenus à l'écart sur 87 (25 %)**, dont 19 nouveaux (17 ponts,
+   2 tunnels), tous avec au moins un passage baro, plus `normandie`, `recoumene` et
+   `donostia-zurriola` ; **9 traces perso sur 39 (23 %)** ; 48 fenêtres de passage masquées dans les
+   métriques des traces.
+
+   Variantes écartées : grouper des traces entières (composante connexe trace × ouvrage) soude les
+   traces nantaises, qui partagent de nombreux ponts, en une composante géante (28 cas, puis 36 avec
+   l'extension) : tout ou rien. Sans la règle « déjà vu », on garderait des ouvrages sur lesquels
+   vcyclist a réglé son constructeur de tablier : fuite.
 2. Les **seuils** du §4 sont gelés dans ce fichier avant le premier passage du service. Toute
    modification est un commit séparé, motivé, antérieur à la mesure qu'elle concerne.
 3. La série tenue à l'écart est jugée **une seule fois par incrément** (MVP, V1…) : on note le commit
@@ -237,7 +246,13 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    envoyer les abords du domicile), rééchantillonnée à 25 m, par tronçons de 2 000 points
    chevauchants (`tools/stadia_match.py`). Sorties dans `private/recales/` : géométrie recalée
    (`<id>.gpx`, sans altitude), baro transporté (`<id>.baro.csv`), revêtement Stadia
-   (`<id>.surface.csv`, référence R3) et réponses brutes (`brut/`).
+   (`<id>.surface.csv`, référence R3) et réponses brutes (`brut/`). Une trace est d'abord coupée
+   aux sauts de plus de 2 km entre deux points consécutifs (transport : le recalage inventerait une
+   route) ; les segments de moins de 5 km sont écartés. Seuil au-dessus du plus long tunnel cyclable
+   du corpus (1,76 km), où le GPS peut décrocher. Résultat le 2026-10-30 sur les 39 traces : 40
+   parcours recalés (`perso-13` coupée en `.s1`/`.s2` après 10,8 km de transport ; `perso-12` réduite
+   à son segment principal après 32,7 km de transport), 96 à 100 % des points appariés, longueur
+   recalée entre 0,99 et 1,03 fois la longueur d'origine.
 2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
    16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
    aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie
@@ -251,8 +266,8 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    multipliée par la pente transversale (5 m d'écart sur un dévers à 30 % ≈ 1,5 m), et sur un pont la
    trace d'origine peut sortir du tablier. La géométrie d'origine ne sert qu'au transport du baro.
 
-Dépendance : tant que le recalage n'a pas tourné, E1, E2, E2b et R3 ne sont pas mesurables sur
-les traces perso.
+Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est régénérable :
+`tools/stadia_match.py` relit `private/recales/brut/` s'il existe, et rappelle Stadia sinon.
 
 ### 2.2 Campagne de mesure (une par incrément)
 
@@ -350,26 +365,18 @@ Complément sans baro : ponts de `test1..3` de vcyclist (référence MNS seule, 
 **Règle de décision, écrite avant la mesure.** B est retenue si, sur la calibration :
 RMSE médiane(B) ≤ RMSE médiane(A) − 0,3 m, aucun pont n'est dégradé de plus de 0,5 m en erreur max,
 et B gagne dans la classe > 5 m d'écart latéral. Puis une seule vérification sur la série tenue à
-l'écart : B ne doit pas y perdre. Sinon A reste (doc 01 §11.2). **Aujourd'hui, la série tenue à
-l'écart ne contient aucun pont français franchi par une trace baro** (Saint-Nazaire et Mauves sont
-passés en calibration avec la règle par groupes) : la vérification attend les nouveaux ouvrages du §6.
+l'écart : B ne doit pas y perdre. Sinon A reste (doc 01 §11.2). Avec l'extension du §2, la série
+tenue à l'écart compte 17 ponts français franchis par une trace baro (de 54 à 571 m).
 
 ---
 
 ## 6. Reste à faire, et à fournir par l'utilisateur
 
-- **Autoriser l'envoi des traces perso (rognées) à Stadia Maps** pour le recalage (§2.1) : bloqué
-  par le contrôle des permissions de la session, en attente de l'utilisateur.
 - Qualifier les 3 traces hors France contre Mapterhorn (pas de MNT IGN).
 - Conditions de Stadia Maps sur le stockage des réponses : dans le doute, hors git et régénérables.
 - Vérifier l'accès vélo des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`), la source réelle
   GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
-- **Étoffer la série tenue à l'écart d'ouvrages** : ponts et tunnels jamais vus par vcyclist,
-  franchis par des traces perso fiables (Loire en amont de Mauves, Massif central, Vosges…), ajoutés
-  au corpus avant tout passage du service, puis séries recalculées par `tools/series_groups.py`.
 - Constituer une nouvelle série tenue à l'écart après le jugement du MVP.
-- Geler `criteria.yaml` (forme machine du §4) après les décisions en attente : E2 bloquant ou non,
-  traces enregistrées comme entrées du MVP ou seulement comme références.
 
 ## 6 bis. Taille du cache de banc
 
@@ -401,7 +408,7 @@ représentent 90 % du cache ; il croît à peu près linéairement avec les kilo
 | `tools/build_perso_corpus.py` | Sélection → GPX, empreintes, séries, fragment du manifest |
 | `tools/deck_baro_vs_lidar.py` | Baro corrigé vs MNS LiDAR au milieu des ouvrages |
 | `tools/series_groups.py` | Groupes d'ouvrages, séries, passages masqués (§2) |
-| `tools/ouvrages/` | Requêtes Overpass et scripts de constitution de `data/ouvrages.yaml` ; `mns_median25.py` |
+| `tools/ouvrages/` | Requêtes Overpass et scripts de constitution de `data/ouvrages.yaml` ; `mns_median25.py` ; `candidats_traces.py` (extension par les traces perso) |
 
 API utilisées : Géoplateforme altimétrie (`data.geopf.fr/altimetrie`, ≤ 4 req/s, User-Agent
 identifiable), Overpass (quelques requêtes), MCP Strava (lecture seule).

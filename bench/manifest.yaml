@@ -133,6 +133,12 @@ ouvrages:
   licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
   reference: "Médiane MNS 25 m au milieu des ponts français (cohérence seulement) + MNT RGE ALTI + MNT/MNS/MNH LiDAR HD (ressource ign_lidar_hd_mnx_multi_wld) aux extrémités et au milieu ; baromètre corrigé quand une trace perso le traverse (data/deck_baro_vs_lidar.csv)"
   serie_tenue_a_l_ecart: [donostia-zurriola, normandie, recoumene]
+  ouvrages_perso:   # extension du 2026-10-30, hors git : dérivée des traces perso (elle dessinerait des trajets habituels)
+    fichier: private/ouvrages-perso.json
+    sha256: ba81ae43ed8a77057e11a61da95fbf36e4a966a9b4458cbbf1c78e777551d14e
+    nombre: 51   # 46 ponts (MNH ≥ 3 m au milieu), 5 tunnels ; tous franchis par une trace perso fiable, jamais vus par vcyclist
+    tenus_a_l_ecart: 19   # 17 ponts, 2 tunnels ; chacun avec au moins un passage baro
+    outil: tools/ouvrages/candidats_traces.py (Overpass sur la boîte englobante de chaque trace rognée, IGN LiDAR HD)
   groupes: "private/series.csv n'est pas requis : tools/series_groups.py recalcule groupes et séries"
   regle_serie: "par groupe d'ouvrages, voir README §2 et tools/series_groups.py"
 
@@ -152,7 +158,7 @@ mesures_derivees:
 # qualification : sortie de tools/qualify_baro.py contre le MNT RGE ALTI (pas de 50 m).
 perso:
   hors_git: true
-  regle_serie: "héritée des groupes d'ouvrages franchis, sinon sha256 de l'identifiant de trace ; passages mixtes masqués (README §2, tools/series_groups.py)"
+  regle_serie: "sha256 de l'identifiant de trace ; la fenêtre ± 500 m autour d'un ouvrage suit la série de l'ouvrage (README §2, tools/series_groups.py)"
   periode_exclue: "2015-05 → 2020-09 (baromètre KO en 2015-05/07, altitude bruitée jusqu'en 2020-08) ; voir README §1.3"
   traces:
     - id: perso-01
@@ -169,6 +175,7 @@ perso:
     - id: perso-02
       groupe: dplus
       serie: calibration
+      passages_masques: [nv-42]
       cas: "Moyenne montagne Puy-de-Dôme/Sancy (voyage J2)"
       region: "Puy-de-Dôme"
       mois: "2026-08"
@@ -213,6 +220,7 @@ perso:
     - id: perso-06
       groupe: dplus
       serie: calibration
+      passages_masques: [nv-06, nv-43]
       cas: "Longue sortie gravel 205 km Loire/Anjou (dérive baro 62 m)"
       region: "Loire-Atlantique"
       mois: "2026-06"
@@ -246,6 +254,7 @@ perso:
     - id: perso-09
       groupe: dplus
       serie: calibration
+      passages_masques: [nv-07, nv-18]
       cas: "Pyrénées-Orientales"
       region: "Pyrénées-Orientales"
       mois: "2023-04"
@@ -257,6 +266,7 @@ perso:
     - id: perso-10
       groupe: dplus
       serie: calibration
+      passages_masques: [nv-29]
       cas: "Hautes-Pyrénées (haute montagne)"
       region: "Hautes Pyrenees"
       mois: "2023-05"
@@ -290,6 +300,7 @@ perso:
     - id: perso-13
       groupe: dplus
       serie: tenue_a_l_ecart
+      passages_masques: [nv-02, nv-24, nv-41]
       cas: "Finistère (relief breton)"
       region: "Finistère"
       mois: "2022-07"
@@ -312,6 +323,7 @@ perso:
     - id: perso-15
       groupe: dplus
       serie: tenue_a_l_ecart
+      passages_masques: [nv-12]
       cas: "Livradois-Forez (Puy-de-Dôme)"
       region: "Puy-de-Dôme"
       mois: "2022-10"
@@ -356,6 +368,7 @@ perso:
     - id: perso-19
       groupe: plaine
       serie: calibration
+      passages_masques: [nv-23]
       cas: "Plaine et bocage (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2021-02"
@@ -378,6 +391,7 @@ perso:
     - id: perso-21
       groupe: ouvrage
       serie: calibration
+      passages_masques: [nv-01, nv-38]
       cas: "Pont de Saint-Nazaire (tablier tagué + accès nord non tagué)"
       region: "Loire-Atlantique"
       mois: "2024-04"
@@ -399,7 +413,8 @@ perso:
       qualification: {verdict: fiable, offset_m: -0.32, drift_m: 11.2, noise_m: 0.33, p95_abs_m: 1.2, gain_baro_m: 479, gain_mnt_m: 473}
     - id: perso-23
       groupe: ouvrage
-      serie: calibration
+      serie: tenue_a_l_ecart
+      passages_masques: [chevire, chevire-dessous, nantes-anne-de-bretagne, nantes-pirmil, reze-ponts-successifs, nv-28, nv-50]
       cas: "Passage sous le viaduc de Cheviré"
       region: "Loire-Atlantique"
       mois: "2024-01"
@@ -422,6 +437,7 @@ perso:
     - id: perso-25
       groupe: ouvrage
       serie: calibration
+      passages_masques: [nv-05, nv-08]
       cas: "Pont Audibert ; passage sous Cheviré"
       region: "Loire-Atlantique"
       mois: "2025-10"
@@ -432,7 +448,8 @@ perso:
       qualification: {verdict: fiable, offset_m: 0.04, drift_m: 3.3, noise_m: 0.41, p95_abs_m: 1.2, gain_baro_m: 866, gain_mnt_m: 882}
     - id: perso-26
       groupe: ouvrage
-      serie: calibration
+      serie: tenue_a_l_ecart
+      passages_masques: [nantes-pirmil, nantes-audibert, nv-16]
       cas: "Ponts de Pirmil et Audibert"
       region: "Loire-Atlantique"
       mois: "2026-01"
@@ -444,6 +461,7 @@ perso:
     - id: perso-27
       groupe: ouvrage
       serie: calibration
+      passages_masques: [nv-31, nv-47]
       cas: "Pont Audibert ; ponts de Mauves"
       region: "Loire-Atlantique"
       mois: "2025-03"
@@ -455,6 +473,7 @@ perso:
     - id: perso-28
       groupe: ouvrage
       serie: calibration
+      passages_masques: [nv-03, nv-19, nv-51]
       cas: "Pont Audibert"
       region: "Loire-Atlantique"
       mois: "2026-03"
@@ -466,6 +485,7 @@ perso:
     - id: perso-29
       groupe: ouvrage
       serie: calibration
+      passages_masques: [nv-31, nv-40]
       cas: "Ponts Anne-de-Bretagne et Audibert"
       region: "Loire-Atlantique"
       mois: "2020-10"
@@ -477,6 +497,7 @@ perso:
     - id: perso-30
       groupe: plaine
       serie: calibration
+      passages_masques: [nv-27, nv-40]
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2026-04"
@@ -488,6 +509,7 @@ perso:
     - id: perso-31
       groupe: plaine
       serie: tenue_a_l_ecart
+      passages_masques: [nv-10, nv-28]
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2026-05"
@@ -499,6 +521,7 @@ perso:
     - id: perso-32
       groupe: plaine
       serie: calibration
+      passages_masques: [nv-06, nv-23, nv-27]
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2026-07"
@@ -521,6 +544,7 @@ perso:
     - id: perso-34
       groupe: plaine
       serie: calibration
+      passages_masques: [nv-27]
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2022-05"
@@ -543,6 +567,7 @@ perso:
     - id: perso-36
       groupe: plaine
       serie: tenue_a_l_ecart
+      passages_masques: [nv-17, nv-39, nv-44]
       cas: "Plaine (Loire-Atlantique)"
       region: "Loire-Atlantique"
       mois: "2020-12"
@@ -553,7 +578,8 @@ perso:
       qualification: {verdict: fiable, offset_m: -0.52, drift_m: 3.5, noise_m: 0.45, p95_abs_m: 1.3, gain_baro_m: 896, gain_mnt_m: 909}
     - id: perso-37
       groupe: hors_france
-      serie: tenue_a_l_ecart
+      serie: calibration
+      passages_masques: [donostia-zurriola]
       cas: "Pays basque espagnol, pont de la Zurriola (hors LiDAR HD)"
       region: "Landes"
       mois: "2022-08"
@@ -587,6 +613,7 @@ perso:
     - id: neg-01
       groupe: negatif
       serie: calibration
+      passages_masques: [nv-05, nv-27]
       cas: "Baromètre KO (mai 2015) : D+ enregistré 38 % du MNT"
       region: "Loire-Atlantique"
       mois: "2015-05"
@@ -609,6 +636,7 @@ perso:
     - id: neg-03
       groupe: negatif
       serie: calibration
+      passages_masques: [nv-07]
       cas: "Altitude bruitée (2016, bruit 7,5 m)"
       region: "Pyrénées-Orientales"
       mois: "2016-03"

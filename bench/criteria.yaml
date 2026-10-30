@@ -69,7 +69,7 @@ criteres:
 
   - id: E3
     metrique: "Erreur d'altitude sur tablier de pont tagué (milieu et max sur l'emprise)"
-    cas: {manifest: [ouvrages, perso], types: [bridge]}
+    cas: {manifest: [ouvrages, ouvrages_perso, perso], types: [bridge]}
     reference: {priorite: [baro_corrige_local, mns_mediane_25m], note: "mns = cohérence seulement"}
     terrain: france
     agregation: par_pont
@@ -81,7 +81,7 @@ criteres:
 
   - id: E3_hors_france
     metrique: "Erreur d'altitude sur tablier hors LiDAR (pont interpolé)"
-    cas: {manifest: [ouvrages, perso], types: [bridge]}
+    cas: {manifest: [ouvrages, ouvrages_perso, perso], types: [bridge]}
     terrain: hors_france
     agregation: par_pont
     seuils: []
@@ -90,7 +90,7 @@ criteres:
 
   - id: E4
     metrique: "Erreur max vs droite entre portails ; D+ fictif dans le tunnel"
-    cas: {manifest: [ouvrages, vcyclist], types: [tunnel]}
+    cas: {manifest: [ouvrages, ouvrages_perso, vcyclist], types: [tunnel]}
     terrain: france
     agregation: par_tunnel
     seuils:
@@ -109,7 +109,7 @@ criteres:
 
   - id: S1
     metrique: "Rappel en longueur des ponts/tunnels tagués OSM"
-    cas: {manifest: [ouvrages, vcyclist]}
+    cas: {manifest: [ouvrages, ouvrages_perso, vcyclist]}
     agregation: longueur_totale
     seuils:
       - {rappel_min: 0.95}

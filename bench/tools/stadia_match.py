@@ -3,7 +3,12 @@
 la réponse comme référence de revêtement (R3).
 
 Étapes :
-1. Lecture du GPX (altitude = baromètre), rééchantillonnage tous les STEP_M mètres.
+1. Lecture du GPX (altitude = baromètre), découpage en segments aux sauts de plus de GAP_M entre
+   deux points consécutifs (transport : sinon le recalage invente une route entre les deux). Seuil
+   au-dessus du plus long tunnel cyclable du corpus (1,76 km), où le GPS peut décrocher ; les sauts
+   plus courts (pause avec reprise quelques centaines de mètres plus loin, point aberrant) sont
+   laissés au recalage, segments de moins de MIN_SEG_KM écartés ; chaque segment est traité comme une trace
+   <id>.sN ; rééchantillonnage tous les STEP_M mètres.
 2. Appels trace_attributes (costing bicycle, shape_match map_snap) par tronçons de CHUNK_PTS points
    chevauchants de OVERLAP_PTS ; réponses brutes écrites telles quelles (régénérables, hors git).
 3. Géométrie recalée = concaténation des `shape` (polyline6) ; chaque point d'origine apparié reçoit
@@ -35,6 +40,8 @@ CHUNK_PTS = 2000
 OVERLAP_PTS = 40
 MAX_KM = 200.0
 MAX_PTS = 16000
+GAP_M = 2000.0
+MIN_SEG_KM = 5.0
 ATTRS = ["edge.surface", "edge.road_class", "edge.use", "edge.length", "edge.way_id",
          "edge.begin_shape_index", "edge.end_shape_index", "matched.point", "matched.type",
          "matched.edge_index", "matched.distance_from_trace_point", "shape"]
@@ -149,16 +156,36 @@ def write_gpx(path, pts, name):
         f.write("</trkseg></trk></gpx>\n")
 
 
+def segments(raw):
+    segs, cur = [], [raw[0]]
+    for a, b in zip(raw, raw[1:]):
+        if hav(a, b) > GAP_M:
+            segs.append(cur)
+            cur = []
+        cur.append(b)
+    segs.append(cur)
+    return [g for g in segs if len(g) > 1 and sum(hav(a, b) for a, b in zip(g, g[1:])) >= MIN_SEG_KM * 1000]
+
+
 def main(gpx, tid, outdir):
     key = api_key()
     os.makedirs(os.path.join(outdir, "brut"), exist_ok=True)
-    pts = resample(read_gpx(gpx), STEP_M)
+    segs = segments(read_gpx(gpx))
+    if len(segs) == 1:
+        process(key, segs[0], tid, outdir)
+    else:
+        for k, seg in enumerate(segs):
+            process(key, seg, f"{tid}.s{k + 1}", outdir)
+
+
+def process(key, raw_pts, tid, outdir):
+    pts = resample(raw_pts, STEP_M)
     poly, baro_rows, surf_rows = [], [], []
     starts = list(range(0, len(pts), CHUNK_PTS - OVERLAP_PTS))
     for k, st in enumerate(starts):
         chunk = pts[st:st + CHUNK_PTS]
-        if len(chunk) < 2:
-            break
+        if len(chunk) < 2 or (k > 0 and starts[k - 1] + CHUNK_PTS >= len(pts)):
+            break  # le tronçon précédent atteignait déjà la fin
         raw = os.path.join(outdir, "brut", f"{tid}.{k:02d}.json")
         if os.path.exists(raw):
             d = json.load(open(raw))

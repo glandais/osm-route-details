@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 """Tire les séries du banc pour qu'aucune donnée ne serve aux deux séries.
 
-Règle (bench/README.md §2) :
+Règle (bench/README.md §2) : on partitionne les MÈTRES de trace, pas les traces entières.
 1. Groupes d'ouvrages : composantes connexes des ouvrages dont des points de référence sont à moins
-   de NEAR_M (même ouvrage en plusieurs entrées, dessus/dessous, ponts contigus, départ sur un pont).
-   Série d'un groupe : tenue à l'écart si le premier chiffre hexadécimal de
+   de NEAR_M (même ouvrage en plusieurs entrées, dessus/dessous, ponts contigus, départ sur un pont),
+   plus LIENS_DECLARES. Série d'un groupe : tenue à l'écart si le premier chiffre hexadécimal de
    sha256("osm-route-details:groupe:" + plus petit identifiant du groupe) est dans 0–4.
-2. Passage : une trace franchit un ouvrage si elle passe à moins de TOL_M de chacun de ses points de
-   référence (A, milieu, B ; ou le point de croisement pour un passage dessous).
-3. Série d'une trace : celle des groupes d'ouvrages qu'elle franchit s'ils sont tous de la même série ;
-   sinon (aucun ouvrage, ou séries mélangées) sha256("osm-route-details:trace:" + id), même critère.
-   Les négatifs (contrôle du banc) restent en calibration.
-5. Déjà vu par un projet dont le service reprend les réglages ⇒ calibration : les traces vc-*
-   (vcyclist : détecteurs et constructeur de tablier), os-* (osm-surface : chaîne typologie) et tout
-   groupe d'ouvrages dont un membre a un renvoi vcyclist. Les traces qui les franchissent suivent les points 3 et 4.
-4. Passage mixte (série de la trace ≠ série de l'ouvrage) : exclu des métriques d'ouvrage (E3, E4,
-   E5, S*) des deux séries, et masqué (± MASK_M autour de l'ouvrage) dans les métriques de la trace
-   (E1, E2 : D+ sommé sur les tronçons restants, pour le service comme pour la référence).
-Ainsi un mètre de trace et un ouvrage n'appartiennent qu'à une série.
+2. Déjà vu par un projet dont le service reprend les réglages ⇒ calibration : tout groupe dont un
+   ouvrage a un renvoi vcyclist (détecteurs et constructeur de tablier de vcyclist), les traces vc-*,
+   os-* (chaîne typologie d'osm-surface) et les négatifs.
+3. Série d'une trace : sha256("osm-route-details:trace:" + id), même critère.
+4. Passage : une trace franchit un ouvrage si elle passe à moins de TOL_M de chacun de ses points de
+   référence (A, milieu, B ; ou le point de croisement pour un passage dessous). La fenêtre de
+   ± MASK_M autour de l'ouvrage appartient à la série de l'OUVRAGE : le passage y sert aux métriques
+   d'ouvrage (E3, E4, E5, S*). Si elle diffère de la série de la trace, cette fenêtre est masquée
+   dans les métriques de la trace (E1, E2, E2b : D+ sommé sur les tronçons restants, pour le service
+   comme pour ses références).
+Ainsi chaque mètre de trace n'appartient qu'à une série, et chaque ouvrage garde tous ses passages.
+(Grouper des traces entières soude les traces nantaises, qui partagent de nombreux ponts, en une
+composante géante : tout ou rien.)
 
 Avec --composantes, applique à la place la règle « composante connexe trace × ouvrage » (pour
 comparaison seulement : elle soude ici 28 cas de Loire-Atlantique en un seul groupe).
 
 Entrées : ouvrages-geom.json, une liste de traces « id chemin.gpx|chemin.json ».
-Sortie : CSV id,type,groupe,serie,passages_masques sur la sortie standard.
+Sortie : CSV id,type,groupe,serie,passages_masques sur la sortie standard (passages_masques :
+ouvrages dont la fenêtre est retirée des métriques de la trace, car d'une autre série).
 
 Usage : series_groups.py ouvrages-geom.json traces.txt [--composantes]
 """
@@ -125,13 +127,7 @@ def main(geom_path, traces_path, mode=""):
         for m in ms:
             print(f"{m},ouvrage,{gid},{oserie[gid]},")
     for tid, cs in crossings.items():
-        series = {oserie[og_of[o]] for o in cs}
-        if tid.startswith(("neg-", "vc-", "os-")):
-            s = "calibration"
-        elif len(series) == 1:
-            s = series.pop()
-        else:
-            s = serie_of(f"trace:{tid}")
+        s = "calibration" if tid.startswith(("neg-", "vc-", "os-")) else serie_of(f"trace:{tid}")
         masked = [o for o in cs if oserie[og_of[o]] != s]
         print(f"{tid},trace,{tid},{s},{' '.join(masked)}")
 

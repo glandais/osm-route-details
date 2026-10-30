@@ -43,7 +43,7 @@ def mns(points):
 
 def main(geom_path, osm_dir):
     ways = {}
-    for f in sorted(glob.glob(f"{osm_dir}/q*.json")):
+    for f in sorted(glob.glob(f"{osm_dir}/*.json")):
         for e in json.load(open(f)).get("elements", []):
             if e.get("type") == "way" and "geometry" in e:
                 ways[e["id"]] = [(p["lat"], p["lon"]) for p in e["geometry"]]
