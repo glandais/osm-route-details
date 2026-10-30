@@ -70,7 +70,8 @@ service répond avec Mapterhorn seul, en **mode dégradé signalé**.
 remesuré par vcyclist à **+12 %** sur un parcours (714 m contre 637 m ; le « +35 % » de l'ancienne
 étude n'est pas reproductible). Ni le zoom (z12 → z15 : 1,5 à 3 %) ni le recalage ne l'expliquent
 (doc 01 §6.3). La correction des ouvrages se justifie par ses propres artefacts, qui sont les plus
-grosses erreurs du profil.
+grosses erreurs du profil. Le banc mesure cet écart (E2) à titre **indicatif** ; son seul critère
+bloquant est de ne pas dégrader le D+ du MNT brut (§10).
 
 ## 2. Périmètre
 
@@ -577,7 +578,8 @@ longueur en panne en deçà duquel la réponse serait tolérée. La raison : rec
 
 ### 8.5 Qualité et non-régression
 
-- Les 3 parcours d'osm-surface autour de Nantes (185 km, référence Stadia).
+- Les 3 parcours d'osm-surface autour de Nantes (185 km, référence Stadia), copiés dans `bench/data/`
+  avec leur provenance (dépôt, commit, sha256), comme les fixtures de vcyclist (§10).
 - Un **corpus d'ouvrages dès le MVP** : viaduc, tunnel de montagne, passage sous un pont, ponts
   contigus, trace qui commence sur un pont. osm-surface n'a jamais évalué `bridge` ni `tunnel`.
 - Les **bancs de vcyclist** : itinéraires `docs/deck-strava-data/test1..4.gpx` (Saint-Nazaire, Nantes et
@@ -588,7 +590,9 @@ longueur en panne en deçà duquel la réponse serait tolérée. La raison : rec
 - Les **traces barométriques personnelles** de l'utilisateur, dans d'autres régions que celles des
   bancs de vcyclist : corpus de référence pour le D+, les ouvrages hors Loire-Atlantique et Vercors,
   et à terme les ponts hors LiDAR et la confiance agrégée. Même discipline : séries tenues à l'écart,
-  critères écrits avant.
+  critères écrits avant. Jamais versionnées (`bench/private/`, hors git). Le service v1 restant conçu
+  pour des parcours planifiés, l'outillage du banc les **recale sur la route** (map matching Stadia
+  Maps) avant de les passer au service ; le résultat est comparé au baromètre.
 - Les mesures à faire avant la V1.x (§11) : MNS sur la trace ou sur la géométrie OSM, détection des
   plages GLO-30.
 - Les points de contrôle de vcyclist (Mont Blanc, mer Morte, Badwater), en tests live hors CI.
@@ -652,7 +656,8 @@ les sources) ; pont non tagué traité par heuristiques sur terrain mesuré en V
 MVP en France ; erreurs RFC 9457 (doc 02 §5.1). Les décisions ci-dessous tranchent les questions
 ouvertes de la révision précédente (numéro d'origine entre parenthèses) ; les lignes sans numéro, à
 partir de « Pont OSM sans tablier dans le MNS », tranchent les points de tension de la conception
-technique (`technique/`).
+technique (`technique/`) ; à partir de « D+ face au baromètre », les écarts entre le banc (`bench/`)
+et la conception.
 
 | Sujet | Décision | Conséquence |
 |---|---|---|
@@ -682,7 +687,15 @@ technique (`technique/`).
 | Déploiement | Une seule instance ; mise à l'échelle horizontale hors v1. | La cadence IGN reste locale au processus (§8.1). |
 | Bornes des options | `sampling.step_m` ∈ [5 ; 1 000] m, défaut 25 m ; `smoothing_m` ∈ {0} ∪ [10 ; 1 000] m. | Publiées dans `/v1/capabilities` (doc 02 §3.2). |
 | Zone France | Contour de couverture LiDAR HD de vcyclist (Apache 2.0), recopié ; ni Natural Earth ni Admin Express. | Contour généreux : bandes frontalières comptées en France (§5.1). |
-| Cache de banc | Local, hors git (`~/.cache/osm-route-details/bench`), régénérable par `tools/ord-bench` ; pas de stockage distant. | Bancs hors ligne lancés en local ; une régénération est un changement de données (§8.5). |
+| Cache de banc | Local, hors git (`~/.cache/osm-route-details/bench`), régénérable par `tools/ord-bench` ; pas de stockage distant. | Bancs hors ligne lancés en local ; une régénération est un changement de données (§8.5). Taille en cours de mesure côté banc : ≈ 2 Go estimés avec les traces perso (≈ 250–350 Mo sans). |
+| D+ face au baromètre (E2) | **Indicatif** : D+ service / D+ baro ∈ [0,90 ; 1,20] mesuré, rapporté, suivi en non-régression. Seul critère bloquant : par groupe, la médiane ne se dégrade pas par rapport au D+ du MNT brut. | Cohérent avec §1 : l'écart D+ du MNT n'est pas promis (technique/05 §3.1). |
+| Traces enregistrées du banc | Recalées sur la route par l'outillage du banc (map matching Stadia Maps), puis passées au service et comparées au baromètre. Le service v1 reste conçu pour des parcours planifiés ; il ne recale rien (§2.2). | M1 se mesure sur ces parcours recalés et sur les parcours planifiés (technique/05 §3.4). |
+| Portée des bornes | 200 km et 16 000 points ne bornent que l'**entrée** (413). La sortie n'est pas bornée en points (`distance` à 5 m : ≈ 40 000 sur 200 km). La taille densifiée interne n'est pas une borne. | Doc 02 §7 ; les traces du banc de plus de 200 km sont découpées par l'outillage du banc. |
+| Fixtures de vcyclist et d'osm-surface | Copiées une fois dans `bench/data/` avec leur provenance (dépôt, commit, sha256) ; aucune lecture dans un autre dépôt ni par chemin absolu. | Cohérent avec Q11 (chacun ses données). Licence de code d'osm-surface absente : ouvert (technique/05 §11). |
+| Traces personnelles | Jamais versionnées (`bench/private/`, hors git) ; les golden tests ne les utilisent pas. | Cas perso `skipped` sans `bench/private/` (technique/05 §3.4). |
+| Référence du revêtement (R3) | Réponse `trace_attributes` de Stadia Maps, stockée hors git, régénérable par l'outillage du banc. Stadia dérive aussi d'OSM : c'est un **accord**, pas une vérité terrain indépendante. | R3 n'est plus `skipped` (technique/05 §3). |
+| Séries trace × ouvrage | Tirées **par groupe** : une trace et les ouvrages qu'elle franchit sont dans la même série (sha256 de l'identifiant de groupe), règle de `bench/README.md` §2, en cours de mise à jour côté banc. | `ord-bench` et les golden suivent les listes du manifest (technique/05 §2.6, §3.3). |
+| Référence E3 de cohérence | Médiane du MNS sur 25 m au milieu du pont, portée par `bench/data/ouvrages.yaml` (`milieu_mns_mediane_25m`). Le baromètre reste la seule référence indépendante. | `ord-bench` ne recalcule plus cette référence (technique/05 §3.1). |
 
 ## 11. Vérifications
 

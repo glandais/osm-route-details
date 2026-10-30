@@ -171,11 +171,12 @@ fusionné, arche de plus de 10 % plafonnée par l'étape 6, §8).
 
 Première mesure du banc (`bench/README.md` §1.5) : au milieu des grands ponts (Saint-Nazaire,
 Pirmil, Anne-de-Bretagne, Mauves), le MNS LiDAR est à ≤ 1 m du baromètre corrigé. Au pont
-Général-Audibert, la lecture **ponctuelle** est 2,4 à 4,5 m au-dessus, sur 5 passages
-(superstructure, lampadaires, véhicules). Le constructeur ne lit donc **jamais** le MNS en un seul
-point : il ne retient que des ancres propres (étapes 4–5), puis prend une médiane sur 25 m
-(étape 6). Si un biais survit à la médiane, par exemple une superstructure lisse et continue, il se
-verra en E3 contre le baromètre (bench §3) ; aucune autre correction n'est prévue au MVP.
+Général-Audibert, le MNS est 2,4 à 4,5 m au-dessus du baromètre sur 5 passages, et la médiane sur
+25 m (11,54 m, valeurs de 11,2 à 11,7 m) ne fait pas mieux que la lecture ponctuelle : le biais n'est
+pas un pixel isolé mais le MNS lui-même sur cet ouvrage. Cause ouverte : voie cyclable plus basse que
+la surface lue, ou décalage local du baromètre. Le constructeur garde malgré tout ancres propres
+(étapes 4–5) et médiane sur 25 m (étape 6), qui protègent des artefacts ponctuels. Un biais continu
+de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (bench §3).
 
 ### 3.3 Repli d'interpolation (`interpolated_structure`)
 

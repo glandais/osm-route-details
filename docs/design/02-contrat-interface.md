@@ -318,7 +318,7 @@ Une option ou une clé inconnue donne un 400 **avant** tout calcul.
 | HTTP | `code` | Cas |
 |---|---|---|
 | 400 | `invalid_input` | Format invalide, moins de 2 points distincts, coordonnée hors bornes (y compris hors plage Web Mercator), option hors bornes, `points` et `polyline` fournis ensemble, `debug` demandé sans y avoir droit. |
-| 413 | `route_too_large` | Trop de points, ou parcours de plus de 200 km. Les bornes sont publiées dans `/v1/capabilities`. Le client découpe. |
+| 413 | `route_too_large` | Trop de points d'entrée, ou parcours de plus de 200 km (bornes d'entrée seulement, §7). Les bornes sont publiées dans `/v1/capabilities`. Le client découpe. |
 | 422 | `out_of_coverage` | **Aucune** donnée d'**aucune** source sur toute l'emprise (cas des extraits par bbox). Si une seule source couvre, ou si la couverture est partielle, la réponse est un 200 `partial`. |
 | 503 | `data_unavailable` | Une source attendue est en panne, même après essai du cache périmé **et du repli** (IGN en échec mais Mapterhorn disponible : 200 avec `terrain_fallback`), et `accept_partial` n'est pas activé. Règle stricte, sans seuil de tolérance : une seule tuile en panne non rattrapée suffit, quelle que soit la longueur touchée. Les deux sources en panne donnent toujours un 503, même avec `accept_partial`. Toujours avec `Retry-After`. |
 | 503 | `overloaded` | File saturée. |
@@ -396,7 +396,8 @@ Règles d'évolution à l'intérieur de la v1 :
 
 | Limite | Valeur v1 |
 |---|---|
-| Nombre de points, longueur du parcours | Bornes publiées dans `/v1/capabilities` : **200 km** et 16 000 points (bornes d'osm-surface). Comme dans vcyclist, la borne porte sur la taille **densifiée** (qui dépend de la longueur), pas seulement sur le nombre de points d'entrée. Au-delà : 413, découpage par le client ; un endpoint asynchrone pourra venir plus tard, hors v1. |
+| Nombre de points, longueur du parcours | Bornes publiées dans `/v1/capabilities` : **200 km** et 16 000 points (bornes d'osm-surface). Elles ne portent que sur l'**entrée** (points d'entrée après dédoublonnage, longueur) : au-delà, 413, découpage par le client ; un endpoint asynchrone pourra venir plus tard, hors v1. |
+| Taille de la sortie | **Non bornée en points** : le mode `distance` au pas minimal de 5 m dépasse 16 000 points (≈ 40 000 sur 200 km) sans 413. La densification interne à 5 m découle des bornes d'entrée et n'est pas une borne. |
 | Taille du corps de requête | Bornée. Les corps compressés sont acceptés. |
 | Budget de temps par requête | **90 s** ; au-delà, 504 `timeout`. Dimensionné large sur une lecture IGN à froid (de l'ordre de 20 s pour 130 km sans cache) : usage personnel, latence à froid secondaire. Le délai du reverse proxy doit le dépasser. |
 | Sources tierces | Aucune URL de tuile ni de source fournie par le client. |

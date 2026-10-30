@@ -230,8 +230,9 @@ d'entrée soit un problème RFC 9457 et non un rejet texte d'axum :
 7. Bornes (après dédoublonnage des consécutifs) : moins de 2 points distincts → 400 ; plus de
    `max_points` (16 000 **[M]**, `OS/src/trace.rs:17`) ou longueur > `max_length_m` (200 000
    **[M]**, `OS/src/trace.rs:18`) → 413 `route_too_large`, `details.limit` ∈ {`points`, `length_m`,
-   `body_bytes`}. La borne **densifiée** (doc 02 §7) `n + L / densify_step_m`, sur le modèle de
-   `densifiedPointBound` (`VC/engine/.../Enhancer.kt:86-89`), découle de la longueur et est publiée.
+   `body_bytes`}. Les bornes ne portent que sur l'**entrée** (doc 02 §7) ; la sortie n'est pas bornée
+   en points (`distance` à 5 m sur 200 km ≈ 40 000 points). La taille densifiée interne
+   `n + L / densify_step_m` (stations, §5.1) découle des deux bornes : ce n'est pas une borne 413.
 8. Corps > `max_body_bytes` (8 Mio **[C]** ; 16 000 points ≈ 1 Mo) → 413, `limit = "body_bytes"`.
 
 **Formats d'entrée.** En v1 : JSON `points` ou `polyline`, seuls formats du contrat (doc 02 §3.1).
@@ -345,8 +346,8 @@ Les étapes 6 à 9 forment **une seule** tâche bloquante (un permis). La typolo
    aussi une station. Une station uniforme à moins de 1 cm d'un point d'entrée se confond avec lui.
    `PreparedRoute::samples` **est** la grille de T04 §2.1. Le HMM y prend une observation sur deux
    (10 m, T03 §5.1).
-4. Bornes 413 (§4.2, étape 7) sur `n_dédoublonnés` et `L`. La taille densifiée, `n + L/5 ≤ 56 000`,
-   s'en déduit et est publiée.
+4. Bornes 413 (§4.2, étape 7) sur `n_dédoublonnés` et `L` seulement. La taille densifiée interne,
+   `n + L/5 ≤ 56 000` stations, s'en déduit ; elle dimensionne le calcul, sans 413 propre.
 
 ### 5.2 Parallélisme
 
@@ -493,7 +494,7 @@ collecteur de logs ; aucune ligne ne doit contenir ses chiffres.
 aucune réduction flottante parallèle, sommation dans l'ordre des distances ; `TilePlan` triés, donc
 indifférents à l'ordre d'arrivée des tuiles ; arrondis de sortie fixés dans l'assembleur et
 versionnés (altitudes et distances au cm, pentes à 0,01 %, coordonnées à 1e-6° **[C]**), ce qui
-absorbe les écarts flottants entre machines (T05 §10, point 4) ; `request_id` et `duration_ms` ajoutés par le handler, hors `RouteReport`. Seules
+absorbe les écarts flottants entre machines (T05 §10, point 2) ; `request_id` et `duration_ms` ajoutés par le handler, hors `RouteReport`. Seules
 causes de variation : externes et signalées (repli après panne, tuile IGN nouvellement publiée).
 Test : chaque parcours d'`ord-testkit` rejoué deux fois sur tuiles figées donne des réponses égales,
 ces deux champs retirés. **Idempotence** : aucun effet de bord observable (les caches chauffent

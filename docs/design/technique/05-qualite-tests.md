@@ -20,9 +20,10 @@
 3. **Une mesure sans critère écrit avant ne vaut rien** (exploration 01 §6.4) : séries tirées par
    règle sha256 et seuils gelés dans `bench/` **avant** le premier passage du code jugé (bench §2).
 4. **Toute différence de sortie s'explique** par `rules_version` ou `data_versions` (doc 02 §6, §4).
-5. **Dépendances entre projets gelées et tracées** (doc 01 §10, Q11) : le banc **référence** les
-   bancs de vcyclist et d'osm-surface par chemin et empreinte sha256, sans les copier (bench §1.1,
-   §1.2). Une empreinte qui ne correspond plus arrête la mesure. Tension avec Q11 : §10.3.
+5. **Chacun ses données** (doc 01 §10, Q11) : les fixtures de vcyclist et d'osm-surface sont
+   **copiées une fois** dans `bench/data/`, avec leur provenance (dépôt, commit, sha256) inscrite au
+   manifest. Aucun fichier n'est lu dans un autre dépôt, ni par chemin absolu. Une empreinte qui ne
+   correspond plus arrête la mesure.
 
 ## 2. Stratégie de tests
 
@@ -44,7 +45,8 @@ Par composant (noms de doc 01 §4), les cas qui **doivent** exister, en plus des
 - **Orchestrateur / préparation** : doublons consécutifs fusionnés, non consécutifs gardés (boucle,
   aller-retour) ; indices d'entrée conservés après fusion ; densification à pas métrique sur un
   segment de 0 m, de 1 cm, de 200 km ; antiméridien et latitude limite Web Mercator rejetés (400) ;
-  taille **densifiée** au-delà de la borne → 413 (règle de vcyclist, `VC/api/README.md` §limites).
+  plus de 16 000 points d'entrée ou plus de 200 km → 413 ; les bornes ne portent que sur l'**entrée** :
+  200 km en `distance` à 5 m (≈ 40 000 points de sortie) → 200, jamais 413 (doc 01 §10, doc 02 §7).
 - **Classification** : table de T03 §7 exécutée **en table** (`rstest`) : chaque ligne `(kind,
   surface regroupée, tracktype)` → `(surface.class, surface.source, way_kind)`. Un test d'exhaustivité
   énumère toutes les combinaisons d'attributs neutres connues et vérifie qu'aucune ne panique et que
@@ -185,15 +187,13 @@ hors d'un extrait (`Extent::Bbox` simulé, `typology_missing` et `elevation_miss
 transfrontalier France–Espagne (aucun avertissement de référentiel vertical). Le test
 `contract_edge_cases` vérifie qu'à chaque ligne de doc 02 §5.3 correspond un scénario.
 
-Deux règles viennent du banc. (1) **Aucune trace personnelle** dans `tests/golden/` : les requêtes
-sont versionnées, les traces perso ne le sont pas (bench §1.3). Les scénarios perso restent dans
-`ord-bench`. (2) Un snapshot golden **montre** la sortie du service : il ne doit porter que sur des
-cas de **calibration** du manifest, sinon il fait fuiter la série tenue à l'écart. Avec la règle du
-§3.3, plusieurs scénarios ci-dessus touchent des ouvrages tenus à l'écart : viaduc et départ sur le
-tablier (`stn-pont`, `test1`), Grands Goulets (`grands-goulets-tunnel`, `test4`), passage sous
-Cheviré (`chevire-dessous` ; `n02-nantes-chevire-under` est sans doute au même endroit, à vérifier). Ils sont reportés après le jugement du MVP, ou
-remplacés par un ouvrage de calibration du corpus (`normandie`, `re-pont`, `rousset`,
-`petits-goulets`, `nantes-audibert`). Voir §10.10.
+Deux règles viennent du banc. (1) **Aucune trace personnelle** dans `tests/golden/` : les traces
+perso ne sont **jamais** versionnées (`bench/private/`, hors git) et les golden tests ne les utilisent
+pas (doc 01 §10). Les scénarios perso restent dans `ord-bench`. (2) Un snapshot golden **montre** la
+sortie du service : il ne doit porter que sur des cas et des ouvrages de **calibration** du manifest,
+sinon il fait fuiter la série tenue à l'écart. L'appartenance se lit dans les listes du manifest,
+tirées par groupe (§3.3) ; un scénario qui toucherait un groupe tenu à l'écart est reporté après le
+jugement du MVP ou déplacé sur un ouvrage de calibration.
 
 ### 2.7 Tests live (feature `live-tests`)
 
@@ -214,8 +214,8 @@ Ce chapitre ne les recopie pas. Il décrit comment le logiciel les consomme. Si 
 
 | Sujet | Où, dans le banc |
 |---|---|
-| Bancs de vcyclist (référencés, non copiés), chiffres de base, **pièges** | `bench/README.md` §1.1 ; `manifest.yaml` → `vcyclist` |
-| Éval d'osm-surface (référence Stadia, pas une vérité terrain) | `bench/README.md` §1.2 ; `manifest.yaml` → `osm_surface` |
+| Bancs de vcyclist (copiés dans `bench/data/` avec leur provenance), chiffres de base, **pièges** | `bench/README.md` §1.1 ; `manifest.yaml` → `vcyclist` |
+| Éval d'osm-surface (référence Stadia, pas une vérité terrain ; copiée dans `bench/data/` avec sa provenance) | `bench/README.md` §1.2 ; `manifest.yaml` → `osm_surface` |
 | Traces barométriques personnelles : acquisition, période exclue, critère « fiable », groupes `dplus`, `plaine`, `ouvrage`, `hors_france`, `negatif`, vie privée | `bench/README.md` §1.3 ; `manifest.yaml` → `perso` ; fichiers dans `bench/private/` (hors git) |
 | Corpus de 36 ouvrages (OSM + MNT/MNS/MNH IGN ponctuels) | `bench/README.md` §1.4 ; `data/ouvrages.yaml`, `data/ouvrages-geom.json`, `data/ouvrages-osm/` |
 | Première mesure baro vs MNS LiDAR | `bench/README.md` §1.5 ; `data/deck_baro_vs_lidar.csv` |
@@ -235,19 +235,24 @@ passer le service sur ces références et calcule les métriques.
 |---|---|---|
 | Rôle | Constituer et qualifier le corpus, en amont du service | Faire passer le service sur le corpus, mesurer, juger |
 | Appelle le service | jamais | toujours (en processus par défaut, ou `--url`) |
-| Réseau | Overpass, API alti IGN, MCP Strava, au moment de la constitution | aucun en `run` et `judge` (cache de banc, §5.3) ; seulement `fill-cache` et `latency --profile cold` |
-| Écrit | `manifest.yaml`, `data/ouvrages.yaml`, `data/ouvrages-geom.json`, `data/ouvrages-osm/`, `data/deck_baro_vs_lidar.csv`, `private/traces/*.gpx` | `bench/reports/<date>-<rules_version>/` (`results.json`, `report.md`, CSV par cas), `bench/judgements.md`, `bench/baseline.json`, `bench/cache.lock` |
-| Métriques | **Q1** : verdicts de `qualify_baro.py`, inscrits dans `manifest.yaml` (`qualification.verdict`) | **E1–E5, S1–S3, R1–R2, M1, L1–L2** ; Q1 recopié depuis le manifest, sans recalcul |
+| Réseau | Overpass, API alti IGN, MCP Strava, Stadia Maps (map matching des traces enregistrées, `trace_attributes` pour R3), au moment de la constitution | aucun en `run` et `judge` (cache de banc, §5.3) ; seulement `fill-cache` et `latency --profile cold` |
+| Écrit | `manifest.yaml`, `data/ouvrages.yaml`, `data/ouvrages-geom.json`, `data/ouvrages-osm/`, `data/deck_baro_vs_lidar.csv`, copies des fixtures vcyclist et osm-surface dans `data/`, `private/traces/*.gpx`, traces recalées et réponses Stadia (hors git, régénérables) | `bench/reports/<date>-<rules_version>/` (`results.json`, `report.md`, CSV par cas), `bench/judgements.md`, `bench/baseline.json`, `bench/cache.lock` |
+| Métriques | **Q1** : verdicts de `qualify_baro.py`, inscrits dans `manifest.yaml` (`qualification.verdict`) | **E1–E5, S1–S3, R1–R3, M1, L1–L2** ; Q1 recopié depuis le manifest, sans recalcul |
 
 Règles :
 
-- `ord-bench` **ne recalcule aucune référence** : il lit celles du banc. Il y a deux exceptions,
-  parce que le banc ne stocke pas la valeur. (a) Les vérités de vcyclist (`truth/testN.csv`,
-  `structures.csv`) sont lues à leur emplacement, vérifiées par l'empreinte du manifest. (b) La
-  médiane du MNS sur 25 m le long de l'axe OSM, référence E3 de dernier recours (ni baromètre ni
-  vérité `B`), est calculée sur le cache de banc. C'est la même donnée que celle du service : le
-  rapport la marque `reference = mns_median_25m` (cohérence, pas exactitude). Les valeurs
-  **ponctuelles** de `ouvrages.yaml` ne servent jamais de référence E3 : ce sont des indices (§3.5).
+- `ord-bench` **ne recalcule aucune référence** : il lit celles du banc. Les vérités de vcyclist
+  (`truth/testN.csv`, `structures.csv`) sont lues dans leur copie de `bench/data/`, vérifiées par
+  l'empreinte du manifest. La médiane du MNS sur 25 m au milieu de chaque pont, référence E3 de
+  dernier recours (ni baromètre ni vérité `B`), est lue dans `ouvrages.yaml`
+  (`milieu_mns_mediane_25m`, ajoutée par le banc). C'est la même donnée que celle du service : le
+  rapport la marque `reference = mns_median_25m` (cohérence, pas exactitude ; le baromètre reste la
+  seule référence indépendante). Les valeurs **ponctuelles** de `ouvrages.yaml` ne servent jamais de
+  référence E3 : ce sont des indices (§3.5).
+- **E2 est indicatif** (doc 01 §10) : D+ service / D+ baro ∈ [0,90 ; 1,20] est mesuré, rapporté et
+  suivi en non-régression (§4). Seul critère bloquant : par groupe, la médiane ne se dégrade pas par
+  rapport au D+ du **MNT brut** (service avec `structure_correction: false`, même preset). La forme
+  exacte est celle de `bench/criteria.yaml`.
 - `bench/tools/` ne lit jamais `results.json` pour produire un verdict : il n'y a pas de boucle. Une
   analyse ponctuelle en Python peut le lire, en lecture seule.
 - **Seuils** : `ord-bench` lit `bench/criteria.yaml`, transcription machine de `bench/README.md` §4
@@ -257,8 +262,7 @@ Règles :
   `bench/README.md` §3 et §4.
 - **Règles de calcul non fixées par le banc** : distance maximale d'appariement entre la trace et la
   référence (30 m, `MATCH_MAX_M` de vcyclist), emprise d'un ouvrage (ways `osm.chain` projetées sur la
-  trace), fenêtre du croisement E5 (± 10 m autour du point `croisement`), découpage des traces trop
-  longues. Ce sont des constantes `BenchRules` d'`ord-bench`, hachées dans `results.json`
+  trace), fenêtre du croisement E5 (± 10 m autour du point `croisement`). Ce sont des constantes `BenchRules` d'`ord-bench`, hachées dans `results.json`
   (`bench_rules_sha256`) et gelées avec les seuils : les changer obéit à la même règle que les seuils.
 
 ### 3.2 Format d'échange : `results.json`
@@ -278,12 +282,13 @@ Un fichier par campagne (bench §2, « Campagne »), sans aucune coordonnée :
                   "passages": [ { "cas": "vc-test1", "reference": "baro | vc_B | mns_median_25m",
                                   "E3.err_milieu_m": 0.3, "E3.err_max_m": 0.9 } ] } ],
   "agregats": { "E1": { "plaine.rmse_m": 0.6, "relief.rmse_m": 1.3 } },
-  "verdicts": { "E1": "pass", "S3": "reported", "R3": "skipped" },
+  "verdicts": { "E1": "pass", "S3": "reported", "R3": "reported" },
   "diagnostics": { "structure_uncorrected": 0, "tuiles_lues": { "ign_mnt": 190 } } }
 ```
 
 Verdicts : `pass`, `fail` (avec la valeur mesurée), `reported` (pas de seuil, par exemple S3 au MVP
-ou E3 hors France), `skipped` (référence absente : R3 aujourd'hui, ou `bench/private/` absent). Un
+ou E3 hors France, ou la plage indicative d'E2), `skipped` (référence absente : réponses Stadia
+de R3 non régénérées, ou `bench/private/` absent). Un
 `skipped` n'est jamais compté comme vert. Les **diagnostics** (nombre de `structure_uncorrected`,
 de `structure_slope_implausible`, tuiles et octets lus par source, latence « chaud disque » et
 « chaud mémoire ») sont des indicateurs logiciels, sans seuil, hors banc.
@@ -292,9 +297,11 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
 
 - `ord-bench run` vérifie toutes les empreintes du manifest (traces privées comprises, si
   `bench/private/` est présent), puis **exclut** les cas `serie: tenue_a_l_ecart` et les ouvrages de
-  `ouvrages.serie_tenue_a_l_ecart`, avant de lire une seule tuile. Un cas qui croise une trace et un
-  ouvrage (E3, E5) est exclu dès que **l'un des deux** est tenu à l'écart. C'est la règle par défaut,
-  conservatrice, tant que le banc n'en a pas fixé une (§10.10).
+  `ouvrages.serie_tenue_a_l_ecart`, avant de lire une seule tuile. Les séries sont tirées **par
+  groupe** : une trace et les ouvrages qu'elle franchit sont dans la même série (sha256 de
+  l'identifiant de groupe) ; un passage mixte éventuel est exclu des métriques d'ouvrage et masqué
+  dans celles de la trace. La règle est celle de `bench/README.md` §2 « Discipline », en cours de
+  mise à jour côté banc : `ord-bench` applique les listes du manifest, sans règle propre.
 - `ORD_JUDGE=1 ord-bench judge --increment MVP` ne lit que la série tenue à l'écart. Il vérifie que
   `manifest_sha256`, `criteria_sha256` et `bench_rules_sha256` sont ceux du commit de gel, juge
   **une fois** et ajoute le résultat à `bench/judgements.md` (date, commit, `rules_version`,
@@ -310,21 +317,25 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
 
 ### 3.4 Lecture des traces personnelles
 
-- **Fichiers** : `bench/private/traces/<id>.gpx`, chemins relatifs à `bench/` tels que les donne le
-  manifest (`--private-dir` pour les déplacer). `<ele>` est l'altitude enregistrée brute, sans `<time>`
+- **Fichiers** : `bench/private/traces/<id>.gpx` (jamais versionnés), chemins relatifs à `bench/` tels
+  que les donne le manifest (`--private-dir` pour les déplacer). `<ele>` est l'altitude enregistrée brute, sans `<time>`
   (`bench/tools/stream_to_gpx.py`). GPX est le seul format : le banc dérive tout des streams Strava,
-  la lecture FIT est abandonnée. Les traces `*.trim1km.gpx` ne servent qu'à l'éventuel versionnement
-  (§11).
+  la lecture FIT est abandonnée.
 - **Sans `bench/private/`** (CI, autre machine) : les cas perso sont `skipped`, jamais verts.
-- **Requête** : la trace est rééchantillonnée à 10 m puis envoyée en `points`, dans les deux modes du
-  banc (`distance` à 5 m, puis `input_with_breakpoints`, à froid puis à chaud : bench §2, étape 2).
-  Le rééchantillonnage tient la borne de 16 000 points d'entrée (doc 02 §7) jusqu'à 160 km. Au-delà de
-  200 km (aujourd'hui `perso-06`, 205 km), la règle de découpage est une `BenchRules` à fixer (§10.9).
+- **Requête** : le service v1 est conçu pour des parcours planifiés. Une trace enregistrée est donc
+  d'abord **recalée sur la route** par l'outillage du banc (map matching Stadia Maps, fichier hors
+  git, régénérable), puis la trace recalée est envoyée en `points` (rééchantillonnée à 10 m, pas
+  élargi au-delà de 160 km pour rester sous 16 000 points d'entrée), dans les deux modes du banc
+  (`distance` à 5 m, puis `input_with_breakpoints`, à froid puis à chaud : bench §2, étape 2). La
+  sortie n'est pas bornée en points. Les traces de plus de 200 km (aujourd'hui `perso-06`, 205 km)
+  sont **découpées par l'outillage du banc** avant envoi. Le service est comparé au baromètre de la
+  trace d'origine. M1 se mesure sur ces parcours recalés et sur les parcours planifiés.
 - **Comparaison** : protocole du banc, §2, étape 4. Décalage global = médiane(baro − service) sur les
   stations `ground`. Pour un ouvrage, décalage local entre 1 et 3 km de part et d'autre. La dérive lente
   (> 5 km) est retirée par médiane glissante avant les résidus d'altitude, jamais avant le D+. Le
   recalage de retard τ et l'offset local sur 300 m de la version précédente sont abandonnés.
-- **Test de la méthode** (test d'`ord-bench`, pas une métrique du banc) : sur `VC/demo/public/gpx/strava.gpx`,
+- **Test de la méthode** (test d'`ord-bench`, pas une métrique du banc) : sur `strava.gpx` de vcyclist
+  (`demo/public/gpx/`, copié dans `bench/data/` avec sa provenance),
   le calcul de D+ d'`ord-bench` doit redonner le rapport publié par vcyclist (714 / 637 m ≈ 1,12 au
   preset `dem`, `elevation.md:319-321`) à ± 3 points près.
 - Les rapports des cas perso n'écrivent **aucune coordonnée** : identifiants `perso-NN`, distances
@@ -337,12 +348,13 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
   traces barométriques personnelles sont la **seule référence indépendante** : quand l'une traverse
   un ouvrage, elle prime sur `B` et sur `ouvrages.yaml` (bench §1.1, piège 1). `report.md` affiche une
   colonne par type de référence, jamais une moyenne qui les mélange.
-- **MNS ponctuel peu fiable sur certains ponts.** Au milieu des grands ponts (Saint-Nazaire, Pirmil,
-  Anne-de-Bretagne, Mauves), le MNS LiDAR est à ≤ 1 m du baromètre corrigé. Au pont Général-Audibert,
-  la lecture ponctuelle est **2,4 à 4,5 m au-dessus** sur 5 passages (superstructure, lampadaires,
-  véhicules). Le service ne lit donc jamais le MNS ponctuel : il prend des ancres « propres » puis une
-  médiane sur 25 m (T04 §3.2, étapes 4 à 6). Si un biais survit à la médiane, E3 le montrera contre le
-  baromètre.
+- **Le MNS n'est pas une vérité sur tous les ponts.** Au milieu des grands ponts (Saint-Nazaire,
+  Pirmil, Anne-de-Bretagne, Mauves), le MNS LiDAR est à ≤ 1 m du baromètre corrigé. Au pont
+  Général-Audibert, il est **2,4 à 4,5 m au-dessus** sur 5 passages, et la médiane sur 25 m vaut la
+  lecture ponctuelle (11,54 m) : le biais tient au MNS sur cet ouvrage, pas à un pixel. Cause ouverte
+  (voie cyclable plus basse que la surface lue, ou baromètre). Le service garde ancres propres et
+  médiane sur 25 m (T04 §3.2, étapes 4 à 6) contre les artefacts ponctuels ; un biais continu se verra
+  en E3 contre le baromètre.
 - **Passage sous un pont.** Sous le viaduc de Cheviré, le MNS lu au croisement est à 57–59 m pour un
   sol à 0,4–6,9 m, soit ≈ 50 m d'erreur. C'est le cas **E5** (`chevire-dessous`, `rotonde-dessous`,
   `perso-23..25`), à tolérance quasi nulle (bench §4). Côté service, il est couvert par T04 §2.3 (le
@@ -359,18 +371,18 @@ remplacé. Quand le seuil diffère, c'est celui du banc qui s'applique.
 | A1 | Ponts de Loire à Nantes, max ≤ 2 m sur `B` | **E3**, pont tagué < 300 m : \|milieu\| ≤ 2 m, max ≤ 3 m | Référence baro d'abord, `B` à défaut |
 | A2 | Saint-Nazaire ≤ 5 m | **E3**, grands ponts : max ≤ 5 m ; ≥ 90 % des ponts passent | — |
 | A3 | Rappel 21/21 de `structures.csv` | **S1** ≥ 95 % de la longueur taguée | Longueur, pas un compte |
-| A4 | `p09..p17` ≥ 9/11, jugement unique | **S1** et **E3** sur la calibration ; la tenue à l'écart devient celle du banc (12 ouvrages, 8 traces) | `p09..p17` consommés |
+| A4 | `p09..p17` ≥ 9/11, jugement unique | **S1** et **E3** sur la calibration ; la tenue à l'écart devient celle du banc (tirée par groupe, `manifest.yaml`) | `p09..p17` consommés |
 | A5 | Tunnels du Vercors, max ≤ 2 m | **E4** : \|max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel | Seuil élargi |
 | A6 | Tunnels `th*` ≥ 6/7 | **E4** : ≥ 6/7 des tunnels tagués ; `th*` en calibration | — |
 | A7 | 0 station déplacée sur les négatifs | **S2** (0 ouvrage fictif, ≤ 0,5 % de longueur) et **E5** (passage sous un pont) | E5 isolé |
 | A8 | RMS `T` ≤ 1,0 m (`test1..3`), ≤ 1,5 m (`test4`) | **E1** contre le baromètre ; l'ancien A8 reste un **test de cohérence nommé** (demi-pixel) | Référence indépendante |
-| A9 | D+ / vérité ∈ [0,90 ; 1,15] | **E2** : D+ / baro ∈ [0,90 ; 1,20], médiane du groupe ∈ [0,95 ; 1,12] | Devient bloquant (§10.8) |
+| A9 | D+ / vérité ∈ [0,90 ; 1,15] | **E2** : D+ / baro ∈ [0,90 ; 1,20], médiane du groupe ∈ [0,95 ; 1,12] | Indicatif ; bloquant : ne pas dégrader le D+ du MNT brut (§3.1) |
 | A10 | Revêtu / non revêtu ≥ 97,5 % | **R2** ≥ 97 % ; plus **R1** (classe ≥ 85 %) | — |
 | A11 | `matched_ratio` ≥ 98 % | **M1** : non apparié ≤ 1 %, `unknown` ≤ 2 % | — |
 | A12 | p95 à chaud ≤ 500 ms, 180 km | **L2** : p95 ≤ 500 ms, 100 km | — |
 | A13 | Froid ≤ 25 s, 130 km (live) | **L1** : p95 ≤ 20 s pour 100 km en France, ≤ 5 s hors France | — |
 | ancien R1 | D+ / baro sur les traces perso, non bloquant | **E2** et **E3** | Nom R1 réattribué au revêtement |
-| — | (nouveaux) | **S3** (ouvrage non tagué, rapporté), **R3** (vérité terrain, `skipped`), **Q1** (rejet des négatifs) | — |
+| — | (nouveaux) | **S3** (ouvrage non tagué, rapporté), **R3** (accord avec `trace_attributes` de Stadia, pas une vérité terrain), **Q1** (rejet des négatifs) | — |
 
 ## 4. Non-régression : `rules_version` et `data_versions`
 
@@ -390,7 +402,8 @@ remplacé. Quand le seuil diffère, c'est celui du banc qui s'applique.
   une régression du code (ou un non-déterminisme) : échec.
 - **Référence de banc** : `bench/baseline.json` (résultats de la dernière version acceptée, avec ses
   empreintes). `ord-bench compare` signale toute métrique qui se dégrade au-delà d'une tolérance
-  (0,2 m sur une erreur d'ouvrage, 1 point d'accord, 2 points de rapport de D+ **[à calibrer]**) et tout
+  (0,2 m sur une erreur d'ouvrage, 1 point d'accord, 2 points de rapport de D+, E2 compris
+  **[à calibrer]**) et tout
   seuil de `bench/README.md` §4 qui bascule.
 - **Changement de données** (nouvelle release VersaTiles, IGN publié sur une nouvelle zone,
   rafraîchissement du cache) : nouveau cache, nouveau `baseline.json`, golden régénérés dans une PR
@@ -429,9 +442,9 @@ coordonnée** (§3.4).
 Coût à froid estimé d'après vcyclist (`ElevationBenchProbeTest.kt:64-67`) : ≈ 190 tuiles IGN
 (48 Mo) et 20 Mapterhorn pour les 4 routes, autant de MNS, ≈ 178 BIL (47 Mo) pour les contrôles de
 ponts, plus les tunnels ; ≈ 11 Mo de VersaTiles pour 185 km (`OS/README.md:177`). Les 43 traces
-personnelles (≈ 4 500 km) et les 36 ouvrages s'y ajoutent. À ≈ 0,5 Mo d'IGN par km (vcyclist : 66 Mo
-pour 130 km à froid), on passe de 250–350 Mo à **jusqu'à ≈ 2 Go** avant recouvrement des traces
-**[à mesurer]** au premier `fill-cache`.
+personnelles (≈ 4 600 km) et les 36 ouvrages s'y ajoutent. La taille est **en cours de mesure côté
+banc** (`bench/README.md` §6 bis) : ≈ 250–350 Mo sans les traces perso, **≈ 2 Go estimés** avec
+elles ; mesure exacte au premier `fill-cache`.
 
 **Décision** (doc 01 §10) : le cache de banc est **local, hors git**, dans
 `~/.cache/osm-route-details/bench` par défaut (`ORD_BENCH_CACHE` ou `--cache-dir` pour le déplacer),
@@ -484,7 +497,7 @@ Ce chapitre ne garde que la mise en œuvre.
   règle du banc.
 - Calibration d'abord, puis `dsm-placement --judge` **une seule fois** sur la série tenue à l'écart
   désignée par le banc ; résultat dans `bench/judgements.md`, décision consignée dans doc 01 §11.
-- En mode B, l'invariant 8 (même altitude dans les deux sens) est revérifié par `proptest` (§10.7).
+- En mode B, l'invariant 8 (même altitude dans les deux sens) est revérifié par `proptest` (§10.5).
 
 ## 8. Interfaces
 
@@ -503,6 +516,7 @@ pub struct Manifest { pub entries: Vec<ManifestEntry>, pub ouvrages_tenus: BTree
     pub sha256: [u8; 32] }                                    // refuse une empreinte fausse
 pub struct Ouvrage { pub id: String, pub kind: String, pub chain: Vec<i64>, pub associees: Vec<i64>,
     pub longueur_m: f64, pub points: BTreeMap<String, (f64, f64)>,
+    pub milieu_mns_mediane_25m: Option<f64>,                  // ouvrages.yaml ; référence E3 de cohérence
     pub indices: BTreeMap<String, IgnPointValues> }           // ouvrages.yaml ; ponctuels, jamais une référence E3
 pub enum StationKind { Terrain, Deck, OffDeck, Tunnel, Balcony, Ground, Overhead, Alongside, Excluded, Margin }
 pub struct TruthProfile { pub route: String, pub step_m: f64, pub s: Vec<f64>, pub lat: Vec<f64>,
@@ -516,7 +530,7 @@ pub struct BaroOffset { pub global_m: f64, pub local_m: Option<f64> }   // bench
 pub enum ReferenceKind { Baro, VcTruth, MnsMedian25m }
 pub struct MetricId(pub &'static str);                        // "E1" … "Q1", ceux de bench §3
 pub struct Criterion { pub id: MetricId, pub blocking: bool, pub threshold: Threshold } // criteria.yaml
-pub struct BenchRules { /* MATCH_MAX_M, emprise, fenêtre E5, découpage */ }          // Serialize, haché
+pub struct BenchRules { /* MATCH_MAX_M, emprise, fenêtre E5 */ }          // Serialize, haché
 pub enum Verdict { Pass, Fail { measured: f64 }, Reported, Skipped }
 pub struct RulesFingerprint(pub [u8; 32]);  pub struct DataFingerprint(pub [u8; 32]);
 pub struct BenchResults { pub campagne: CampaignMeta, pub cas: Vec<CaseResult>,
@@ -554,7 +568,7 @@ pub fn offline_sources(cache_dir: &Path) -> Sources;   // TileReader en mode Off
 | `tokio` (`test-util`) | temps virtuel | cadence, relances, budget sans attente réelle |
 | `tower`, `http-body-util` | appel du routeur en mémoire | déjà le modèle d'osm-surface |
 | `jsonschema` | validation des réponses contre l'OpenAPI | contrat vérifié sur des sorties réelles |
-| `gpx` | lecture des GPX (vcyclist, osm-surface, traces perso) | seule dépendance de lecture de traces, confinée à `ord-bench` |
+| `gpx` | lecture des GPX (copies vcyclist et osm-surface, traces perso et recalées) | seule dépendance de lecture de traces, confinée à `ord-bench` |
 | parseur YAML serde (à choisir, `serde_yaml` n'étant plus maintenu) ; `csv`, `serde_json` | `manifest.yaml`, `ouvrages.yaml`, `criteria.yaml` ; vérités vcyclist ; `results.json` | formats du banc et de vcyclist |
 | `sha2`, `hdrhistogram`, `clap` | empreintes ; p50/p95 de latence ; CLI d'`ord-bench` | gel, non-régression, mesure |
 | `criterion` (optionnel) ; outils `cargo-nextest`, `cargo-deny`, `cargo-fuzz`, `oasdiff` | micro-bancs ; exécution, licences, fuzz, rupture d'API | hors cœur |
@@ -566,65 +580,35 @@ pub fn offline_sources(cache_dir: &Path) -> Sources;   // TileReader en mode Off
    référence indépendante (§3.5). Un flux `altitude` Strava peut en outre avoir été remplacé par le
    fond Strava (« corriger l'altitude ») : à exclure au manifeste, faute de marqueur fiable dans les
    streams (§11).
-2. **Traces barométriques = traces enregistrées**, que v1 ne valide pas (doc 01 §2.3, V2). Le banc
-   les utilise pour des seuils bloquants (E1, E2, E3, E5) et M1 vise « toutes traces ». Or
-   l'appariement d'une trace GPS bruitée peut rater des ponts ou laisser des portions non appariées :
-   un échec de M1 ou de S1 sur ces traces peut venir de l'entrée, pas du service. `report.md` sépare
-   les traces enregistrées des parcours planifiés ; la décision (bloquant ou non) revient au banc.
-3. **Q11 « aucune dépendance de fichiers entre projets »** contre doc 01 §8.5 « bancs de vcyclist ».
-   Le banc a choisi de **référencer** vcyclist et osm-surface (chemin absolu + sha256), sans les
-   copier, à cause des licences (§11). `ord-bench` lit donc des fichiers d'un autre dépôt sur la
-   machine locale : la dépendance est gelée et tracée, mais réelle. Une régénération côté vcyclist
-   casse l'empreinte (le banc refuse) au lieu de passer inaperçue. La CI n'en dépend pas.
-4. **Déterminisme flottant** : l'exigence « même réponse » (doc 02 §6) suppose une sérialisation
+2. **Déterminisme flottant** : l'exigence « même réponse » (doc 02 §6) suppose une sérialisation
    arrondie ou une arithmétique identique entre machines (FMA x86/ARM). Tranché par T01 §9 (arrondis
    de l'assembleur) ; reste un cas rare de valeur à cheval sur un arrondi, d'où la tolérance d'une unité.
-5. **S1 ≥ 95 % et E3 ≥ 90 % des ponts** sont des paris sur l'apport d'OSM : si l'appariement rate les
+3. **S1 ≥ 95 % et E3 ≥ 90 % des ponts** sont des paris sur l'apport d'OSM : si l'appariement rate les
    tabliers étroits, le seuil sera manqué et rapporté, pas abaissé (bench §4, dernier paragraphe).
-6. **L1 dépend du réseau** (IGN, 40 req/s/IP, pas de SLA) : critère mesuré en live, donc non
+4. **L1 dépend du réseau** (IGN, 40 req/s/IP, pas de SLA) : critère mesuré en live, donc non
    reproductible et non bloquant en CI. Un p95 à froid exige plusieurs passages caches vidés, donc
    autant de téléchargements complets.
-7. **Méthode B (§7)** réutilise le constructeur de tablier sur une géométrie que la trace ne suit pas :
+5. **Méthode B (§7)** réutilise le constructeur de tablier sur une géométrie que la trace ne suit pas :
    l'invariant 8 (même altitude dans les deux sens) doit être revérifié par `proptest` dans ce mode.
-8. **E2 bloquant contre « ne pas promettre »** : doc 01 §1 exclut de corriger l'écart résiduel du D+
-   MNT face au baromètre, et l'ancien critère sur les traces perso était non bloquant. Le banc fixe
-   [0,90 ; 1,20] par trace, alors que le ratio MNT brut / baro mesuré va déjà jusqu'à 1,20 (`dplus`) et
-   1,21 (`ouvrage`, `perso-23`). Le service n'a pas de levier sur cet écart hors ouvrage.
-9. **Bornes de l'API** (doc 02 §7 : 200 km, 16 000 points, taille densifiée) : `perso-06` (205 km,
-   tenue à l'écart) les dépasse, et le mode `distance` à 5 m demandé par le banc produit 20 000 à
-   26 000 points pour 100 à 130 km. Selon la définition de la « taille densifiée », la campagne
-   reçoit des 413. Le découpage fausse le D+ (doc 02 §5.3). À trancher avant le gel des `BenchRules`.
-10. **Séries croisées trace × ouvrage.** Les séries sont tirées séparément pour les traces et pour les
-    ouvrages. `stn-pont` et `mauves` sont tenus à l'écart, mais les traces qui les franchissent
-    (`perso-20..22`, `perso-27`, `vc-test1`, `vc-test3`) sont en calibration. À l'inverse, `perso-25`
-    est tenue à l'écart et `nantes-audibert` en calibration. La règle conservatrice du §3.3 retire de
-    la calibration Saint-Nazaire, Mauves et Cheviré-dessous, et les scénarios golden qui les
-    franchissent. Le protocole du banc §5 compte pourtant `perso-20..22` en calibration et
-    Saint-Nazaire en tenue à l'écart. Le banc doit fixer la règle.
-11. **Référence E3 « médiane MNS 25 m (`ouvrages.yaml`) »** : `ouvrages.yaml` ne porte que des lectures
-    ponctuelles, celles que la mesure d'Audibert disqualifie. `ord-bench` calcule la médiane sur le
-    cache (§3.1), mais c'est alors la donnée du service : cohérence seulement.
 
 ## 11. Reste à fournir
 
-Ce que le banc attend encore de l'utilisateur (bench §6). Rien n'est tranché ici.
+Ce que le banc attend encore de l'utilisateur (bench §6). Rien n'est tranché ici. Les décisions du
+2026-10-30 (E2 indicatif, traces recalées, bornes d'entrée, fixtures copiées, traces perso jamais
+versionnées, référence R3, séries par groupe, référence E3, cache de banc) sont dans doc 01 §10.
 
-- **Versionnement des traces personnelles** : accord pour versionner tout ou partie des traces
-  (entières ou rognées de 1 km), ou décision de garder les identifiants Strava hors dépôt. Par défaut,
-  rien de personnel n'est versionné.
 - **Qualification hors France** : qualifier `perso-37..39` contre Mapterhorn, faute de MNT IGN. Il faut
   aussi choisir le MNT de référence de cette qualification (`perso-38` et `perso-39` n'ont aujourd'hui
   aucun indicateur).
-- **Vérité terrain du revêtement (R3)** : aucune pour l'instant. Un relevé sur un parcours connu ?
-- **Licences** : conditions de réutilisation de la référence Stadia ; absence de licence de code
-  d'osm-surface ; expurgation des `.route.json` (métadonnées d'équipe, URL tribly) avant toute copie.
+- **Licences** : osm-surface n'a **aucune licence** de code, alors que ses fixtures sont copiées dans
+  `bench/data/` ; conditions de réutilisation de Stadia (référence d'osm-surface, map matching et
+  `trace_attributes`) ; expurgation des `.route.json` (métadonnées d'équipe, URL tribly) à la copie.
+- **S1 sur les traces recalées** : M1 s'y mesure (doc 01 §10) ; le statut de S1 n'est pas tranché
+  explicitement.
 - **Points divers** : accès vélo réel des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`) ; source
   GLO-30 réelle de Krk ; RGE ALTI ou MNT LiDAR au tunnel d'Arbois ; streams Strava dont l'altitude
-  aurait été « corrigée » par le fond Strava (§10.1) ; nouvelle série tenue à l'écart après le
-  jugement du MVP.
-- **Décisions de protocole attendues du banc** (tensions de ce fichier) : règle des séries croisées
-  trace × ouvrage (§10.10) ; E2 bloquant ou rapporté (§10.8) ; découpage des traces au-delà des bornes
-  de l'API (§10.9) ; statut de M1 et S1 sur les traces enregistrées (§10.2).
-- **Ajouts à `bench/`**, dans un commit séparé, avant le premier passage : `criteria.yaml` (§3.1) ;
-  entrée de `VC/demo/public/gpx/strava.gpx` au manifest, si le test de méthode du §3.4 doit être
-  tracé par empreinte.
+  aurait été « corrigée » par le fond Strava (§10.1) ; série tenue à l'écart d'ouvrages à étoffer
+  (bench §6) ; nouvelle série tenue à l'écart après le jugement du MVP.
+- **Ajouts à `bench/`**, dans un commit séparé, avant le premier passage : `criteria.yaml` (§3.1, avec
+  le critère bloquant d'E2) ; copie de `strava.gpx` de vcyclist dans `bench/data/` et entrée au
+  manifest, si le test de méthode du §3.4 doit être tracé par empreinte.
