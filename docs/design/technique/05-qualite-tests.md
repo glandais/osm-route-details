@@ -191,9 +191,9 @@ Deux règles viennent du banc. (1) **Aucune trace personnelle** dans `tests/gold
 perso ne sont **jamais** versionnées (`bench/private/`, hors git) et les golden tests ne les utilisent
 pas (doc 01 §10). Les scénarios perso restent dans `ord-bench`. (2) Un snapshot golden **montre** la
 sortie du service : il ne doit porter que sur des cas et des ouvrages de **calibration** du manifest,
-sinon il fait fuiter la série tenue à l'écart. L'appartenance se lit dans les listes du manifest,
-tirées par groupe (§3.3) ; un scénario qui toucherait un groupe tenu à l'écart est reporté après le
-jugement du MVP ou déplacé sur un ouvrage de calibration.
+sinon il fait fuiter la série tenue à l'écart. L'appartenance se lit dans les listes du manifest
+(§3.3) ; un scénario qui toucherait un ouvrage, une trace ou une fenêtre tenus à l'écart est reporté
+après le jugement du MVP ou déplacé sur un ouvrage de calibration.
 
 ### 2.7 Tests live (feature `live-tests`)
 
@@ -297,11 +297,12 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
 
 - `ord-bench run` vérifie toutes les empreintes du manifest (traces privées comprises, si
   `bench/private/` est présent), puis **exclut** les cas `serie: tenue_a_l_ecart` et les ouvrages de
-  `ouvrages.serie_tenue_a_l_ecart`, avant de lire une seule tuile. Les séries sont tirées **par
-  groupe** : une trace et les ouvrages qu'elle franchit sont dans la même série (sha256 de
-  l'identifiant de groupe) ; un passage mixte éventuel est exclu des métriques d'ouvrage et masqué
-  dans celles de la trace. La règle est celle de `bench/README.md` §2 « Discipline », en cours de
-  mise à jour côté banc : `ord-bench` applique les listes du manifest, sans règle propre.
+  `ouvrages.serie_tenue_a_l_ecart`, avant de lire une seule tuile. Les séries partitionnent les
+  **mètres** de trace : série par groupe d'ouvrages et série par trace (sha256) ; la fenêtre de
+  ± 500 m autour d'un ouvrage franchi suit la série de l'ouvrage (E3, E4, E5, S*) et, si elle diffère
+  de celle de la trace, elle est masquée dans E1, E2 et E2b de la trace. La règle est celle de
+  `bench/README.md` §2 « Discipline » : `ord-bench` applique les listes et les fenêtres masquées du
+  manifest, sans règle propre.
 - `ORD_JUDGE=1 ord-bench judge --increment MVP` ne lit que la série tenue à l'écart. Il vérifie que
   `manifest_sha256`, `criteria_sha256` et `bench_rules_sha256` sont ceux du commit de gel, juge
   **une fois** et ajoute le résultat à `bench/judgements.md` (date, commit, `rules_version`,
@@ -371,7 +372,7 @@ remplacé. Quand le seuil diffère, c'est celui du banc qui s'applique.
 | A1 | Ponts de Loire à Nantes, max ≤ 2 m sur `B` | **E3**, pont tagué < 300 m : \|milieu\| ≤ 2 m, max ≤ 3 m | Référence baro d'abord, `B` à défaut |
 | A2 | Saint-Nazaire ≤ 5 m | **E3**, grands ponts : max ≤ 5 m ; ≥ 90 % des ponts passent | — |
 | A3 | Rappel 21/21 de `structures.csv` | **S1** ≥ 95 % de la longueur taguée | Longueur, pas un compte |
-| A4 | `p09..p17` ≥ 9/11, jugement unique | **S1** et **E3** sur la calibration ; la tenue à l'écart devient celle du banc (tirée par groupe, `manifest.yaml`) | `p09..p17` consommés |
+| A4 | `p09..p17` ≥ 9/11, jugement unique | **S1** et **E3** sur la calibration ; la tenue à l'écart devient celle du banc (`manifest.yaml`) | `p09..p17` consommés |
 | A5 | Tunnels du Vercors, max ≤ 2 m | **E4** : \|max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel | Seuil élargi |
 | A6 | Tunnels `th*` ≥ 6/7 | **E4** : ≥ 6/7 des tunnels tagués ; `th*` en calibration | — |
 | A7 | 0 station déplacée sur les négatifs | **S2** (0 ouvrage fictif, ≤ 0,5 % de longueur) et **E5** (passage sous un pont) | E5 isolé |
@@ -600,15 +601,14 @@ versionnées, référence R3, séries par groupe, référence E3, cache de banc)
 - **Qualification hors France** : qualifier `perso-37..39` contre Mapterhorn, faute de MNT IGN. Il faut
   aussi choisir le MNT de référence de cette qualification (`perso-38` et `perso-39` n'ont aujourd'hui
   aucun indicateur).
-- **Licences** : osm-surface n'a **aucune licence** de code, alors que ses fixtures sont copiées dans
-  `bench/data/` ; conditions de réutilisation de Stadia (référence d'osm-surface, map matching et
-  `trace_attributes`) ; expurgation des `.route.json` (métadonnées d'équipe, URL tribly) à la copie.
+- **Licences** : conditions de réutilisation de Stadia (référence d'osm-surface, map matching et
+  `trace_attributes`). osm-surface est sous Apache 2.0 et ses `.route.json` sont expurgés à la copie
+  (fait).
 - **S1 sur les traces recalées** : M1 s'y mesure (doc 01 §10) ; le statut de S1 n'est pas tranché
   explicitement.
 - **Points divers** : accès vélo réel des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`) ; source
   GLO-30 réelle de Krk ; RGE ALTI ou MNT LiDAR au tunnel d'Arbois ; streams Strava dont l'altitude
-  aurait été « corrigée » par le fond Strava (§10.1) ; série tenue à l'écart d'ouvrages à étoffer
-  (bench §6) ; nouvelle série tenue à l'écart après le jugement du MVP.
+  aurait été « corrigée » par le fond Strava (§10.1) ; nouvelle série tenue à l'écart après le jugement du MVP.
 - **Ajouts à `bench/`**, dans un commit séparé, avant le premier passage : `criteria.yaml` (§3.1, avec
   le critère bloquant d'E2) ; copie de `strava.gpx` de vcyclist dans `bench/data/` et entrée au
   manifest, si le test de méthode du §3.4 doit être tracé par empreinte.

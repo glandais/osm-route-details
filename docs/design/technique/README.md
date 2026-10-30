@@ -43,7 +43,7 @@ banc** (`bench/README.md` §3), mesurées par `ord-bench run --offline` sur le c
 A1–A13 sont retirés (correspondance : T05 §3.6).
 
 Les incréments 1 à 5 sont acceptés sur la **série de calibration** seule. La série tenue à l'écart
-(tirée par groupe trace × ouvrages, `bench/manifest.yaml`) est jugée **une seule fois**, à
+(partition des mètres de trace et des ouvrages, `bench/manifest.yaml`) est jugée **une seule fois**, à
 l'incrément 6, pour le MVP entier (bench §2, T05 §3.3). Q1 (le banc rejette ses 4 négatifs) est
 vérifié par `ord-bench check` avant toute campagne.
 
