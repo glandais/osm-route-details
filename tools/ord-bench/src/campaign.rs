@@ -740,13 +740,32 @@ pub async fn measure_case(
         let reference = service.with_mode(BenchMode::Reference);
         let (q, _, _) = recolle(&reference, case, true, rules, dem.threshold_m).await?;
         let (q_raw, _, _) = recolle(&reference, case, false, rules, dem.threshold_m).await?;
-        // Même grille, aux arrondis du cm près (tronçons recollés : décalages cumulés).
-        let same = |a: &[f64]| a.len() == p.d.len() && a.iter().zip(&p.d).all(|(x, y)| (x - y).abs() <= 0.05);
-        if !same(&q.d) || !same(&q_raw.d) {
-            bail!("grilles de référence et testée différentes");
+        // Même grille, aux arrondis du cm près ; la dernière station du mode `distance` peut être
+        // doublée (fin du parcours à moins d'un cm du dernier pas) : profils de référence lus
+        // aux abscisses de la grille testée.
+        if (q.d.len() as i64 - p.d.len() as i64).abs() > 1
+            || (q_raw.d.len() as i64 - p.d.len() as i64).abs() > 1
+        {
+            bail!("grilles de référence et testée différentes ({} / {} stations)", q.d.len(), p.d.len());
         }
-        p.pts = q.pts;
-        (q.ele, q_raw.ele)
+        // Station à moins d'un cm : sa valeur telle quelle (jamais `0 × NaN` d'un voisin absent).
+        let on = |xs: &[f64], ys: &[f64]| -> Vec<f64> {
+            p.d.iter()
+                .map(|&x| {
+                    let i = xs.partition_point(|&v| v < x - 0.01);
+                    match xs.get(i) {
+                        Some(&v) if (v - x).abs() <= 0.01 => ys[i],
+                        _ => interp_one(xs, ys, x),
+                    }
+                })
+                .collect()
+        };
+        let lat: Vec<f64> = q.pts.iter().map(|l| l.lat).collect();
+        let lon: Vec<f64> = q.pts.iter().map(|l| l.lon).collect();
+        let (lat, lon) = (on(&q.d, &lat), on(&q.d, &lon));
+        let (svc_ref, raw_ref) = (on(&q.d, &q.ele), on(&q_raw.d, &q_raw.ele));
+        p.pts = lat.iter().zip(&lon).map(|(&a, &b)| LatLon::new(a, b)).collect();
+        (svc_ref, raw_ref)
     };
     let r = &responses[0];
     // Abscisse recalée → distance du service (identiques sans rééchantillonnage), tronçons
