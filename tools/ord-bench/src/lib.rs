@@ -91,8 +91,9 @@ impl BenchPaths {
 /// recalés régénérés par le banc en 74cdd88 (raccords de tronçons Stadia), outil inchangé. `bench2`
 /// (règles 2026.10.8, banc 53225a8 et adbf6f1) : baro des points insérés gardé à 30 m d'une voie
 /// des tuiles de la campagne ; recalages régénérés (colonne `insere`, pas de baro dans les trous de
-/// la trace brute).
-pub const BENCH_REVISION: Option<&str> = Some("bench2");
+/// la trace brute). Remise à `None` avec les règles 2026.10.9 (incrément 5 : points de rupture ;
+/// campagne dans les deux modes, `distance` et `input_with_breakpoints`).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

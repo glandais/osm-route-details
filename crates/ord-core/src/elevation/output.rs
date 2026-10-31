@@ -1,7 +1,5 @@
-//! Points de sortie (T04 §6) : modes `input` et `distance`.
-//!
-//! Incrément 1 : `input_with_breakpoints` rend les seuls points d'entrée, sans point inséré ; la
-//! sélection des points de rupture arrive à l'incrément 5.
+//! Points de sortie (T04 §6) : modes `input`, `distance` et `input_with_breakpoints` (points
+//! d'entrée et points de rupture insérés, `breakpoints`).
 
 use std::fmt;
 
@@ -10,7 +8,10 @@ use ord_domain::route::PreparedRoute;
 use ord_domain::LatLon;
 use serde::Serialize;
 
+use super::breakpoints::{select_breakpoints, BreakpointReason};
 use super::{EleMethod, ElevationProfile};
+use crate::rules::BreakpointRules;
+use crate::typology::TypedSegment;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +28,9 @@ pub struct OutputPoint {
     pub index: u32,
     /// `None` en mode `distance`.
     pub origin: Option<PointOrigin>,
+    /// Raisons d'insertion (mode `input_with_breakpoints`) : obligatoires sur un point inséré,
+    /// présentes sur un point d'entrée si une rupture lui est rattachée.
+    pub reasons: Vec<BreakpointReason>,
     /// Position interpolée : mode `distance` et points insérés seulement.
     pub latlon: Option<LatLon>,
     pub ele: Option<f64>,
@@ -41,6 +45,7 @@ impl fmt::Debug for OutputPoint {
             .field("index", &self.index)
             .field("ele", &self.ele)
             .field("ele_method", &self.ele_method)
+            .field("reasons", &self.reasons)
             .finish_non_exhaustive()
     }
 }
@@ -49,26 +54,17 @@ impl fmt::Debug for OutputPoint {
 /// est `L` lui-même.
 const LAST_STEP_EPS_M: f64 = 1e-3;
 
-pub fn sample_output(route: &PreparedRoute, profile: &ElevationProfile, mode: &Sampling) -> Vec<OutputPoint> {
+/// Points de `points[]` selon le mode (T04 §6).
+pub fn sample_output(
+    route: &PreparedRoute,
+    profile: &ElevationProfile,
+    mode: &Sampling,
+    segs: &[TypedSegment],
+    rules: &BreakpointRules,
+) -> Vec<OutputPoint> {
     match *mode {
-        Sampling::Input | Sampling::InputWithBreakpoints => route
-            .input_pos
-            .iter()
-            .map(|&pos| {
-                let i = pos as usize;
-                let s = &route.samples[i];
-                let ele = profile.ele[i];
-                OutputPoint {
-                    d_m: s.d_m,
-                    index: s.input_index.unwrap_or(s.prev_input),
-                    origin: Some(PointOrigin::Input),
-                    latlon: None,
-                    ele: (!ele.is_nan()).then_some(ele),
-                    ele_smoothed: profile.ele_smoothed.as_ref().map(|v| v[i]).filter(|v| !v.is_nan()),
-                    ele_method: profile.method[i],
-                }
-            })
-            .collect(),
+        Sampling::Input => input_points(route, profile),
+        Sampling::InputWithBreakpoints => select_breakpoints(route, profile, segs, rules),
         Sampling::Distance { step_m } => {
             let length = route.length_m;
             let mut out = Vec::with_capacity((length / step_m) as usize + 2);
@@ -89,7 +85,32 @@ pub fn sample_output(route: &PreparedRoute, profile: &ElevationProfile, mode: &S
     }
 }
 
-fn point_at(route: &PreparedRoute, profile: &ElevationProfile, d: f64) -> OutputPoint {
+/// Un point par point d'entrée dédoublonné, lu à sa station (jamais déplacé), sans position.
+pub(super) fn input_points(route: &PreparedRoute, profile: &ElevationProfile) -> Vec<OutputPoint> {
+    route
+        .input_pos
+        .iter()
+        .map(|&pos| {
+            let i = pos as usize;
+            let s = &route.samples[i];
+            let ele = profile.ele[i];
+            OutputPoint {
+                d_m: s.d_m,
+                index: s.input_index.unwrap_or(s.prev_input),
+                origin: Some(PointOrigin::Input),
+                reasons: Vec::new(),
+                latlon: None,
+                ele: (!ele.is_nan()).then_some(ele),
+                ele_smoothed: profile.ele_smoothed.as_ref().map(|v| v[i]).filter(|v| !v.is_nan()),
+                ele_method: profile.method[i],
+            }
+        })
+        .collect()
+}
+
+/// Point à la distance `d`, position interpolée sur la trace d'origine (mode `distance`, point
+/// inséré).
+pub(super) fn point_at(route: &PreparedRoute, profile: &ElevationProfile, d: f64) -> OutputPoint {
     let pe = profile.at(d);
     let a = &route.samples[pe.lower];
     let b = &route.samples[(pe.lower + 1).min(route.samples.len() - 1)];
@@ -100,6 +121,7 @@ fn point_at(route: &PreparedRoute, profile: &ElevationProfile, d: f64) -> Output
         d_m: d,
         index: a.prev_input,
         origin: None,
+        reasons: Vec::new(),
         latlon: Some(latlon),
         ele: pe.ele,
         ele_smoothed: pe.ele_smoothed,
@@ -128,7 +150,7 @@ mod tests {
             &Rules::default(),
         )
         .unwrap();
-        let pts = sample_output(&route, &p, &Sampling::Distance { step_m: 25.0 });
+        let pts = sample_output(&route, &p, &Sampling::Distance { step_m: 25.0 }, &[], &Default::default());
         let d: Vec<f64> = pts.iter().map(|p| p.d_m).collect();
         assert_eq!(d.len(), 4);
         assert_eq!(&d[..3], [0.0, 25.0, 50.0]);
@@ -152,7 +174,7 @@ mod tests {
             &Rules::default(),
         )
         .unwrap();
-        let pts = sample_output(&route, &p, &Sampling::Input);
+        let pts = sample_output(&route, &p, &Sampling::Input, &[], &Default::default());
         assert_eq!(pts.iter().map(|p| p.index).collect::<Vec<_>>(), [0, 2]);
         assert!(pts.iter().all(|p| p.origin == Some(PointOrigin::Input) && p.latlon.is_none()));
     }

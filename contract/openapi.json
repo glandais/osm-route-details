@@ -302,6 +302,77 @@
           }
         }
       },
+      "BreakpointReasonV1": {
+        "type": "string",
+        "description": "Why a point was inserted (open list: clients ignore unknown values).",
+        "enum": [
+          "local_max",
+          "local_min",
+          "grade_change",
+          "structure_start",
+          "structure_end",
+          "surface_change",
+          "terrain_source_change",
+          "elevation_gap_start",
+          "elevation_gap_end"
+        ]
+      },
+      "BreakpointRulesV1": {
+        "type": "object",
+        "description": "Breakpoint selection thresholds; distances in metres.",
+        "required": [
+          "merge_m",
+          "snap_m",
+          "min_spacing_m",
+          "max_inserted_per_km",
+          "max_inserted_total",
+          "grade_tolerance_m",
+          "grade_min_run_m",
+          "grade_min_delta_pct"
+        ],
+        "properties": {
+          "grade_min_delta_pct": {
+            "type": "number",
+            "format": "double",
+            "description": "Grades around a grade change differ by at least this, in percentage points."
+          },
+          "grade_min_run_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Both stretches around a grade change are at least this long."
+          },
+          "grade_tolerance_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Vertical tolerance of the grade change search."
+          },
+          "max_inserted_per_km": {
+            "type": "integer",
+            "description": "Inserted points over any sliding kilometre, at most; structure, gap, terrain and surface\nbreakpoints are never dropped.",
+            "minimum": 0
+          },
+          "max_inserted_total": {
+            "type": "integer",
+            "description": "Inserted points over the whole route, at most.",
+            "minimum": 0
+          },
+          "merge_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Candidate breakpoints closer than this are merged into one point."
+          },
+          "min_spacing_m": {
+            "type": "number",
+            "format": "double",
+            "description": "A summit, low point or grade change closer than this to a kept point is dropped."
+          },
+          "snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "A breakpoint this close to an input point is carried by it, without a new point."
+          }
+        }
+      },
       "Capabilities": {
         "type": "object",
         "required": [
@@ -524,9 +595,14 @@
           "station_step_m",
           "gain_presets",
           "glo30_threshold_m",
-          "glo30_min_range_m"
+          "glo30_min_range_m",
+          "breakpoints"
         ],
         "properties": {
+          "breakpoints": {
+            "$ref": "#/components/schemas/BreakpointRulesV1",
+            "description": "Breakpoint selection of the `input_with_breakpoints` mode."
+          },
           "gain_presets": {
             "type": "array",
             "items": {
@@ -1042,6 +1118,13 @@
                 "type": "null"
               }
             ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakpointReasonV1"
+            },
+            "description": "Insertion reasons (`input_with_breakpoints` mode): always on an inserted point, on an input\npoint only when a breakpoint falls on it."
           }
         }
       },

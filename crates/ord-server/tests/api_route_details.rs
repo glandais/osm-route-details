@@ -105,11 +105,34 @@ async fn distance_mode_and_default_mode() {
     assert_eq!(points[0]["index"], 0);
     assert_eq!(points[21]["index"], 1, "après le point d'entrée du milieu (505 m)");
 
-    // Mode par défaut à l'incrément 1 : les points d'entrée, sans point inséré.
+    // Mode par défaut (`input_with_breakpoints`) : les points d'entrée, jamais déplacés, et les
+    // extrémités du pont (600–700 m) insérées avec leurs raisons et leur position.
     let r = send(app_with(&config), post_json(&request_body(&pts, None))).await.json();
-    let origins: Vec<&str> =
-        r["points"].as_array().unwrap().iter().map(|p| p["origin"].as_str().unwrap()).collect();
-    assert_eq!(origins, ["input", "input", "input"]);
+    let points = r["points"].as_array().unwrap();
+    let origins: Vec<&str> = points.iter().map(|p| p["origin"].as_str().unwrap()).collect();
+    assert_eq!(origins, ["input", "input", "inserted", "inserted", "input"], "{points:?}");
+    let entry = &r["summary"]["structures"][0];
+    for (p, reason, bound) in
+        [(&points[2], "structure_start", "from_m"), (&points[3], "structure_end", "to_m")]
+    {
+        assert_eq!(p["reasons"], json!([reason]));
+        assert_eq!(p["d_m"], entry[bound], "borne de l'ouvrage portée par un point");
+        assert_eq!(p["index"], 1);
+        assert!(p["lat"].is_f64() && p["lon"].is_f64() && p["ele"].is_f64());
+        assert_eq!(p["ele_method"], "interpolated_structure");
+    }
+    for (k, i) in [(0, 0), (1, 1), (4, 2)] {
+        assert_eq!(points[k]["index"], i);
+        assert!(points[k].get("lat").is_none() && points[k].get("reasons").is_none());
+    }
+    // Mode `input` : aucune insertion, aucune raison.
+    let body = request_body(&pts, Some(json!({"sampling": {"mode": "input"}})));
+    let r = send(app_with(&config), post_json(&body)).await.json();
+    assert!(r["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|p| p["origin"] == "input" && p.get("reasons").is_none()));
 }
 
 #[tokio::test]

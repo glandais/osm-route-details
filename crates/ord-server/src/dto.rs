@@ -10,7 +10,7 @@ use std::fmt;
 use ord_core::assemble::{ReportSegment, RouteReport, Status};
 use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
 use ord_core::elevation::fusion::{CorrectionStatus, OutcomeMethod};
-use ord_core::elevation::{EleMethod, PointOrigin};
+use ord_core::elevation::{BreakpointReason, EleMethod, PointOrigin};
 use ord_core::typology::StructureKind;
 use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
@@ -191,6 +191,38 @@ pub enum PointOriginV1 {
     Inserted,
 }
 
+// Raisons d'insertion (doc 02 §4.2) : liste ouverte, un client ignore une raison inconnue.
+/// Why a point was inserted (open list: clients ignore unknown values).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BreakpointReasonV1 {
+    LocalMax,
+    LocalMin,
+    GradeChange,
+    StructureStart,
+    StructureEnd,
+    SurfaceChange,
+    TerrainSourceChange,
+    ElevationGapStart,
+    ElevationGapEnd,
+}
+
+impl From<BreakpointReason> for BreakpointReasonV1 {
+    fn from(r: BreakpointReason) -> Self {
+        match r {
+            BreakpointReason::LocalMax => Self::LocalMax,
+            BreakpointReason::LocalMin => Self::LocalMin,
+            BreakpointReason::GradeChange => Self::GradeChange,
+            BreakpointReason::StructureStart => Self::StructureStart,
+            BreakpointReason::StructureEnd => Self::StructureEnd,
+            BreakpointReason::SurfaceChange => Self::SurfaceChange,
+            BreakpointReason::TerrainSourceChange => Self::TerrainSourceChange,
+            BreakpointReason::ElevationGapStart => Self::ElevationGapStart,
+            BreakpointReason::ElevationGapEnd => Self::ElevationGapEnd,
+        }
+    }
+}
+
 /// A point of the elevation profile.
 #[derive(Serialize, ToSchema)]
 pub struct OutputPointV1 {
@@ -201,6 +233,10 @@ pub struct OutputPointV1 {
     /// Absent in `distance` mode.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<PointOriginV1>,
+    /// Insertion reasons (`input_with_breakpoints` mode): always on an inserted point, on an input
+    /// point only when a breakpoint falls on it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<BreakpointReasonV1>,
     /// Only on inserted points and in `distance` mode.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lat: Option<f64>,
@@ -610,6 +646,7 @@ pub fn to_dto(
                     PointOrigin::Input => PointOriginV1::Input,
                     PointOrigin::Inserted => PointOriginV1::Inserted,
                 }),
+                reasons: p.reasons.iter().map(|&r| r.into()).collect(),
                 lat: p.latlon.map(|l| l.lat),
                 lon: p.latlon.map(|l| l.lon),
                 ele: p.ele,

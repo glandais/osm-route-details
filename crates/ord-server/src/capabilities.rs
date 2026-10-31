@@ -3,6 +3,7 @@
 //! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
 use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
+use ord_core::elevation::BreakpointReason;
 use ord_core::{Rules, RULES_VERSION};
 use ord_data::catalog::StaticCatalog;
 use ord_domain::catalog::{Attribution, DataCatalog, DataVersion};
@@ -104,6 +105,31 @@ pub struct ElevationRulesV1 {
     pub glo30_threshold_m: f64,
     /// GLO-30 ranges shorter than this are not adapted, and shorter gaps are closed, in metres.
     pub glo30_min_range_m: f64,
+    /// Breakpoint selection of the `input_with_breakpoints` mode.
+    pub breakpoints: BreakpointRulesV1,
+}
+
+// Seuils de sélection des points de rupture (T04 §6.2, doc 02 §2) : un ajout au contrat.
+/// Breakpoint selection thresholds; distances in metres.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct BreakpointRulesV1 {
+    /// Candidate breakpoints closer than this are merged into one point.
+    pub merge_m: f64,
+    /// A breakpoint this close to an input point is carried by it, without a new point.
+    pub snap_m: f64,
+    /// A summit, low point or grade change closer than this to a kept point is dropped.
+    pub min_spacing_m: f64,
+    /// Inserted points over any sliding kilometre, at most; structure, gap, terrain and surface
+    /// breakpoints are never dropped.
+    pub max_inserted_per_km: usize,
+    /// Inserted points over the whole route, at most.
+    pub max_inserted_total: usize,
+    /// Vertical tolerance of the grade change search.
+    pub grade_tolerance_m: f64,
+    /// Both stretches around a grade change are at least this long.
+    pub grade_min_run_m: f64,
+    /// Grades around a grade change differ by at least this, in percentage points.
+    pub grade_min_delta_pct: f64,
 }
 
 /// Parameters of one gain preset.
@@ -128,6 +154,19 @@ impl ElevationRulesV1 {
                 .collect(),
             glo30_threshold_m: g.glo30_threshold_m,
             glo30_min_range_m: g.glo30_min_range_m,
+            breakpoints: {
+                let b = &rules.elevation.breakpoints;
+                BreakpointRulesV1 {
+                    merge_m: b.merge_m,
+                    snap_m: b.snap_m,
+                    min_spacing_m: b.min_spacing_m,
+                    max_inserted_per_km: b.max_inserted_per_km,
+                    max_inserted_total: b.max_inserted_total,
+                    grade_tolerance_m: b.grade_tolerance_m,
+                    grade_min_run_m: b.grade_min_run_m,
+                    grade_min_delta_pct: b.grade_min_delta_pct,
+                }
+            },
         }
     }
 }
@@ -223,17 +262,7 @@ impl EnumCatalog {
             ele_method: vec!["dem", "dsm_deck", "interpolated_structure", "gap_filled", "none"],
             terrain_origin: TerrainOrigin::ALL.to_vec(),
             point_origin: vec!["input", "inserted"],
-            breakpoint_reasons: vec![
-                "local_max",
-                "local_min",
-                "grade_change",
-                "structure_start",
-                "structure_end",
-                "surface_change",
-                "terrain_source_change",
-                "elevation_gap_start",
-                "elevation_gap_end",
-            ],
+            breakpoint_reasons: BreakpointReason::ALL.iter().map(|r| r.as_str()).collect(),
             structure_method: vec!["dsm_deck", "interpolated_structure", "kept_ground", "none"],
             structure_correction_status: vec!["applied", "partial", "none_found", "disabled", "unavailable"],
             warning_codes: WarningCode::ALL.to_vec(),

@@ -5,6 +5,7 @@
 //! plages de terrain et de manque, le D+ du preset avec adaptation du seuil sur GLO-30, le lissage
 //! optionnel, et les avertissements de `fuse` (T06 §4).
 
+pub mod breakpoints;
 pub mod derive;
 pub mod fusion;
 pub mod output;
@@ -24,6 +25,7 @@ use derive::{gain_turns_on_runs, smooth_profile, AdaptedRange, GainParams, GainR
 use fusion::plan::StructurePlan;
 use fusion::{StructureCorrectionReport, StructureOutcome};
 
+pub use breakpoints::{select_breakpoints, BreakpointReason};
 pub use output::{sample_output, OutputPoint, PointOrigin};
 
 /// Méthode d'altitude d'une station ou d'un point (doc 02 §4.2).

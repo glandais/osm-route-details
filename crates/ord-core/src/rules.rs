@@ -5,7 +5,8 @@
 //! seuil sur GLO-30) et du référentiel de couverture (couture). Incrément 3 : typologie
 //! (paramètres du HMM, couloir, chaînes et segments) ; les tables de la classification sont des
 //! constantes (`classification::tables`), couvertes par la même empreinte. Incrément 4 : ouvrages
-//! (extension, doutes), correction des ouvrages, constructeur de tablier, comblement.
+//! (extension, doutes), correction des ouvrages, constructeur de tablier, comblement. Incrément 5 :
+//! sélection des points de rupture.
 
 use ord_domain::request::GainPreset;
 use serde::Serialize;
@@ -19,7 +20,8 @@ use serde::Serialize;
 // 2026.10.6 : état « hors graphe » des routes motorisées fermées au vélo dans le HMM.
 // 2026.10.7 : prolongement du tablier jugé sur un MNS de sonde qui ne retombe pas (test unilatéral).
 // 2026.10.8 : saut court à une culée, qui n'est pas un saut dans l'ouvrage.
-pub const RULES_VERSION: &str = "2026.10.8";
+// 2026.10.9 : sélection des points de rupture du mode `input_with_breakpoints` (T04 §6).
+pub const RULES_VERSION: &str = "2026.10.9";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -174,6 +176,7 @@ pub struct ElevationRules {
     /// Suite de stations sans altitude comblée linéairement jusqu'à cette longueur (T04 §5.1)
     /// [à calibrer].
     pub gap_fill_max_m: f64,
+    pub breakpoints: BreakpointRules,
 }
 
 impl Default for ElevationRules {
@@ -184,6 +187,45 @@ impl Default for ElevationRules {
             structures: CorrectionRules::default(),
             deck: DeckBuilderRules::default(),
             gap_fill_max_m: 100.0,
+            breakpoints: BreakpointRules::default(),
+        }
+    }
+}
+
+/// Sélection des points de rupture du mode `input_with_breakpoints` (T04 §6.2) ; toutes les
+/// valeurs sont des points de départ [à calibrer].
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct BreakpointRules {
+    /// Événements plus proches fusionnés en un point.
+    pub merge_m: f64,
+    /// Événement rattaché au point d'entrée le plus proche, sans créer de point.
+    pub snap_m: f64,
+    /// Extremum ou rupture de pente abandonné à moins de cette distance d'un point retenu
+    /// (entrée, ouvrage, trou, terrain, revêtement).
+    pub min_spacing_m: f64,
+    /// Points insérés au plus sur toute fenêtre glissante d'un km.
+    pub max_inserted_per_km: usize,
+    /// Points insérés au plus sur tout le parcours (borne d'entrée, doc 02 §7).
+    pub max_inserted_total: usize,
+    /// Tolérance verticale du Douglas-Peucker des ruptures de pente.
+    pub grade_tolerance_m: f64,
+    /// Longueur minimale de chacune des deux pièces d'une rupture de pente.
+    pub grade_min_run_m: f64,
+    /// Écart minimal de pente entre les deux pièces, en points de pourcentage.
+    pub grade_min_delta_pct: f64,
+}
+
+impl Default for BreakpointRules {
+    fn default() -> Self {
+        Self {
+            merge_m: 5.0,
+            snap_m: 5.0,
+            min_spacing_m: 20.0,
+            max_inserted_per_km: 20,
+            max_inserted_total: 16_000,
+            grade_tolerance_m: 2.0,
+            grade_min_run_m: 50.0,
+            grade_min_delta_pct: 2.0,
         }
     }
 }
@@ -313,6 +355,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.8", "d533724602494282".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.9", "774c78d37a5e4c66".to_owned()));
     }
 }

@@ -162,7 +162,8 @@ impl Orchestrator {
                 &route,
                 rules.typology.min_segment_m,
             );
-            let points = sample_output(&route, &profile, &options.sampling);
+            let points =
+                sample_output(&route, &profile, &options.sampling, &segments, &rules.elevation.breakpoints);
             let part = TypologyPart {
                 output: &typo,
                 segments: &segments,
