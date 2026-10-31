@@ -1,9 +1,10 @@
 //! Routeur public et routeur interne (T01 §4.1).
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{FromRef, Request, State};
+use axum::extract::{Extension, FromRef, Request, State};
 use axum::http::{header, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -11,9 +12,10 @@ use axum::routing::{get, post, MethodRouter};
 use axum::{Json, Router};
 use metrics_exporter_prometheus::PrometheusHandle;
 use ord_data::catalog::{ConfiguredSources, StaticCatalog};
-use ord_domain::budget::RequestId;
+use ord_domain::budget::{Deadline, RequestId};
 use ord_domain::catalog::{DataCatalog, Readiness};
-use ord_pipeline::PipelineError;
+use ord_domain::ctx::RequestCtx;
+use ord_pipeline::Orchestrator;
 use serde::Serialize;
 use tower::ServiceBuilder;
 use tower_http::catch_panic::CatchPanicLayer;
@@ -25,10 +27,11 @@ use utoipa::ToSchema;
 
 use crate::capabilities::{AttributionDoc, Capabilities};
 use crate::config::{Config, LimitsConfig};
-use crate::dto::RouteDetailsRequestV1;
+use crate::dto::{to_dto, RouteDetailsRequestV1, RouteDetailsResponseV1};
 use crate::problem::{problem_for_status, with_request_id, Problem, ProblemBody};
 use crate::strict_json::{MaxBodyBytes, StrictJson};
 use crate::validate::validate;
+use crate::wiring::{StartupError, Wiring};
 
 pub const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 const MAX_REQUEST_ID_LEN: usize = 128;
@@ -41,9 +44,12 @@ pub struct AppState {
 
 struct Inner {
     limits: LimitsConfig,
+    budget: Duration,
     catalog: Arc<dyn DataCatalog>,
+    orchestrator: Orchestrator,
     capabilities: Bytes,
     attribution: Bytes,
+    attribution_text: String,
 }
 
 impl std::fmt::Debug for AppState {
@@ -53,25 +59,34 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
-    /// Construit l'état et précalcule les documents servis tels quels.
-    pub fn new(config: &Config) -> Self {
-        let catalog = StaticCatalog::new(ConfiguredSources {
+    /// Construit l'état, les sources et l'orchestrateur, et précalcule les documents servis tels
+    /// quels. Aucune I/O ici : le cache disque est créé à la première écriture.
+    pub fn new(config: &Config) -> Result<Self, StartupError> {
+        Self::with_wiring(config, Wiring::default())
+    }
+
+    pub fn with_wiring(config: &Config, wiring: Wiring) -> Result<Self, StartupError> {
+        let catalog = Arc::new(StaticCatalog::new(ConfiguredSources {
             ign_enabled: config.elevation.ign.enabled,
             ign_zoom: config.elevation.ign.zoom,
             mapterhorn_zoom: config.elevation.mapterhorn.zoom,
             mapterhorn_version: config.elevation.mapterhorn.version.clone(),
             streets_zoom: config.typology.zoom,
-        });
+        }));
         let capabilities = Capabilities::build(config, &catalog);
-        let attribution = AttributionDoc::build(&catalog);
-        Self {
+        let attribution = AttributionDoc::build(catalog.as_ref());
+        let orchestrator = crate::wiring::orchestrator(config, Arc::clone(&catalog), wiring)?;
+        Ok(Self {
             inner: Arc::new(Inner {
                 limits: config.limits.clone(),
+                budget: Duration::from_secs(config.budget.request_budget_s),
                 capabilities: to_json_bytes(&capabilities),
+                attribution_text: attribution.text.clone(),
                 attribution: to_json_bytes(&attribution),
-                catalog: Arc::new(catalog),
+                catalog,
+                orchestrator,
             }),
-        }
+        })
     }
 }
 
@@ -187,19 +202,22 @@ async fn method_not_allowed() -> Problem {
     Problem::method_not_allowed()
 }
 
-// Calcul des détails d'un parcours. Incrément 0 : la requête est validée, puis le service
-// répond 500 `internal` (pas encore de pipeline).
+// Calcul des détails d'un parcours. Incrément 1 : profil d'élévation Mapterhorn seul, modes
+// `input` et `distance` (`input_with_breakpoints` rend les seuls points d'entrée).
 #[utoipa::path(
     post,
     path = "/v1/route-details",
     summary = "Compute elevation and typology along a route",
     description = "Validates the route and its options before any computation. Unknown keys, \
 out-of-bounds options and coordinates outside the Web Mercator range give a 400 that lists every \
-faulty field by JSON pointer; input bounds give a 413 with `details.limit`.",
+faulty field by JSON pointer; input bounds give a 413 with `details.limit`. A 200 carries the \
+elevation profile (`points`), the route aggregates (`summary`), the terrain provenance and warnings \
+(`quality`) and the attribution.",
     operation_id = "postRouteDetails",
     tag = "route",
     request_body(content = RouteDetailsRequestV1, content_type = "application/json"),
     responses(
+        (status = 200, description = "Route details", body = RouteDetailsResponseV1),
         (status = 400, description = "Invalid input (format, unknown keys, bounds)", body = ProblemBody, content_type = "application/problem+json"),
         (status = 413, description = "Route too large (`details.limit`)", body = ProblemBody, content_type = "application/problem+json"),
         (status = 415, description = "Content-Type is not application/json", body = ProblemBody, content_type = "application/problem+json"),
@@ -211,11 +229,40 @@ faulty field by JSON pointer; input bounds give a 413 with `details.limit`.",
 )]
 async fn route_details(
     State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
     StrictJson(dto): StrictJson<RouteDetailsRequestV1>,
 ) -> Result<Response, Problem> {
+    let started = Instant::now();
     let request = validate(dto, &state.inner.limits)?;
-    tracing::info!(input_points = request.input_len, "route request validated");
-    Err(PipelineError::Internal("pipeline not implemented yet (increment 0)".into()).into())
+    let sections = request.options.sections;
+    let input_points = request.input_len;
+    let ctx = RequestCtx::new(request_id.clone(), Deadline::after(state.inner.budget));
+    let result = state.inner.orchestrator.run(request, &ctx).await;
+    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    // Ligne de synthèse, sans coordonnée ni clé de tuile (T01 §8).
+    {
+        let log = ctx.log();
+        let c = log.counters;
+        tracing::info!(
+            input_points,
+            tiles_memory = c.memory_hits,
+            tiles_disk = c.disk_hits,
+            tiles_fetched = c.fetched,
+            tiles_failed = log.failures.len(),
+            tiles_stale = log.stale_served.len(),
+            status =
+                result.as_ref().map_or("error", |r| if r.status == ord_core::assemble::Status::Complete {
+                    "complete"
+                } else {
+                    "partial"
+                }),
+            duration_ms,
+            "route details"
+        );
+    }
+    let report = result.map_err(Problem::from)?;
+    let body = to_dto(&report, sections, &request_id, duration_ms, &state.inner.attribution_text);
+    Ok(Json::<RouteDetailsResponseV1>(body).into_response())
 }
 
 // Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.

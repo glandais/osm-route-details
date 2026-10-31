@@ -85,9 +85,9 @@ async fn route_of_201_km_is_too_large() {
     let problem = assert_problem(&reply, StatusCode::PAYLOAD_TOO_LARGE, "route_too_large");
     assert_eq!(problem["details"]["limit"], "length_m");
 
-    // 199 km passent la validation : le pipeline absent répond 500 `internal`.
+    // 199 km passent la validation (hors ligne, sans tuile : 503 `data_unavailable`).
     let reply = post(&request_body(&route(199_000.0, 200), None)).await;
-    assert_problem(&reply, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&reply);
 }
 
 #[tokio::test]
@@ -100,12 +100,12 @@ async fn too_many_distinct_points_is_too_large() {
     let mut pts = route(10_000.0, 16_000);
     pts.insert(1, pts[0]);
     let reply = post(&request_body(&pts, None)).await;
-    assert_problem(&reply, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&reply);
 }
 
 #[tokio::test]
 async fn body_limit_applies_after_decompression() {
-    let mut config = ord_server::config::Config::default();
+    let mut config = test_config();
     config.limits.max_body_bytes = 4_096;
     let body = request_body(&route(1_000.0, 200), None).to_string();
     assert!(body.len() > 4_096);
@@ -127,7 +127,7 @@ async fn gzip_request_body_is_accepted() {
     gz.write_all(body.as_bytes()).expect("compression");
     let mut req = post_raw(Some("application/json"), gz.finish().expect("compression"));
     req.headers_mut().insert("content-encoding", "gzip".parse().expect("en-tête"));
-    assert_problem(&send(app(), req).await, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&send(app(), req).await);
 }
 
 #[tokio::test]
@@ -154,12 +154,12 @@ async fn route_shape_rules() {
 async fn polyline_and_tolerated_altitude_pass_validation() {
     // (38.5, -120.2) puis 0,001° plus au nord.
     let polyline = json!({"polyline": "_p~iF~ps|UgE?", "polyline_precision": 5});
-    assert_problem(&post(&polyline).await, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&post(&polyline).await);
     let with_ele = json!({"points": [
         {"lat": 47.2184, "lon": -1.5536, "ele": 12.5},
         {"lat": 47.2201, "lon": -1.5490, "alt": null}
     ]});
-    assert_problem(&post(&with_ele).await, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&post(&with_ele).await);
 }
 
 #[tokio::test]
@@ -188,14 +188,14 @@ async fn option_bounds_are_enforced() {
         "debug": false
     });
     let reply = post(&request_body(&pts, Some(accepted))).await;
-    assert_problem(&reply, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&reply);
 }
 
 #[tokio::test]
 async fn debug_is_accepted_when_allowed() {
-    let mut config = ord_server::config::Config::default();
+    let mut config = test_config();
     config.limits.debug_allowed = true;
     let body = request_body(&route(1_000.0, 3), Some(json!({"debug": true})));
     let reply = send(app_with(&config), post_json(&body)).await;
-    assert_problem(&reply, StatusCode::INTERNAL_SERVER_ERROR, "internal");
+    assert_passed_validation(&reply);
 }

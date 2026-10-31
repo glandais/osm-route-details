@@ -27,12 +27,41 @@ impl Reply {
     }
 }
 
+/// Configuration de test : hors ligne, cache disque dans un dossier temporaire neuf. Une requête
+/// valide y lit des tuiles absentes du disque : 503 `data_unavailable`, sans aucun réseau.
+pub fn test_config() -> Config {
+    let mut config = Config::default();
+    config.cache.offline = true;
+    config.cache.dir = std::env::temp_dir().join(format!("ord-test-{}", uuid_like()));
+    config
+}
+
+fn uuid_like() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    format!("{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed))
+}
+
 pub fn app() -> Router {
-    app_with(&Config::default())
+    app_with(&test_config())
 }
 
 pub fn app_with(config: &Config) -> Router {
-    router(AppState::new(config))
+    router(AppState::new(config).expect("état du service"))
+}
+
+/// La requête a passé la validation : sans tuile en cache, l'élévation est en panne (503, ou 200
+/// `partial` avec `accept_partial`).
+pub fn assert_passed_validation(reply: &Reply) {
+    if reply.status == StatusCode::OK {
+        let body = reply.json();
+        assert_eq!(body["status"], "partial", "{}", reply.text);
+        assert_eq!(body["quality"]["warnings"][0]["code"], "elevation_unavailable");
+        return;
+    }
+    let body = assert_problem(reply, StatusCode::SERVICE_UNAVAILABLE, "data_unavailable");
+    assert_eq!(body["details"]["source"], "elevation");
+    assert!(reply.headers.get("retry-after").is_some(), "Retry-After toujours présent");
 }
 
 pub async fn send(app: Router, req: Request<Body>) -> Reply {

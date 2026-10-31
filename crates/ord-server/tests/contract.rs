@@ -79,7 +79,7 @@ async fn errors_are_rfc9457_problems() {
         &ord_testkit::routes::meridian(ord_testkit::routes::START, 1_000.0, 3),
         None,
     );
-    let mut small = ord_server::config::Config::default();
+    let mut small = test_config();
     small.limits.max_body_bytes = 64;
     let cases = [
         (send(app(), get("/nope")).await, StatusCode::NOT_FOUND, "not_found"),
@@ -101,7 +101,7 @@ async fn errors_are_rfc9457_problems() {
         ),
         (post(&json!({"points": [], "foo": 1})).await, StatusCode::BAD_REQUEST, "invalid_input"),
         (send(app_with(&small), post_json(&valid)).await, StatusCode::PAYLOAD_TOO_LARGE, "route_too_large"),
-        (post(&valid).await, StatusCode::INTERNAL_SERVER_ERROR, "internal"),
+        (post(&valid).await, StatusCode::SERVICE_UNAVAILABLE, "data_unavailable"),
     ];
     for (reply, status, code) in &cases {
         assert_problem(reply, *status, code);

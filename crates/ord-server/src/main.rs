@@ -44,7 +44,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     observability::init_tracing(&config.log);
     tracing::info!(config = %serde_json::to_string(&config)?, "configuration");
     let metrics = observability::install_metrics()?;
-    let state = AppState::new(&config);
+    if config.elevation.ign.enabled {
+        tracing::warn!("IGN LiDAR HD is configured but not read yet (increment 1): Mapterhorn only");
+    }
+    let state = AppState::new(&config)?;
 
     let public = tokio::net::TcpListener::bind(config.server.listen_addr)
         .await

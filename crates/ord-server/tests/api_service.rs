@@ -4,7 +4,6 @@ mod common;
 
 use axum::http::StatusCode;
 use common::*;
-use ord_server::config::Config;
 
 #[tokio::test]
 async fn health_endpoints() {
@@ -51,7 +50,7 @@ async fn capabilities_publish_bounds_and_defaults() {
 
 #[tokio::test]
 async fn capabilities_follow_configuration() {
-    let mut config = Config::default();
+    let mut config = test_config();
     config.limits.max_points = 1_000;
     config.elevation.ign.enabled = false;
     let caps = send(app_with(&config), get("/v1/capabilities")).await.json();

@@ -202,7 +202,10 @@ impl Default for IgnConfig {
 pub struct MapterhornConfig {
     pub url: String,
     pub zoom: u8,
+    /// Côté des tuiles Terrarium, en pixels (512 chez Mapterhorn).
+    pub tile_size: u16,
     pub concurrency: usize,
+    /// Entre dans l'espace de noms du cache disque ; `None` : `unversioned`.
     pub version: Option<String>,
 }
 
@@ -211,6 +214,7 @@ impl Default for MapterhornConfig {
         Self {
             url: "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp".into(),
             zoom: 12,
+            tile_size: 512,
             concurrency: 4,
             version: None,
         }
@@ -371,6 +375,13 @@ impl Config {
         }
         if self.typology.source == TypologySourceKind::VersatilesFile && self.typology.path.is_none() {
             return invalid("typology.path", "required when typology.source = versatiles_file");
+        }
+        let m = &self.elevation.mapterhorn;
+        if m.zoom > 15 {
+            return invalid("elevation.mapterhorn.zoom", "must not be above 15");
+        }
+        if m.tile_size == 0 || m.concurrency == 0 {
+            return invalid("elevation.mapterhorn", "tile_size and concurrency must be positive");
         }
         if self.http_client.user_agent.trim().is_empty() {
             return invalid("http_client.user_agent", "must not be empty");

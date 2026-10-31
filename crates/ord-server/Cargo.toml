@@ -7,6 +7,10 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# Tests contre les sources réelles (réseau), hors CI bloquante (T05 §2.7).
+live-tests = []
+
 [[bin]]
 name = "osm-route-details"
 path = "src/main.rs"
@@ -44,6 +48,7 @@ ord-domain.workspace = true
 figment = { workspace = true, features = ["test"] }
 flate2 = "1"
 http-body-util.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

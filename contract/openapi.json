@@ -113,7 +113,7 @@
           "route"
         ],
         "summary": "Compute elevation and typology along a route",
-        "description": "Validates the route and its options before any computation. Unknown keys, out-of-bounds options and coordinates outside the Web Mercator range give a 400 that lists every faulty field by JSON pointer; input bounds give a 413 with `details.limit`.",
+        "description": "Validates the route and its options before any computation. Unknown keys, out-of-bounds options and coordinates outside the Web Mercator range give a 400 that lists every faulty field by JSON pointer; input bounds give a 413 with `details.limit`. A 200 carries the elevation profile (`points`), the route aggregates (`summary`), the terrain provenance and warnings (`quality`) and the attribution.",
         "operationId": "postRouteDetails",
         "requestBody": {
           "content": {
@@ -126,6 +126,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Route details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteDetailsResponseV1"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Invalid input (format, unknown keys, bounds)",
             "content": {
@@ -202,6 +212,33 @@
   },
   "components": {
     "schemas": {
+      "AdaptedRangeV1": {
+        "type": "object",
+        "description": "A range read on GLO-30 (a surface model), with the threshold applied there.",
+        "required": [
+          "from_m",
+          "to_m",
+          "dsm",
+          "threshold_m"
+        ],
+        "properties": {
+          "dsm": {
+            "type": "string"
+          },
+          "from_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "Attribution": {
         "type": "object",
         "description": "Attribution of a configured source.",
@@ -246,6 +283,22 @@
           "text": {
             "type": "string",
             "description": "Short notice to display, covering every configured source."
+          }
+        }
+      },
+      "AttributionRefV1": {
+        "type": "object",
+        "description": "Mandatory notice of the configured sources and link to the full list.",
+        "required": [
+          "text",
+          "url"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
           }
         }
       },
@@ -367,6 +420,41 @@
             "minimum": 0
           }
         }
+      },
+      "DataVersions": {
+        "type": "object",
+        "required": [
+          "elevation"
+        ],
+        "properties": {
+          "elevation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataVersion"
+            }
+          },
+          "typology": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DataVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EleMethodV1": {
+        "type": "string",
+        "description": "Elevation method of a point or station.",
+        "enum": [
+          "dem",
+          "dsm_deck",
+          "interpolated_structure",
+          "gap_filled",
+          "none"
+        ]
       },
       "ElevationDefaults": {
         "type": "object",
@@ -552,6 +640,41 @@
           }
         }
       },
+      "GainParamsV1": {
+        "type": "object",
+        "description": "Effective parameters of the elevation gain.",
+        "required": [
+          "preset",
+          "threshold_m",
+          "smoothing_m",
+          "adapted",
+          "partial"
+        ],
+        "properties": {
+          "adapted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdaptedRangeV1"
+            },
+            "description": "GLO-30 ranges where the threshold was adapted."
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "Some elevation ranges are missing: the gain sums the ranges that were read."
+          },
+          "preset": {
+            "$ref": "#/components/schemas/GainPreset"
+          },
+          "smoothing_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "GainPreset": {
         "type": "string",
         "description": "Elevation gain preset: threshold and smoothing scale of the gain computation.",
@@ -614,6 +737,37 @@
           "station_step_m": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "MetaV1": {
+        "type": "object",
+        "description": "Versions and request identity: equal requests with equal versions give equal responses, apart\nfrom `request_id` and `duration_ms`.",
+        "required": [
+          "api_version",
+          "rules_version",
+          "data_versions",
+          "request_id",
+          "duration_ms"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "data_versions": {
+            "$ref": "#/components/schemas/DataVersions",
+            "description": "Version of each data source used by this request."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "rules_version": {
+            "type": "string"
           }
         }
       },
@@ -744,6 +898,83 @@
             "description": "Default: `true`."
           }
         }
+      },
+      "OutputPointV1": {
+        "type": "object",
+        "description": "A point of the elevation profile.",
+        "required": [
+          "d_m",
+          "index",
+          "ele",
+          "ele_method"
+        ],
+        "properties": {
+          "d_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Cumulative distance from the start, in metres."
+          },
+          "ele": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Elevation after structure correction, not smoothed; `null` when missing."
+          },
+          "ele_method": {
+            "$ref": "#/components/schemas/EleMethodV1"
+          },
+          "ele_smoothed": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Only when smoothing is requested."
+          },
+          "index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Client index of the input point, or of the last input point before it.",
+            "minimum": 0
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Only on inserted points and in `distance` mode."
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Only on inserted points and in `distance` mode."
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PointOriginV1",
+                "description": "Absent in `distance` mode."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PointOriginV1": {
+        "type": "string",
+        "description": "`input` for a client point, `inserted` for a point added by the service.",
+        "enum": [
+          "input",
+          "inserted"
+        ]
       },
       "PointV1": {
         "type": "object",
@@ -900,6 +1131,35 @@
           "both"
         ]
       },
+      "QualityV1": {
+        "type": "object",
+        "description": "Factual provenance and warnings.",
+        "required": [
+          "elevation_coverage",
+          "terrain",
+          "warnings"
+        ],
+        "properties": {
+          "elevation_coverage": {
+            "type": "number",
+            "format": "double",
+            "description": "Share of the length with an elevation, in [0, 1]."
+          },
+          "terrain": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TerrainRangeV1"
+            },
+            "description": "Terrain provenance by range."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WarningV1"
+            }
+          }
+        }
+      },
       "Readiness": {
         "type": "object",
         "description": "Observed state of the configured local data.",
@@ -983,6 +1243,51 @@
           }
         }
       },
+      "RouteDetailsResponseV1": {
+        "type": "object",
+        "description": "Response of `POST /v1/route-details`. `meta`, `status`, `quality` and `attribution` are always\npresent; `points` and `summary` follow the requested `sections`.",
+        "required": [
+          "meta",
+          "status",
+          "quality",
+          "attribution"
+        ],
+        "properties": {
+          "attribution": {
+            "$ref": "#/components/schemas/AttributionRefV1"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaV1"
+          },
+          "points": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OutputPointV1"
+            },
+            "description": "Elevation profile (section `elevation`)."
+          },
+          "quality": {
+            "$ref": "#/components/schemas/QualityV1"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StatusV1"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SummaryV1",
+                "description": "Route aggregates (section `summary`)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "SamplingDefaults": {
         "type": "object",
         "required": [
@@ -1057,6 +1362,67 @@
           "coverage"
         ]
       },
+      "StatusV1": {
+        "type": "string",
+        "description": "`partial` when a source gave no data on part of the route.",
+        "enum": [
+          "complete",
+          "partial"
+        ]
+      },
+      "SummaryV1": {
+        "type": "object",
+        "description": "Route aggregates, computed on the internal 5 m profile.",
+        "required": [
+          "length_m",
+          "gain_m",
+          "loss_m",
+          "gain_params",
+          "terrain_m"
+        ],
+        "properties": {
+          "ele_max_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "ele_min_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "gain_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "gain_params": {
+            "$ref": "#/components/schemas/GainParamsV1"
+          },
+          "length_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "loss_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "terrain_m": {
+            "type": "object",
+            "description": "Length per terrain origin, in metres (keys: `terrain_origin` values).",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "TerrainOrigin": {
         "type": "string",
         "description": "Origin of the terrain data.",
@@ -1066,6 +1432,38 @@
           "mapterhorn",
           "none"
         ]
+      },
+      "TerrainRangeV1": {
+        "type": "object",
+        "description": "Terrain read on a range of the route.",
+        "required": [
+          "from_m",
+          "to_m",
+          "origin",
+          "measured",
+          "fallback_after_error"
+        ],
+        "properties": {
+          "fallback_after_error": {
+            "type": "boolean",
+            "description": "Fallback after a source failure, as opposed to a normal fallback outside coverage."
+          },
+          "from_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "measured": {
+            "type": "boolean",
+            "description": "Whether this origin has been measured by a benchmark."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/TerrainOrigin"
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "WarningCode": {
         "type": "string",
@@ -1084,6 +1482,37 @@
           "elevation_unavailable",
           "structure_untagged"
         ]
+      },
+      "WarningV1": {
+        "type": "object",
+        "description": "A knowingly degraded or network-dependent output; codes are stable.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/WarningCode"
+          },
+          "from_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "message": {
+            "type": "string",
+            "description": "Diagnostic only; clients translate the code."
+          },
+          "to_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
       }
     }
   },
