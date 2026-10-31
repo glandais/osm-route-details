@@ -1,12 +1,13 @@
-//! `ord-bench` : `check`, `fill-cache`, `run --offline` (T05 §5.1). Les autres sous-commandes
-//! (`judge`, `compare`, `latency`, `dsm-placement`) arrivent avec les incréments suivants.
+//! `ord-bench` : `check`, `fill-cache`, `run --offline`, `latency` (L1 à froid) (T05 §5.1). Les
+//! autres sous-commandes (`judge`, `compare`, `dsm-placement`) arrivent avec les incréments
+//! suivants.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use ord_bench::campaign::{default_report_dir, fill_cache, run};
+use ord_bench::campaign::{default_report_dir, fill_cache, latency_cold, run};
 use ord_bench::check::check;
 use ord_bench::BenchPaths;
 
@@ -30,17 +31,21 @@ struct Args {
 enum Command {
     /// Empreintes du manifest, cohérence criteria.yaml ↔ README, Q1.
     Check,
-    /// Remplit le cache de banc en ligne (Mapterhorn, sobrement) et écrit `cache.lock` dans le cache.
+    /// Remplit le cache de banc en ligne (IGN à 20 req/s, Mapterhorn, couverture) et écrit
+    /// `cache.lock` dans le cache.
     FillCache {
         /// Identifiants de cas (défaut : tous ceux des groupes choisis).
         #[arg(long, value_delimiter = ',')]
         cas: Vec<String>,
         /// Groupes de traces personnelles.
-        #[arg(long, value_delimiter = ',', default_value = "hors_france")]
+        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france")]
         groupes: Vec<String>,
-        /// Parcours vcyclist de la cohérence du demi-pixel.
-        #[arg(long, value_delimiter = ',', default_value = "test4")]
+        /// Parcours vcyclist des tests de cohérence avec la vérité `T`.
+        #[arg(long, value_delimiter = ',', default_value = "test1,test2,test3,test4")]
         coherence: Vec<String>,
+        /// Scénarios golden (ouvrages de calibration).
+        #[arg(long, value_delimiter = ',', default_value = "krk,liege-belle-liegeoise")]
+        golden: Vec<String>,
         /// Fixtures hors git du manifest (test de méthode `vc-strava`), lues dans bench/private/.
         #[arg(long, value_delimiter = ',', default_value = "vc-strava")]
         hors_git: Vec<String>,
@@ -50,16 +55,24 @@ enum Command {
     },
     /// Campagne de calibration sur le cache de banc, sans réseau.
     Run {
-        /// Obligatoire à l'incrément 1 : seul le mode hors ligne existe.
+        /// Obligatoire : seul le mode hors ligne existe.
         #[arg(long)]
         offline: bool,
         #[arg(long, value_delimiter = ',')]
         cas: Vec<String>,
-        #[arg(long, value_delimiter = ',', default_value = "hors_france")]
+        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france")]
         groupes: Vec<String>,
         /// Fichier de sortie (défaut : bench/reports/<date>-<rules_version>/results.json, T05 §5.2).
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+    /// L1 : latence à froid (live, caches disque et mémoire neufs à chaque essai).
+    Latency {
+        /// Cas personnels (traces de 90 à 130 km).
+        #[arg(long, value_delimiter = ',', required = true)]
+        cas: Vec<String>,
+        #[arg(long, default_value_t = 1)]
+        essais: usize,
     },
 }
 
@@ -92,17 +105,21 @@ async fn main_inner() -> anyhow::Result<bool> {
             );
             Ok(r.ok())
         }
-        Command::FillCache { cas, groupes, coherence, hors_git, gpx } => {
-            let lock = fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &gpx).await?;
+        Command::FillCache { cas, groupes, coherence, golden, hors_git, gpx } => {
+            let lock = fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &golden, &gpx).await?;
             println!("{}", serde_json::to_string_pretty(&lock)?);
             Ok(true)
         }
         Command::Run { offline, cas, groupes, out } => {
             if !offline {
-                anyhow::bail!("seul `run --offline` existe à l'incrément 1 (cache de banc, sans réseau)");
+                anyhow::bail!("seul `run --offline` existe (cache de banc, sans réseau)");
+            }
+            let out = out.unwrap_or_else(|| default_report_dir(&paths).join("results.json"));
+            // Un rapport consigné n'est jamais réécrit (T05 §5.2) : changer `rules_version` ou `--out`.
+            if out.exists() {
+                anyhow::bail!("{} existe déjà : rapport non réécrit", out.display());
             }
             let results = run(&paths, &groupes, &cas).await?;
-            let out = out.unwrap_or_else(|| default_report_dir(&paths).join("results.json"));
             if let Some(dir) = out.parent() {
                 std::fs::create_dir_all(dir).with_context(|| format!("création de {}", dir.display()))?;
             }
@@ -124,6 +141,11 @@ async fn main_inner() -> anyhow::Result<bool> {
                 );
             }
             println!("écrit : {}", out.display());
+            Ok(true)
+        }
+        Command::Latency { cas, essais } => {
+            let result = latency_cold(&paths, &cas, essais).await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
             Ok(true)
         }
     }

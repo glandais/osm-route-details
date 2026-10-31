@@ -1,6 +1,8 @@
 //! Campagne de calibration (`run --offline`) et remplissage du cache de banc (`fill-cache`),
-//! T05 §3.3, §5.1, §5.3. Incrément 1 : métriques E1 et E2 sur les traces personnelles (groupe
-//! `hors_france` par défaut), mesurées et rapportées sans seuil.
+//! T05 §3.3, §5.1, §5.3. Incrément 2 : E1 jugé sur `dplus` et `plaine` (seuils de
+//! `criteria.yaml`), E2 rapporté (bornes indicatives), E2b jugé par groupe (médiane de
+//! |ln(D+ service / D+ baro)| non dégradée face au service appelé avec
+//! `structure_correction: false`, le « MNT brut » de T05 §3.1), `hors_france` rapporté.
 //!
 //! Ordre imposé : empreintes vérifiées, puis cas `tenue_a_l_ecart` exclus, **avant** toute lecture
 //! de tuile. Aucune coordonnée n'est écrite : identifiants `perso-NN`, distances curvilignes.
@@ -10,7 +12,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use ord_core::rules::Rules;
-use ord_data::elevation::PixelConvention;
 use ord_domain::geo::haversine_m;
 use ord_domain::request::GainPreset;
 use ord_domain::LatLon;
@@ -19,8 +20,8 @@ use serde_json::{json, Value};
 use crate::check::{check, CheckReport};
 use crate::hash::{cache_fingerprint, sha256_bytes};
 use crate::manifest::{Manifest, Serie, Trace};
-use crate::metrics::{dplus, e1, interpolate, median, passage_windows};
-use crate::service::{Pt, Service};
+use crate::metrics::{dplus, dplus_with, e1, interpolate, median, passage_windows};
+use crate::service::{Pt, Service, Variant};
 use crate::{gpx, BenchPaths, BenchRules};
 
 /// Sélection des cas : la série tenue à l'écart est exclue ici, avant toute lecture.
@@ -189,6 +190,20 @@ fn profile(r: &Value) -> anyhow::Result<Profile> {
     Ok(p)
 }
 
+/// Seuil de D+ par station de la grille : celui du preset, ou celui des plages `adapted[]` que
+/// le service a appliqué (GLO-30, T04 §5.4). Le D+ du banc reproduit ainsi celui du service.
+fn thresholds(d: &[f64], r: &Value, preset_threshold: f64) -> Vec<f64> {
+    let adapted: Vec<(f64, f64, f64)> = r["summary"]["gain_params"]["adapted"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| Some((a["from_m"].as_f64()?, a["to_m"].as_f64()?, a["threshold_m"].as_f64()?)))
+        .collect();
+    d.iter()
+        .map(|&x| adapted.iter().find(|(a, b, _)| x >= *a && x <= *b).map_or(preset_threshold, |t| t.2))
+        .collect()
+}
+
 fn round(x: f64, digits: i32) -> f64 {
     let k = 10f64.powi(digits);
     (x * k).round() / k
@@ -244,11 +259,20 @@ pub async fn measure_case(
 
     let m1 = e1(&p.d, &svc, &bar, rules.detrend_window_m, rules.detrend_step_m);
     let g = &rules_core.elevation.gain;
+    let dem = g.preset(GainPreset::Dem);
     let (dplus_svc, dplus_raw, dplus_baro) = (
-        dplus(&p.d, &svc, g.preset(GainPreset::Dem)),
-        dplus(&p.d, &svc_raw, g.preset(GainPreset::Dem)),
+        dplus_with(&p.d, &svc, dem, &thresholds(&p.d, &r, dem.threshold_m)),
+        dplus_with(&p.d, &svc_raw, dem, &thresholds(&p.d, &raw, dem.threshold_m)),
         dplus(&p.d, &bar, g.preset(GainPreset::Barometric)),
     );
+    let warning_codes: BTreeMap<String, usize> =
+        r["quality"]["warnings"].as_array().into_iter().flatten().filter_map(|w| w["code"].as_str()).fold(
+            BTreeMap::new(),
+            |mut m, c| {
+                *m.entry(c.to_owned()).or_default() += 1;
+                m
+            },
+        );
     let step = rules.grid_step_m;
     let masked_m = masked.iter().filter(|m| **m).count() as f64 * step;
     let compared = bar.iter().filter(|x| !x.is_nan()).count();
@@ -281,7 +305,9 @@ pub async fn measure_case(
             "summary_gain_m": r["summary"]["gain_m"],
             "summary_length_m": r["summary"]["length_m"],
             "status": r["status"],
-            "terrain_m": r["summary"]["terrain_m"]
+            "terrain_m": r["summary"]["terrain_m"],
+            "plages_glo30_adaptees": r["summary"]["gain_params"]["adapted"].as_array().map_or(0, Vec::len),
+            "avertissements": warning_codes
         }
     });
     Ok((case_json, r["meta"]["data_versions"].clone()))
@@ -348,6 +374,113 @@ pub fn ensure_check(report: &CheckReport) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Seuils E1 d'une strate (`criteria.yaml`, E1) : `(rmse_m_max, p95_m_max)`.
+fn e1_thresholds(groupe: &str) -> Option<(f64, f64)> {
+    match groupe {
+        "plaine" => Some((1.5, 4.0)),
+        "dplus" => Some((3.0, 8.0)),
+        _ => None,
+    }
+}
+
+/// Bornes indicatives d'E2 (`criteria.yaml`) : par trace, et médiane du groupe.
+const E2_TRACE: (f64, f64) = (0.90, 1.20);
+const E2_GROUP_MEDIAN: (f64, f64) = (0.95, 1.12);
+/// Groupes jugés « France » pour E2 et E2b (`criteria.yaml`, `terrain: france`).
+const E2_GROUPS: [&str; 3] = ["dplus", "plaine", "ouvrage"];
+
+fn within(x: f64, (lo, hi): (f64, f64)) -> bool {
+    x >= lo && x <= hi
+}
+
+/// Verdicts E1, E2 (indicatif), E2b (bloquant) à partir des cas mesurés.
+fn judge(cases: &[Value]) -> (Value, Value) {
+    let metric = |c: &Value, k: &str| c["metriques"][k].as_f64().unwrap_or(f64::NAN);
+    let groupe = |c: &Value| c["groupe"].as_str().unwrap_or("").to_owned();
+    let mut groups: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    for c in cases {
+        groups.entry(groupe(c)).or_default().push(c);
+    }
+    let mut agg_e1 = serde_json::Map::new();
+    let mut agg_e2 = serde_json::Map::new();
+    let mut agg_e2b = serde_json::Map::new();
+    let mut e1_fail = Vec::new();
+    let mut e1_judged = 0usize;
+    let mut e2b_fail = Vec::new();
+    let mut e2b_judged = 0usize;
+    let mut e2_out = Vec::new();
+    for (g, list) in &groups {
+        let rmse: Vec<f64> = list.iter().map(|c| metric(c, "E1.rmse_m")).collect();
+        let p95: Vec<f64> = list.iter().map(|c| metric(c, "E1.p95_m")).collect();
+        let ratio: Vec<f64> = list.iter().map(|c| metric(c, "E2.ratio")).collect();
+        let ratio_raw: Vec<f64> = list.iter().map(|c| metric(c, "E2.ratio_mnt_brut")).collect();
+        agg_e1.insert(format!("{g}.rmse_m_mediane"), json!(round(median(&rmse), 3)));
+        agg_e1.insert(format!("{g}.p95_m_mediane"), json!(round(median(&p95), 3)));
+        agg_e1.insert(
+            format!("{g}.rmse_m_max"),
+            json!(round(rmse.iter().copied().fold(f64::NAN, f64::max), 3)),
+        );
+        agg_e1
+            .insert(format!("{g}.p95_m_max"), json!(round(p95.iter().copied().fold(f64::NAN, f64::max), 3)));
+        if let Some((rmse_max, p95_max)) = e1_thresholds(g) {
+            for c in list {
+                e1_judged += 1;
+                let (r, q) = (metric(c, "E1.rmse_m"), metric(c, "E1.p95_m"));
+                if !(r <= rmse_max && q <= p95_max) {
+                    e1_fail.push(json!({"id": c["id"], "groupe": g, "rmse_m": r, "p95_m": q}));
+                }
+            }
+        }
+        let med = median(&ratio);
+        agg_e2.insert(format!("{g}.ratio_mediane"), json!(round(med, 4)));
+        agg_e2.insert(format!("{g}.ratio_mnt_brut_mediane"), json!(round(median(&ratio_raw), 4)));
+        if E2_GROUPS.contains(&g.as_str()) {
+            let traces_out: Vec<Value> = list
+                .iter()
+                .filter(|c| !within(metric(c, "E2.ratio"), E2_TRACE))
+                .map(|c| json!({"id": c["id"], "ratio": metric(c, "E2.ratio")}))
+                .collect();
+            e2_out.push(json!({
+                "groupe": g,
+                "mediane": round(med, 4),
+                "mediane_dans_bornes": within(med, E2_GROUP_MEDIAN),
+                "traces_hors_bornes": traces_out
+            }));
+            // E2b : médiane |ln(service / baro)| ≤ médiane |ln(MNT brut / baro)|.
+            let ln_svc: Vec<f64> = ratio.iter().map(|r| r.ln().abs()).collect();
+            let ln_raw: Vec<f64> = ratio_raw.iter().map(|r| r.ln().abs()).collect();
+            let (ms, mr) = (median(&ln_svc), median(&ln_raw));
+            e2b_judged += 1;
+            let pass = ms <= mr + 1e-12;
+            if !pass {
+                e2b_fail.push(g.clone());
+            }
+            agg_e2b.insert(
+                g.clone(),
+                json!({
+                    "mediane_ecart_log_service": round(ms, 5),
+                    "mediane_ecart_log_mnt_brut": round(mr, 5),
+                    "verdict": if pass { "pass" } else { "fail" }
+                }),
+            );
+        }
+    }
+    let verdict = |judged: usize, fails: usize| match (judged, fails) {
+        (0, _) => "skipped",
+        (_, 0) => "pass",
+        _ => "fail",
+    };
+    let verdicts = json!({
+        "E1": verdict(e1_judged, e1_fail.len()),
+        "E1_echecs": e1_fail,
+        "E2": if e2_out.is_empty() { "skipped" } else { "reported" },
+        "E2_indicatif": e2_out,
+        "E2b": verdict(e2b_judged, e2b_fail.len()),
+        "E2b_groupes_en_echec": e2b_fail,
+    });
+    (json!({"E1": agg_e1, "E2": agg_e2, "E2b": agg_e2b}), verdicts)
+}
+
 /// `run --offline` : campagne de calibration ; renvoie le contenu de `results.json`.
 pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyhow::Result<Value> {
     let report = check(paths)?;
@@ -362,7 +495,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let refs = ouvrage_refs(paths)?;
-    let service = Service::new(&paths.cache, true, PixelConvention::Center)?;
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
     let mut cases = Vec::new();
     let mut skipped = Vec::new();
     let mut data_versions = Value::Null;
@@ -389,35 +522,18 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             Err(e) => skipped.push(json!({"id": t.id, "raison": e.to_string()})),
         }
     }
-    // Par groupe : RMSE E1, P95 E1, rapport E2, rapport E2 du MNT brut.
-    type Series = [Vec<f64>; 4];
-    let mut by_group: BTreeMap<String, Series> = BTreeMap::new();
-    for c in &cases {
-        let g = by_group.entry(c["groupe"].as_str().unwrap_or("").to_owned()).or_default();
-        let m = &c["metriques"];
-        for (series, key) in g.iter_mut().zip(["E1.rmse_m", "E1.p95_m", "E2.ratio", "E2.ratio_mnt_brut"]) {
-            series.push(m[key].as_f64().unwrap_or(f64::NAN));
-        }
-    }
-    let mut e1_agg = serde_json::Map::new();
-    let mut e2_agg = serde_json::Map::new();
-    for (g, [rmse, p95, ratio, ratio_raw]) in &by_group {
-        e1_agg.insert(format!("{g}.rmse_m_mediane"), json!(round(median(rmse), 3)));
-        e1_agg.insert(format!("{g}.p95_m_mediane"), json!(round(median(p95), 3)));
-        e2_agg.insert(format!("{g}.ratio_mediane"), json!(round(median(ratio), 4)));
-        e2_agg.insert(format!("{g}.ratio_mnt_brut_mediane"), json!(round(median(ratio_raw), 4)));
-    }
+    let (agregats, mut verdicts) = judge(&cases);
+    verdicts["Q1"] = json!(if report.q1.pass() { "pass" } else { "fail" });
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
-    let measured = if cases.is_empty() { "skipped" } else { "reported" };
     let results = json!({
         "schema": 1,
         "campagne": {
             "date": today_utc(),
             "type": "calibration",
             "increment": "MVP",
-            "increment_plan": 1,
+            "increment_plan": 2,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
             "rules_version": ord_core::RULES_VERSION,
@@ -430,26 +546,34 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "bench_rules": rules,
             "private_present": paths.private_present(),
             "groupes": groupes,
-            "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out
+            "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
+            "notes": [
+                "E1 : toutes les stations hors fenêtres masquées (pas encore de typologie : les ouvrages ne sont pas exclus)",
+                "E2b : sans correction d'ouvrage avant l'incrément 4, le service et sa référence structure_correction=false sont identiques"
+            ]
         },
         "cas": cases,
         "cas_sautes": skipped,
-        "agregats": {"E1": e1_agg, "E2": e2_agg},
-        "verdicts": {"E1": measured, "E2": measured, "Q1": if report.q1.pass() { "pass" } else { "fail" }},
+        "agregats": agregats,
+        "verdicts": verdicts,
         "diagnostics": {"cache": {"tuiles": fingerprint.tiles, "octets": fingerprint.bytes}}
     });
     crate::privacy::assert_report_clean(&results, &crate::privacy::private_names(paths))?;
     Ok(results)
 }
 
-/// `fill-cache` : mêmes requêtes que `run`, en ligne, plus la cohérence `test4` (deux conventions
-/// de pixel) et des GPX supplémentaires (test de méthode). Écrit `cache.lock` dans le cache.
+/// `fill-cache` : mêmes requêtes que `run`, en ligne, plus les cohérences `test1..4` (service
+/// complet ; `test4` aussi en Mapterhorn seul, deux conventions), les fixtures hors git
+/// (Mapterhorn seul, test de méthode), les scénarios golden et des GPX supplémentaires. Écrit
+/// `cache.lock` dans le cache.
+#[allow(clippy::too_many_arguments)]
 pub async fn fill_cache(
     paths: &BenchPaths,
     groupes: &[String],
     ids: &[String],
     coherence_routes: &[String],
     hors_git: &[String],
+    goldens: &[String],
     extra_gpx: &[PathBuf],
 ) -> anyhow::Result<Value> {
     let report = check(paths)?;
@@ -457,7 +581,8 @@ pub async fn fill_cache(
     let manifest = Manifest::load(&paths.bench)?;
     let selection = select(&manifest, groupes, ids);
     let rules = BenchRules::default();
-    let service = Service::new(&paths.cache, false, PixelConvention::Center)?;
+    let service = Service::start(&paths.cache, false, Variant::DEFAULT).await?;
+    let mapterhorn = Service::start(&paths.cache, false, Variant::MAPTERHORN).await?;
     let mut filled = Vec::new();
     if paths.private_present() {
         for t in &selection.cases {
@@ -470,23 +595,32 @@ pub async fn fill_cache(
         }
     }
     for route in coherence_routes {
-        crate::coherence::measure(&paths.cache, &paths.bench, route, false).await?;
+        crate::coherence::measure(&paths.cache, &paths.bench, route, false, true, false).await?;
+        if route == "test4" {
+            crate::coherence::measure(&paths.cache, &paths.bench, route, false, false, true).await?;
+        }
         let gpx_path = paths.bench.join(format!("data/vcyclist/{route}.gpx"));
         let pts: Vec<Pt> = gpx::read(&gpx_path)?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
         service.route_details(&pts, distance_options(true, rules.grid_step_m)).await?;
-        eprintln!("vc-{route} : tuiles en cache (cohérence, deux conventions)");
+        eprintln!("vc-{route} : tuiles en cache (cohérence)");
         filled.push(format!("vc-{route}"));
     }
     for id in hors_git {
         match hors_git_file(paths, &manifest, id)? {
             Some(path) => {
                 let pts: Vec<Pt> = gpx::read(&path)?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
-                crate::coherence::sample_points(&service, &pts).await?;
+                crate::coherence::sample_points(&mapterhorn, &pts).await?;
                 eprintln!("{id} : tuiles en cache");
                 filled.push(id.clone());
             }
             None => eprintln!("{id} : sauté (bench/private/ absent)"),
         }
+    }
+    for id in goldens {
+        let scenario = crate::golden::scenario(paths, &manifest, id)?;
+        crate::golden::response(&service, &scenario).await?;
+        eprintln!("golden {id} : tuiles en cache");
+        filled.push(format!("golden-{id}"));
     }
     for path in extra_gpx {
         let pts: Vec<Pt> = gpx::read(path)?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
@@ -507,4 +641,44 @@ pub async fn fill_cache(
     std::fs::create_dir_all(&paths.cache)?;
     std::fs::write(paths.cache.join("cache.lock"), serde_json::to_string_pretty(&lock)? + "\n")?;
     Ok(lock)
+}
+
+/// L1 (latence à froid, live) : chaque essai part d'un cache disque neuf, temporaire, et d'un
+/// service neuf (mémoire vide). Durée de la requête `distance` 5 m, comme la campagne.
+pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> anyhow::Result<Value> {
+    let report = check(paths)?;
+    ensure_check(&report)?;
+    let manifest = Manifest::load(&paths.bench)?;
+    let selection = select(&manifest, &[], ids);
+    let rules = BenchRules::default();
+    let mut out = Vec::new();
+    for t in &selection.cases {
+        let case = load_perso(paths, t, &rules).map_err(|e| anyhow::anyhow!("{} : {e}", t.id))?;
+        let mut durations = Vec::new();
+        let mut terrain = Value::Null;
+        let mut length = Value::Null;
+        for _ in 0..trials.max(1) {
+            let dir = tempfile::tempdir().context("cache temporaire")?;
+            let service = Service::start(dir.path(), false, Variant::DEFAULT).await?;
+            let start = std::time::Instant::now();
+            let r = service.route_details(&case.request, distance_options(true, rules.grid_step_m)).await?;
+            durations.push(start.elapsed().as_secs_f64());
+            terrain = r["summary"]["terrain_m"].clone();
+            length = r["summary"]["length_m"].clone();
+        }
+        let mut sorted = durations.clone();
+        sorted.sort_by(f64::total_cmp);
+        out.push(json!({
+            "id": t.id,
+            "groupe": t.groupe,
+            "serie": t.serie,
+            "longueur_service_m": length,
+            "terrain_m": terrain,
+            "essais": durations.iter().map(|d| round(*d, 2)).collect::<Vec<_>>(),
+            "p95_s": round(crate::metrics::percentile(&sorted, 95.0), 2)
+        }));
+    }
+    let result = json!({"date": today_utc(), "rules_version": ord_core::RULES_VERSION, "L1": out});
+    crate::privacy::assert_report_clean(&result, &crate::privacy::private_names(paths))?;
+    Ok(result)
 }

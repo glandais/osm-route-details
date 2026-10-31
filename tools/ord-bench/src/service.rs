@@ -37,18 +37,37 @@ impl std::fmt::Debug for Service {
     }
 }
 
+/// Variante du service mesurée par le banc.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Variant {
+    pub convention: PixelConvention,
+    /// IGN LiDAR HD lu (défaut du service) ; `false` : Mapterhorn seul (mesures de l'incrément 1,
+    /// test de méthode `vc-strava`, correction du demi-pixel sur Mapterhorn).
+    pub ign: bool,
+}
+
+impl Variant {
+    /// Le service tel qu'il est déployé.
+    pub const DEFAULT: Self = Self { convention: PixelConvention::Center, ign: true };
+    /// Mapterhorn seul, centres de pixel.
+    pub const MAPTERHORN: Self = Self { convention: PixelConvention::Center, ign: false };
+}
+
 /// Configuration du service pour le banc : cache disque = cache de banc.
-pub fn bench_config(cache_dir: &Path, offline: bool) -> Config {
+pub fn bench_config(cache_dir: &Path, offline: bool, variant: Variant) -> Config {
     let mut config = Config::default();
     config.cache.dir = cache_dir.to_path_buf();
     config.cache.offline = offline;
+    config.elevation.ign.enabled = variant.ign;
     config
 }
 
 impl Service {
-    pub fn new(cache_dir: &Path, offline: bool, convention: PixelConvention) -> anyhow::Result<Self> {
-        let config = bench_config(cache_dir, offline);
-        let state = AppState::with_wiring(&config, Wiring { pixel_convention: convention })?;
+    /// Service en processus, après ses lectures de démarrage (version Mapterhorn, index de
+    /// couverture), relues dans le cache de banc en mode hors ligne.
+    pub async fn start(cache_dir: &Path, offline: bool, variant: Variant) -> anyhow::Result<Self> {
+        let config = bench_config(cache_dir, offline, variant);
+        let state = AppState::bootstrap(&config, Wiring { pixel_convention: variant.convention }).await?;
         Ok(Self { app: router(state) })
     }
 

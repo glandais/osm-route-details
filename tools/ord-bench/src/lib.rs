@@ -1,13 +1,15 @@
 //! `ord-bench` (T05 §3, §5) : fait passer le service sur le corpus du banc et calcule les
 //! métriques. Il ne recalcule aucune référence : il lit celles de `bench/`.
 //!
-//! Incrément 1 : `check` (empreintes du manifest, cohérence `criteria.yaml` ↔ README, Q1),
-//! `fill-cache` (cache de banc local), `run --offline` (E1 et E2 rapportés, sans seuil).
+//! `check` (empreintes du manifest, cohérence `criteria.yaml` ↔ README, Q1), `fill-cache` (cache
+//! de banc local), `run --offline` (incrément 2 : E1 jugé, E2 indicatif, E2b jugé), `latency`
+//! (L1 à froid, live) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
 pub mod campaign;
 pub mod check;
 pub mod coherence;
+pub mod golden;
 pub mod gpx;
 pub mod hash;
 pub mod manifest;

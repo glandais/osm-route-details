@@ -1,6 +1,11 @@
-//! Test de cohérence du demi-pixel sur `test4` de vcyclist (README technique §3, ligne 1) :
-//! RMS(service − `T`) sur le terrain ouvert. C'est une **cohérence** avec la vérité de vcyclist
-//! (tirée du MNT IGN), pas une métrique du banc. vcyclist : 0,58 m aux centres, 2,63 m aux coins.
+//! Tests de cohérence avec la vérité `T` de vcyclist (README technique §3) : RMS(service − `T`)
+//! sur le terrain ouvert. Ce sont des **cohérences** avec la vérité de vcyclist (tirée du MNT IGN
+//! LiDAR HD), pas des métriques du banc.
+//!
+//! - Ligne 1 : correction du demi-pixel sur `test4`, Mapterhorn seul (vcyclist : 0,58 m aux
+//!   centres, 2,63 m aux coins).
+//! - Ligne 2 (ex-A8) : service complet (IGN et repli) sur `test1..4`, ≤ 1,0 m sur `test1..3` et
+//!   ≤ 1,5 m sur `test4`.
 
 use std::path::Path;
 
@@ -8,7 +13,7 @@ use anyhow::{bail, Context};
 use ord_data::elevation::PixelConvention;
 use serde_json::json;
 
-use crate::service::{Pt, Service};
+use crate::service::{Pt, Service, Variant};
 
 /// Une requête ne dépasse jamais les bornes d'entrée (16 000 points).
 const CHUNK: usize = 15_000;
@@ -67,7 +72,8 @@ pub async fn sample_points(service: &Service, points: &[Pt]) -> anyhow::Result<V
 pub struct Coherence {
     pub stations: usize,
     pub rms_center_m: f64,
-    pub rms_corner_m: f64,
+    /// Convention des coins (avant correction), si mesurée.
+    pub rms_corner_m: Option<f64>,
 }
 
 fn rms(truth: &Truth, ele: &[f64]) -> (f64, usize) {
@@ -78,12 +84,25 @@ fn rms(truth: &Truth, ele: &[f64]) -> (f64, usize) {
     ((e.iter().map(|x| x * x).sum::<f64>() / e.len().max(1) as f64).sqrt(), e.len())
 }
 
-/// Mesure les deux conventions sur le cache de banc (`offline`) ou en ligne (remplissage).
-pub async fn measure(cache: &Path, bench: &Path, route: &str, offline: bool) -> anyhow::Result<Coherence> {
+/// Mesure sur le cache de banc (`offline`) ou en ligne (remplissage) : IGN lu ou Mapterhorn
+/// seul (`ign`), convention des coins en plus si `corner`.
+pub async fn measure(
+    cache: &Path,
+    bench: &Path,
+    route: &str,
+    offline: bool,
+    ign: bool,
+    corner: bool,
+) -> anyhow::Result<Coherence> {
     let truth = load_truth(bench, route)?;
-    let center = Service::new(cache, offline, PixelConvention::Center)?;
-    let corner = Service::new(cache, offline, PixelConvention::Corner)?;
+    let center = Service::start(cache, offline, Variant { convention: PixelConvention::Center, ign }).await?;
     let (rms_center_m, stations) = rms(&truth, &sample_points(&center, &truth.points).await?);
-    let (rms_corner_m, _) = rms(&truth, &sample_points(&corner, &truth.points).await?);
+    let rms_corner_m = if corner {
+        let service =
+            Service::start(cache, offline, Variant { convention: PixelConvention::Corner, ign }).await?;
+        Some(rms(&truth, &sample_points(&service, &truth.points).await?).0)
+    } else {
+        None
+    };
     Ok(Coherence { stations, rms_center_m, rms_corner_m })
 }

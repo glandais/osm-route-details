@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use ord_core::elevation::derive::gain_on_runs;
+use ord_core::elevation::derive::{gain_on_runs, gain_on_runs_with};
 use ord_core::rules::PresetParams;
 use ord_domain::geo::haversine_m;
 use ord_domain::LatLon;
@@ -144,6 +144,11 @@ pub fn e1(d: &[f64], service: &[f64], baro: &[f64], window: f64, step: f64) -> E
 /// service).
 pub fn dplus(d: &[f64], ele: &[f64], preset: PresetParams) -> f64 {
     gain_on_runs(d, ele, preset).0
+}
+
+/// D+ avec un seuil par station (plages GLO-30 adaptées par le service).
+pub fn dplus_with(d: &[f64], ele: &[f64], preset: PresetParams, tau: &[f64]) -> f64 {
+    gain_on_runs_with(d, ele, preset, Some(tau)).0
 }
 
 /// Fenêtres masquées autour des passages d'un ouvrage : stations à moins de `tol` d'un de ses

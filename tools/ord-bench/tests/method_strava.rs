@@ -13,10 +13,9 @@
 
 use ord_bench::campaign::hors_git_file;
 use ord_bench::manifest::Manifest;
-use ord_bench::service::{Pt, Service};
+use ord_bench::service::{Pt, Service, Variant};
 use ord_bench::{gpx, metrics, BenchPaths};
 use ord_core::rules::Rules;
-use ord_data::elevation::PixelConvention;
 use ord_domain::geo::haversine_m;
 use ord_domain::request::GainPreset;
 use ord_domain::LatLon;
@@ -45,8 +44,8 @@ async fn dplus_ratio_matches_vcyclist() {
     let dem = Rules::default().elevation.gain.preset(GainPreset::Dem);
     let baro = metrics::dplus(&d, &ele, dem);
 
-    // D+ du service (MNT Mapterhorn z12, preset dem).
-    let service = Service::new(&paths.cache, true, PixelConvention::Center).expect("service");
+    // D+ du service, Mapterhorn z12 seul comme vcyclist (preset dem).
+    let service = Service::start(&paths.cache, true, Variant::MAPTERHORN).await.expect("service");
     let r = service
         .route_details(&pts, json!({"sampling": {"mode": "input"}, "sections": ["summary"]}))
         .await

@@ -1,0 +1,95 @@
+{
+  "attribution": {
+    "text": "© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · © IGN — LiDAR HD · Mapterhorn and its sources",
+    "url": "/v1/attribution"
+  },
+  "meta": {
+    "api_version": "1.0",
+    "data_versions": {
+      "elevation": [
+        {
+          "id": "0.0.13",
+          "indicative": true,
+          "role": "fallback",
+          "source": "mapterhorn",
+          "zoom": 12
+        },
+        {
+          "date": "2026-09-14",
+          "indicative": true,
+          "products": [
+            "coverage-index",
+            "coverage"
+          ],
+          "role": "coverage",
+          "source": "mapterhorn-coverage",
+          "zoom": 12
+        }
+      ]
+    },
+    "duration_ms": null,
+    "request_id": null,
+    "rules_version": "2026.10.2"
+  },
+  "points": [
+    {
+      "d_m": 0.0,
+      "ele": 60.26,
+      "ele_method": "dem",
+      "index": 0,
+      "origin": "input"
+    },
+    {
+      "d_m": 86.47,
+      "ele": 62.37,
+      "ele_method": "dem",
+      "index": 1,
+      "origin": "input"
+    },
+    {
+      "d_m": 173.14,
+      "ele": 64.51,
+      "ele_method": "dem",
+      "index": 2,
+      "origin": "input"
+    }
+  ],
+  "quality": {
+    "elevation_coverage": 1.0,
+    "terrain": [
+      {
+        "fallback_after_error": false,
+        "from_m": 0.0,
+        "measured": false,
+        "origin": "mapterhorn",
+        "to_m": 173.14
+      }
+    ],
+    "warnings": [
+      {
+        "code": "outside_primary_zone",
+        "from_m": 0.0,
+        "message": "outside France, Mapterhorn only",
+        "to_m": 173.14
+      }
+    ]
+  },
+  "status": "complete",
+  "summary": {
+    "ele_max_m": 64.51,
+    "ele_min_m": 60.05,
+    "gain_m": 3.72,
+    "gain_params": {
+      "adapted": [],
+      "partial": false,
+      "preset": "dem",
+      "smoothing_m": 30.0,
+      "threshold_m": 3.0
+    },
+    "length_m": 173.14,
+    "loss_m": 0.0,
+    "terrain_m": {
+      "mapterhorn": 173.14
+    }
+  }
+}
