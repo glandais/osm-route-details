@@ -86,7 +86,8 @@ impl BenchPaths {
 /// passages des ouvrages de calibration dans les traces tenues à l'écart (extraits). `bench2`
 /// (e48170f) : passage en hauteur sur un pont (test de niveau) ; repli 1–3 km des extraits lu sur la
 /// trace (baro − MNT), stations par côté rapportées ; `diagnose-structures` sur les extraits.
-pub const BENCH_REVISION: Option<&str> = Some("bench2");
+/// Remise à `None` avec les règles 2026.10.8.
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

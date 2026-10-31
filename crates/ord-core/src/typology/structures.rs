@@ -955,7 +955,8 @@ pub fn resolve(
 
     // Doutes du chemin apparié autour de chaque passage.
     for p in &mut passages {
-        add_path_doubts(p, path, runs, rules);
+        let length = built.iter().find(|b| b.structure.id == p.structure).map(|b| b.structure.length_m);
+        add_path_doubts(p, length, path, runs, rules);
     }
     Ok(StructuresOut { structures: built.into_iter().map(|b| b.structure).collect(), passages })
 }
@@ -963,7 +964,15 @@ pub fn resolve(
 /// Passage sans ouvrage retrouvé dans le graphe des ouvrages.
 pub const NO_STRUCTURE: StructureId = u32::MAX;
 
-fn add_path_doubts(p: &mut StructurePassage, path: &MatchedPath, runs: &[TypedRun], rules: &StructureRules) {
+/// Doutes du chemin apparié sur un passage ; `length` : longueur de l'ouvrage (culées en chaînage
+/// 0 et `length`).
+fn add_path_doubts(
+    p: &mut StructurePassage,
+    length: Option<f64>,
+    path: &MatchedPath,
+    runs: &[TypedRun],
+    rules: &StructureRules,
+) {
     let guard = rules.doubt_guard_m;
     let unmatched = runs.iter().any(|r| {
         matches!(r.matched, RunMatch::Unmatched | RunMatch::NoData { .. })
@@ -1001,11 +1010,87 @@ fn add_path_doubts(p: &mut StructurePassage, path: &MatchedPath, runs: &[TypedRu
         let inside = d1 > p.from_m + 1e-6 && d0 < p.to_m - 1e-6;
         let near = d1 >= p.from_m - guard && d0 <= p.to_m + guard;
         let long = haversine_m(path.obs[t].at, path.obs[t + 1].at) > rules.max_end_jump_m;
-        if inside || (near && long) {
+        // Saut court qui franchit une culée (T03 §6.3 : seul un saut de plus de `max_end_jump_m`
+        // y est un doute) : il chevauche une borne du passage et son extrémité sur l'ouvrage est à
+        // une culée (chaînage 0 ou `length` à `end_reached_m` près), pas au milieu d'un ouvrage
+        // longé par-dessous. C'est un trou du graphe entre la voie au sol et l'ouvrage (ways sans
+        // nœud commun), pas un saut dans l'ouvrage.
+        let at_abutment = |d: f64| {
+            let c = p.chainage_at(d);
+            length.is_some_and(|l| c.abs() <= rules.end_reached_m || (l - c).abs() <= rules.end_reached_m)
+        };
+        let enters = d0 <= p.from_m + 1e-6 && d1 > p.from_m + 1e-6;
+        let leaves = d0 < p.to_m - 1e-6 && d1 >= p.to_m - 1e-6;
+        let abutment_jump =
+            !long && ((enters && !leaves && at_abutment(d1)) || (leaves && !enters && at_abutment(d0)));
+        if (inside && !abutment_jump) || (near && long) {
             p.doubts.push(PassageDoubt::JumpInside);
             break;
         }
     }
     p.doubts.sort_unstable();
     p.doubts.dedup();
+}
+
+#[cfg(test)]
+mod doubt_tests {
+    use super::*;
+    use crate::typology::matcher::Obs;
+
+    /// Parcours rectiligne vers l'est, une observation tous les `step` mètres.
+    fn path(ds: &[f64], jump_at: usize) -> MatchedPath {
+        let m_per_deg = haversine_m(LatLon::new(45.0, 0.0), LatLon::new(45.0, 1.0));
+        let obs: Vec<Obs> = ds
+            .iter()
+            .map(|&d| Obs { p: [0.0, 0.0], at: LatLon::new(45.0, d / m_per_deg), d_m: d, no_data: None })
+            .collect();
+        let mut steps = vec![None; ds.len()];
+        steps[jump_at] = Some(Step::Jump);
+        MatchedPath { state: vec![ObsState::Unmatched; ds.len()], obs, steps }
+    }
+
+    /// Passage de 1 000 à 1 900 m sur un ouvrage de 900 m (chaînage = d − 1 000).
+    fn passage() -> StructurePassage {
+        StructurePassage {
+            id: 0,
+            structure: 0,
+            from_m: 1_000.0,
+            to_m: 1_900.0,
+            chainage: (0..=18).map(|k| (1_000.0 + 50.0 * k as f64, 50.0 * k as f64)).collect(),
+            doubts: Vec::new(),
+        }
+    }
+
+    fn doubts(ds: &[f64], jump_at: usize, length: Option<f64>) -> Vec<PassageDoubt> {
+        let mut p = passage();
+        add_path_doubts(&mut p, length, &path(ds, jump_at), &[], &StructureRules::default());
+        p.doubts
+    }
+
+    #[test]
+    fn a_short_jump_onto_an_abutment_is_not_a_jump_inside() {
+        // Saut de 3 m qui franchit la culée d'entrée (trou du graphe entre la voie au sol et le
+        // pont) : pas de doute.
+        assert!(doubts(&[990.0, 998.5, 1_001.5, 1_010.0], 1, Some(900.0)).is_empty());
+        // Même saut à la culée de sortie.
+        assert!(doubts(&[1_890.0, 1_898.5, 1_901.5, 1_910.0], 1, Some(900.0)).is_empty());
+        // Saut dans l'ouvrage, au milieu : doute.
+        assert_eq!(
+            doubts(&[1_400.0, 1_405.0, 1_408.0, 1_410.0], 1, Some(900.0)),
+            vec![PassageDoubt::JumpInside]
+        );
+        // Saut long à la culée : doute.
+        assert_eq!(doubts(&[960.0, 970.0, 1_001.5, 1_010.0], 1, Some(900.0)), vec![PassageDoubt::JumpInside]);
+        // Arrivée au milieu d'un ouvrage longé (pas une culée) : doute, même court.
+        let mut p = passage();
+        p.chainage = (0..=18).map(|k| (1_000.0 + 50.0 * k as f64, 300.0 + 50.0 * k as f64)).collect();
+        add_path_doubts(
+            &mut p,
+            Some(2_000.0),
+            &path(&[990.0, 998.5, 1_001.5, 1_010.0], 1),
+            &[],
+            &StructureRules::default(),
+        );
+        assert_eq!(p.doubts, vec![PassageDoubt::JumpInside]);
+    }
 }

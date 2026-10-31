@@ -336,7 +336,13 @@ pub enum PassageDoubt { EndUnresolved, UnmatchedAdjacent, JumpInside, FarFromAxi
 
 Doutes : extrémité `Unresolved` ; `Unmatched`/`NoData` à moins de `doubt_guard_m` ; saut dans
 l'ouvrage ou saut > 20 m [cal] à la culée ; distance moyenne obs–axe > 3·σ = 15 m [cal] ; coupure de
-chaîne dans l'ouvrage. `chainage` donne, à chaque observation, la position du candidat projetée sur l'axe : la fusion lit le
+chaîne dans l'ouvrage. Un saut court qui chevauche une borne du passage et dont l'extrémité sur
+l'ouvrage est à une culée (chaînage 0 ou `length_m`, à `end_reached_m` près) est un saut **à la
+culée**, pas dans l'ouvrage (règles 2026.10.8) : c'est un trou du graphe entre la voie au sol et le
+pont (ways sans nœud commun). Compté comme saut dans l'ouvrage, il laissait le MNT brut sur tout le
+pont (`nv-02`, banc 2026.10.7 : saut de 3 m à la culée, MNT LiDAR erratique sous un tablier haut
+au-dessus de l'eau, 41 m d'écart). Une arrivée au milieu d'un ouvrage reste un doute, même courte
+(trace qui longe un ouvrage par-dessous). `chainage` donne, à chaque observation, la position du candidat projetée sur l'axe : la fusion lit le
 profil de l'ouvrage **une fois**, en chaînage, puis le rend à chaque passage, dans chaque sens (inv. 8).
 `doubt_guard_m` = 20 m [cal]. La typologie **constate** les doutes ; la fusion décide (inv. 4 :
 pas de correction en cas de doute, `structure_uncorrected`) et y ajoute les siens (extrémité sans
