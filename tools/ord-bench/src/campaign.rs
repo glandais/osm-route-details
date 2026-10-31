@@ -94,7 +94,22 @@ pub struct PersoCase {
     pub baro_s: Vec<f64>,
     pub baro_z: Vec<f64>,
     pub masks: Vec<String>,
+    /// Extrait d'une trace tenue à l'écart : points de la trace jusqu'à 3 km de la fenêtre
+    /// (abscisse de l'extrait, position, baro transporté), pour le seul repli 1–3 km du décalage
+    /// local (baro − MNT, données de référence) ; jamais envoyés au service.
+    pub ring: Vec<RingPoint>,
 }
+
+/// Point de référence du repli 1–3 km d'un extrait tenu à l'écart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RingPoint {
+    pub s: f64,
+    pub at: LatLon,
+    pub baro: f64,
+}
+
+/// Portée du repli du décalage local autour de la fenêtre d'un extrait (1–3 km du milieu).
+const HELD_OUT_RING_M: f64 = 3_000.0;
 
 impl std::fmt::Debug for PersoCase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -194,6 +209,7 @@ fn build_case(
         baro_s,
         baro_z,
         masks: trace.passages_masques.clone(),
+        ring: Vec::new(),
     })
 }
 
@@ -462,10 +478,51 @@ pub fn held_out_extracts(
             baro_z,
             // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
             masks: Vec::new(),
+            ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
         };
         out.push((extract, (w.start - s0)..(w.end - s0)));
     }
     out
+}
+
+/// Points de la trace dans `range` (abscisse de la trace), en abscisse de l'extrait (`s0`), avec
+/// le baro transporté (`NaN` au-delà d'un trou de baro).
+fn ring_points(
+    case: &PersoCase,
+    ll: &[LatLon],
+    range: std::ops::Range<f64>,
+    s0: f64,
+    rules: &BenchRules,
+) -> Vec<RingPoint> {
+    let idx: Vec<usize> = (0..ll.len()).filter(|&i| range.contains(&case.s_ref[i])).collect();
+    let s: Vec<f64> = idx.iter().map(|&i| case.s_ref[i]).collect();
+    let baro = interpolate(&case.baro_s, &case.baro_z, &s, rules.baro_gap_max_m);
+    idx.iter().zip(s).zip(baro).map(|((&i, s), baro)| RingPoint { s: s - s0, at: ll[i], baro }).collect()
+}
+
+/// Repli 1–3 km d'un extrait : `(abscisse de l'extrait, baro − MNT LiDAR)` des points de la
+/// trace hors pont et tunnel des tuiles (MNT IGN lu directement, jamais la sortie du service).
+async fn ring_reference(
+    service: &Service,
+    cache: &Path,
+    ring: &[RingPoint],
+) -> anyhow::Result<Vec<(f64, f64)>> {
+    let pts: Vec<LatLon> = ring.iter().map(|r| r.at).collect();
+    let ctx = ord_domain::ctx::RequestCtx::new(
+        ord_domain::budget::RequestId("bench".into()),
+        ord_domain::budget::Deadline::after(std::time::Duration::from_secs(600)),
+    );
+    let dtm = service.state().orchestrator().sources().terrain.sample_ign_dtm(&pts, &ctx).await;
+    let tiles = crate::ouvrages::Tiles::load(cache, &pts).await?;
+    let on_structure = tiles.structure_mask(&pts);
+    Ok(ring
+        .iter()
+        .zip(dtm)
+        .zip(on_structure)
+        .filter(|(_, on)| !on)
+        .filter_map(|((r, z), _)| z.map(|z| (r.s, r.baro - f64::from(z))))
+        .filter(|(_, v)| v.is_finite())
+        .collect())
 }
 
 /// Mesures d'ouvrage d'une trace tenue à l'écart, sur ses extraits : seuls les passages de ses
@@ -484,7 +541,8 @@ pub async fn measure_held_out(
 ) -> anyhow::Result<Vec<Value>> {
     let mut items = Vec::new();
     for (extract, window) in held_out_extracts(case, refs, rules) {
-        let eval = OuvrageEval { cache, window: Some(window) };
+        let ring = ring_reference(service, cache, &extract.ring).await?;
+        let eval = OuvrageEval { cache, window: Some(window), ring: Some(ring) };
         let (_trace_metrics, _, its) =
             measure_case(service, &extract, None, refs, ouvrages, rules, rules_core, &eval).await?;
         items.extend(held_out_items(its, &trace.id, &trace.passages_masques));
@@ -517,6 +575,8 @@ pub fn held_out_items(items: Vec<Value>, trace: &str, calibration: &[String]) ->
 pub struct OuvrageEval<'a> {
     pub cache: &'a Path,
     pub window: Option<std::ops::Range<f64>>,
+    /// Extrait : repli 1–3 km lu sur la trace (`(abscisse, baro − MNT)`), hors service.
+    pub ring: Option<Vec<(f64, f64)>>,
 }
 
 /// Mesure E1 et E2 d'un cas (service appelé deux fois : corrections actives, puis MNT brut).
@@ -702,6 +762,7 @@ pub async fn measure_case(
         matched: &p.matched,
         unmatched_warn: &p.unmatched_warn,
         tile_structure: &tile_structure,
+        ring: eval.ring.as_deref(),
     };
     let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
@@ -1021,7 +1082,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
             )
             .ok();
-            let eval = OuvrageEval { cache: &paths.cache, window: None };
+            let eval = OuvrageEval { cache: &paths.cache, window: None, ring: None };
             match measure_case(&service, &case, csv, &refs, &ouvrages, &rules, &rules_core, &eval).await {
                 Ok((c, dv, its)) => {
                     eprintln!("{} : mesuré", case.id);
@@ -1121,7 +1182,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 4,
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f et 4304838)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838 et e48170f)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1148,6 +1209,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
                 "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
+                "Passage en hauteur sur un pont (README §2.1, passage_pont.niveau) : MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR) ≥ 10 m : passage compté seulement si la médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) atteint ½ MNH, sinon rapporté en passage_retire_niveau et retiré de E3, S1 et hors_graphe_velo ; MNH < 10 m : niveau_non_discriminant ; moins de 3 stations : niveau_sans_baro",
+                "Extraits tenus à l'écart : repli 1–3 km du décalage local lu sur la trace (baro − MNT IGN LiDAR lu directement, hors ponts et tunnels des tuiles), jamais la sortie du service ; seul le décalage est écrit ; decalage_repli_stations_par_cote = stations d'approche avant / après le pont",
                 "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
@@ -1220,6 +1283,14 @@ pub async fn fill_cache(
                             service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;
                         }
                     }
+                    // Repli 1–3 km : MNT IGN et tuiles de rues seulement, jamais le service.
+                    let pts: Vec<LatLon> = extract.ring.iter().map(|r| r.at).collect();
+                    let ctx = ord_domain::ctx::RequestCtx::new(
+                        ord_domain::budget::RequestId("bench".into()),
+                        ord_domain::budget::Deadline::after(std::time::Duration::from_secs(600)),
+                    );
+                    service.state().orchestrator().sources().terrain.sample_ign_dtm(&pts, &ctx).await;
+                    crate::ouvrages::Tiles::load_online(&paths.cache, &pts).await?;
                 }
                 eprintln!("{} : tuiles des extraits en cache", case.id);
                 filled.push(format!("{}#extraits", case.id));
@@ -1370,6 +1441,7 @@ mod tests {
             baro_z: vec![10.0; s_ref.len()],
             s_ref,
             masks: vec!["pont".into()],
+            ring: Vec::new(),
         };
         (case, refs)
     }

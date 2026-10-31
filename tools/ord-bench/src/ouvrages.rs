@@ -85,6 +85,9 @@ pub struct Ouvrage {
     /// Une way de l'ouvrage porte `tunnel=avalanche_protector` dans le corpus : le schéma
     /// Shortbread n'a pas cette valeur, la galerie y est une voie ordinaire (§4 bis.4).
     pub avalanche_protector: bool,
+    /// MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR au milieu), pour le test de niveau
+    /// d'un passage de pont (README §2.1, `passage_pont.niveau`) ; `None` sans valeur LiDAR.
+    pub mnh_milieu: Option<f64>,
 }
 
 /// Périmètre vélo d'un ouvrage du corpus, lu dans les tuiles de la campagne (couche `streets` :
@@ -216,6 +219,19 @@ pub fn calibration_ouvrages(
     held_out: &BTreeSet<String>,
 ) -> anyhow::Result<Vec<Ouvrage>> {
     let mut out = Vec::new();
+    // MNH au milieu des ouvrages publics : `reference.valeurs` d'`ouvrages.yaml`.
+    let public_mnh: BTreeMap<String, f64> = std::fs::read_to_string(paths.bench.join("data/ouvrages.yaml"))
+        .ok()
+        .and_then(|t| serde_yaml_ng::from_str::<Value>(&t).ok())
+        .map(|y| {
+            y["ouvrages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|o| Some((o["id"].as_str()?.to_owned(), corpus_mnh(o)?)))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut files = vec![(paths.bench.join("data/ouvrages-geom.json"), false)];
     if paths.private_present() {
         files.push((paths.private.join("ouvrages-perso.json"), true));
@@ -249,10 +265,23 @@ pub fn calibration_ouvrages(
                 perimeter_ambiguous: false,
                 chain,
                 avalanche_protector,
+                mnh_milieu: corpus_mnh(o).or_else(|| public_mnh.get(id).copied()),
             });
         }
     }
     Ok(out)
+}
+
+/// MNH au milieu d'un ouvrage du corpus : médiane MNS 25 m (sinon MNS ponctuel) − MNT LiDAR au
+/// milieu ; lu dans `valeurs` (extension perso) ou `reference.valeurs` (géométrie publique).
+fn corpus_mnh(o: &Value) -> Option<f64> {
+    let v = if o["valeurs"].is_object() { &o["valeurs"] } else { &o["reference"]["valeurs"] };
+    let mid = &v["milieu"];
+    let mnt = mid["lidar_mnt"].as_f64()?;
+    let med = &o["milieu_mns_mediane_25m"];
+    let med = if med.is_null() { &v["milieu_mns_mediane_25m"] } else { med };
+    let mns = med["valeur"].as_f64().or_else(|| med.as_f64()).or_else(|| mid["lidar_mns"].as_f64())?;
+    Some(mns - mnt)
 }
 
 /// Géométrie des ways du corpus (réponses Overpass de `data/ouvrages-osm/`).
@@ -297,6 +326,8 @@ pub struct CaseProfile<'a> {
     pub unmatched_warn: &'a [bool],
     /// Station sur un pont ou un tunnel des tuiles de la campagne (`Tiles::structure_mask`).
     pub tile_structure: &'a [bool],
+    /// Extrait tenu à l'écart : repli 1–3 km lu sur la trace, `(abscisse, baro − MNT)`.
+    pub ring: Option<&'a [(f64, f64)]>,
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -556,8 +587,9 @@ const APPROACH_SIDES_MAX_DIFF_M: f64 = 2.0;
 enum Approaches {
     /// Médianes de (baro − MNT LiDAR) avant et après le pont, et médiane des deux côtés réunis.
     Sides { before: f64, after: f64, offset: f64 },
-    /// Moins de 20 stations d'un côté : repli 1–3 km (`decalage_repli_1_3km`).
-    Fallback,
+    /// Moins de 20 stations d'un côté : repli 1–3 km (`decalage_repli_1_3km`), avec le nombre de
+    /// stations de chaque côté.
+    Fallback { before: usize, after: usize },
 }
 
 /// Décalage local E3 (§4 bis.3) : médiane de (baro − MNT LiDAR) sur les approches de 50 à 300 m
@@ -581,11 +613,17 @@ fn approach_offset(p: &CaseProfile<'_>, i0: usize, i1: usize, others: &[(usize, 
     };
     let (before, after) = (side(p.d[i0], -1.0), side(p.d[i1], 1.0));
     if before.len() < APPROACH_MIN_STATIONS || after.len() < APPROACH_MIN_STATIONS {
-        return Approaches::Fallback;
+        return Approaches::Fallback { before: before.len(), after: after.len() };
     }
     let all: Vec<f64> = before.iter().chain(&after).copied().collect();
     Approaches::Sides { before: median(&before), after: median(&after), offset: median(&all) }
 }
+
+/// Test de niveau d'un passage de pont (README §2.1) : MNH minimal au milieu, demi-fenêtre autour
+/// du milieu, stations baro minimales.
+const LEVEL_MNH_MIN_M: f64 = 10.0;
+const LEVEL_HALF_M: f64 = 12.5;
+const LEVEL_MIN_STATIONS: usize = 3;
 
 /// Mesures d'ouvrage sur les passages d'un cas perso.
 pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f64) -> Vec<Value> {
@@ -661,6 +699,15 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             let others: Vec<(usize, usize)> =
                 found.iter().filter(|f| (f.2, f.3) != (i0, i1)).map(|f| (f.2, f.3)).collect();
             let approaches = (o.kind == Kind::Bridge).then(|| approach_offset(p, i0, i1, &others));
+            // Extrait tenu à l'écart : le repli lit la trace jusqu'à 3 km (baro − MNT), hors service.
+            let ring: Vec<f64> = match p.ring {
+                Some(r) => r
+                    .iter()
+                    .filter(|(s, _)| (1_000.0..=3_000.0).contains(&(s - dm).abs()))
+                    .map(|&(_, v)| v)
+                    .collect(),
+                None => ring,
+            };
             let offset = match approaches {
                 Some(Approaches::Sides { offset, .. }) => offset,
                 _ => median(&ring),
@@ -676,11 +723,39 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                 out.push(absent_item(o, case));
                 continue;
             }
+            // Passage en hauteur sur un pont (README §2.1, `passage_pont.niveau`) : baro et MNT
+            // seulement, jamais le service.
+            let mut level_note: Option<&str> = None;
+            if o.kind == Kind::Bridge {
+                let at_mid: Vec<f64> = (0..n)
+                    .filter(|&i| (p.d[i] - dm).abs() <= LEVEL_HALF_M)
+                    .map(|i| p.baro[i] - offset - p.raw[i])
+                    .filter(|x| x.is_finite())
+                    .collect();
+                match o.mnh_milieu {
+                    Some(mnh) if mnh >= LEVEL_MNH_MIN_M => {
+                        if at_mid.len() < LEVEL_MIN_STATIONS {
+                            level_note = Some("niveau_sans_baro");
+                        } else if median(&at_mid) < 0.5 * mnh {
+                            // Trace sous le tablier : le passage n'est pas compté sur ce pont.
+                            out.push(
+                                json!({"ouvrage": o.id, "cas": case, "metrique": "passage_retire_niveau",
+                                "baro_moins_mnt_milieu_m": r2(median(&at_mid)), "mnh_milieu_m": r2(mnh)}),
+                            );
+                            continue;
+                        }
+                    }
+                    _ => level_note = Some("niveau_non_discriminant"),
+                }
+            }
             if o.perimeter == Perimeter::OffGraph && o.kind != Kind::Untagged {
                 let baro: Vec<f64> = (0..n).map(|i| p.baro[i] - offset).collect();
                 let reference = Some(("baro_corrige_local", baro.as_slice()));
                 let mut h =
                     hors_graphe_item(&o.id, case, p.matched, p.unmatched_warn, p.svc, reference, i0, i1);
+                if let Some(note) = level_note {
+                    h[note] = json!(true);
+                }
                 h["d_milieu_m"] = r2(dm);
                 out.push(h);
                 continue;
@@ -711,6 +786,9 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     item.insert("ecart_max_d_m".into(), worst.map_or(Value::Null, |i| r2(p.d[i])));
                     item.insert(format!("{pre}emprise_d_m"), json!([r2(p.d[i0]), r2(p.d[i1])]));
                     item.insert("decalage_local_m".into(), r2(offset));
+                    if let Some(note) = level_note {
+                        item.insert(note.into(), json!(true));
+                    }
                     match approaches {
                         Some(Approaches::Sides { before, after, .. }) => {
                             item.insert("decalage_approches_m".into(), json!([r2(before), r2(after)]));
@@ -719,8 +797,9 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                                 item.insert("reference_incertaine".into(), json!(true));
                             }
                         }
-                        Some(Approaches::Fallback) => {
+                        Some(Approaches::Fallback { before, after }) => {
                             item.insert("decalage_repli_1_3km".into(), json!(true));
+                            item.insert("decalage_repli_stations_par_cote".into(), json!([before, after]));
                         }
                         None => {}
                     }
@@ -921,7 +1000,16 @@ impl std::fmt::Debug for Tiles {
 
 impl Tiles {
     pub async fn load(cache: &Path, pts: &[LatLon]) -> anyhow::Result<Self> {
-        let config = crate::service::bench_config(cache, true, crate::service::Variant::DEFAULT);
+        Self::load_mode(cache, pts, true).await
+    }
+
+    /// Comme `load`, en ligne (fill-cache) : tuiles absentes lues et mises en cache.
+    pub async fn load_online(cache: &Path, pts: &[LatLon]) -> anyhow::Result<Self> {
+        Self::load_mode(cache, pts, false).await
+    }
+
+    async fn load_mode(cache: &Path, pts: &[LatLon], offline: bool) -> anyhow::Result<Self> {
+        let config = crate::service::bench_config(cache, offline, crate::service::Variant::DEFAULT);
         let chain = ord_server::wiring::typology_chain(&config)?;
         let ctx =
             RequestCtx::new(RequestId("bench".into()), Deadline::after(std::time::Duration::from_secs(600)));
@@ -1533,6 +1621,7 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "S1": {"emprise_m": r2(s1_ref), "type_m": r2(s1_typed), "rappel": r4(s1), "seuil": 0.95},
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
         "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
+        "passages_retires_niveau": by("passage_retire_niveau").into_iter().map(strip_private).collect::<Vec<_>>(),
         "hors_graphe_velo": {"ouvrages": hg.len(), "controle_ok": hg_ok, "detail": hg.iter().map(|i| strip_private(i)).collect::<Vec<_>>()},
     });
     let verdicts = json!({
@@ -1795,6 +1884,7 @@ mod tests {
             perimeter_ambiguous: false,
             chain: vec![1],
             avalanche_protector: true,
+            mnh_milieu: None,
         };
         let known = vec![("arly-galerie".to_owned(), "shortbread sans avalanche_protector".to_owned())];
         let l = corpus_data_limits(std::slice::from_ref(&o), &known);
@@ -1824,6 +1914,7 @@ mod tests {
                 matched: &flags,
                 unmatched_warn: &flags,
                 tile_structure: &flags,
+                ring: None,
             };
             approach_offset(&p, 100, 120, others)
         };
@@ -1840,9 +1931,9 @@ mod tests {
         }
         // Baro absent sur une approche (fenêtre masquée) : repli 1–3 km.
         let gap: Vec<f64> = (0..n).map(|k| if k > 120 { f64::NAN } else { 3.0 }).collect();
-        assert_eq!(profile(&gap), Approaches::Fallback);
+        assert!(matches!(profile(&gap), Approaches::Fallback { after: 0, .. }));
         // Approche sur un autre ouvrage du corpus (accès non tagué) : stations exclues, repli.
-        assert_eq!(profile_with(&baro, &[(40, 95)]), Approaches::Fallback);
+        assert!(matches!(profile_with(&baro, &[(40, 95)]), Approaches::Fallback { before: 0, .. }));
     }
 
     #[test]
@@ -1868,6 +1959,76 @@ mod tests {
     }
 
     #[test]
+    fn a_high_bridge_passage_needs_the_baro_on_the_deck() {
+        // Pont de 200 m (stations 180 à 220, pas de 5 m), MNH 50 m ; MNT plat à 0.
+        let n = 401;
+        let m_per_deg = haversine_m(LatLon::new(47.0, 0.0), LatLon::new(47.0, 1.0));
+        let d: Vec<f64> = (0..n).map(|k| k as f64 * 5.0).collect();
+        let pts: Vec<LatLon> = d.iter().map(|x| LatLon::new(47.0, x / m_per_deg)).collect();
+        let raw = vec![0.0; n];
+        let flags = vec![false; n];
+        let ign = vec![true; n];
+        let o = |mnh: Option<f64>| Ouvrage {
+            id: "pont".into(),
+            kind: Kind::Bridge,
+            length_m: 200.0,
+            pts: [pts[180], pts[200], pts[220]],
+            perso: false,
+            perimeter: Perimeter::InGraph,
+            perimeter_ambiguous: false,
+            chain: Vec::new(),
+            avalanche_protector: false,
+            mnh_milieu: mnh,
+        };
+        let items = |baro: &[f64], mnh: Option<f64>| {
+            let p = CaseProfile {
+                d: &d,
+                pts: &pts,
+                svc: &raw,
+                raw: &raw,
+                baro,
+                on_structure: &flags,
+                ign: &ign,
+                matched: &flags,
+                unmatched_warn: &flags,
+                tile_structure: &flags,
+                ring: None,
+            };
+            perso_items("c", &p, &[o(mnh)], 40.0)
+        };
+        // Trace au sol sous le tablier : retirée.
+        let ground = vec![0.0; n];
+        let i = items(&ground, Some(50.0));
+        assert_eq!(i.len(), 1);
+        assert_eq!(i[0]["metrique"], "passage_retire_niveau", "{i:?}");
+        // Baro sur le tablier : compté.
+        let deck: Vec<f64> = (0..n).map(|k| if (180..=220).contains(&k) { 50.0 } else { 0.0 }).collect();
+        let i = items(&deck, Some(50.0));
+        assert_eq!(i[0]["metrique"], "E3", "{i:?}");
+        assert!(i[0].get("niveau_non_discriminant").is_none());
+        // MNH sous 10 m : critère horizontal seul, mentionné.
+        let i = items(&ground, Some(6.0));
+        assert_eq!(
+            (i[0]["metrique"].clone(), i[0]["niveau_non_discriminant"].clone()),
+            (json!("E3"), json!(true))
+        );
+        // Pas de baro au milieu : mentionné, compté.
+        let gap: Vec<f64> = (0..n).map(|k| if (190..=210).contains(&k) { f64::NAN } else { 0.0 }).collect();
+        let i = items(&gap, Some(50.0));
+        assert_eq!(i[0]["niveau_sans_baro"], true, "{i:?}");
+    }
+
+    #[test]
+    fn corpus_mnh_reads_the_median_dsm_minus_the_dtm() {
+        let o = json!({"valeurs": {"milieu": {"lidar_mnt": 1.5, "lidar_mns": 12.0}},
+            "milieu_mns_mediane_25m": {"valeur": 11.5}});
+        assert_eq!(corpus_mnh(&o), Some(10.0));
+        let o = json!({"reference": {"valeurs": {"milieu": {"lidar_mnt": 2.0, "lidar_mns": 9.0}}}});
+        assert_eq!(corpus_mnh(&o), Some(7.0));
+        assert_eq!(corpus_mnh(&json!({})), None);
+    }
+
+    #[test]
     fn private_keys_are_stripped_at_every_level() {
         let i = json!({"ouvrage": "nv-01", "_longueur_m": 1.0,
             "bande_remplacee": {"entree": {"_distance_m": 5.0, "altitude_m": 1.0}}});
@@ -1887,6 +2048,7 @@ mod tests {
             perimeter_ambiguous: false,
             chain: Vec::new(),
             avalanche_protector: false,
+            mnh_milieu: None,
         };
         let mut items = vec![
             absent_item(&o, "c1"),

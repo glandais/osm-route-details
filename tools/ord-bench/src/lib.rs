@@ -83,8 +83,10 @@ impl BenchPaths {
 /// toute galerie `avalanche_protector` du corpus. Remise à `None` avec les règles 2026.10.7. `bench1`
 /// (règles 2026.10.7, README §4 bis complété en 022710f et 4304838) : décalage local E3 sur les
 /// approches, référence incertaine, bande sur un ouvrage des tuiles, plausibilité E4 (25 %) ;
-/// passages des ouvrages de calibration dans les traces tenues à l'écart (extraits).
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// passages des ouvrages de calibration dans les traces tenues à l'écart (extraits). `bench2`
+/// (e48170f) : passage en hauteur sur un pont (test de niveau) ; repli 1–3 km des extraits lu sur la
+/// trace (baro − MNT), stations par côté rapportées ; `diagnose-structures` sur les extraits.
+pub const BENCH_REVISION: Option<&str> = Some("bench2");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

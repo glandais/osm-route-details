@@ -18,25 +18,58 @@ use serde_json::{json, Value};
 
 use crate::service::{Pt, Service, Variant};
 
-/// Points d'un cas : `vc-testN` (GPX public), témoin vcyclist ou trace perso de calibration (premier tronçon).
-pub fn case_points(paths: &crate::BenchPaths, id: &str) -> anyhow::Result<Vec<Pt>> {
+/// Points d'un cas : `vc-testN` (GPX public), témoin vcyclist, trace perso de calibration (premier
+/// tronçon), ou extrait `<trace>#extraitK` d'une trace tenue à l'écart, comme la campagne : fenêtre
+/// de ± 500 m autour d'un ouvrage de calibration, ± 1 km envoyé au service. Pour un extrait, la
+/// fenêtre évaluée (abscisses de l'extrait) est renvoyée : rien n'est affiché hors d'elle.
+pub fn case_points(
+    paths: &crate::BenchPaths,
+    id: &str,
+) -> anyhow::Result<(Vec<Pt>, Option<std::ops::Range<f64>>)> {
     if let Some(route) = id.strip_prefix("vc-") {
         let pts = crate::gpx::read(&paths.bench.join(format!("data/vcyclist/{route}.gpx")))?;
-        return Ok(pts.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect());
+        return Ok((pts.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect(), None));
     }
     if let Some((dir, _, _)) = crate::ouvrages::controls(&paths.bench)?.into_iter().find(|c| c.1 == id) {
-        return crate::ouvrages::control_points(&paths.bench, &dir, id);
+        return Ok((crate::ouvrages::control_points(&paths.bench, &dir, id)?, None));
     }
     let manifest = crate::manifest::Manifest::load(&paths.bench)?;
+    if let Some((case_id, k)) = id.split_once("#extrait") {
+        let k: usize = k
+            .parse()
+            .map_err(|_| anyhow::anyhow!("{id} : extrait attendu sous la forme <trace>#extraitK"))?;
+        let base = case_id.split(".s").next().unwrap_or(case_id);
+        let trace = manifest.trace(base).ok_or_else(|| anyhow::anyhow!("{id} : cas inconnu"))?;
+        if trace.serie != crate::manifest::Serie::TenueALEcart {
+            anyhow::bail!("{id} : les extraits ne concernent que les traces tenues à l'écart");
+        }
+        let rules = crate::BenchRules::default();
+        let cases =
+            crate::campaign::load_perso(paths, trace, &rules).map_err(|e| anyhow::anyhow!("{id} : {e}"))?;
+        let case = cases
+            .into_iter()
+            .find(|c| c.id == case_id)
+            .ok_or_else(|| anyhow::anyhow!("{id} : cas absent"))?;
+        let refs = crate::campaign::ouvrage_refs(paths)?;
+        let mut extracts = crate::campaign::held_out_extracts(&case, &refs, &rules);
+        let n = extracts.len();
+        if k >= n {
+            anyhow::bail!("{id} : {n} extrait(s) pour ce cas");
+        }
+        let (extract, window) = extracts.swap_remove(k);
+        return Ok((extract.parts.into_iter().next().unwrap_or_default(), Some(window)));
+    }
     let base = id.split(".s").next().unwrap_or(id);
     let trace = manifest.trace(base).ok_or_else(|| anyhow::anyhow!("{id} : cas inconnu"))?;
     if trace.serie == crate::manifest::Serie::TenueALEcart {
-        anyhow::bail!("{id} : série tenue à l'écart, jamais diagnostiquée");
+        anyhow::bail!(
+            "{id} : série tenue à l'écart, jamais diagnostiquée entière (extraits : {id}#extraitK)"
+        );
     }
     let cases = crate::campaign::load_perso(paths, trace, &crate::BenchRules::default())
         .map_err(|e| anyhow::anyhow!("{id} : {e}"))?;
     let case = cases.into_iter().find(|c| c.id == id).ok_or_else(|| anyhow::anyhow!("{id} : cas absent"))?;
-    Ok(case.parts.into_iter().next().unwrap_or_default())
+    Ok((case.parts.into_iter().next().unwrap_or_default(), None))
 }
 
 fn r2(x: f64) -> Value {
@@ -54,7 +87,14 @@ pub async fn diagnose_structures(
     from: f64,
     to: f64,
 ) -> anyhow::Result<Value> {
-    let pts = case_points(paths, id)?;
+    let (pts, window) = case_points(paths, id)?;
+    // Extrait d'une trace tenue à l'écart : seule la fenêtre évaluée est lue et affichée.
+    let (from, to) = match &window {
+        Some(w) => (from.max(w.start), to.min(w.end)),
+        None => (from, to),
+    };
+    let shown = |d: f64| d >= from && d <= to;
+    let clip = |x: f64| x.clamp(from, to);
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
     let orch = service.state().orchestrator();
     let sources = orch.sources();
@@ -83,9 +123,14 @@ pub async fn diagnose_structures(
             AxisPoint::Route(i) => s.plan.route_dsm.binary_search(&i).ok().map(|k| s.route_dsm[k]),
             AxisPoint::Off(k) => s.off_dsm[k],
         };
+        let in_window = |a: &AxisPoint| match a {
+            AxisPoint::Route(i) => window.is_none() || shown(route.samples[*i].d_m),
+            AxisPoint::Off(_) => true,
+        };
         let stations: Vec<Value> = g
             .axis
             .iter()
+            .filter(|a| in_window(&a.at))
             .map(|a| {
                 let t = terrain(a.at);
                 let mns = match dsm(a.at) {
@@ -104,15 +149,18 @@ pub async fn diagnose_structures(
         let probes: Vec<Value> = g
             .probes
             .iter()
-            .map(|p| p.map_or(Value::Null, |p| json!({"c": r2(p.c), "mnt": r2(terrain(p.at).ele.map_or(f64::NAN, f64::from)), "mns": match dsm(p.at) { Some(DsmSample::Value(v)) => r2(f64::from(v)), _ => Value::Null }, "hors_parcours": matches!(p.at, AxisPoint::Off(_))})))
+            .map(|p| p.filter(|p| in_window(&p.at)).map_or(Value::Null, |p| json!({"c": r2(p.c), "mnt": r2(terrain(p.at).ele.map_or(f64::NAN, f64::from)), "mns": match dsm(p.at) { Some(DsmSample::Value(v)) => r2(f64::from(v)), _ => Value::Null }, "hors_parcours": matches!(p.at, AxisPoint::Off(_))})))
             .collect();
         groups.push(json!({
             "passages": g.passages.iter().map(|&k| {
                 let p = &typo.passages[k];
-                json!({"from_m": r2(p.from_m), "to_m": r2(p.to_m), "doutes": format!("{:?}", p.doubts)})
+                json!({"from_m": r2(clip(p.from_m)), "to_m": r2(clip(p.to_m)), "doutes": format!("{:?}", p.doubts)})
             }).collect::<Vec<_>>(),
             "lecture": format!("{:?}", g.mapping),
-            "suites": g.runs.iter().map(|r| json!([r2(r.0), r2(r.1), r.2.as_str()])).collect::<Vec<_>>(),
+            "suites": g.runs.iter().map(|r| match g.mapping {
+                ord_core::elevation::fusion::plan::Mapping::Route => json!([r2(clip(r.0)), r2(clip(r.1)), r.2.as_str()]),
+                ord_core::elevation::fusion::plan::Mapping::Chainage => json!([r2(r.0), r2(r.1), r.2.as_str()]),
+            }).collect::<Vec<_>>(),
             "non_corrige": g.uncorrected.map(|u| format!("{u:?}")),
             "sondes": probes,
             "stations": stations,
@@ -122,7 +170,7 @@ pub async fn diagnose_structures(
         .structures
         .iter()
         .filter(|o| o.to_m >= from && o.from_m <= to)
-        .map(|o| json!({"kind": o.kind.as_str(), "from_m": r2(o.from_m), "to_m": r2(o.to_m), "method": o.method.as_str()}))
+        .map(|o| json!({"kind": o.kind.as_str(), "from_m": r2(clip(o.from_m)), "to_m": r2(clip(o.to_m)), "method": o.method.as_str()}))
         .collect();
     let segs = ord_core::typology::build_segments(
         &typo.runs,
@@ -137,7 +185,7 @@ pub async fn diagnose_structures(
         .map(|x| {
             let kind =
                 x.class.and_then(|c| typo.classes.get(c as usize)).map(|c| c.attrs.highway.to_string());
-            json!([r2(x.from_m), r2(x.to_m), x.structure.as_str(), kind, x.matched])
+            json!([r2(clip(x.from_m)), r2(clip(x.to_m)), x.structure.as_str(), kind, x.matched])
         })
         .collect();
     // Exploration : MNS en travers de l'axe (± 8 m tous les 1 m) aux stations d'axe sur le
@@ -203,9 +251,14 @@ pub async fn diagnose_structures(
     let corrected = profile
         .method
         .iter()
-        .filter(|m| matches!(m, EleMethod::DsmDeck | EleMethod::InterpolatedStructure))
+        .zip(&route.samples)
+        .filter(|(m, x)| {
+            matches!(m, EleMethod::DsmDeck | EleMethod::InterpolatedStructure)
+                && (window.is_none() || shown(x.d_m))
+        })
         .count();
-    let out = json!({"id": id, "profil": profil, "travers": travers, "segments": segments, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
+    let fenetre = window.as_ref().map(|w| json!([r2(w.start), r2(w.end)]));
+    let out = json!({"id": id, "fenetre_extrait": fenetre, "profil": profil, "travers": travers, "segments": segments, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
     crate::privacy::assert_report_clean(&out, &crate::privacy::private_names(paths))?;
     Ok(out)
 }
