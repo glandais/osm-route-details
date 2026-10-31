@@ -1,6 +1,6 @@
 [package]
 name = "ord-data"
-description = "Accès données et caches : port de tuiles, HTTP, disque, mémoire, lecteur de terrain"
+description = "Accès données et caches : port de tuiles, HTTP et WMS, disque, mémoire, lecteur de terrain, couverture"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,7 +12,9 @@ ord-domain.workspace = true
 
 async-trait.workspace = true
 bytes.workspace = true
+flate2.workspace = true
 futures-util.workspace = true
+metrics.workspace = true
 moka.workspace = true
 reqwest.workspace = true
 serde.workspace = true

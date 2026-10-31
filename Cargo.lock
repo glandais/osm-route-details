@@ -1242,7 +1242,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "flate2",
  "futures-util",
+ "metrics",
  "moka",
  "ord-domain",
  "reqwest",
@@ -1294,6 +1296,7 @@ dependencies = [
  "ord-domain",
  "ord-pipeline",
  "ord-testkit",
+ "reqwest",
  "serde",
  "serde_ignored",
  "serde_json",

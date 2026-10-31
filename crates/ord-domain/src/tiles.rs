@@ -17,6 +17,22 @@ pub struct TileKey {
     pub y: u32,
 }
 
+impl TileKey {
+    /// Emprise de la tuile Web Mercator en degrés : `(ouest, sud, est, nord)`.
+    pub fn bounds(self) -> (f64, f64, f64, f64) {
+        let n = f64::from(1u32 << self.z);
+        let lon = |x: f64| x / n * 360.0 - 180.0;
+        let lat = |y: f64| (std::f64::consts::PI * (1.0 - 2.0 * y / n)).sinh().atan().to_degrees();
+        let (x, y) = (f64::from(self.x), f64::from(self.y));
+        (lon(x), lat(y + 1.0), lon(x + 1.0), lat(y))
+    }
+
+    /// Tuile parente, un zoom plus bas (`None` à z0).
+    pub fn parent(self) -> Option<Self> {
+        (self.z > 0).then(|| Self { z: self.z - 1, x: self.x / 2, y: self.y / 2 })
+    }
+}
+
 impl fmt::Debug for TileKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "TileKey(z{}, ..)", self.z)
