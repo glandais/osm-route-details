@@ -740,7 +740,9 @@ pub async fn measure_case(
         let reference = service.with_mode(BenchMode::Reference);
         let (q, _, _) = recolle(&reference, case, true, rules, dem.threshold_m).await?;
         let (q_raw, _, _) = recolle(&reference, case, false, rules, dem.threshold_m).await?;
-        if q.d != p.d || q_raw.d != p.d {
+        // Même grille, aux arrondis du cm près (tronçons recollés : décalages cumulés).
+        let same = |a: &[f64]| a.len() == p.d.len() && a.iter().zip(&p.d).all(|(x, y)| (x - y).abs() <= 0.05);
+        if !same(&q.d) || !same(&q_raw.d) {
             bail!("grilles de référence et testée différentes");
         }
         p.pts = q.pts;
