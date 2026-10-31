@@ -1523,8 +1523,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     };
     let agg = json!({
         "E3": {"ponts": e3_n, "ponts_ok": e3_ok, "part": r4(e3_ok as f64 / e3_n.max(1) as f64), "seuil": 0.90, "par_pont": e3_ponts,
-            "references_incertaines": by("E3").into_iter().filter(|i| i["reference_incertaine"] == true).collect::<Vec<_>>()},
-        "E3_hors_france": by("E3_hors_france"),
+            "references_incertaines": by("E3").into_iter().filter(|i| i["reference_incertaine"] == true).map(strip_private).collect::<Vec<_>>()},
+        "E3_hors_france": by("E3_hors_france").into_iter().map(strip_private).collect::<Vec<_>>(),
         "E3_non_couverts": not_covered("E3_non_couvert"),
         "E4": {"tunnels": e4_n, "tunnels_ok": e4_ok, "part": r4(e4_ok as f64 / e4_n.max(1) as f64), "seuil": 0.857, "reference_ambigue": e4_amb, "reference_indisponible": e4_unavailable},
         "E4_non_couverts": not_covered("E4_non_couvert"),
@@ -1532,8 +1532,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "E5": {"croisements": e5_n, "ok": e5_ok},
         "S1": {"emprise_m": r2(s1_ref), "type_m": r2(s1_typed), "rappel": r4(s1), "seuil": 0.95},
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
-        "S3": by("S3"),
-        "hors_graphe_velo": {"ouvrages": hg.len(), "controle_ok": hg_ok, "detail": hg},
+        "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
+        "hors_graphe_velo": {"ouvrages": hg.len(), "controle_ok": hg_ok, "detail": hg.iter().map(|i| strip_private(i)).collect::<Vec<_>>()},
     });
     let verdicts = json!({
         "E3": verdict(e3_ok as f64 >= 0.90 * e3_n as f64, e3_n),
@@ -1854,6 +1854,17 @@ mod tests {
         assert_eq!(t["reference_indisponible"], true, "{t}");
         assert!(t["pass"].is_null(), "non compté");
         assert!(t["pente_implicite_portails"].as_f64().unwrap() > IMPLICIT_GRADE_MAX);
+    }
+
+    #[test]
+    fn aggregates_never_carry_private_keys() {
+        let items = vec![
+            json!({"ouvrage": "nv-01", "cas": "c", "metrique": "E3", "ecart_milieu_m": 0.1, "ecart_max_m": 0.2,
+                "reference_incertaine": true, "_emprise_d_m": [1.0, 2.0], "_S1.emprise_m": 50.0}),
+            json!({"ouvrage": "nv-02", "cas": "c", "metrique": "S3", "_longueur_m": 10.0}),
+        ];
+        let (agg, _) = judge(&items);
+        assert!(!agg.to_string().contains("\"_"), "{agg}");
     }
 
     #[test]
