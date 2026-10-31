@@ -20,7 +20,8 @@
 //! - un ouvrage dont la voie est exclue du graphe vélo par la règle de tags du service
 //!   (`bicycle_routable`, T03 §4.2 étape 1) sort de S1, E3, E4 et E5 et est rapporté en
 //!   `hors_graphe_velo` (non apparié et `unmatched_range` attendus, erreur sans seuil). Tags lus
-//!   dans les tuiles de la campagne (cache du banc), jamais dans le corpus Overpass ; un pont ou un
+//!   dans les tuiles de la campagne (cache du banc), sur la voie de l'ouvrage (élément de même
+//!   nature qui suit le mieux la géométrie du corpus), jamais dans le corpus Overpass ; un pont ou un
 //!   tunnel du corpus sans voie dans les tuiles est `absent_des_donnees`, rapporté
 //!   (`E3_non_couvert`, `E4_non_couvert`) et non compté. Pour E5, c'est la voie du passage dessous
 //!   qui compte ; les témoins négatifs dont la trace est hors graphe restent dans S2 et E5 ;
@@ -77,6 +78,9 @@ pub struct Ouvrage {
     pub perso: bool,
     /// Périmètre vélo, décidé sur les tuiles de la campagne (§4 bis.1).
     pub perimeter: Perimeter,
+    /// Deux voies candidates à moins de 3 m l'une de l'autre en médiane donnent des périmètres
+    /// différents : rapporté (`perimetre_ambigu`).
+    pub perimeter_ambiguous: bool,
     pub chain: Vec<u64>,
 }
 
@@ -106,11 +110,48 @@ fn kind_of(t: &str) -> Kind {
     }
 }
 
-/// Périmètre vélo des ouvrages du corpus, d'après les tuiles de la campagne (§4 bis.1).
-pub fn apply_perimeter(ouvrages: &mut [Ouvrage], tiles: &Tiles) {
-    for o in ouvrages {
-        o.perimeter = tiles.perimeter(o.pts[1], o.kind);
+/// Stations d'un ouvrage du corpus pour la lecture de son périmètre : tous les 5 m le long de sa
+/// géométrie Overpass (ways de la chaîne), sinon de la ligne A–milieu–B.
+pub fn perimeter_stations(o: &Ouvrage, geoms: &BTreeMap<u64, Vec<LatLon>>) -> Vec<LatLon> {
+    let ways: Vec<&Vec<LatLon>> = o.chain.iter().filter_map(|w| geoms.get(w)).collect();
+    let lines: Vec<Vec<LatLon>> = if !ways.is_empty() && ways.len() == o.chain.len() {
+        ways.into_iter().cloned().collect()
+    } else {
+        vec![o.pts.to_vec()]
+    };
+    let mut out = Vec::new();
+    for l in &lines {
+        for w in l.windows(2) {
+            let len = haversine_m(w[0], w[1]);
+            let n = (len / 5.0).ceil().max(1.0) as usize;
+            for k in 0..n {
+                let f = k as f64 / n as f64;
+                out.push(LatLon::new(
+                    w[0].lat + f * (w[1].lat - w[0].lat),
+                    w[0].lon + f * (w[1].lon - w[0].lon),
+                ));
+            }
+        }
+        out.extend(l.last().copied());
     }
+    out
+}
+
+/// Périmètre vélo des ouvrages du corpus, d'après les tuiles de la campagne (§4 bis.1).
+pub fn apply_perimeter(ouvrages: &mut [Ouvrage], tiles: &Tiles, geoms: &BTreeMap<u64, Vec<LatLon>>) {
+    for o in ouvrages {
+        let stations = perimeter_stations(o, geoms);
+        (o.perimeter, o.perimeter_ambiguous) = tiles.perimeter(o.pts[1], &stations, o.kind);
+    }
+}
+
+/// Ouvrages au périmètre ambigu, rapportés (§4 bis.1).
+pub fn perimeter_items(ouvrages: &[Ouvrage]) -> Vec<Value> {
+    ouvrages
+        .iter()
+        .filter(|o| o.perimeter_ambiguous)
+        .map(|o| json!({"ouvrage": o.id, "metrique": "perimetre_ambigu", "perimetre": format!("{:?}", o.perimeter)}))
+        .collect()
 }
 
 /// Ouvrage sans équivalent dans les tuiles : rapporté non couvert, non compté (§4 bis.1).
@@ -180,6 +221,7 @@ pub fn calibration_ouvrages(
                 perso,
                 // Décidé sur les tuiles de la campagne (`apply_perimeter`).
                 perimeter: Perimeter::Unknown,
+                perimeter_ambiguous: false,
                 chain,
             });
         }
@@ -278,8 +320,15 @@ fn band(d: &[f64], raw: &[f64], blocked: &[bool], p: usize, dir: f64) -> Option<
 
 /// Portail retenu d'un côté du tunnel dont le portail est `i` : le sien si sa bande est valide,
 /// sinon le portail extérieur de l'ouvrage voisin suivant (`blocked`), et ainsi de suite tant que
-/// la bande reste à moins de 1 km de `i` (§4 bis.2). `None` : référence indisponible.
-fn retained_portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64) -> Option<(usize, f64)> {
+/// la bande reste à moins de 1 km de `i` (§4 bis.2). Renvoie la station retenue, l'altitude de sa
+/// bande et le nombre de bandes sautées ; `None` : référence indisponible.
+fn retained_portal(
+    d: &[f64],
+    raw: &[f64],
+    blocked: &[bool],
+    i: usize,
+    dir: f64,
+) -> Option<(usize, f64, usize)> {
     let step = |k: usize| -> Option<usize> {
         if dir < 0.0 {
             k.checked_sub(1)
@@ -288,13 +337,15 @@ fn retained_portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64)
         }
     };
     let mut p = i;
+    let mut skipped = 0;
     loop {
         if dir * (d[p] - d[i]) + 30.0 > 1_000.0 {
             return None;
         }
         if let Some(z) = band(d, raw, blocked, p, dir) {
-            return Some((p, z));
+            return Some((p, z, skipped));
         }
+        skipped += 1;
         // Premier ouvrage voisin plus loin de ce côté, puis la première station après lui.
         let mut k = step(p)?;
         while !blocked[k] {
@@ -310,13 +361,25 @@ fn retained_portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64)
     }
 }
 
+/// Portail retenu d'un côté d'un tunnel (§4 bis.2).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Portal {
+    /// Station du portail retenu (≠ portail du tunnel : bande remplacée).
+    at: usize,
+    /// Médiane du MNT brut de sa bande 10–30 m.
+    z: f64,
+    /// Lectures à 5, 10, 20 et 30 m du portail retenu (sensibilité).
+    variants: [f64; 4],
+    /// Bandes invalides sautées avant celle-ci.
+    skipped: usize,
+}
+
 /// Altitude d'un portail : médiane du MNT brut des stations entre 10 et 30 m hors du portail
 /// retenu (`dir` = −1 avant l'entrée, +1 après la sortie), sur l'approche, et lectures à 5, 10,
 /// 20 et 30 m de ce portail ; `blocked` : stations dans un autre ouvrage (tunnel, galerie, balcon).
-/// Renvoie aussi la station du portail retenu (≠ `i` : bande remplacée) ; `None` : référence
-/// indisponible (§4 bis.2).
-fn portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64) -> Option<(f64, [f64; 4], usize)> {
-    let (p, z) = retained_portal(d, raw, blocked, i, dir)?;
+/// `None` : référence indisponible (§4 bis.2).
+fn portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64) -> Option<Portal> {
+    let (p, z, skipped) = retained_portal(d, raw, blocked, i, dir)?;
     let at = |m: f64| -> f64 {
         let target = d[p] + dir * m;
         (0..d.len())
@@ -325,7 +388,7 @@ fn portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64) -> Optio
             .filter(|&k| (d[k] - target).abs() <= 3.0)
             .map_or(f64::NAN, |k| raw[k])
     };
-    Some((z, [at(5.0), at(10.0), at(20.0), at(30.0)], p))
+    Some(Portal { at: p, z, variants: [at(5.0), at(10.0), at(20.0), at(30.0)], skipped })
 }
 
 /// E4 d'un tunnel OSM entre ses portails `i0` (entrée) et `i1` (sortie) sur un parcours ;
@@ -344,13 +407,12 @@ fn tunnel_item(
     i1: usize,
 ) -> Value {
     let typed = (i0..=i1).filter(|&k| on[k]).count() as f64 / (i1 - i0 + 1) as f64 * (d[i1] - d[i0]);
-    let (Some((za, va, pa)), Some((zb, vb, pb))) =
-        (portal(d, raw, blocked, i0, -1.0), portal(d, raw, blocked, i1, 1.0))
-    else {
+    let (Some(a), Some(b)) = (portal(d, raw, blocked, i0, -1.0), portal(d, raw, blocked, i1, 1.0)) else {
         // Rapporté, non compté en E4 (pas de `pass`) ; S1 reste mesuré.
         return json!({"ouvrage": id, "cas": case, "metrique": "E4", "reference_indisponible": true,
             "S1.emprise_m": r2(d[i1] - d[i0]), "S1.type_m": r2(typed)});
     };
+    let (pa, pb) = (a.at, b.at);
     // Droite entre les deux portails retenus, chacun à sa place ; erreur sur le seul tunnel.
     let judge = |za: f64, zb: f64| -> (f64, f64, bool) {
         let line = |k: usize| za + (zb - za) * (d[k] - d[pa]) / (d[pb] - d[pa]).max(1e-9);
@@ -359,33 +421,60 @@ fn tunnel_item(
         let fict = dplus_slice(&d[i0..=i1], &svc[i0..=i1]) - dplus_slice(&d[i0..=i1], &lz);
         (max, fict, max <= 5.0 && fict <= 5.0)
     };
-    let (max, fict, pass) = judge(za, zb);
-    let variants: Vec<bool> = (0..4).map(|k| judge(va[k], vb[k]).2).collect();
+    let (max, fict, pass) = judge(a.z, b.z);
+    let variants: Vec<bool> = (0..4).map(|k| judge(a.variants[k], b.variants[k]).2).collect();
+    // Distances curvilignes et altitudes seulement (jamais de coordonnée).
+    let side = |p: &Portal, i: usize| {
+        json!({"remplacee": p.at != i, "distance_m": r2((d[p.at] - d[i]).abs()),
+            "bandes_sautees": p.skipped, "altitude_m": r2(p.z)})
+    };
     let ambiguous = variants.iter().any(|v| *v != pass);
     json!({"ouvrage": id, "cas": case, "metrique": "E4", "reference": "droite_portails_mnt_median_10_30m",
         "ecart_max_m": r2(max), "dplus_fictif_m": r2(fict), "pass": max.is_finite() && pass,
-        "bande_remplacee": {"entree": pa != i0, "sortie": pb != i1},
+        "bande_remplacee": {"entree": side(&a, i0), "sortie": side(&b, i1)},
         "sensibilite_portail_m": {"5": variants[0], "10": variants[1], "20": variants[2], "30": variants[3]},
         "reference_ambigue": ambiguous,
         "S1.emprise_m": r2(d[i1] - d[i0]), "S1.type_m": r2(typed)})
 }
 
-/// Contrôle d'un ouvrage hors graphe vélo : part non appariée, `unmatched_range`, erreur.
+/// Référence d'altitude d'une portion hors graphe : nom et altitudes par station.
+type AltRef<'a> = Option<(&'static str, &'a [f64])>;
+
+/// Contrôle d'un ouvrage hors graphe vélo : part non appariée, `unmatched_range`, et erreur de
+/// l'altitude rendue (le MNT brut, rien n'étant apparié) contre la référence sur les stations non
+/// appariées ; `null` avec une raison sans référence ou sans station non appariée.
+#[allow(clippy::too_many_arguments)]
 fn hors_graphe_item(
     id: &str,
     case: &str,
     matched: &[bool],
     warn: &[bool],
-    err: f64,
+    svc: &[f64],
+    reference: AltRef<'_>,
     i0: usize,
     i1: usize,
 ) -> Value {
     let n = (i1 - i0 + 1) as f64;
     let unmatched = (i0..=i1).filter(|&k| !matched[k]).count() as f64 / n;
     let warned = (i0..=i1).any(|k| warn[k]);
-    json!({"ouvrage": id, "cas": case, "metrique": "hors_graphe_velo",
+    let mut item = json!({"ouvrage": id, "cas": case, "metrique": "hors_graphe_velo",
         "part_non_appariee": r4(unmatched), "unmatched_range": warned,
-        "controle": unmatched >= 0.99 && warned, "ecart_max_m": r2(err)})
+        "controle": unmatched >= 0.99 && warned});
+    let Some((name, z)) = reference.filter(|(_, z)| (i0..=i1).any(|k| z[k].is_finite())) else {
+        item["ecart_max_m"] = Value::Null;
+        item["raison_ecart"] = json!("aucune référence d'altitude sur cette portion");
+        return item;
+    };
+    let err = (i0..=i1)
+        .filter(|&k| !matched[k] && z[k].is_finite() && svc[k].is_finite())
+        .map(|k| (svc[k] - z[k]).abs())
+        .fold(f64::NAN, f64::max);
+    item["reference"] = json!(name);
+    item["ecart_max_m"] = r2(err);
+    if !err.is_finite() {
+        item["raison_ecart"] = json!("aucune station non appariée avec référence");
+    }
+    item
 }
 
 /// Mesures d'ouvrage sur les passages d'un cas perso.
@@ -459,7 +548,10 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                 continue;
             }
             if o.perimeter == Perimeter::OffGraph && o.kind != Kind::Untagged {
-                let mut h = hors_graphe_item(&o.id, case, p.matched, p.unmatched_warn, max, i0, i1);
+                let baro: Vec<f64> = (0..n).map(|i| p.baro[i] - offset).collect();
+                let reference = Some(("baro_corrige_local", baro.as_slice()));
+                let mut h =
+                    hors_graphe_item(&o.id, case, p.matched, p.unmatched_warn, p.svc, reference, i0, i1);
                 h["d_milieu_m"] = r2(dm);
                 out.push(h);
                 continue;
@@ -499,6 +591,19 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     for (k, v) in t.as_object().into_iter().flatten() {
                         if !k.starts_with("S1.") {
                             item.insert(k.clone(), v.clone());
+                        }
+                    }
+                    // Ouvrage perso : la distance au portail retenu dirait l'emprise des
+                    // ouvrages voisins (vie privée) ; gardée sous une clé `_`, retirée du rapport.
+                    if o.perso {
+                        if let Some(Value::Object(sides)) = item.get_mut("bande_remplacee") {
+                            for v in sides.values_mut() {
+                                if let Some(m) = v.as_object_mut() {
+                                    if let Some(x) = m.remove("distance_m") {
+                                        m.insert("_distance_m".into(), x);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -679,46 +784,64 @@ impl Tiles {
         Ok(Self { tiles })
     }
 
-    /// Périmètre vélo d'un ouvrage du corpus de milieu `p` : les voies de la tuile à moins de 15 m,
-    /// de même nature (pont ; tunnel ; voie au sol pour un passage dessous), sinon toute voie
-    /// (ouvrage que la source ne décrit pas comme tel, §4 bis.4). Dans le graphe si l'une d'elles y
-    /// est ; aucune voie : pont ou tunnel absent des données.
-    fn perimeter(&self, p: LatLon, kind: Kind) -> Perimeter {
+    /// Périmètre vélo d'un ouvrage du corpus de milieu `mid` et de stations `stations` (§4 bis.1) :
+    /// lu sur la voie de l'ouvrage, l'élément de la tuile (attributs identiques) de même nature
+    /// (pont ; tunnel ; voie au sol pour un passage dessous) qui suit le mieux la géométrie du
+    /// corpus, c'est-à-dire de plus petite médiane de distance aux stations, acceptée à ≤ 15 m ; à
+    /// défaut, toute voie avec le même critère (ouvrage que la source ne décrit pas comme tel,
+    /// §4 bis.4). Aucune : pont ou tunnel absent des données. Ambigu si un autre candidat du même
+    /// lot est à moins de 3 m de médiane en plus et donne l'autre périmètre.
+    fn perimeter(&self, mid: LatLon, stations: &[LatLon], kind: Kind) -> (Perimeter, bool) {
         let grid = Shortbread::GRID;
-        let u = grid.to_units(p);
-        let mpu = grid.metres_per_unit(p.lat);
-        let Some(Some(t)) = self.tiles.get(&grid.tile_of(u)) else { return Perimeter::Unknown };
-        let (mut same, mut any): (Option<bool>, Option<bool>) = (None, None);
-        for l in &t.lines {
-            let a = &t.attrs[l.attr as usize];
-            if a.rail || a.highway.is_empty() {
-                continue;
-            }
-            let near = l
-                .points
-                .windows(2)
-                .any(|w| dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu <= 15.0);
-            if !near {
-                continue;
-            }
-            let r = bicycle_routable(a);
-            let same_kind = match a.structure {
-                StructureTag::Bridge => kind == Kind::Bridge,
-                StructureTag::Tunnel | StructureTag::Covered | StructureTag::BuildingPassage => {
-                    kind == Kind::Tunnel
-                }
-                _ => kind == Kind::Under,
-            };
-            if same_kind {
-                same = Some(same.unwrap_or(false) || r);
-            }
-            any = Some(any.unwrap_or(false) || r);
+        if !matches!(self.tiles.get(&grid.tile_of(grid.to_units(mid))), Some(Some(_))) || stations.is_empty()
+        {
+            return (Perimeter::Unknown, false);
         }
-        match same.or(any) {
-            Some(true) => Perimeter::InGraph,
-            Some(false) => Perimeter::OffGraph,
-            None if matches!(kind, Kind::Bridge | Kind::Tunnel) => Perimeter::Absent,
-            None => Perimeter::Unknown,
+        // Distance de chaque station à chaque élément candidat (∞ hors de sa tuile).
+        let mut dist: BTreeMap<String, (bool, bool, Vec<f64>)> = BTreeMap::new();
+        for (s, p) in stations.iter().enumerate() {
+            let u = grid.to_units(*p);
+            let mpu = grid.metres_per_unit(p.lat);
+            let Some(Some(t)) = self.tiles.get(&grid.tile_of(u)) else { continue };
+            for l in &t.lines {
+                let a = &t.attrs[l.attr as usize];
+                if a.rail || a.highway.is_empty() {
+                    continue;
+                }
+                let d = l
+                    .points
+                    .windows(2)
+                    .map(|w| dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu)
+                    .fold(f64::INFINITY, f64::min);
+                if d > 100.0 {
+                    continue;
+                }
+                let same_kind = match a.structure {
+                    StructureTag::Bridge => kind == Kind::Bridge,
+                    StructureTag::Tunnel | StructureTag::Covered | StructureTag::BuildingPassage => {
+                        kind == Kind::Tunnel
+                    }
+                    _ => kind == Kind::Under,
+                };
+                let e = dist
+                    .entry(format!("{a:?}"))
+                    .or_insert_with(|| (same_kind, bicycle_routable(a), vec![f64::INFINITY; stations.len()]));
+                e.2[s] = e.2[s].min(d);
+            }
+        }
+        let medians: Vec<(bool, bool, f64)> =
+            dist.values().map(|(same, r, d)| (*same, *r, median(d))).filter(|c| c.2 <= 15.0).collect();
+        for pool in [true, false] {
+            let cands: Vec<&(bool, bool, f64)> = medians.iter().filter(|c| !pool || c.0).collect();
+            let Some(best) = cands.iter().min_by(|a, b| a.2.total_cmp(&b.2)) else { continue };
+            let ambiguous = cands.iter().any(|c| c.1 != best.1 && c.2 - best.2 < 3.0);
+            let p = if best.1 { Perimeter::InGraph } else { Perimeter::OffGraph };
+            return (p, ambiguous);
+        }
+        if matches!(kind, Kind::Bridge | Kind::Tunnel) {
+            (Perimeter::Absent, false)
+        } else {
+            (Perimeter::Unknown, false)
         }
     }
 
@@ -886,8 +1009,17 @@ pub async fn vc_items(
         for (k, &(i0, i1)) in groups.iter().enumerate() {
             let id = if groups.len() > 1 { format!("{}#{k}", o.id) } else { o.id.clone() };
             if o.perimeter == Perimeter::OffGraph {
-                let err = (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
-                out.push(hors_graphe_item(&id, &r.id, &r.svc.matched, &r.svc.warn, err, i0, i1));
+                let reference = Some(("vcyclist_T", r.s.z.as_slice()));
+                out.push(hors_graphe_item(
+                    &id,
+                    &r.id,
+                    &r.svc.matched,
+                    &r.svc.warn,
+                    &r.svc.ele,
+                    reference,
+                    i0,
+                    i1,
+                ));
             } else {
                 out.push(tunnel_item(
                     &id,
@@ -944,10 +1076,17 @@ pub async fn vc_items(
                     "tunnel" => {}
                     "bridge" | "missed" => {
                         if tiles.routable(mid, false) == Some(false) {
-                            let err = (i0..=i1)
-                                .map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs())
-                                .fold(f64::NAN, f64::max);
-                            out.push(hors_graphe_item(&id, &r.id, &r.svc.matched, &r.svc.warn, err, i0, i1));
+                            let reference = Some(("vcyclist_T", r.s.z.as_slice()));
+                            out.push(hors_graphe_item(
+                                &id,
+                                &r.id,
+                                &r.svc.matched,
+                                &r.svc.warn,
+                                &r.svc.ele,
+                                reference,
+                                i0,
+                                i1,
+                            ));
                             continue;
                         }
                         let mut item = json!({"ouvrage": id, "cas": r.id, "nature": kind});
@@ -994,8 +1133,17 @@ pub async fn vc_items(
             let mid = ll(r, (i0 + i1) / 2);
             if kind == "N" && !is_covered(&r.id, i0, i1) {
                 if tiles.routable(mid, true) == Some(false) {
-                    let err = (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
-                    out.push(hors_graphe_item(&id, &r.id, &r.svc.matched, &r.svc.warn, err, i0, i1));
+                    let reference = Some(("vcyclist_T", r.s.z.as_slice()));
+                    out.push(hors_graphe_item(
+                        &id,
+                        &r.id,
+                        &r.svc.matched,
+                        &r.svc.warn,
+                        &r.svc.ele,
+                        reference,
+                        i0,
+                        i1,
+                    ));
                 } else {
                     // Plages `N` : la station du portail est la première hors du tunnel.
                     let (a, b) = (i0.saturating_sub(1), (i1 + 1).min(n - 1));
@@ -1013,8 +1161,17 @@ pub async fn vc_items(
                 }
             } else if kind == "D" && !negative {
                 if tiles.routable(mid, false) == Some(false) {
-                    let err = (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
-                    out.push(hors_graphe_item(&id, &r.id, &r.svc.matched, &r.svc.warn, err, i0, i1));
+                    let reference = Some(("vcyclist_T", r.s.z.as_slice()));
+                    out.push(hors_graphe_item(
+                        &id,
+                        &r.id,
+                        &r.svc.matched,
+                        &r.svc.warn,
+                        &r.svc.ele,
+                        reference,
+                        i0,
+                        i1,
+                    ));
                 } else {
                     out.push(json!({"ouvrage": id, "cas": r.id, "nature": "bridge",
                         "S1.emprise_m": r2(r.d[i1] - r.d[i0]), "S1.type_m": r2(span_typed(i0, i1))}));
@@ -1218,10 +1375,10 @@ mod tests {
         // Stations à 5 m ; falaise au portail (station juste avant l'entrée à 50 m), sol à 10 m.
         let d: Vec<f64> = (0..21).map(|k| k as f64 * 5.0).collect();
         let raw: Vec<f64> = (0..21).map(|k| if k == 9 { 50.0 } else { 10.0 }).collect();
-        let (z, v, p) = portal(&d, &raw, &[false; 21], 10, -1.0).expect("bande valide");
-        assert_eq!(z, 10.0);
-        assert_eq!(v, [50.0, 10.0, 10.0, 10.0]);
-        assert_eq!(p, 10);
+        let p = portal(&d, &raw, &[false; 21], 10, -1.0).expect("bande valide");
+        assert_eq!(p.z, 10.0);
+        assert_eq!(p.variants, [50.0, 10.0, 10.0, 10.0]);
+        assert_eq!((p.at, p.skipped), (10, 0));
     }
 
     #[test]
@@ -1233,14 +1390,18 @@ mod tests {
         let raw: Vec<f64> = (0..60).map(|k| if k < 20 { 100.0 } else { 200.0 }).collect();
         let blocked: Vec<bool> = (0..60).map(|k| (20..=26).contains(&k)).collect();
         assert_eq!(band(&d, &raw, &blocked, 30, -1.0), None);
-        let (z, _, p) = portal(&d, &raw, &blocked, 30, -1.0).expect("portail extérieur");
-        assert_eq!((p, z), (19, 100.0));
+        let p = portal(&d, &raw, &blocked, 30, -1.0).expect("portail extérieur");
+        assert_eq!((p.at, p.z, p.skipped), (19, 100.0, 1));
         // Route à 1 % : la droite passe par chaque portail retenu à sa place ; le tunnel (stations
         // 30 à 40) qui suit la pente n'a que l'écart de la bande à son portail (≤ 0,2 m), et non
         // les 0,75 m d'un portail extérieur ramené à l'entrée du tunnel.
         let slope: Vec<f64> = (0..60).map(|k| k as f64 * 0.05).collect();
         let t = tunnel_item("t", "c", &d, &slope, &slope, &[true; 60], &blocked, 30, 40);
-        assert_eq!(t["bande_remplacee"]["entree"], true);
+        let entry = &t["bande_remplacee"]["entree"];
+        assert_eq!(entry["remplacee"], true);
+        assert_eq!(entry["distance_m"], 55.0);
+        assert_eq!(entry["bandes_sautees"], 1);
+        assert_eq!(t["bande_remplacee"]["sortie"]["remplacee"], false);
         assert!(t["ecart_max_m"].as_f64().unwrap() <= 0.2, "{t}");
         // Moins de 3 stations à MNT lu : invalide aussi.
         let mut sparse = raw.clone();
@@ -1298,19 +1459,47 @@ mod tests {
             }
             Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]) }
         };
+        // Stations du corpus le long de l'axe (y = 0).
+        let stations: Vec<LatLon> = (-8..=8).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1]])).collect();
+        let read = |ways: Vec<(WayAttrs, f64)>, kind: Kind| tiles_with(ways).perimeter(mid, &stations, kind);
         let closed = || (way("trunk", Some("no"), StructureTag::Bridge), 0.0);
-        assert_eq!(tiles_with(vec![closed()]).perimeter(mid, Kind::Bridge), Perimeter::OffGraph);
-        // Un pont cyclable à ≈ 10 m : franchissable dans les tuiles.
-        let cycle = (way("cycleway", None, StructureTag::Bridge), 25.0);
-        assert_eq!(tiles_with(vec![closed(), cycle]).perimeter(mid, Kind::Bridge), Perimeter::InGraph);
+        assert_eq!(read(vec![closed()], Kind::Bridge), (Perimeter::OffGraph, false));
+        // Un pont cyclable voisin (≈ 10 m) ne change rien : la voie de l'ouvrage est celle qui
+        // suit le mieux sa géométrie.
+        let cycle = |north: f64| (way("cycleway", None, StructureTag::Bridge), north);
+        assert_eq!(read(vec![closed(), cycle(25.0)], Kind::Bridge), (Perimeter::OffGraph, false));
+        // Accolé (< 3 m de médiane) avec l'autre périmètre : ambigu, rapporté.
+        assert_eq!(read(vec![closed(), cycle(2.0)], Kind::Bridge), (Perimeter::OffGraph, true));
+        // Le pont cyclable sur l'axe et la route fermée au sol à côté : dans le graphe.
+        let ground = (way("trunk", Some("no"), StructureTag::None), 0.5);
+        assert_eq!(read(vec![ground, cycle(0.0)], Kind::Bridge), (Perimeter::InGraph, false));
         // Tunnel que la source rend en voie ordinaire : dans le périmètre (limite des données).
         let plain = (way("primary", None, StructureTag::None), 0.0);
-        assert_eq!(tiles_with(vec![plain]).perimeter(mid, Kind::Tunnel), Perimeter::InGraph);
-        // Aucune voie : absent des données ; tuile hors cache : rien n'est décidé.
+        assert_eq!(read(vec![plain], Kind::Tunnel), (Perimeter::InGraph, false));
+        // Aucune voie à 15 m : absent des données ; tuile hors cache : rien n'est décidé.
         let far = (way("primary", None, StructureTag::Bridge), 200.0);
-        assert_eq!(tiles_with(vec![far]).perimeter(mid, Kind::Bridge), Perimeter::Absent);
+        assert_eq!(read(vec![far], Kind::Bridge), (Perimeter::Absent, false));
         let other = LatLon::new(48.0, 2.0);
-        assert_eq!(tiles_with(vec![closed()]).perimeter(other, Kind::Bridge), Perimeter::Unknown);
+        assert_eq!(
+            tiles_with(vec![closed()]).perimeter(other, &stations, Kind::Bridge).0,
+            Perimeter::Unknown
+        );
+    }
+
+    #[test]
+    fn off_graph_error_is_measured_against_a_reference_or_null() {
+        // Portion non appariée (stations 1 à 3) : l'altitude rendue est le MNT brut.
+        let matched = [true, false, false, false, true];
+        let warn = [false, true, true, true, false];
+        let svc = [10.0, 12.0, 15.0, 11.0, 10.0];
+        let truth = [10.0, 10.0, 10.0, 10.0, 0.0];
+        let h = hors_graphe_item("o", "c", &matched, &warn, &svc, Some(("vcyclist_T", &truth)), 0, 4);
+        assert_eq!(h["ecart_max_m"], 5.0, "la station appariée n'entre pas : {h}");
+        assert_eq!(h["reference"], "vcyclist_T");
+        let none = [f64::NAN; 5];
+        let h = hors_graphe_item("o", "c", &matched, &warn, &svc, Some(("vcyclist_T", &none)), 0, 4);
+        assert!(h["ecart_max_m"].is_null() && h["raison_ecart"].is_string(), "{h}");
+        assert_eq!(h["controle"], false, "part non appariée 0,6");
     }
 
     #[test]
@@ -1322,6 +1511,7 @@ mod tests {
             pts: [LatLon::new(47.0, -1.0); 3],
             perso: false,
             perimeter: Perimeter::Absent,
+            perimeter_ambiguous: false,
             chain: Vec::new(),
         };
         let mut items = vec![

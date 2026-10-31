@@ -851,12 +851,14 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let mut ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest.ouvrages_tenus)?;
     // Tuiles de rues du cache : périmètre vélo des ouvrages du corpus (§4 bis.1) et spans vcyclist.
     let structures_wanted = ids.is_empty();
-    let mut tile_points: Vec<LatLon> = ouvrages.iter().map(|o| o.pts[1]).collect();
+    let geoms = crate::ouvrages::way_geometries(&paths.bench);
+    let mut tile_points: Vec<LatLon> =
+        ouvrages.iter().flat_map(|o| crate::ouvrages::perimeter_stations(o, &geoms)).collect();
     if structures_wanted {
         tile_points.extend(crate::ouvrages::vc_points(&paths.bench)?);
     }
     let tiles = crate::ouvrages::Tiles::load(&paths.cache, &tile_points).await?;
-    crate::ouvrages::apply_perimeter(&mut ouvrages, &tiles);
+    crate::ouvrages::apply_perimeter(&mut ouvrages, &tiles, &geoms);
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
     let mut items: Vec<Value> = Vec::new();
     let mut cases = Vec::new();
@@ -916,6 +918,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             crate::ouvrages::vc_items(&service, &paths.bench, &tiles, &ouvrages, &mut skipped).await?,
         );
     }
+    items.extend(crate::ouvrages::perimeter_items(&ouvrages));
     crate::ouvrages::annotate_data_limits(&mut items, &crate::ouvrages::data_limits(&paths.bench)?);
     let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
     let (agregats, mut verdicts) = judge(&cases);
@@ -968,8 +971,9 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "notes": [
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
                 "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
-                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
-                "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel des tuiles de la campagne (data_versions, couche streets) à moins de 15 m du milieu de l'ouvrage (voies de même nature, sinon toute voie), jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
+                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
+                "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel, dans les tuiles de la campagne (data_versions, couche streets), de la voie de l'ouvrage = élément de même nature (pont, tunnel, voie au sol d'un passage dessous) de plus petite médiane de distance aux stations du corpus (tous les 5 m sur la géométrie Overpass, sinon A–milieu–B), accepté à ≤ 15 m, sinon toute voie avec le même critère ; deux candidats à moins de 3 m de médiane et de périmètres différents : perimetre_ambigu, rapporté ; jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
+                "hors_graphe_velo : ecart_max_m = altitude rendue (MNT brut) contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées ; null avec raison_ecart sans référence (témoins vcyclist) ou sans station non appariée",
                 "Limite des données (README §4 bis.4) : ouvrages de criteria.yaml perimetre.limite_donnees comptés, avec la note limite_donnees",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
