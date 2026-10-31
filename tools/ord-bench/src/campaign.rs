@@ -76,11 +76,15 @@ pub fn ouvrage_refs(paths: &BenchPaths) -> anyhow::Result<BTreeMap<String, Vec<L
 /// Requête d'un cas personnel : géométrie recalée, abscisse de chaque point envoyé sur cette
 /// géométrie (`s` de `baro.csv`) et altitude baro transportée.
 pub struct PersoCase {
+    /// Identifiant du cas : celui de la trace, ou `<trace>.sN` pour un segment disjoint.
     pub id: String,
     pub groupe: String,
     pub serie: Serie,
-    pub request: Vec<Pt>,
-    /// Abscisse sur la géométrie recalée de chaque point envoyé.
+    /// Requêtes envoyées, une par tronçon (`.partN` : bornes d'entrée de 200 km) ; le tronçon
+    /// N+1 repart du dernier point du tronçon N.
+    pub parts: Vec<Vec<Pt>>,
+    /// Abscisse sur la géométrie recalée entière de chaque point envoyé, tronçons recollés
+    /// (point de raccord en double retiré).
     pub s_ref: Vec<f64>,
     pub baro_s: Vec<f64>,
     pub baro_z: Vec<f64>,
@@ -91,7 +95,8 @@ impl std::fmt::Debug for PersoCase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PersoCase")
             .field("id", &self.id)
-            .field("points", &self.request.len())
+            .field("parts", &self.parts.len())
+            .field("points", &self.s_ref.len())
             .finish_non_exhaustive()
     }
 }
@@ -108,37 +113,36 @@ fn cumulative(pts: &[Pt]) -> Vec<f64> {
     out
 }
 
-/// Charge un cas personnel ; `Err` = cas sauté (raison sans coordonnée).
-pub fn load_perso(paths: &BenchPaths, trace: &Trace, rules: &BenchRules) -> Result<PersoCase, String> {
-    let dir = paths.private.join("recales");
-    let geom = dir.join(format!("{}.gpx", trace.id));
-    if !geom.exists() {
-        return Err(
-            "géométrie recalée absente ou découpée (.sN, .partN : non pris en charge à l'incrément 1)".into(),
-        );
+/// Points envoyés pour une géométrie recalée : tels quels, ou rééchantillonnés à 10 m au-delà des
+/// bornes d'entrée (T05 §3.4) ; avec leur abscisse sur cette géométrie.
+fn request_of(vertices: Vec<Pt>, rules: &BenchRules) -> (Vec<Pt>, Vec<f64>) {
+    let cum = cumulative(&vertices);
+    if vertices.len() <= 16_000 {
+        return (vertices, cum);
     }
-    let vertices: Vec<Pt> =
-        gpx::read(&geom).map_err(|e| e.to_string())?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
-    if vertices.len() < 2 {
+    let total = *cum.last().unwrap_or(&0.0);
+    let mut s: Vec<f64> =
+        (0..).map(|k| k as f64 * rules.request_resample_m).take_while(|x| *x < total).collect();
+    s.push(total);
+    let lat = interpolate(&cum, &vertices.iter().map(|p| p.lat).collect::<Vec<_>>(), &s, f64::INFINITY);
+    let lon = interpolate(&cum, &vertices.iter().map(|p| p.lon).collect::<Vec<_>>(), &s, f64::INFINITY);
+    (lat.iter().zip(&lon).map(|(&lat, &lon)| Pt { lat, lon }).collect(), s)
+}
+
+fn read_geometry(path: &std::path::Path) -> Result<Vec<Pt>, String> {
+    let v: Vec<Pt> =
+        gpx::read(path).map_err(|e| e.to_string())?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
+    if v.len() < 2 {
         return Err("géométrie recalée vide".into());
     }
-    let cum = cumulative(&vertices);
-    // Au-delà des bornes d'entrée : rééchantillonnage à 10 m sur la géométrie recalée (T05 §3.4).
-    let (request, s_ref) = if vertices.len() <= 16_000 {
-        (vertices, cum)
-    } else {
-        let total = *cum.last().unwrap_or(&0.0);
-        let mut s: Vec<f64> =
-            (0..).map(|k| k as f64 * rules.request_resample_m).take_while(|x| *x < total).collect();
-        s.push(total);
-        let lat = interpolate(&cum, &vertices.iter().map(|p| p.lat).collect::<Vec<_>>(), &s, f64::INFINITY);
-        let lon = interpolate(&cum, &vertices.iter().map(|p| p.lon).collect::<Vec<_>>(), &s, f64::INFINITY);
-        (lat.iter().zip(&lon).map(|(&lat, &lon)| Pt { lat, lon }).collect(), s)
-    };
-    let baro_text = std::fs::read_to_string(dir.join(format!("{}.baro.csv", trace.id)))
-        .map_err(|_| "baro.csv absent".to_owned())?;
+    Ok(v)
+}
+
+/// Baro transporté (`s_recale_m`, `baro_m`, …, `distance_au_trace_m`), trié par abscisse.
+fn read_baro(path: &std::path::Path, rules: &BenchRules) -> Result<(Vec<f64>, Vec<f64>), String> {
+    let text = std::fs::read_to_string(path).map_err(|_| "baro.csv absent".to_owned())?;
     let mut rows: Vec<(f64, f64)> = Vec::new();
-    for line in baro_text.lines().skip(1) {
+    for line in text.lines().skip(1) {
         let f: Vec<&str> = line.split(',').collect();
         let (Some(s), Some(z)) =
             (f.first().and_then(|x| x.parse::<f64>().ok()), f.get(1).and_then(|x| x.parse::<f64>().ok()))
@@ -152,16 +156,83 @@ pub fn load_perso(paths: &BenchPaths, trace: &Trace, rules: &BenchRules) -> Resu
         rows.push((s, z));
     }
     rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(rows.into_iter().unzip())
+}
+
+/// Un cas : géométrie en un ou plusieurs tronçons, baro unique sur l'abscisse recollée.
+fn build_case(
+    id: String,
+    trace: &Trace,
+    geometries: Vec<Vec<Pt>>,
+    baro: &std::path::Path,
+    rules: &BenchRules,
+) -> Result<PersoCase, String> {
+    let mut parts = Vec::new();
+    let mut s_ref: Vec<f64> = Vec::new();
+    let mut offset = 0.0;
+    for (k, g) in geometries.into_iter().enumerate() {
+        let total = *cumulative(&g).last().unwrap_or(&0.0);
+        let (request, s) = request_of(g, rules);
+        // Le tronçon N+1 repart du dernier point du tronçon N : raccord retiré une fois.
+        let skip = usize::from(k > 0);
+        s_ref.extend(s.iter().skip(skip).map(|x| x + offset));
+        offset += total;
+        parts.push(request);
+    }
+    let (baro_s, baro_z) = read_baro(baro, rules)?;
     Ok(PersoCase {
-        id: trace.id.clone(),
+        id,
         groupe: trace.groupe.clone(),
         serie: trace.serie,
-        request,
+        parts,
         s_ref,
-        baro_s: rows.iter().map(|r| r.0).collect(),
-        baro_z: rows.iter().map(|r| r.1).collect(),
+        baro_s,
+        baro_z,
         masks: trace.passages_masques.clone(),
     })
+}
+
+/// Charge les cas d'une trace personnelle ; `Err` = trace sautée (raison sans coordonnée).
+///
+/// - `<id>.gpx` : un cas ;
+/// - `<id>.part1.gpx`, `.part2.gpx`… : un cas en tronçons (bornes d'entrée), `<id>.baro.csv`
+///   unique, abscisse continue sur toute la géométrie recalée ;
+/// - `<id>.s1.gpx`, `.s2.gpx`… : segments disjoints (transport coupé), un cas indépendant
+///   `<id>.sN` chacun, avec son `<id>.sN.baro.csv`.
+pub fn load_perso(paths: &BenchPaths, trace: &Trace, rules: &BenchRules) -> Result<Vec<PersoCase>, String> {
+    let dir = paths.private.join("recales");
+    let id = &trace.id;
+    let file = |name: String| dir.join(name);
+    let numbered = |infix: &str| -> Vec<std::path::PathBuf> {
+        (1..).map(|n| file(format!("{id}.{infix}{n}.gpx"))).take_while(|p| p.exists()).collect()
+    };
+    if file(format!("{id}.gpx")).exists() {
+        let g = read_geometry(&file(format!("{id}.gpx")))?;
+        return Ok(vec![build_case(id.clone(), trace, vec![g], &file(format!("{id}.baro.csv")), rules)?]);
+    }
+    let parts = numbered("part");
+    if !parts.is_empty() {
+        let geometries = parts.iter().map(|p| read_geometry(p)).collect::<Result<Vec<_>, _>>()?;
+        return Ok(vec![build_case(id.clone(), trace, geometries, &file(format!("{id}.baro.csv")), rules)?]);
+    }
+    let segments = numbered("s");
+    if !segments.is_empty() {
+        return segments
+            .iter()
+            .enumerate()
+            .map(|(k, p)| {
+                let sid = format!("{id}.s{}", k + 1);
+                build_case(
+                    sid.clone(),
+                    trace,
+                    vec![read_geometry(p)?],
+                    &file(format!("{sid}.baro.csv")),
+                    rules,
+                )
+            })
+            .collect();
+    }
+    Err("géométrie recalée absente".into())
 }
 
 fn distance_options(structure_correction: bool, step: f64) -> Value {
@@ -209,6 +280,50 @@ fn round(x: f64, digits: i32) -> f64 {
     (x * k).round() / k
 }
 
+/// Profil `distance` d'un cas en tronçons : chaque tronçon envoyé séparément, `d_m` du tronçon
+/// N+1 décalés de la longueur cumulée des précédents, point de raccord en double retiré. Renvoie
+/// aussi le seuil de D+ par station et les réponses brutes.
+async fn recolle(
+    service: &Service,
+    case: &PersoCase,
+    structure_correction: bool,
+    rules: &BenchRules,
+    preset_threshold: f64,
+) -> anyhow::Result<(Profile, Vec<f64>, Vec<Value>)> {
+    let mut p = Profile { d: Vec::new(), pts: Vec::new(), ele: Vec::new() };
+    let (mut tau, mut responses) = (Vec::new(), Vec::new());
+    let mut offset = 0.0;
+    for (k, part) in case.parts.iter().enumerate() {
+        let r =
+            service.route_details(part, distance_options(structure_correction, rules.grid_step_m)).await?;
+        let q = profile(&r)?;
+        let t = thresholds(&q.d, &r, preset_threshold);
+        let skip = usize::from(k > 0);
+        p.d.extend(q.d.iter().skip(skip).map(|x| x + offset));
+        p.pts.extend(q.pts.iter().skip(skip));
+        p.ele.extend(q.ele.iter().skip(skip));
+        tau.extend(t.iter().skip(skip));
+        offset += q.d.last().copied().unwrap_or(0.0);
+        responses.push(r);
+    }
+    if responses.is_empty() {
+        bail!("cas sans tronçon");
+    }
+    Ok((p, tau, responses))
+}
+
+/// Distance du service de chaque point envoyé, tronçons recollés (raccord retiré).
+fn request_distances(case: &PersoCase) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut offset = 0.0;
+    for (k, part) in case.parts.iter().enumerate() {
+        let c = cumulative(part);
+        out.extend(c.iter().skip(usize::from(k > 0)).map(|x| x + offset));
+        offset += c.last().copied().unwrap_or(0.0);
+    }
+    out
+}
+
 /// Mesure E1 et E2 d'un cas (service appelé deux fois : corrections actives, puis MNT brut).
 pub async fn measure_case(
     service: &Service,
@@ -217,15 +332,16 @@ pub async fn measure_case(
     rules: &BenchRules,
     rules_core: &Rules,
 ) -> anyhow::Result<(Value, Value)> {
-    let r = service.route_details(&case.request, distance_options(true, rules.grid_step_m)).await?;
-    let raw = service.route_details(&case.request, distance_options(false, rules.grid_step_m)).await?;
-    let p = profile(&r)?;
-    let p_raw = profile(&raw)?;
+    let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
+    let (p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
+    let (p_raw, tau_raw, _) = recolle(service, case, false, rules, dem.threshold_m).await?;
     if p_raw.d.len() != p.d.len() {
         bail!("profils de longueurs différentes");
     }
-    // Abscisse recalée → distance du service (identiques sans rééchantillonnage).
-    let d_srv = cumulative(&case.request);
+    let r = &responses[0];
+    // Abscisse recalée → distance du service (identiques sans rééchantillonnage), tronçons
+    // recollés comme les profils.
+    let d_srv = request_distances(case);
     let baro_d = interpolate(&case.s_ref, &d_srv, &case.baro_s, f64::INFINITY);
     let (bd, bz): (Vec<f64>, Vec<f64>) =
         baro_d.iter().zip(&case.baro_z).filter(|(d, _)| !d.is_nan()).map(|(d, z)| (*d, *z)).unzip();
@@ -259,20 +375,32 @@ pub async fn measure_case(
 
     let m1 = e1(&p.d, &svc, &bar, rules.detrend_window_m, rules.detrend_step_m);
     let g = &rules_core.elevation.gain;
-    let dem = g.preset(GainPreset::Dem);
+    // D+ sur le profil recollé, jamais somme des D+ des tronçons.
     let (dplus_svc, dplus_raw, dplus_baro) = (
-        dplus_with(&p.d, &svc, dem, &thresholds(&p.d, &r, dem.threshold_m)),
-        dplus_with(&p.d, &svc_raw, dem, &thresholds(&p.d, &raw, dem.threshold_m)),
+        dplus_with(&p.d, &svc, dem, &tau),
+        dplus_with(&p.d, &svc_raw, dem, &tau_raw),
         dplus(&p.d, &bar, g.preset(GainPreset::Barometric)),
     );
-    let warning_codes: BTreeMap<String, usize> =
-        r["quality"]["warnings"].as_array().into_iter().flatten().filter_map(|w| w["code"].as_str()).fold(
-            BTreeMap::new(),
-            |mut m, c| {
-                *m.entry(c.to_owned()).or_default() += 1;
-                m
-            },
-        );
+    let mut warning_codes: BTreeMap<String, usize> = BTreeMap::new();
+    let mut terrain_m: BTreeMap<String, f64> = BTreeMap::new();
+    let mut adapted = 0;
+    for x in &responses {
+        for c in x["quality"]["warnings"].as_array().into_iter().flatten().filter_map(|w| w["code"].as_str())
+        {
+            *warning_codes.entry(c.to_owned()).or_default() += 1;
+        }
+        for (k, v) in x["summary"]["terrain_m"].as_object().into_iter().flatten() {
+            *terrain_m.entry(k.clone()).or_default() += v.as_f64().unwrap_or(0.0);
+        }
+        adapted += x["summary"]["gain_params"]["adapted"].as_array().map_or(0, Vec::len);
+    }
+    let per_part = |f: &dyn Fn(&Value) -> Value| -> Value {
+        if responses.len() == 1 {
+            f(r)
+        } else {
+            Value::Array(responses.iter().map(f).collect())
+        }
+    };
     let step = rules.grid_step_m;
     let masked_m = masked.iter().filter(|m| **m).count() as f64 * step;
     let compared = bar.iter().filter(|x| !x.is_nan()).count();
@@ -294,19 +422,24 @@ pub async fn measure_case(
         "diagnostics": {
             "E1.offset_baro_moins_service_m": round(m1.offset_m, 2),
             "E1.max_abs_m": round(m1.max_abs_m, 2),
+            "E1.max_abs_d_m": round(m1.max_abs_d_m, 1),
             "E1.part_au_dela_de_10m": round(m1.share_over_10m, 4),
+            "E1.plage_10m_debut_d_m": m1.longest_over_10m.map(|r| round(r.0, 1)),
+            "E1.plage_10m_fin_d_m": m1.longest_over_10m.map(|r| round(r.1, 1)),
+            "E1.plage_10m_longueur_m": m1.longest_over_10m.map(|r| round(r.1 - r.0, 1)),
             "stations_comparees": compared,
             "stations": n,
             "part_comparee": round(compared as f64 / n.max(1) as f64, 4),
             "masque_m": masked_m,
             "passages_masques": case.masks,
             "passages_non_retrouves": not_found,
-            "points_envoyes": case.request.len(),
-            "summary_gain_m": r["summary"]["gain_m"],
-            "summary_length_m": r["summary"]["length_m"],
-            "status": r["status"],
-            "terrain_m": r["summary"]["terrain_m"],
-            "plages_glo30_adaptees": r["summary"]["gain_params"]["adapted"].as_array().map_or(0, Vec::len),
+            "troncons": case.parts.len(),
+            "points_envoyes": case.parts.iter().map(Vec::len).sum::<usize>(),
+            "summary_gain_m": per_part(&|x| x["summary"]["gain_m"].clone()),
+            "summary_length_m": per_part(&|x| x["summary"]["length_m"].clone()),
+            "status": per_part(&|x| x["status"].clone()),
+            "terrain_m": terrain_m.into_iter().map(|(k, v)| (k, json!(round(v, 2)))).collect::<serde_json::Map<_, _>>(),
+            "plages_glo30_adaptees": adapted,
             "avertissements": warning_codes
         }
     });
@@ -362,9 +495,15 @@ fn git_commit(repo: &Path) -> String {
     }
 }
 
-/// Emplacement de `results.json` prévu par T05 §5.2.
+/// Emplacement de `results.json` prévu par T05 §5.2 : `<date>-<rules_version>`, suivi de
+/// `-<révision du banc>` quand seul l'outil de mesure a changé (règles du service inchangées).
 pub fn default_report_dir(paths: &BenchPaths) -> PathBuf {
-    paths.bench.join("reports").join(format!("{}-{}", today_utc(), ord_core::RULES_VERSION))
+    let mut name = format!("{}-{}", today_utc(), ord_core::RULES_VERSION);
+    if let Some(rev) = crate::BENCH_REVISION {
+        name.push('-');
+        name.push_str(rev);
+    }
+    paths.bench.join("reports").join(name)
 }
 
 pub fn ensure_check(report: &CheckReport) -> anyhow::Result<()> {
@@ -408,6 +547,7 @@ fn judge(cases: &[Value]) -> (Value, Value) {
     let mut e1_judged = 0usize;
     let mut e2b_fail = Vec::new();
     let mut e2b_judged = 0usize;
+    let mut e2b_neutral = 0usize;
     let mut e2_out = Vec::new();
     for (g, list) in &groups {
         let rmse: Vec<f64> = list.iter().map(|c| metric(c, "E1.rmse_m")).collect();
@@ -450,17 +590,27 @@ fn judge(cases: &[Value]) -> (Value, Value) {
             let ln_svc: Vec<f64> = ratio.iter().map(|r| r.ln().abs()).collect();
             let ln_raw: Vec<f64> = ratio_raw.iter().map(|r| r.ln().abs()).collect();
             let (ms, mr) = (median(&ln_svc), median(&ln_raw));
-            e2b_judged += 1;
-            let pass = ms <= mr + 1e-12;
-            if !pass {
+            // Service et référence identiques sur tous les cas : le critère ne mesure rien (ni
+            // réussite ni échec), ce qui est le cas tant qu'aucun ouvrage n'est corrigé.
+            let identical =
+                list.iter().all(|c| metric(c, "E2.dplus_service_m") == metric(c, "E2.dplus_mnt_brut_m"));
+            let v = if identical {
+                e2b_neutral += 1;
+                "non_discriminant"
+            } else if ms <= mr + 1e-12 {
+                e2b_judged += 1;
+                "pass"
+            } else {
+                e2b_judged += 1;
                 e2b_fail.push(g.clone());
-            }
+                "fail"
+            };
             agg_e2b.insert(
                 g.clone(),
                 json!({
                     "mediane_ecart_log_service": round(ms, 5),
                     "mediane_ecart_log_mnt_brut": round(mr, 5),
-                    "verdict": if pass { "pass" } else { "fail" }
+                    "verdict": v
                 }),
             );
         }
@@ -475,7 +625,10 @@ fn judge(cases: &[Value]) -> (Value, Value) {
         "E1_echecs": e1_fail,
         "E2": if e2_out.is_empty() { "skipped" } else { "reported" },
         "E2_indicatif": e2_out,
-        "E2b": verdict(e2b_judged, e2b_fail.len()),
+        "E2b": match (e2b_judged, e2b_neutral) {
+            (0, n) if n > 0 => "non_discriminant",
+            (j, _) => verdict(j, e2b_fail.len()),
+        },
         "E2b_groupes_en_echec": e2b_fail,
     });
     (json!({"E1": agg_e1, "E2": agg_e2, "E2b": agg_e2b}), verdicts)
@@ -504,22 +657,24 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             skipped.push(json!({"id": t.id, "raison": "bench/private/ absent"}));
             continue;
         }
-        let case = match load_perso(paths, t, &rules) {
+        let loaded = match load_perso(paths, t, &rules) {
             Ok(c) => c,
             Err(reason) => {
                 skipped.push(json!({"id": t.id, "raison": reason}));
                 continue;
             }
         };
-        match measure_case(&service, &case, &refs, &rules, &rules_core).await {
-            Ok((c, dv)) => {
-                eprintln!("{} : mesuré", t.id);
-                cases.push(c);
-                if data_versions.is_null() {
-                    data_versions = dv;
+        for case in loaded {
+            match measure_case(&service, &case, &refs, &rules, &rules_core).await {
+                Ok((c, dv)) => {
+                    eprintln!("{} : mesuré", case.id);
+                    cases.push(c);
+                    if data_versions.is_null() {
+                        data_versions = dv;
+                    }
                 }
+                Err(e) => skipped.push(json!({"id": case.id, "raison": e.to_string()})),
             }
-            Err(e) => skipped.push(json!({"id": t.id, "raison": e.to_string()})),
         }
     }
     let (agregats, mut verdicts) = judge(&cases);
@@ -534,6 +689,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 2,
+            "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
             "rules_version": ord_core::RULES_VERSION,
@@ -549,7 +705,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
             "notes": [
                 "E1 : toutes les stations hors fenêtres masquées (pas encore de typologie : les ouvrages ne sont pas exclus)",
-                "E2b : sans correction d'ouvrage avant l'incrément 4, le service et sa référence structure_correction=false sont identiques"
+                "E2b : non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
+                "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
             ]
         },
         "cas": cases,
@@ -586,12 +743,16 @@ pub async fn fill_cache(
     let mut filled = Vec::new();
     if paths.private_present() {
         for t in &selection.cases {
-            let Ok(case) = load_perso(paths, t, &rules) else { continue };
-            for sc in [true, false] {
-                service.route_details(&case.request, distance_options(sc, rules.grid_step_m)).await?;
+            let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
+            for case in loaded {
+                for part in &case.parts {
+                    for sc in [true, false] {
+                        service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;
+                    }
+                }
+                eprintln!("{} : tuiles en cache", case.id);
+                filled.push(case.id.clone());
             }
-            eprintln!("{} : tuiles en cache", t.id);
-            filled.push(t.id.clone());
         }
     }
     for route in coherence_routes {
@@ -652,8 +813,19 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
     let selection = select(&manifest, &[], ids);
     let rules = BenchRules::default();
     let mut out = Vec::new();
-    for t in &selection.cases {
-        let case = load_perso(paths, t, &rules).map_err(|e| anyhow::anyhow!("{} : {e}", t.id))?;
+    let cases: Vec<PersoCase> = selection
+        .cases
+        .iter()
+        .map(|t| load_perso(paths, t, &rules).map_err(|e| anyhow::anyhow!("{} : {e}", t.id)))
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    for case in &cases {
+        // L1 porte sur une requête : un cas en tronçons n'est pas mesurable tel quel.
+        if case.parts.len() != 1 {
+            bail!("{} : cas en tronçons, hors du protocole L1", case.id);
+        }
         let mut durations = Vec::new();
         let mut terrain = Value::Null;
         let mut length = Value::Null;
@@ -661,7 +833,7 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
             let dir = tempfile::tempdir().context("cache temporaire")?;
             let service = Service::start(dir.path(), false, Variant::DEFAULT).await?;
             let start = std::time::Instant::now();
-            let r = service.route_details(&case.request, distance_options(true, rules.grid_step_m)).await?;
+            let r = service.route_details(&case.parts[0], distance_options(true, rules.grid_step_m)).await?;
             durations.push(start.elapsed().as_secs_f64());
             terrain = r["summary"]["terrain_m"].clone();
             length = r["summary"]["length_m"].clone();
@@ -669,9 +841,9 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
         let mut sorted = durations.clone();
         sorted.sort_by(f64::total_cmp);
         out.push(json!({
-            "id": t.id,
-            "groupe": t.groupe,
-            "serie": t.serie,
+            "id": case.id,
+            "groupe": case.groupe,
+            "serie": case.serie,
             "longueur_service_m": length,
             "terrain_m": terrain,
             "essais": durations.iter().map(|d| round(*d, 2)).collect::<Vec<_>>(),

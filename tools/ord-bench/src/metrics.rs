@@ -117,7 +117,11 @@ pub struct E1 {
     pub offset_m: f64,
     /// Plus grand écart absolu, et part des stations à plus de 10 m (diagnostics).
     pub max_abs_m: f64,
+    /// Position curviligne (`d_m` du service) de l'écart maximal.
+    pub max_abs_d_m: f64,
     pub share_over_10m: f64,
+    /// Plus longue plage `(début, fin)` de stations comparées consécutives à plus de 10 m.
+    pub longest_over_10m: Option<(f64, f64)>,
     pub stations: usize,
 }
 
@@ -135,9 +139,40 @@ pub fn e1(d: &[f64], service: &[f64], baro: &[f64], window: f64, step: f64) -> E
     let n = e.len();
     let rmse_m = if n == 0 { f64::NAN } else { (e.iter().map(|x| x * x).sum::<f64>() / n as f64).sqrt() };
     let abs: Vec<f64> = e.iter().map(|x| x.abs()).collect();
-    let max_abs_m = abs.iter().copied().fold(f64::NAN, f64::max);
+    let (max_abs_m, max_abs_d_m) =
+        abs.iter().zip(&dd).fold(
+            (f64::NAN, f64::NAN),
+            |(m, at), (a, d)| if m.is_nan() || *a > m { (*a, *d) } else { (m, at) },
+        );
     let share_over_10m = abs.iter().filter(|x| **x > 10.0).count() as f64 / n.max(1) as f64;
-    E1 { rmse_m, p95_m: percentile(&abs, 95.0), offset_m, max_abs_m, share_over_10m, stations: n }
+    // Plages de stations comparées consécutives (dans l'ordre des distances) au-delà de 10 m.
+    let mut longest: Option<(f64, f64)> = None;
+    let mut i = 0;
+    while i < n {
+        if abs[i] <= 10.0 {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i + 1 < n && abs[i + 1] > 10.0 {
+            i += 1;
+        }
+        let run = (dd[start], dd[i]);
+        if longest.is_none_or(|l| run.1 - run.0 > l.1 - l.0) {
+            longest = Some(run);
+        }
+        i += 1;
+    }
+    E1 {
+        rmse_m,
+        p95_m: percentile(&abs, 95.0),
+        offset_m,
+        max_abs_m,
+        max_abs_d_m,
+        share_over_10m,
+        longest_over_10m: longest,
+        stations: n,
+    }
 }
 
 /// D+ d'un profil à trous (`NaN`), sommé sur les tronçons restants (même accumulateur que le
@@ -206,6 +241,31 @@ mod tests {
         assert!((m.rmse_m - 0.5).abs() < 0.1, "{m:?}");
         assert!((m.p95_m - 0.5).abs() < 0.2, "{m:?}");
         assert!((m.offset_m - 13.5).abs() < 0.6, "{m:?}");
+        assert_eq!(m.longest_over_10m, None);
+    }
+
+    #[test]
+    fn e1_locates_the_worst_error_and_the_longest_range_over_10_m() {
+        let d: Vec<f64> = (0..2_000).map(|i| i as f64 * 5.0).collect();
+        let baro = vec![0.0; d.len()];
+        // Deux plages au-delà de 10 m : 100–120 m (court) et 5 000–5 200 m, pic à 5 100 m.
+        let service: Vec<f64> = d
+            .iter()
+            .map(|&x| match x {
+                x if (100.0..=120.0).contains(&x) => 15.0,
+                x if (5_000.0..=5_200.0).contains(&x) => {
+                    if x == 5_100.0 {
+                        40.0
+                    } else {
+                        20.0
+                    }
+                }
+                _ => 0.0,
+            })
+            .collect();
+        let m = e1(&d, &service, &baro, 50_000.0, 50.0);
+        assert_eq!(m.max_abs_d_m, 5_100.0);
+        assert_eq!(m.longest_over_10m, Some((5_000.0, 5_200.0)));
     }
 
     #[test]

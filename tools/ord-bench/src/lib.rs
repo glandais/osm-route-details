@@ -64,6 +64,11 @@ impl BenchPaths {
     }
 }
 
+/// Révision de l'outil de mesure à `rules_version` égale : suffixe du dossier de rapport
+/// (`<date>-<rules_version>-<révision>`), remis à `None` à la prochaine montée des règles.
+/// `bench1` : tronçons recollés, segments `.sN`, E2b `non_discriminant`, diagnostics E1.
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
+
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
 #[derive(Clone, Debug, PartialEq, Serialize)]
