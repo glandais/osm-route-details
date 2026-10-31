@@ -361,6 +361,60 @@ pub fn match_obs(
             }
         }
     }
+    // Ouvrage croisé et non suivi : une observation appariée sur un pont ou un tunnel dont le cap
+    // diverge de plus de `max_structure_heading_deg` de celui du parcours (sur ± `heading_window_m`)
+    // n'est pas sur l'ouvrage, elle passe dessous ou dessus (route absente du graphe vélo,
+    // appariée sur les passages supérieurs qui l'enjambent) : non appariée. Restreint aux
+    // ouvrages, qui ne se rejoignent qu'aux culées (T03 §4.2).
+    let mut crossing = vec![false; n];
+    for t in 0..n {
+        let Some(j) = chosen[t] else { continue };
+        let c = cands[t][j];
+        if !g.segs[c.seg as usize].level.is_structure() {
+            continue;
+        }
+        let lo = (0..=t).rev().find(|&k| obs[t].d_m - obs[k].d_m >= params.heading_window_m).unwrap_or(0);
+        let hi = (t..n).find(|&k| obs[k].d_m - obs[t].d_m >= params.heading_window_m).unwrap_or(n - 1);
+        if hi <= lo {
+            continue;
+        }
+        let trace = [obs[hi].p[0] - obs[lo].p[0], obs[hi].p[1] - obs[lo].p[1]];
+        let (a, b) = g.seg_points(c.seg);
+        let seg = [b[0] - a[0], b[1] - a[1]];
+        let (nt, ns) =
+            ((trace[0].powi(2) + trace[1].powi(2)).sqrt(), (seg[0].powi(2) + seg[1].powi(2)).sqrt());
+        if nt <= 0.0 || ns <= 0.0 {
+            continue;
+        }
+        // Angle aigu entre les deux directions (le sens du segment est indifférent).
+        let cos = ((trace[0] * seg[0] + trace[1] * seg[1]) / (nt * ns)).abs().min(1.0);
+        if cos.acos().to_degrees() > params.max_structure_heading_deg {
+            crossing[t] = true;
+        }
+    }
+    if crossing.iter().any(|x| *x) {
+        for (c, x) in chosen.iter_mut().zip(&crossing) {
+            if *x {
+                *c = None;
+            }
+        }
+        // Morceaux restants trop courts rejetés à leur tour.
+        let mut t = 0;
+        while t < n {
+            if chosen[t].is_none() {
+                t += 1;
+                continue;
+            }
+            let start = t;
+            while t + 1 < n && chosen[t + 1].is_some() && chain_of[t + 1] == chain_of[start] {
+                t += 1;
+            }
+            if obs[t].d_m - obs[start].d_m < min_chain {
+                chosen[start..=t].iter_mut().for_each(|c| *c = None);
+            }
+            t += 1;
+        }
+    }
 
     let mut steps: Vec<Option<Step>> = vec![None; n];
     let mut dst: [u32; 2] = [0; 2];

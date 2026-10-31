@@ -15,7 +15,8 @@ use serde::Serialize;
 // 2026.10.3 : typologie (classification v1, HMM tiles-only, segments homogènes).
 // 2026.10.4 : ouvrages OSM (graphe des ouvrages, extension, tablier MNS, interpolation, tunnels,
 // comblement des trous courts).
-pub const RULES_VERSION: &str = "2026.10.4";
+// 2026.10.5 : ouvrage apparié à contre-cap rejeté (passages supérieurs croisés).
+pub const RULES_VERSION: &str = "2026.10.5";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -44,6 +45,11 @@ pub struct MatchParams {
     pub footway_cost: f64,
     /// Chaîne plus courte rejetée en non appariée.
     pub min_chain_m: f64,
+    /// Demi-fenêtre du cap du parcours comparé à celui d'un ouvrage apparié.
+    pub heading_window_m: f64,
+    /// Un ouvrage apparié dont le cap s'écarte davantage de celui du parcours est croisé, pas
+    /// suivi : observation non appariée [à calibrer].
+    pub max_structure_heading_deg: f64,
 }
 
 impl Default for MatchParams {
@@ -58,6 +64,8 @@ impl Default for MatchParams {
             max_jump_m: 60.0,
             footway_cost: 0.75,
             min_chain_m: 50.0,
+            heading_window_m: 20.0,
+            max_structure_heading_deg: 60.0,
         }
     }
 }
@@ -298,6 +306,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.4", "577afa749f5f34ec".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.5", "8ba3909e957c1727".to_owned()));
     }
 }

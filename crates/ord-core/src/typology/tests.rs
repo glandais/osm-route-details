@@ -372,3 +372,19 @@ fn an_end_in_an_unread_tile_needs_it() {
     assert!(out.structures[0].ends.iter().any(|e| matches!(e.kind, EndKind::Unresolved(_))));
     assert!(out.passages[0].doubts.contains(&PassageDoubt::EndUnresolved));
 }
+
+#[test]
+fn a_crossing_overpass_is_never_followed() {
+    // La voie du parcours (est-ouest sur y = 0) est absente du graphe vélo ; seul un pont
+    // nord-sud l'enjambe à x = 0. Croisé à angle droit, il n'est jamais apparié : non apparié.
+    let net = || {
+        Net::new()
+            .add(with_surface("tertiary", PavedGroup::Paved), &[(0.0, -400.0), (0.0, -60.0)])
+            .add(bridge("tertiary"), &[(0.0, -60.0), (0.0, 60.0)])
+            .add(with_surface("tertiary", PavedGroup::Paved), &[(0.0, 60.0), (0.0, 400.0)])
+    };
+    let (_, out) = typology_of(net(), &[(-300.0, 0.0), (300.0, 0.0)]);
+    assert!(out.passages.is_empty(), "{:?}", out.passages);
+    let (segs, _) = run(net(), &[(-300.0, 0.0), (300.0, 0.0)], None);
+    assert!(segs.iter().all(|s| s.structure != StructureClass::Bridge && !s.matched), "{segs:?}");
+}
