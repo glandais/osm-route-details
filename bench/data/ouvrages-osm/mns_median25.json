@@ -165,5 +165,12 @@
   "mns_mediane_25m": null,
   "n": 0,
   "pas_m": 2.5
+ },
+ "roselend-barrage": {
+  "mns_mediane_25m": 1548.15,
+  "n": 11,
+  "pas_m": 2.5,
+  "mns_min": 1517.56,
+  "mns_max": 1559.69
  }
 }

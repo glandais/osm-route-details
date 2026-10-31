@@ -9,7 +9,7 @@ chaque incrément du MVP ait une cible mesurable. Le contrat mesuré est celui d
 |---------|---------|
 | `manifest.yaml` | Une entrée par cas : fichier, région, ce qu'il teste, référence, licence, provenance, empreinte, série |
 | `criteria.yaml` | Forme machine des seuils du §4 (brouillon, gelé avant le premier passage) |
-| `data/ouvrages.yaml` | Corpus de 36 ouvrages (OSM way ids, tags, longueurs, MNT/MNS/MNH IGN aux extrémités et au milieu) |
+| `data/ouvrages.yaml` | Corpus de 37 ouvrages (OSM way ids, tags, longueurs, MNT/MNS/MNH IGN aux extrémités et au milieu) |
 | `data/ouvrages-geom.json`, `data/ouvrages-osm/` | Géométrie et réponses brutes Overpass / IGN du corpus d'ouvrages |
 | `data/deck_baro_vs_lidar.csv` | Première mesure : baromètre corrigé vs MNS LiDAR au milieu des ouvrages traversés |
 | `tools/` | Scripts d'extraction et de qualification (Python 3, bibliothèque standard ; PyYAML via `uv run --with pyyaml`) |
@@ -140,7 +140,7 @@ puis lancer `tools/build_perso_corpus.py` et vérifier les empreintes du manifes
 
 ### 1.4 Corpus d'ouvrages (versionné)
 
-`data/ouvrages.yaml`, 36 ouvrages, OSM lu via Overpass le 2026-10-30, référence IGN interrogée le même
+`data/ouvrages.yaml`, 37 ouvrages, OSM lu via Overpass le 2026-10-30 (le 2026-10-31 pour Roselend), référence IGN interrogée le même
 jour sur deux ressources : `ign_rge_alti_wld` (MNT) et `ign_lidar_hd_mnx_multi_wld` (MNT, MNS, MNH
 LiDAR HD, `zonly=false&measures=true`). Cas couverts :
 
@@ -158,7 +158,11 @@ LiDAR HD, `zonly=false&measures=true`). Cas couverts :
 - tunnels cyclables longs : Croix-Rousse (1,76 km), voie verte de Dordogne ;
 - hors LiDAR HD : Liège, Venise (Ponte della Libertà), Saint-Sébastien (Zurriola), **Krk (GLO-30
   côtier inféré : tuile Mapterhorn z13 absente)** ;
-- trace qui commence sur un pont : milieu du pont de l'île de Ré.
+- trace qui commence sur un pont : milieu du pont de l'île de Ré ;
+- **route en crête de barrage** taguée `bridge=yes` : Roselend (824 m, Savoie). Le MNT LiDAR HD retire
+  le barrage voûte et lit le sol 20 à 70 m plus bas, le RGE ALTI le garde. Ajouté le 2026-10-31 après
+  l'écart E1 de 131 m de `perso-11` à l'incrément 2 ; déjà vu par vcyclist (`tn10-roselend`), donc en
+  calibration. Baro de `perso-11` corrigé localement : +2,0 m au-dessus du MNS ponctuel de la crête.
 
 Réserves : le MNS n'est pas la chaussée (garde-corps, véhicules, végétation, falaise : 993 contre
 907 m à un portail de Combe Laval) ; RGE ALTI et MNT LiDAR divergent de 20 à 55 m au tunnel d'Arbois
@@ -189,7 +193,7 @@ MNS, ponctuel ou médian, n'est qu'une référence de **cohérence** ; la seule 
 d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du MNS lu au croisement
 (≈ 50 m d'erreur).
 
-`data/ouvrages.yaml` porte, pour les 21 ponts français, `milieu_mns_mediane_25m` (11 points de −12,5 à
+`data/ouvrages.yaml` porte, pour les 22 ponts français, `milieu_mns_mediane_25m` (11 points de −12,5 à
 +12,5 m le long de l'axe OSM, `tools/ouvrages/mns_median25.py`) à côté de la lecture ponctuelle.
 
 ---
@@ -224,7 +228,7 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
    traces perso et dessineraient des trajets habituels : ils restent **hors git**
    (`private/ouvrages-perso.json`, empreinte au manifest), comme les traces.
 
-   Résultat (2026-10-30) : **22 ouvrages tenus à l'écart sur 87 (25 %)**, dont 19 nouveaux (17 ponts,
+   Résultat (2026-10-30) : **22 ouvrages tenus à l'écart sur 87 (25 %)**, 88 avec Roselend (calibration, ajouté le 2026-10-31), dont 19 nouveaux (17 ponts,
    2 tunnels), tous avec au moins un passage baro, plus `normandie`, `recoumene` et
    `donostia-zurriola` ; **9 traces perso sur 39 (23 %)** ; 48 fenêtres de passage masquées dans les
    métriques des traces.

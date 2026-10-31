@@ -2286,5 +2286,49 @@
     "ref": "D102"
    }
   }
+ },
+ {
+  "id": "roselend-barrage",
+  "name": "Route du Barrage (crête du barrage de Roselend)",
+  "type": "bridge",
+  "chain": [
+   531946485
+  ],
+  "extra": [
+   37899852
+  ],
+  "region": "Savoie (FR)",
+  "cas": "Route en crête d'un barrage voûte, taguée bridge=yes : le MNT LiDAR HD retire le barrage",
+  "vc": "controls/tunnels tn10-roselend (négatif de tunnel, span X)",
+  "notes": null,
+  "pts_from": [],
+  "length_m": 824,
+  "mid": [
+   45.68489754579894,
+   6.6213708868632875
+  ],
+  "pts": {
+   "A": [
+    45.6827742,
+    6.6170415
+   ],
+   "milieu": [
+    45.68489754579894,
+    6.6213708868632875
+   ],
+   "B": [
+    45.6877083,
+    6.6245673
+   ]
+  },
+  "tags": {
+   "531946485": {
+    "bridge": "yes",
+    "highway": "tertiary",
+    "layer": "1",
+    "name": "Route du Barrage",
+    "seasonal": "yes"
+   }
+  }
  }
 ]

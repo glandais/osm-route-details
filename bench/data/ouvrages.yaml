@@ -1005,3 +1005,28 @@ ouvrages:
     renvoi_vcyclist: null
     licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
     notes: "Accès vélo : aucune balise bicycle sur les ways (highway=primary D102) ; usage cyclable réel non vérifié."
+  - id: roselend-barrage
+    nom: "Route du Barrage (crête du barrage de Roselend)"
+    type: "bridge"
+    region: "Savoie — Beaufortain (FR)"
+    cas_teste: "Route en crête d'un barrage voûte (824 m), taguée bridge=yes : le MNT LiDAR HD retire le barrage et lit le sol 20 à 70 m plus bas (131 m dans le service à l'incrément 2), le MNT RGE ALTI le garde"
+    osm:
+      chain: [531946485]
+      ways_associees: [37899852]   # waterway=dam « Barrage de Roselend » (emprise du barrage)
+      verifie: "Overpass, tags+géométrie lus le 2026-10-31"
+      tags:
+        531946485: {"bridge": "yes", "highway": "tertiary", "layer": "1", "name": "Route du Barrage", "seasonal": "yes"}
+    longueur_m: 824
+    milieu: {lat: 45.684898, lon: 6.621371}
+    points: {A: [45.682774, 6.617042], milieu: [45.684898, 6.621371], B: [45.687708, 6.624567]}
+    reference:
+      methode: methode_reference_defaut
+      valeurs:
+        A: {"rge_alti_mnt": 1559.11, "lidar_mnt": 1558.98, "lidar_mns": 1558.98, "lidar_mnh": 0.0}
+        milieu: {"rge_alti_mnt": 1557.49, "lidar_mnt": 1552.11, "lidar_mns": 1559.21, "lidar_mnh": 7.11}
+        milieu_mns_mediane_25m: {valeur: 1548.15, n: 11, pas_m: 2.5, min: 1517.56, max: 1559.69, role: coherence}
+        B: {"rge_alti_mnt": 1558.97, "lidar_mnt": 1558.96, "lidar_mns": 1558.96, "lidar_mnh": 0.0}
+      date_mesure: "2026-10-31"
+    renvoi_vcyclist: "controls/tunnels tn10-roselend (négatif de tunnel « dam-crest-road », span X sur le way 531946485)"
+    licence: "ODbL (OSM) / Etalab 2.0 (IGN)"
+    notes: "Trouvé par l'écart E1 de perso-11 (incrément 2, d_m 88 365–89 010). Écarté de l'extension perso parce que vu par vcyclist (tn10-roselend) : série de calibration. La médiane MNS 25 m n'est pas fiable ici : la crête est étroite et courbe, l'axe OSM en sort (min 1 517 m) ; la crête est à ≈ 1 559 m (MNS ponctuel au milieu, A et B). Référence : baro de perso-11 corrigé localement."

@@ -139,7 +139,7 @@ osm_surface:
     serie: calibration
 
 # ---------------------------------------------------------------------------------------------
-# 3. Corpus d'ouvrages (versionné : data/ouvrages.yaml, 36 entrées)
+# 3. Corpus d'ouvrages (versionné : data/ouvrages.yaml, 37 entrées)
 # ---------------------------------------------------------------------------------------------
 ouvrages:
   fichier: data/ouvrages.yaml
