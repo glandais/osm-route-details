@@ -20,7 +20,7 @@ use serde::Serialize;
 use crate::classification::StructureVerdict;
 use crate::rules::Rules;
 use crate::typology::TypologyOutput;
-use derive::{gain_on_runs_with, smooth_profile, AdaptedRange, GainParams, GainResult};
+use derive::{gain_turns_on_runs, smooth_profile, AdaptedRange, GainParams, GainResult};
 use fusion::plan::StructurePlan;
 use fusion::{StructureCorrectionReport, StructureOutcome};
 
@@ -408,7 +408,7 @@ pub fn fuse(
         }
         tau
     });
-    let (gain_m, loss_m, partial) = gain_on_runs_with(&d, &ele, preset, tau.as_deref());
+    let (gain_m, loss_m, partial, turning_points) = gain_turns_on_runs(&d, &ele, preset, tau.as_deref());
     let adapted: Vec<AdaptedRange> = glo30
         .iter()
         .map(|&(i, j)| {
@@ -431,6 +431,7 @@ pub fn fuse(
             adapted,
             partial,
         },
+        turning_points,
     };
 
     // Lissage client : jamais à travers une plage `none`, sans toucher `ele` (T04 §5.3).

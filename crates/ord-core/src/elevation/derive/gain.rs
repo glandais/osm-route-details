@@ -36,6 +36,22 @@ pub struct GainResult {
     /// Dénivelé négatif cumulé, ≥ 0 (valeur absolue, comme le contrat).
     pub loss_m: f64,
     pub params: GainParams,
+    /// Extrémités des jambes comptées (T04 §6.1), réutilisées par la sélection des points de
+    /// rupture.
+    pub turning_points: Vec<TurningPoint>,
+}
+
+/// Extrémité d'une jambe comptée par l'accumulateur (T04 §6.1) : sommet ou creux confirmé, ou
+/// bout d'une suite de stations lues. Les extrémités successives d'une suite délimitent ses
+/// jambes ; `gain_m` est la somme des montées entre elles, sur le profil lissé du preset.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TurningPoint {
+    /// Rang de la station (dans le profil entier pour `gain_turns_on_runs`).
+    pub station: usize,
+    /// `true` : sommet ; `false` : creux.
+    pub max: bool,
+    /// Altitude lissée à cette station.
+    pub value: f64,
 }
 
 /// Accumulateur à points de retournement sur un profil déjà lissé ; renvoie `(gain, perte)`,
@@ -49,21 +65,48 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
 /// qu'à cheval sur une frontière le seuil le plus prudent s'applique. Avec un seuil constant,
 /// identique à `accumulate`. `τ(0) ≤ 0` : somme brute des montées et descentes.
 pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
+    let (gain, loss, _) = accumulate_turns(h, tau);
+    (gain, loss)
+}
+
+/// Comme `accumulate_with`, avec les extrémités des jambes comptées, dans l'ordre : départ de
+/// la suite, extrema confirmés, fin de la dernière jambe (extremum courant en fin de profil).
+/// Aucune jambe (profil plat sous le seuil) : liste vide.
+pub fn accumulate_turns(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64, Vec<TurningPoint>) {
+    let mut turns = Vec::new();
     if h.len() < 2 {
-        return (0.0, 0.0);
+        return (0.0, 0.0, turns);
     }
+    let turn = |station: usize, max: bool| TurningPoint { station, max, value: h[station] };
     let threshold = tau(0);
     if threshold.is_nan() || threshold <= 0.0 {
+        // Somme brute : chaque changement de sens est une extrémité de jambe.
         let (mut gain, mut loss) = (0.0, 0.0);
-        for w in h.windows(2) {
+        let mut dir = 0i8;
+        for (i, w) in h.windows(2).enumerate() {
             let d = w[1] - w[0];
+            let s = if d > 0.0 {
+                1
+            } else if d < 0.0 {
+                -1
+            } else {
+                0
+            };
             if d > 0.0 {
                 gain += d;
             } else {
                 loss -= d;
             }
+            if s != 0 && s != dir {
+                // Départ (dir = 0) ou retournement à la station i.
+                turns.push(turn(i, s < 0));
+                dir = s;
+            }
         }
-        return (gain, loss);
+        if dir != 0 {
+            turns.push(turn(h.len() - 1, dir > 0));
+        }
+        return (gain, loss, turns);
     }
     let (mut gain, mut loss) = (0.0, 0.0);
     let (mut hi, mut lo) = (h[0], h[0]);
@@ -86,16 +129,20 @@ pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
                     // Jambe d'ouverture : de h[0] au premier point de retournement, quelle que
                     // soit sa taille (fermeture gain − perte = dénivelé net à un seuil près).
                     if i_hi > i_lo {
+                        turns.push(turn(0, i_lo > 0));
                         if lo < h[0] {
                             loss += h[0] - lo;
+                            turns.push(turn(i_lo, false));
                         }
                         dir = 1;
                         reference = lo;
                         ext = hi;
                         i_ext = i_hi;
                     } else {
+                        turns.push(turn(0, i_hi == 0));
                         if hi > h[0] {
                             gain += hi - h[0];
+                            turns.push(turn(i_hi, true));
                         }
                         dir = -1;
                         reference = hi;
@@ -110,6 +157,7 @@ pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
                     i_ext = i;
                 } else if ext - e >= tau(i_ext).max(tau(i)) {
                     gain += ext - reference;
+                    turns.push(turn(i_ext, true));
                     reference = ext;
                     ext = e;
                     i_ext = i;
@@ -122,6 +170,7 @@ pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
                     i_ext = i;
                 } else if e - ext >= tau(i_ext).max(tau(i)) {
                     loss += reference - ext;
+                    turns.push(turn(i_ext, false));
                     reference = ext;
                     ext = e;
                     i_ext = i;
@@ -133,10 +182,12 @@ pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
     // Jambe encore ouverte en fin de profil : une montée finale n'est pas perdue.
     if dir > 0 && ext > reference {
         gain += ext - reference;
+        turns.push(turn(i_ext, true));
     } else if dir < 0 && ext < reference {
         loss += reference - ext;
+        turns.push(turn(i_ext, false));
     }
-    (gain, loss)
+    (gain, loss, turns)
 }
 
 /// D+/D− d'un profil à trous (`NaN` = altitude absente) : l'accumulateur redémarre après chaque
@@ -153,8 +204,21 @@ pub fn gain_on_runs_with(
     params: PresetParams,
     tau: Option<&[f64]>,
 ) -> (f64, f64, bool) {
+    let (gain, loss, partial, _) = gain_turns_on_runs(d, ele, params, tau);
+    (gain, loss, partial)
+}
+
+/// Comme `gain_on_runs_with`, avec les extrémités des jambes comptées (`TurningPoint`, rangs
+/// dans le profil entier), suite par suite, dans l'ordre des distances.
+pub fn gain_turns_on_runs(
+    d: &[f64],
+    ele: &[f64],
+    params: PresetParams,
+    tau: Option<&[f64]>,
+) -> (f64, f64, bool, Vec<TurningPoint>) {
     assert_eq!(d.len(), ele.len(), "distances et altitudes de même longueur");
     let (mut gain, mut loss, mut partial) = (0.0, 0.0, false);
+    let mut turns = Vec::new();
     let mut i = 0;
     while i < ele.len() {
         if ele[i].is_nan() {
@@ -167,17 +231,18 @@ pub fn gain_on_runs_with(
             i += 1;
         }
         let smoothed = smooth_profile(&d[start..i], &ele[start..i], params.smoothing_m);
-        let (g, l) = match tau {
+        let (g, l, t) = match tau {
             Some(t) => {
                 let t = &t[start..i];
-                accumulate_with(&smoothed, |k| t[k])
+                accumulate_turns(&smoothed, |k| t[k])
             }
-            None => accumulate(&smoothed, params.threshold_m),
+            None => accumulate_turns(&smoothed, |_| params.threshold_m),
         };
         gain += g;
         loss += l;
+        turns.extend(t.into_iter().map(|p| TurningPoint { station: p.station + start, ..p }));
     }
-    (gain, loss, partial)
+    (gain, loss, partial, turns)
 }
 
 #[cfg(test)]
@@ -248,6 +313,37 @@ mod tests {
         // Montée de 50 m suivie d'une descente de 50 m : comptée sous tous les seuils.
         let big = [0.0, 50.0, 0.0];
         assert_eq!(accumulate_with(&big, |i| if i == 1 { 10.0 } else { 3.0 }), (50.0, 50.0));
+    }
+
+    #[test]
+    fn turning_points_bound_every_counted_leg() {
+        // Descente d'ouverture, montée, bosse sous le seuil, descente finale ouverte.
+        let h = [10.0, 5.0, 20.0, 18.5, 21.0, 12.0, 11.0];
+        let (g, l, t) = accumulate_turns(&h, |_| 3.0);
+        let st: Vec<(usize, bool)> = t.iter().map(|p| (p.station, p.max)).collect();
+        assert_eq!(st, [(0, true), (1, false), (4, true), (6, false)]);
+        // Les jambes entre extrémités successives redonnent le gain et la perte.
+        let up: f64 = t.windows(2).map(|w| (w[1].value - w[0].value).max(0.0)).sum();
+        let down: f64 = t.windows(2).map(|w| (w[0].value - w[1].value).max(0.0)).sum();
+        assert_eq!((g, l), (up, down));
+        // Profil plat sous le seuil : aucune jambe.
+        assert!(accumulate_turns(&[1.0, 2.0, 1.0], |_| 3.0).2.is_empty());
+        // Somme brute (`raw`) : chaque changement de sens.
+        let (_, _, t) = accumulate_turns(&[0.0, 1.0, 1.0, 0.5, 2.0], |_| 0.0);
+        let st: Vec<(usize, bool)> = t.iter().map(|p| (p.station, p.max)).collect();
+        assert_eq!(st, [(0, false), (2, true), (3, false), (4, true)]);
+    }
+
+    #[test]
+    fn turning_points_on_runs_use_absolute_stations() {
+        let d: Vec<f64> = (0..9).map(|i| i as f64 * 5.0).collect();
+        let e = [0.0, 10.0, 0.0, f64::NAN, f64::NAN, 50.0, 40.0, 60.0, 61.0];
+        let p = PresetParams { threshold_m: 3.0, smoothing_m: 0.0 };
+        let (g, _, partial, t) = gain_turns_on_runs(&d, &e, p, None);
+        assert!(partial);
+        assert_eq!(g, 31.0);
+        let st: Vec<usize> = t.iter().map(|p| p.station).collect();
+        assert_eq!(st, [0, 1, 2, 5, 6, 8]);
     }
 
     #[test]
