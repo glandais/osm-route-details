@@ -1257,7 +1257,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 4,
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838 et e48170f)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1 et 53225a8)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
