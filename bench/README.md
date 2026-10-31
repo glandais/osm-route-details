@@ -519,6 +519,11 @@ entre portails (point 2).
    (rapport service / sans correction 0,63 → 0,73 et 0,67 → 0,80) : le service y est déjà au-dessus
    du baro, et le preset `dem` abaisse le D+ baro. Le critère reste discriminant partout. En plaine,
    chaque correction insérée seule retire du D+ (62 corrections, −109 m), sauf trois (+0,8 à +3,2 m).
+   Valeurs ci-dessus : recalcul de contrôle hors ord-bench (lissage et accumulateur réimplémentés,
+   écart ≤ 3,6 m par trace). Valeurs d'ord-bench, qui font foi (2026.10.9-bench2, mode distance,
+   baro `dem`) : dplus 0,0472 / 0,0635, ouvrage 0,0565 / 0,0703, plaine 0,0165 / 0,0360 ; mêmes
+   verdicts. Le baro garde un seuil fixe de 3 m : l'adaptation du seuil sur GLO-30 est une propriété
+   de la source MNT, sans objet pour le baro (et sans plage adaptée sur les traces plaine).
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
