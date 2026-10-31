@@ -16,7 +16,8 @@
 # E3 sur les approches 50–300 m, référence incertaine si les deux côtés diffèrent de plus de 2 m ;
 # bande de portail invalide sur un pont ou un tunnel des tuiles. Seuils inchangés ; avant toute
 # nouvelle mesure. Puis plausibilité E4 : pente implicite entre portails retenus > 25 % = référence
-# indisponible (vérifiée sur la calibration avant adoption).
+# indisponible (vérifiée sur la calibration avant adoption). Puis passage en hauteur sur un pont
+# (README §2.1) : test de niveau si MNH au milieu ≥ 10 m (vérifié sur la calibration avant adoption).
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -57,6 +58,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Bande de portail E4 invalide si elle chevauche un pont ou un tunnel des tuiles de la campagne (bridge=true / tunnel=true), du corpus ou non ; remplacement existant"
   - id: e4_plausibilite_pente   # 2026-10-31
     decision: "Pente implicite entre portails retenus > 25 % = référence indisponible, rapportée, non comptée ; borne de géométrie routière, indépendante du service"
+  - id: passage_en_hauteur   # 2026-10-31
+    decision: "Pont à MNH au milieu ≥ 10 m : passage compté seulement si médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) ≥ ½ MNH ; sinon critère horizontal avec niveau_non_discriminant ou niveau_sans_baro ; partition des séries inchangée"
   - id: limite_donnees_comptee   # 2026-10-31
     decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
 
@@ -80,6 +83,18 @@ perimetre:   # README §4 bis.1
     compte: true
     cas_connus:
       - {ouvrage: arly-galerie, criteres: [E4, S1], note: "shortbread sans avalanche_protector"}
+
+passage_pont:   # README §2.1
+  horizontal: {tolerance_m: 40, points: [A, milieu, B]}
+  niveau:
+    applique_si: {mnh_milieu_m_min: 10.0}   # MNH = médiane MNS 25 m − MNT au milieu
+    mesure: "médiane (baro corrigé − MNT) sur les stations à ± 12,5 m du milieu"
+    stations_baro_min: 3
+    retire_si: "mesure < 0.5 × MNH"
+    sinon: {mnh_inferieur: niveau_non_discriminant, baro_insuffisant: niveau_sans_baro}
+    budget_erreur_m: {bruit_baro: 1.0, decalage: 2.0, retard_baro: 4.0}   # ≈ 5 m ⇒ MNH ≥ 2 × 5 m
+  porte_sur: [E3, S1, hors_graphe_velo]
+  partition_series: inchangee
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}

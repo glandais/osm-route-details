@@ -218,6 +218,18 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
      diffère de celle de la trace, la fenêtre est masquée dans les métriques de la trace (E1 ; E2 et
      E2b sommés sur les tronçons restants, pour le service comme pour ses références). Chaque mètre
      n'appartient qu'à une série, et chaque ouvrage garde tous ses passages baro.
+   - **passage en hauteur sur un pont** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle
+     mesure) : le critère horizontal ne distingue pas une trace qui longe un pont par-dessous
+     (Cheviré × perso-23, au sol sous un tablier à plus de 50 m). Si le MNH au milieu (médiane MNS
+     25 m − MNT au milieu) est ≥ 10 m, le passage n'est compté sur le pont que si la médiane de (baro
+     corrigé − MNT) sur les stations à ± 12,5 m du milieu, au moins 3 stations baro, atteint ½ MNH.
+     Sinon, le critère horizontal seul s'applique, avec la mention `niveau_non_discriminant`
+     (MNH < 10 m) ou `niveau_sans_baro` (moins de 3 stations). Budget d'erreur : bruit baro ≈ 1 m,
+     incertitude du décalage ≤ 2 m (au-delà, référence incertaine, §4 bis.3), retard baro jusqu'à
+     ± 4 m ; soit ≈ 5 m, d'où « dessus » et « dessous » discernables seulement pour MNH ≥ 2 × 5 m. Aucun
+     terme ne vient du service. Le test ne porte que sur les métriques d'ouvrage (E3, S1,
+     `hors_graphe_velo`) ; la partition des fenêtres entre séries, fixée avant la mesure, ne change
+     pas.
 
    **Extension avant le premier passage** (décision de l'utilisateur, 2026-10-30) : 51 ouvrages
    jamais vus par vcyclist et franchis par une trace perso fiable (46 ponts dont le MNH au milieu
