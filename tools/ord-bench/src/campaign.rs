@@ -23,7 +23,7 @@ use crate::check::{check, CheckReport};
 use crate::hash::{cache_fingerprint, sha256_bytes};
 use crate::manifest::{Manifest, Serie, Trace};
 use crate::metrics::{dplus, dplus_with, e1, interpolate, median, passage_windows};
-use crate::service::{Pt, Service, Variant};
+use crate::service::{BenchMode, Pt, Service, Variant};
 use crate::typology::{
     agreement, disagreements, metrics_json, ours_of, read_stadia_surface, unmatched_ranges, Class, Ref,
 };
@@ -1090,6 +1090,208 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
     (Value::Object(agg), verdicts)
 }
 
+/// Mesures d'une passe de la campagne, dans un mode de lecture du service.
+#[derive(Debug, Default)]
+struct Pass {
+    cases: Vec<Value>,
+    items: Vec<Value>,
+    skipped: Vec<Value>,
+    data_versions: Value,
+    inserted_report: Vec<Value>,
+    held_out_measured: Vec<Value>,
+    os_cases: Vec<Value>,
+    warm: Vec<Value>,
+}
+
+/// Contexte commun aux passes.
+struct PassCtx<'a> {
+    paths: &'a BenchPaths,
+    manifest: &'a Manifest,
+    selection: &'a Selection<'a>,
+    refs: &'a BTreeMap<String, Vec<LatLon>>,
+    ouvrages: &'a [crate::ouvrages::Ouvrage],
+    tiles: &'a crate::ouvrages::Tiles,
+    groupes: &'a [String],
+    ids: &'a [String],
+}
+
+/// Bilan des points insérés d'un cas (sans position) : points par km et densité maximale.
+fn inserted_stats(stats: &[crate::service::InsertedStats]) -> Value {
+    let length: f64 = stats.iter().map(|s| s.length_m).sum();
+    let inserted: usize = stats.iter().map(|s| s.inserted).sum();
+    json!({
+        "requetes": stats.len(),
+        "longueur_km": round(length / 1_000.0, 3),
+        "points_entree": stats.iter().map(|s| s.input).sum::<usize>(),
+        "points_inseres": inserted,
+        "inseres_par_km": round(inserted as f64 / (length / 1_000.0).max(1e-9), 3),
+        "max_sur_un_km": stats.iter().map(|s| s.max_per_km).max().unwrap_or(0),
+    })
+}
+
+/// Une passe : traces perso, extraits tenus à l'écart, parcours d'osm-surface, ouvrages des
+/// parcours vcyclist et témoins, lus dans le mode du service.
+async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pass> {
+    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids } = *ctx;
+    let rules = BenchRules::default();
+    let rules_core = Rules::default();
+    let structures_wanted = ids.is_empty();
+    let mut items: Vec<Value> = Vec::new();
+    let mut cases = Vec::new();
+    let mut skipped = Vec::new();
+    let mut data_versions = Value::Null;
+    let mut inserted_report: Vec<Value> = Vec::new();
+    for t in &selection.cases {
+        if !paths.private_present() {
+            skipped.push(json!({"id": t.id, "raison": "bench/private/ absent"}));
+            continue;
+        }
+        let loaded = match load_perso(paths, t, &rules) {
+            Ok(c) => c,
+            Err(reason) => {
+                skipped.push(json!({"id": t.id, "raison": reason}));
+                continue;
+            }
+        };
+        for mut case in loaded {
+            service.take_stats();
+            // Baro des points insérés (README §2.1, étape 3) : tuiles de la campagne.
+            match crate::inserted::apply(&mut case, &paths.cache, None, &rules).await? {
+                Ok(o) => {
+                    inserted_report.push(json!({"id": case.id, "inseres": o.inserted, "retires": o.removed}))
+                }
+                Err(reason) => {
+                    skipped.push(json!({"id": case.id, "raison": reason}));
+                    continue;
+                }
+            }
+            let csv = std::fs::read_to_string(
+                paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
+            )
+            .ok();
+            let eval = OuvrageEval { cache: &paths.cache, window: None, ring: None };
+            match measure_case(service, &case, csv, refs, ouvrages, &rules, &rules_core, &eval).await {
+                Ok((mut c, dv, its)) => {
+                    eprintln!("{} : mesuré ({})", case.id, service.mode().as_str());
+                    c["mode"] = json!(service.mode().as_str());
+                    if service.mode() == BenchMode::Breakpoints {
+                        c["points_inseres"] = inserted_stats(&service.take_stats());
+                    }
+                    cases.push(c);
+                    items.extend(its);
+                    if data_versions.is_null() {
+                        data_versions = dv;
+                    }
+                }
+                Err(e) => skipped.push(json!({"id": case.id, "raison": e.to_string()})),
+            }
+        }
+    }
+    // Traces tenues à l'écart : passages de leurs ouvrages de calibration seulement, sur des
+    // extraits (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
+    let mut held_out_measured = Vec::new();
+    for t in manifest.traces.iter().filter(|t| {
+        selection.excluded_held_out.contains(&t.id)
+            && !t.passages_masques.is_empty()
+            && paths.private_present()
+    }) {
+        let Ok(loaded) = load_perso(paths, t, &rules) else {
+            skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
+            continue;
+        };
+        for mut case in loaded {
+            // Points insérés : seulement là où le baro de l'extrait est lu ; bilan non rapporté.
+            let ranges = held_out_baro_ranges(&case, refs, &rules);
+            if let Err(reason) =
+                crate::inserted::apply(&mut case, &paths.cache, Some(&ranges), &rules).await?
+            {
+                skipped
+                    .push(json!({"id": case.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
+                continue;
+            }
+            let measured =
+                measure_held_out(service, t, &case, refs, ouvrages, &rules, &rules_core, &paths.cache).await;
+            // Aucune sortie du service hors des fenêtres : bilans des extraits jamais rapportés.
+            service.take_stats();
+            match measured {
+                Ok(its) => {
+                    eprintln!("{} : extraits mesurés ({} mesures d'ouvrage)", case.id, its.len());
+                    held_out_measured.push(json!({"id": case.id, "mesures": its.len()}));
+                    items.extend(its);
+                }
+                Err(_) => skipped
+                    .push(json!({"id": case.id, "raison": "extraits tenus à l'écart : échec du service"})),
+            }
+        }
+    }
+    // Parcours d'osm-surface : R1, R2, M1 et typologie à chaud.
+    let os_wanted = |id: &str| {
+        (ids.is_empty() && groupes.iter().any(|g| g == "osm_surface")) || ids.iter().any(|i| i == id)
+    };
+    let mut os_cases = Vec::new();
+    let mut warm = Vec::new();
+    for entry in manifest.osm_surface.iter().filter(|e| os_wanted(&e.id) && e.serie == Serie::Calibration) {
+        let route = crate::osm_surface::load(&paths.bench, entry)?;
+        match crate::osm_surface::measure(service, &route).await {
+            Ok(c) => {
+                eprintln!("{} : mesuré", route.id);
+                os_cases.push(c);
+                if service.mode() == BenchMode::Reference {
+                    let (ms, stats) = crate::osm_surface::typology_warm_ms(&paths.cache, &route, 5).await?;
+                    warm.push(json!({"id": route.id, "typologie_a_chaud_ms": round(ms, 1), "stats": stats}));
+                }
+            }
+            Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
+        }
+    }
+    // Ouvrages : parcours `test1..4` de vcyclist et témoins (calibration).
+    if structures_wanted {
+        items.extend(crate::ouvrages::vc_items(service, &paths.bench, tiles, ouvrages, &mut skipped).await?);
+    }
+    items.extend(crate::ouvrages::perimeter_items(ouvrages));
+    Ok(Pass { cases, items, skipped, data_versions, inserted_report, held_out_measured, os_cases, warm })
+}
+
+/// Verdicts d'une passe : `(cas, ouvrages publics, agrégats, verdicts)`.
+fn judge_pass(pass: Pass, limits: &[(String, String)]) -> (Vec<Value>, Vec<Value>, Value, Value, Pass) {
+    let Pass {
+        mut cases,
+        mut items,
+        skipped,
+        data_versions,
+        inserted_report,
+        held_out_measured,
+        os_cases,
+        warm,
+    } = pass;
+    crate::ouvrages::annotate_data_limits(&mut items, limits);
+    let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
+    let (agregats, mut verdicts) = judge(&cases);
+    let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
+    for (k, v) in typo_verdicts.as_object().into_iter().flatten() {
+        verdicts[k] = v.clone();
+    }
+    let warm_total: f64 = warm.iter().filter_map(|w| w["typologie_a_chaud_ms"].as_f64()).sum();
+    let warm_km: f64 = warm.iter().filter_map(|w| w["stats"]["km"].as_f64()).sum();
+    let mut agregats = agregats;
+    agregats["typologie"] = typo_agregats;
+    agregats["typologie_a_chaud"] = json!({
+        "parcours": warm,
+        "total_ms": round(warm_total, 1),
+        "total_km": round(warm_km, 1),
+        "seuil_ms": 160.0,
+        "profil": if cfg!(debug_assertions) { "debug" } else { "release" }
+    });
+    agregats["ouvrages"] = ouvrages_agg;
+    for (k, v) in ouvrages_verdicts.as_object().into_iter().flatten() {
+        verdicts[k] = v.clone();
+    }
+    cases.extend(os_cases);
+    let public = crate::ouvrages::public(&items);
+    let rest = Pass { skipped, data_versions, inserted_report, held_out_measured, ..Pass::default() };
+    (cases, public, agregats, verdicts, rest)
+}
+
 /// `run --offline` : campagne de calibration ; renvoie le contenu de `results.json`.
 pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyhow::Result<Value> {
     let report = check(paths)?;
@@ -1115,138 +1317,32 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     }
     let tiles = crate::ouvrages::Tiles::load(&paths.cache, &tile_points).await?;
     crate::ouvrages::apply_perimeter(&mut ouvrages, &tiles, &geoms);
-    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
-    let mut items: Vec<Value> = Vec::new();
-    let mut cases = Vec::new();
-    let mut skipped = Vec::new();
-    let mut data_versions = Value::Null;
-    let mut inserted_report: Vec<Value> = Vec::new();
-    for t in &selection.cases {
-        if !paths.private_present() {
-            skipped.push(json!({"id": t.id, "raison": "bench/private/ absent"}));
-            continue;
-        }
-        let loaded = match load_perso(paths, t, &rules) {
-            Ok(c) => c,
-            Err(reason) => {
-                skipped.push(json!({"id": t.id, "raison": reason}));
-                continue;
-            }
-        };
-        for mut case in loaded {
-            // Baro des points insérés (README §2.1, étape 3) : tuiles de la campagne.
-            match crate::inserted::apply(&mut case, &paths.cache, None, &rules).await? {
-                Ok(o) => {
-                    inserted_report.push(json!({"id": case.id, "inseres": o.inserted, "retires": o.removed}))
-                }
-                Err(reason) => {
-                    skipped.push(json!({"id": case.id, "raison": reason}));
-                    continue;
-                }
-            }
-            let csv = std::fs::read_to_string(
-                paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
-            )
-            .ok();
-            let eval = OuvrageEval { cache: &paths.cache, window: None, ring: None };
-            match measure_case(&service, &case, csv, &refs, &ouvrages, &rules, &rules_core, &eval).await {
-                Ok((c, dv, its)) => {
-                    eprintln!("{} : mesuré", case.id);
-                    cases.push(c);
-                    items.extend(its);
-                    if data_versions.is_null() {
-                        data_versions = dv;
-                    }
-                }
-                Err(e) => skipped.push(json!({"id": case.id, "raison": e.to_string()})),
-            }
-        }
-    }
-    // Traces tenues à l'écart : passages de leurs ouvrages de calibration seulement, sur des
-    // extraits (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
-    let mut held_out_measured = Vec::new();
-    for t in manifest.traces.iter().filter(|t| {
-        selection.excluded_held_out.contains(&t.id)
-            && !t.passages_masques.is_empty()
-            && paths.private_present()
-    }) {
-        let Ok(loaded) = load_perso(paths, t, &rules) else {
-            skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
-            continue;
-        };
-        for mut case in loaded {
-            // Points insérés : seulement là où le baro de l'extrait est lu ; bilan non rapporté.
-            let ranges = held_out_baro_ranges(&case, &refs, &rules);
-            if let Err(reason) =
-                crate::inserted::apply(&mut case, &paths.cache, Some(&ranges), &rules).await?
-            {
-                skipped
-                    .push(json!({"id": case.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
-                continue;
-            }
-            match measure_held_out(&service, t, &case, &refs, &ouvrages, &rules, &rules_core, &paths.cache)
-                .await
-            {
-                Ok(its) => {
-                    eprintln!("{} : extraits mesurés ({} mesures d'ouvrage)", case.id, its.len());
-                    held_out_measured.push(json!({"id": case.id, "mesures": its.len()}));
-                    items.extend(its);
-                }
-                Err(_) => skipped
-                    .push(json!({"id": case.id, "raison": "extraits tenus à l'écart : échec du service"})),
-            }
-        }
-    }
-    // Parcours d'osm-surface : R1, R2, M1 et typologie à chaud.
-    let os_wanted = |id: &str| {
-        (ids.is_empty() && groupes.iter().any(|g| g == "osm_surface")) || ids.iter().any(|i| i == id)
-    };
-    let mut os_cases = Vec::new();
-    let mut warm = Vec::new();
-    for entry in manifest.osm_surface.iter().filter(|e| os_wanted(&e.id) && e.serie == Serie::Calibration) {
-        let route = crate::osm_surface::load(&paths.bench, entry)?;
-        match crate::osm_surface::measure(&service, &route).await {
-            Ok(c) => {
-                eprintln!("{} : mesuré", route.id);
-                os_cases.push(c);
-                let (ms, stats) = crate::osm_surface::typology_warm_ms(&paths.cache, &route, 5).await?;
-                warm.push(json!({"id": route.id, "typologie_a_chaud_ms": round(ms, 1), "stats": stats}));
-            }
-            Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
-        }
-    }
-    // Ouvrages : parcours `test1..4` de vcyclist et témoins (calibration).
-    if structures_wanted {
-        items.extend(
-            crate::ouvrages::vc_items(&service, &paths.bench, &tiles, &ouvrages, &mut skipped).await?,
-        );
-    }
-    items.extend(crate::ouvrages::perimeter_items(&ouvrages));
     let limits = crate::ouvrages::corpus_data_limits(&ouvrages, &crate::ouvrages::data_limits(&paths.bench)?);
-    crate::ouvrages::annotate_data_limits(&mut items, &limits);
-    let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
-    let (agregats, mut verdicts) = judge(&cases);
-    let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
-    for (k, v) in typo_verdicts.as_object().into_iter().flatten() {
-        verdicts[k] = v.clone();
-    }
-    let warm_total: f64 = warm.iter().filter_map(|w| w["typologie_a_chaud_ms"].as_f64()).sum();
-    let warm_km: f64 = warm.iter().filter_map(|w| w["stats"]["km"].as_f64()).sum();
-    let mut agregats = agregats;
-    agregats["typologie"] = typo_agregats;
-    agregats["typologie_a_chaud"] = json!({
-        "parcours": warm,
-        "total_ms": round(warm_total, 1),
-        "total_km": round(warm_km, 1),
-        "seuil_ms": 160.0,
-        "profil": if cfg!(debug_assertions) { "debug" } else { "release" }
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
+    let ctx = PassCtx {
+        paths,
+        manifest: &manifest,
+        selection: &selection,
+        refs: &refs,
+        ouvrages: &ouvrages,
+        tiles: &tiles,
+        groupes,
+        ids,
+    };
+    // Deux passes (README §2.2, étape 2) : `distance` au pas de la grille, puis le mode par défaut
+    // `input_with_breakpoints`, rééchantillonné sur la même grille (étape 3).
+    let reference = measure_pass(&service, &ctx).await?;
+    let breakpoints = measure_pass(&service.with_mode(BenchMode::Breakpoints), &ctx).await?;
+    let (cases, ouvrages_public, agregats, mut verdicts, rest) = judge_pass(reference, &limits);
+    let (bp_cases, bp_ouvrages, bp_agregats, mut bp_verdicts, bp_rest) = judge_pass(breakpoints, &limits);
+    let Pass { skipped, data_versions, inserted_report, held_out_measured, .. } = rest;
+    let bp_inserted: Vec<&Value> = bp_cases.iter().filter_map(|c| c.get("points_inseres")).collect();
+    let max_per_km = bp_inserted.iter().filter_map(|v| v["max_sur_un_km"].as_u64()).max().unwrap_or(0);
+    let (bp_len, bp_ins) = bp_inserted.iter().fold((0.0, 0u64), |(l, n), v| {
+        (l + v["longueur_km"].as_f64().unwrap_or(0.0), n + v["points_inseres"].as_u64().unwrap_or(0))
     });
-    agregats["ouvrages"] = ouvrages_agg;
-    for (k, v) in ouvrages_verdicts.as_object().into_iter().flatten() {
-        verdicts[k] = v.clone();
-    }
-    cases.extend(os_cases);
     verdicts["Q1"] = json!(if report.q1.pass() { "pass" } else { "fail" });
+    bp_verdicts["Q1"] = verdicts["Q1"].clone();
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
@@ -1256,7 +1352,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "date": today_utc(),
             "type": "calibration",
             "increment": "MVP",
-            "increment_plan": 4,
+            "increment_plan": 5,
+            "modes": ["distance", "input_with_breakpoints"],
             "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1 et 53225a8)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
@@ -1275,6 +1372,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "extraits_tenus_a_l_ecart": held_out_measured,
             "baro_points_inseres": inserted_report,
             "notes": [
+                "Deux modes (README §2.2, étape 2) : cas, ouvrages, agrégats et verdicts de premier niveau en sampling.mode = distance au pas de 5 m (les mesures point par point des témoins et des parcours vcyclist en mode input) ; clé input_with_breakpoints : mêmes requêtes envoyées dans le mode par défaut, sortie rééchantillonnée sur la même grille de 5 m (étape 3 ; altitude interpolée linéairement entre points consécutifs, null si l'un est sans altitude ; position des points d'entrée = position envoyée ; méthode de la station = none si l'un des deux points est none, sinon dsm_deck ou interpolated_structure si l'un des deux la porte, sinon celle du plus proche), et réduite aux points d'entrée pour les mesures point par point ; points_inseres = bilan des points insérés par cas de calibration (sans position), jamais pour les extraits tenus à l'écart ; typologie à chaud mesurée dans la première passe seulement",
                 "Baro des points insérés (README §2.1, étape 3 ; criteria.yaml preparation.baro_points_inseres) : point insere = 1 gardé seulement si sa position sur la géométrie recalée est à ≤ 30 m d'une ligne de la couche streets (toutes classes, tuile z14 et 8 voisines, cache de la campagne) ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté ; baro_points_inseres = bilan par cas de calibration ; traces tenues à l'écart : règle appliquée sur les seules plages lues des extraits, bilan non rapporté",
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
                 "E3 : baro corrigé localement sur les traces perso, décalage = médiane (baro − MNT LiDAR, profil du service sans correction d'ouvrage) sur les approches de 50 à 300 m de chaque côté du pont, hors autres ouvrages (service ou tuiles) et fenêtres masquées ; moins de 20 stations d'un côté : repli sur la médiane baro − service au sol entre 1 et 3 km du milieu (decalage_repli_1_3km) ; côtés différant de plus de 2 m : reference_incertaine, rapportée, non comptée (README §4 bis.3) ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
@@ -1297,10 +1395,24 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             ]
         },
         "cas": cases,
-        "ouvrages": crate::ouvrages::public(&items),
+        "ouvrages": ouvrages_public,
         "cas_sautes": skipped,
         "agregats": agregats,
         "verdicts": verdicts,
+        "input_with_breakpoints": {
+            "mode": "input_with_breakpoints",
+            "points_inseres": {
+                "longueur_km": round(bp_len, 3),
+                "points_inseres": bp_ins,
+                "inseres_par_km": round(bp_ins as f64 / bp_len.max(1e-9), 3),
+                "max_sur_un_km": max_per_km
+            },
+            "cas": bp_cases,
+            "ouvrages": bp_ouvrages,
+            "cas_sautes": bp_rest.skipped,
+            "agregats": bp_agregats,
+            "verdicts": bp_verdicts
+        },
         "diagnostics": {"cache": {"tuiles": fingerprint.tiles, "octets": fingerprint.bytes}}
     });
     crate::privacy::assert_report_clean(&results, &crate::privacy::private_names(paths))?;

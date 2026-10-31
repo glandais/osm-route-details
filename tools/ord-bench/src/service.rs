@@ -26,10 +26,42 @@ impl std::fmt::Debug for Pt {
     }
 }
 
+/// Mode de sortie dans lequel le banc lit le service (README §2.2, étape 2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BenchMode {
+    /// Requêtes telles quelles (`distance` au pas de la grille, `input`).
+    Reference,
+    /// Mode par défaut `input_with_breakpoints` : une requête `distance` est envoyée dans ce mode
+    /// et sa sortie rééchantillonnée sur la grille demandée (étape 3) ; une requête `input` aussi,
+    /// réduite à ses points d'entrée.
+    Breakpoints,
+}
+
+impl BenchMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Reference => "distance",
+            Self::Breakpoints => "input_with_breakpoints",
+        }
+    }
+}
+
+/// Bilan d'une réponse `input_with_breakpoints` : longueur, points d'entrée et insérés, plus
+/// grand nombre de points insérés sur une fenêtre glissante d'un km. Aucune position.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct InsertedStats {
+    pub length_m: f64,
+    pub input: usize,
+    pub inserted: usize,
+    pub max_per_km: usize,
+}
+
 #[derive(Clone)]
 pub struct Service {
     app: axum::Router,
     state: AppState,
+    mode: BenchMode,
+    stats: std::sync::Arc<std::sync::Mutex<Vec<InsertedStats>>>,
 }
 
 impl std::fmt::Debug for Service {
@@ -71,13 +103,31 @@ impl Service {
     pub async fn start(cache_dir: &Path, offline: bool, variant: Variant) -> anyhow::Result<Self> {
         let config = bench_config(cache_dir, offline, variant);
         let state = AppState::bootstrap(&config, Wiring { pixel_convention: variant.convention }).await?;
-        Ok(Self { app: router(state.clone()), state })
+        Ok(Self::new(state))
+    }
+
+    fn new(state: AppState) -> Self {
+        Self { app: router(state.clone()), state, mode: BenchMode::Reference, stats: Default::default() }
+    }
+
+    /// Le même service, lu dans ce mode.
+    pub fn with_mode(&self, mode: BenchMode) -> Self {
+        Self { mode, stats: Default::default(), ..self.clone() }
+    }
+
+    pub fn mode(&self) -> BenchMode {
+        self.mode
+    }
+
+    /// Bilans des réponses `input_with_breakpoints` depuis le dernier appel (vidés).
+    pub fn take_stats(&self) -> Vec<InsertedStats> {
+        std::mem::take(&mut *self.stats.lock().unwrap_or_else(|e| e.into_inner()))
     }
 
     /// Service en processus sur une configuration donnée (diagnostics : `debug` permis).
     pub async fn start_with(config: &Config) -> anyhow::Result<Self> {
         let state = AppState::bootstrap(config, Wiring { pixel_convention: PixelConvention::Center }).await?;
-        Ok(Self { app: router(state.clone()), state })
+        Ok(Self::new(state))
     }
 
     /// État du service (diagnostics : sources et règles de l'orchestrateur).
@@ -88,6 +138,50 @@ impl Service {
     /// `POST /v1/route-details` ; une réponse non 200 est une erreur qui porte le `code` du
     /// problème RFC 9457 (jamais de coordonnée).
     pub async fn route_details(&self, points: &[Pt], options: Value) -> anyhow::Result<Value> {
+        if self.mode == BenchMode::Breakpoints {
+            return self.route_details_breakpoints(points, options).await;
+        }
+        self.post(points, options).await
+    }
+
+    /// Mode `input_with_breakpoints` : la requête `distance` (ou `input`) est envoyée dans le mode
+    /// par défaut, puis sa sortie est rééchantillonnée sur la grille demandée (ou réduite aux
+    /// points d'entrée), pour que les métriques lisent le même profil qu'en mode de référence.
+    async fn route_details_breakpoints(&self, points: &[Pt], mut options: Value) -> anyhow::Result<Value> {
+        let requested = options["sampling"]["mode"].as_str().unwrap_or("input_with_breakpoints").to_owned();
+        let step = options["sampling"]["step_m"].as_f64();
+        options["sampling"] = json!({"mode": "input_with_breakpoints"});
+        let mut r = self.post(points, options).await?;
+        let pts = r["points"].as_array().cloned().unwrap_or_default();
+        if !pts.is_empty() {
+            let inserted: Vec<f64> =
+                pts.iter().filter(|p| p["origin"] == "inserted").filter_map(|p| p["d_m"].as_f64()).collect();
+            let mut max_per_km = 0;
+            for (i, &x) in inserted.iter().enumerate() {
+                max_per_km = max_per_km.max(inserted[i..].partition_point(|&y| y < x + 1_000.0));
+            }
+            let stats = InsertedStats {
+                length_m: r["summary"]["length_m"].as_f64().unwrap_or(0.0),
+                input: pts.len() - inserted.len(),
+                inserted: inserted.len(),
+                max_per_km,
+            };
+            self.stats.lock().unwrap_or_else(|e| e.into_inner()).push(stats);
+        }
+        match (requested.as_str(), step) {
+            ("input", _) => {
+                let inputs: Vec<Value> = pts.into_iter().filter(|p| p["origin"] == "input").collect();
+                r["points"] = Value::Array(inputs);
+            }
+            ("distance", Some(step)) => {
+                r["points"] = Value::Array(resample(points, &pts, step)?);
+            }
+            _ => {}
+        }
+        Ok(r)
+    }
+
+    async fn post(&self, points: &[Pt], options: Value) -> anyhow::Result<Value> {
         let pts: Vec<Value> = points.iter().map(|p| json!({"lat": p.lat, "lon": p.lon})).collect();
         let body = json!({"points": pts, "options": options}).to_string();
         let req = Request::builder()
@@ -104,5 +198,105 @@ impl Service {
             bail!("service : HTTP {} `{}`", status.as_u16(), value["code"].as_str().unwrap_or("?"));
         }
         Ok(value)
+    }
+}
+
+/// Méthode retenue pour une station de la grille entre deux points de la sortie : `none` si l'un
+/// des deux est sans altitude ; sinon une méthode d'ouvrage (`dsm_deck`, puis
+/// `interpolated_structure`) si l'un des deux en porte une, la station étant interpolée vers un
+/// point d'ouvrage ; sinon celle du point le plus proche.
+fn grid_method<'a>(a: &'a str, b: &'a str, t: f64) -> &'a str {
+    for m in ["none", "dsm_deck", "interpolated_structure"] {
+        if a == m || b == m {
+            return m;
+        }
+    }
+    if t <= 0.5 {
+        a
+    } else {
+        b
+    }
+}
+
+/// Sortie `input_with_breakpoints` rééchantillonnée sur la grille `k × step` (plus la fin) :
+/// interpolation linéaire de l'altitude entre deux points consécutifs (`null` si l'une manque) et
+/// de la position (points d'entrée : position envoyée ; points insérés : position rendue). Entre
+/// deux points consécutifs de la sortie, la trace d'origine est droite : tous les points d'entrée
+/// y sont.
+pub fn resample(request: &[Pt], points: &[Value], step: f64) -> anyhow::Result<Vec<Value>> {
+    struct P<'a> {
+        d: f64,
+        lat: f64,
+        lon: f64,
+        ele: f64,
+        method: &'a str,
+        index: u64,
+    }
+    let mut src: Vec<P<'_>> = Vec::with_capacity(points.len());
+    for p in points {
+        let index = p["index"].as_u64().context("index")?;
+        let (lat, lon) = if p["origin"] == "input" {
+            let q = request.get(index as usize).context("indice d'entrée hors de la requête")?;
+            (q.lat, q.lon)
+        } else {
+            (p["lat"].as_f64().context("lat")?, p["lon"].as_f64().context("lon")?)
+        };
+        src.push(P {
+            d: p["d_m"].as_f64().context("d_m")?,
+            lat,
+            lon,
+            ele: p["ele"].as_f64().unwrap_or(f64::NAN),
+            method: p["ele_method"].as_str().unwrap_or("none"),
+            index,
+        });
+    }
+    let Some(last) = src.last() else { return Ok(Vec::new()) };
+    let length = last.d;
+    let mut grid: Vec<f64> = (0..).map(|k| k as f64 * step).take_while(|x| *x <= length + 1e-3).collect();
+    if grid.last().is_some_and(|x| length - x > 1e-3) {
+        grid.push(length);
+    }
+    let mut out = Vec::with_capacity(grid.len());
+    for x in grid {
+        let x = x.min(length);
+        let i = src.partition_point(|p| p.d <= x).saturating_sub(1).min(src.len() - 1);
+        let j = (i + 1).min(src.len() - 1);
+        let (a, b) = (&src[i], &src[j]);
+        let t = if j > i && b.d > a.d { ((x - a.d) / (b.d - a.d)).clamp(0.0, 1.0) } else { 0.0 };
+        let ele = if t == 0.0 { a.ele } else { a.ele + t * (b.ele - a.ele) };
+        let method = if t == 0.0 { a.method } else { grid_method(a.method, b.method, t) };
+        out.push(json!({
+            "d_m": x,
+            "index": a.index,
+            "lat": a.lat + t * (b.lat - a.lat),
+            "lon": a.lon + t * (b.lon - a.lon),
+            "ele": if ele.is_nan() { Value::Null } else { json!(ele) },
+            "ele_method": method,
+        }));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn breakpoint_output_is_resampled_on_the_grid() {
+        let request = [Pt { lat: 45.0, lon: 6.0 }, Pt { lat: 45.001, lon: 6.0 }];
+        let points = vec![
+            json!({"d_m": 0.0, "index": 0, "origin": "input", "ele": 10.0, "ele_method": "dem"}),
+            json!({"d_m": 50.0, "index": 0, "origin": "inserted", "lat": 45.00045, "lon": 6.0, "ele": 20.0, "ele_method": "dsm_deck", "reasons": ["structure_start"]}),
+            json!({"d_m": 111.0, "index": 1, "origin": "input", "ele": null, "ele_method": "none"}),
+        ];
+        let g = resample(&request, &points, 25.0).unwrap();
+        let d: Vec<f64> = g.iter().map(|p| p["d_m"].as_f64().unwrap()).collect();
+        assert_eq!(d, [0.0, 25.0, 50.0, 75.0, 100.0, 111.0]);
+        assert_eq!(g[1]["ele"], 15.0);
+        assert_eq!(g[1]["ele_method"], "dsm_deck", "interpolée vers un point d'ouvrage");
+        assert_eq!(g[0]["ele_method"], "dem");
+        assert!(g[3]["ele"].is_null() && g[3]["ele_method"] == "none");
+        assert!((g[1]["lat"].as_f64().unwrap() - 45.000225).abs() < 1e-9);
+        assert_eq!(g[5]["index"], 1);
     }
 }
