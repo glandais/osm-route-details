@@ -376,7 +376,12 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
    ou retracé après la date des tuiles), l'ouvrage est marqué `absent_des_donnees`, rapporté
    (`E4_non_couvert`, ou `E3_non_couvert` pour un pont) et non compté ; exemple : Anne-de-Bretagne.
    Inversement, un ouvrage interdit au vélo dans OSM récent mais franchissable dans les tuiles reste
-   dans le périmètre (cas `nv-49`, mesuré en E3 normal). Pour E5, c'est la voie du passage
+   dans le périmètre. La voie de l'ouvrage, dans les tuiles, est l'élément de même nature (`bridge`,
+   `tunnel`) qui suit le mieux sa géométrie : plus petite médiane des distances sur l'emprise,
+   acceptée jusqu'à 15 m, sinon même critère sur toutes les voies. Ce n'est jamais la plus permissive
+   des voies voisines : un trottoir `bicycle=no` longé par une piste cyclable reste hors graphe. Deux
+   candidats à moins de 3 m d'écart de médiane, de périmètres différents : « périmètre ambigu »,
+   rapporté. Pour E5, c'est la voie du passage
    dessous qui compte : la piste sous Cheviré (`chevire-dessous`) reste. Ces ouvrages sont rapportés à part
    (`hors_graphe_velo`) avec leur contrôle propre, sans seuil : la portion est non appariée
    (`matched: false`) et l'avertissement `unmatched_range` est présent ; l'erreur d'altitude est
