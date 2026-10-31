@@ -1,12 +1,12 @@
 //! Chaîne typologie, partie pure (T03) : couloir, graphe par niveaux, HMM, tronçons typés,
-//! segments homogènes. Les ouvrages (`Structure`, passages, extension `Step::Need`) arrivent à
-//! l'incrément 4.
+//! ouvrages et passages (graphe des ouvrages, extension aux tuiles voisines), segments homogènes.
 
 pub mod corridor;
 pub mod graph;
 pub mod matcher;
 pub mod runs;
 pub mod segments;
+pub mod structures;
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -22,6 +22,10 @@ use crate::rules::TypologyRules;
 pub use corridor::{corridor_tiles, Corridor};
 pub use graph::{ClassId, EdgeClass, LineId, StreetGraph};
 pub use segments::{build_segments, TypedSegment};
+pub use structures::{
+    EndKind, PassageDoubt, PassageId, Structure, StructureElement, StructureEnd, StructureId, StructureKind,
+    StructurePassage, StructuresOut, UnresolvedEnd,
+};
 
 /// Élément d'ouvrage : une ligne de tuile recollée aux bords.
 pub type ElementId = LineId;
@@ -70,6 +74,10 @@ pub struct TypologyOutput {
     pub coverage: TypologyCoverage,
     pub classes: Arc<[EdgeClass]>,
     pub stats: TypologyStats,
+    /// Ouvrages appariés, avec leurs extrémités sur l'ouvrage.
+    pub structures: Vec<Structure>,
+    /// Passages du parcours sur ces ouvrages, triés par distance.
+    pub passages: Vec<StructurePassage>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -137,15 +145,30 @@ fn ranges(runs: &[TypedRun], want: impl Fn(&RunMatch) -> bool) -> Vec<Range<f64>
     out
 }
 
-/// Calcul complet sur les tuiles lues du couloir (`tiles` triées par clé).
-pub fn compute(
+/// Appariement fait, avant les ouvrages : graphe, chemin, tronçons et couverture.
+pub struct Matched {
+    graph: StreetGraph,
+    path: matcher::MatchedPath,
+    runs: Vec<TypedRun>,
+    coverage: TypologyCoverage,
+    stats: TypologyStats,
+}
+
+impl std::fmt::Debug for Matched {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Matched").field("stats", &self.stats).finish_non_exhaustive()
+    }
+}
+
+/// Appariement sur les tuiles lues du couloir (`tiles` triées par clé).
+pub fn match_route(
     route: &PreparedRoute,
     grid: Grid,
     tiles: &[(TileKey, TileState)],
     caps: &SchemaCapabilities,
     rules: &TypologyRules,
     budget: &dyn Budget,
-) -> Result<TypologyOutput, TypologyError> {
+) -> Result<Matched, TypologyError> {
     let states: FxHashMap<TileKey, &TileState> = tiles.iter().map(|(k, s)| (*k, s)).collect();
     let data: Vec<Arc<StreetTile>> = tiles
         .iter()
@@ -183,8 +206,41 @@ pub fn compute(
             .filter(|s| matches!(s, matcher::ObsState::Matched { .. }))
             .count(),
     };
-    Ok(TypologyOutput { runs, coverage, classes: graph.classes.into(), stats })
+    Ok(Matched { graph, path, runs, coverage, stats })
+}
+
+/// Ouvrages et passages sur toutes les tuiles lues (couloir et extensions). `Err(tuiles)` : il
+/// faut lire ces tuiles voisines et recommencer (seulement si `allow_need`).
+pub fn finish(
+    m: &Matched,
+    tiles: &[(TileKey, TileState)],
+    rules: &TypologyRules,
+    allow_need: bool,
+) -> Result<TypologyOutput, Vec<TileKey>> {
+    let s = structures::resolve(&m.graph, &m.path, &m.runs, tiles, &rules.structures, allow_need)?;
+    Ok(TypologyOutput {
+        runs: m.runs.clone(),
+        coverage: m.coverage.clone(),
+        classes: m.graph.classes.clone().into(),
+        stats: TypologyStats { tiles: tiles.len(), ..m.stats },
+        structures: s.structures,
+        passages: s.passages,
+    })
+}
+
+/// Calcul complet sur les tuiles lues, sans lecture de tuile voisine : une extrémité d'ouvrage
+/// hors des tuiles reste non résolue.
+pub fn compute(
+    route: &PreparedRoute,
+    grid: Grid,
+    tiles: &[(TileKey, TileState)],
+    caps: &SchemaCapabilities,
+    rules: &TypologyRules,
+    budget: &dyn Budget,
+) -> Result<TypologyOutput, TypologyError> {
+    let m = match_route(route, grid, tiles, caps, rules, budget)?;
+    finish(&m, tiles, rules, false).map_err(|_| TypologyError::Internal("extension without need".into()))
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -71,7 +71,8 @@ async fn ign_is_read_first_in_france() {
     assert!(ign.hits() > 0);
 }
 
-/// Scénario T05 §2.4 : IGN en 503 → 200 avec `terrain_fallback`, altitudes lues dans Mapterhorn.
+/// Scénario T05 §2.4 : IGN en 503 → 200 avec `terrain_fallback` et `dsm_unavailable`, altitudes
+/// lues dans Mapterhorn, pont (600–700 m) en `interpolated_structure`.
 #[tokio::test]
 async fn ign_503_gives_200_with_terrain_fallback() {
     let ign = ScriptedServer::start(|_, _| ScriptedResponse::status(503)).await;
@@ -81,7 +82,8 @@ async fn ign_503_gives_200_with_terrain_fallback() {
     let (status, r) = post_route(&config(&ign, &mt, dir.path()), &pts).await;
     assert_eq!(status, StatusCode::OK, "{r}");
     assert_eq!(r["status"], "complete", "un repli absorbé n'est pas une panne");
-    assert_eq!(codes(&r), ["terrain_fallback"]);
+    assert_eq!(codes(&r), ["terrain_fallback", "dsm_unavailable"]);
+    assert_eq!(r["summary"]["structures"][0]["method"], "interpolated_structure");
     let w = &r["quality"]["warnings"][0];
     assert_eq!((w["from_m"].as_f64(), w["to_m"].as_f64()), (Some(0.0), Some(1_000.0)));
     assert_eq!(

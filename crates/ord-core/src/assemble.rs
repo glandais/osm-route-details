@@ -2,7 +2,8 @@
 //! `terrain_m`, `quality.terrain`, `quality.elevation_coverage`, avertissements d'élévation et
 //! `outside_primary_zone`, `status`, versions et attributions. Incrément 3 : `segments[]`,
 //! répartitions `by_*_m`, `unknown_m`, `matched_ratio`, `inferred_surface_ratio`,
-//! `unmatched_range`, `typology_missing` et `typology_unavailable`. Ouvrages : incrément 4.
+//! `unmatched_range`, `typology_missing` et `typology_unavailable`. Incrément 4 :
+//! `summary.structures[]` et `quality.structure_correction`.
 //!
 //! Fonction pure ; les arrondis de sortie sont appliqués ici (T01 §9).
 
@@ -19,6 +20,7 @@ use ord_domain::street::WayAttrs;
 
 use crate::classification::{StructureClass, SurfaceClass, SurfaceSource, WayKind};
 use crate::elevation::derive::{AdaptedRange, GainResult};
+use crate::elevation::fusion::{StructureCorrectionReport, StructureOutcome};
 use crate::elevation::{EleMethod, ElevationProfile, OutputPoint, TerrainRange};
 use crate::round::{cm, coord, pct, ratio};
 use crate::typology::{TypedSegment, TypologyOutput};
@@ -42,6 +44,9 @@ pub struct Summary {
     pub by_way_kind_m: BTreeMap<WayKind, f64>,
     /// Longueur non appariée (`matched = false`).
     pub unknown_m: f64,
+    /// Ponts et tunnels rencontrés, triés par distance (une entrée par suite d'éléments de même
+    /// nature d'un passage).
+    pub structures: Vec<StructureOutcome>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,6 +54,7 @@ pub struct Quality {
     pub matched_ratio: f64,
     pub inferred_surface_ratio: f64,
     pub elevation_coverage: f64,
+    pub structure_correction: StructureCorrectionReport,
     pub terrain: Vec<TerrainRange>,
 }
 
@@ -293,11 +299,17 @@ pub fn assemble(
             by_surface_source_m: rounded(by_surface_source_m),
             by_way_kind_m: rounded(by_way_kind_m),
             unknown_m: cm(unknown_m),
+            structures: profile
+                .structures
+                .iter()
+                .map(|o| StructureOutcome { from_m: cm(o.from_m), to_m: cm(o.to_m), ..*o })
+                .collect(),
         },
         quality: Quality {
             matched_ratio: ratio(share(length - unknown_m)),
             inferred_surface_ratio: ratio(share(inferred_m)),
             elevation_coverage: ratio(elevation_coverage),
+            structure_correction: profile.correction.clone(),
             terrain: profile
                 .terrain_ranges
                 .iter()
@@ -358,7 +370,7 @@ fn merge_warnings(mut warnings: Vec<Warning>) -> Vec<Warning> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elevation::tests::{line, sample};
+    use crate::elevation::tests::{line, no_fill, sample};
     use crate::elevation::{fuse, sample_output, RawProfile};
     use crate::rules::Rules;
     use crate::typology::{build_segments, EdgeClass, RunMatch, TypedRun, TypologyCoverage};
@@ -388,8 +400,18 @@ mod tests {
             missing: rng(RunMatch::NoData { failed: false }),
             unavailable: rng(RunMatch::NoData { failed: true }),
         };
-        let segs = build_segments(&runs, &classes, route, 20.0);
-        (TypologyOutput { runs, coverage, classes, stats: Default::default() }, segs)
+        let segs = build_segments(&runs, &classes, &[], route, 20.0);
+        (
+            TypologyOutput {
+                runs,
+                coverage,
+                classes,
+                stats: Default::default(),
+                structures: Vec::new(),
+                passages: Vec::new(),
+            },
+            segs,
+        )
     }
 
     fn part<'a>(out: &'a TypologyOutput, segs: &'a [TypedSegment]) -> TypologyPart<'a> {
@@ -410,7 +432,7 @@ mod tests {
             .collect();
         let opts =
             RequestOptions { sampling: Sampling::Distance { step_m: 10.0 }, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
+        let p = fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &no_fill()).unwrap();
         let pts = sample_output(&route, &p, &opts.sampling);
         let (out, segs) = typology(&route, &[]);
         assemble(&route, &CoverageRanges::default(), part(&out, &segs), p, pts, versions(), Vec::new())
@@ -450,7 +472,8 @@ mod tests {
         let route = line(100.0);
         let terrain = (0..route.samples.len()).map(|_| sample(Some(5.0), None)).collect();
         let opts = RequestOptions::default();
-        let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
+        let p =
+            fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &Rules::default()).unwrap();
         let cov = CoverageRanges { outside_primary_zone: vec![40.0..100.0], ..CoverageRanges::default() };
         let (out, segs) = typology(&route, &[]);
         let r = assemble(&route, &cov, part(&out, &segs), p, Vec::new(), versions(), Vec::new());
@@ -465,7 +488,8 @@ mod tests {
         let route = line(100.0);
         let terrain = (0..route.samples.len()).map(|i| sample(Some(10.0 + i as f32), None)).collect();
         let opts = RequestOptions::default();
-        let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
+        let p =
+            fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &Rules::default()).unwrap();
         let gaps = [(20.0, 30.0, RunMatch::Unmatched), (60.0, 70.0, RunMatch::NoData { failed: false })];
         let (out, segs) = typology(&route, &gaps);
         let r = assemble(
@@ -508,8 +532,14 @@ mod tests {
         let route = line(100.0);
         let mk = |gaps: &[(f64, f64, RunMatch)], failed: bool| {
             let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
-            let p =
-                fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+            let p = fuse(
+                &route,
+                &RawProfile { terrain, structures: None },
+                None,
+                &RequestOptions::default(),
+                &Rules::default(),
+            )
+            .unwrap();
             let (out, segs) = typology(&route, gaps);
             let t = TypologyPart { output: &out, segments: &segs, failed, debug: false };
             assemble(&route, &CoverageRanges::default(), t, p, Vec::new(), versions(), Vec::new())

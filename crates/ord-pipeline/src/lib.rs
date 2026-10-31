@@ -1,7 +1,8 @@
 //! Orchestrateur : admission, budget, chaînes typologie et élévation, décision (T01 §3, §5).
 //!
-//! Incrément 3 : préparation → zonage (zone France) → typologie et lecture du MNT en parallèle
-//! (`tokio::join!`) → décision → fusion, segments, points de sortie et assemblage.
+//! Préparation → zonage (zone France) → typologie (ouvrages et extensions compris) et lecture du
+//! MNT en parallèle (`tokio::join!`) → décision → lectures des ouvrages (MNS, extensions) → fusion,
+//! segments, points de sortie et assemblage.
 //! L'admission (file bornée, 503 `overloaded`) arrive à l'incrément 6.
 
 pub mod decision;

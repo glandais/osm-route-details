@@ -5,6 +5,7 @@
 //! Apache-2.0, © Gabriel Landais) : la classe est `unpaved` dès que la surface Valhalla est pire que
 //! `paved_rough`.
 
+pub mod reconcile;
 pub mod tables;
 
 use ord_domain::street::{SchemaCapabilities, StructureTag, WayAttrs};
@@ -143,6 +144,8 @@ pub fn classify(a: &WayAttrs, caps: &SchemaCapabilities) -> Classified {
         footway_like: tables::FOOTWAY_LIKE.contains(&kind),
     }
 }
+
+pub use reconcile::{reconcile, DetectedStructure, GroupRef, StructureVerdict};
 
 #[cfg(test)]
 pub(crate) mod tests;

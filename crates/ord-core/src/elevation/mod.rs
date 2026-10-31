@@ -1,23 +1,28 @@
 //! Profil d'élévation (T04) : profil brut lu par le pipeline, fusion, dérivés, points de sortie.
 //!
-//! Incrément 2 : MNT seul (IGN LiDAR HD et repli Mapterhorn). `fuse` ne corrige aucun ouvrage
-//! (pas de typologie) et ne comble aucun trou (incrément 4) : il pose la méthode `dem` ou `none`,
-//! les plages de terrain et de manque, le D+ du preset avec adaptation du seuil sur GLO-30, le
-//! lissage optionnel, et les avertissements `terrain_fallback` et `dsm_source`.
+//! `fuse` part du MNT brut (méthode `dem` ou `none`), corrige les ouvrages OSM (`fusion` : tablier
+//! MNS, interpolation, tunnels), comble ensuite les trous courts (`gap_filled`), puis calcule les
+//! plages de terrain et de manque, le D+ du preset avec adaptation du seuil sur GLO-30, le lissage
+//! optionnel, et les avertissements de `fuse` (T06 §4).
 
 pub mod derive;
+pub mod fusion;
 pub mod output;
 
 use std::fmt;
 
-use ord_domain::elevation::{DemKind, Missing, TerrainOrigin, TerrainSample};
+use ord_domain::elevation::{DemKind, DsmSample, Missing, TerrainOrigin, TerrainSample};
 use ord_domain::report::{Warning, WarningCode};
 use ord_domain::request::RequestOptions;
 use ord_domain::route::PreparedRoute;
 use serde::Serialize;
 
+use crate::classification::StructureVerdict;
 use crate::rules::Rules;
+use crate::typology::TypologyOutput;
 use derive::{gain_on_runs_with, smooth_profile, AdaptedRange, GainParams, GainResult};
+use fusion::plan::StructurePlan;
+use fusion::{StructureCorrectionReport, StructureOutcome};
 
 pub use output::{sample_output, OutputPoint, PointOrigin};
 
@@ -33,10 +38,26 @@ pub enum EleMethod {
 }
 
 /// Profil brut : un échantillon de terrain par station de `PreparedRoute::samples`, jamais modifié
-/// ensuite (T04 §2.2). Défini ici, et non dans `ord-pipeline`, parce que `fuse` le consomme.
+/// ensuite (T04 §2.2), et les lectures des ouvrages (étape 4c). Défini ici, et non dans
+/// `ord-pipeline`, parce que `fuse` le consomme.
 #[derive(Clone, PartialEq)]
 pub struct RawProfile {
     pub terrain: Vec<TerrainSample>,
+    /// Lectures des ouvrages : absentes sans typologie ou avec `structure_correction: false`.
+    pub structures: Option<StructureSamples>,
+}
+
+/// Lectures de l'étape 4c, dans l'ordre du plan : MNS aux stations des ponts, MNT et MNS hors du
+/// parcours (extensions de l'axe, sondes au-delà d'une culée).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StructureSamples {
+    pub plan: StructurePlan,
+    /// MNS de chaque station de `plan.route_dsm`.
+    pub route_dsm: Vec<DsmSample>,
+    /// Terrain de chaque point de `plan.off_route`.
+    pub off_terrain: Vec<TerrainSample>,
+    /// MNS de chaque point de `plan.off_route` (`None` : non demandé).
+    pub off_dsm: Vec<Option<DsmSample>>,
 }
 
 impl fmt::Debug for RawProfile {
@@ -95,6 +116,10 @@ pub struct ElevationProfile {
     pub missing: Vec<MissingRange>,
     pub warnings: Vec<Warning>,
     pub length_m: f64,
+    /// Entrées de `summary.structures[]`, triées par distance.
+    pub structures: Vec<StructureOutcome>,
+    pub verdicts: Vec<StructureVerdict>,
+    pub correction: StructureCorrectionReport,
 }
 
 impl fmt::Debug for ElevationProfile {
@@ -234,11 +259,54 @@ fn measured(origin: TerrainOrigin) -> bool {
     matches!(origin, TerrainOrigin::IgnLidarHd | TerrainOrigin::MapterhornMeasured)
 }
 
-/// Fusion du profil (T04 §5.1), réduite au MNT seul : départ `ele = MNT brut`, méthode `dem` ou
-/// `none` ; plages de terrain et de manque ; D+ du preset ; lissage optionnel `ele_smoothed`.
+/// Suites de `none` d'au plus `max_m`, encadrées de valeurs, interpolées linéairement
+/// (`gap_filled`, T04 §5.1 étape 3) ; renvoie les plages comblées.
+fn fill_gaps(
+    d: &[f64],
+    length: f64,
+    ele: &mut [f64],
+    method: &mut [EleMethod],
+    max_m: f64,
+) -> Vec<(f64, f64)> {
+    let n = ele.len();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if !ele[i].is_nan() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && ele[i].is_nan() {
+            i += 1;
+        }
+        // Stations `start..i` sans altitude ; bornes `start − 1` et `i`.
+        if start == 0 || i >= n {
+            continue;
+        }
+        let (a, b) = (start - 1, i);
+        let (from, to) = station_span(d, length, start, i - 1);
+        if to - from > max_m {
+            continue;
+        }
+        for k in start..i {
+            let t = (d[k] - d[a]) / (d[b] - d[a]);
+            ele[k] = ele[a] + (ele[b] - ele[a]) * t;
+            method[k] = EleMethod::GapFilled;
+        }
+        out.push((from, to));
+    }
+    out
+}
+
+/// Fusion du profil (T04 §5.1) : départ `ele = MNT brut`, méthode `dem` ou `none` ; correction
+/// des ouvrages OSM ; comblement des trous courts ; plages de terrain et de manque ; D+ du
+/// preset ; lissage optionnel `ele_smoothed`. `typo = None` : typologie absente sur tout le
+/// parcours (aucun ouvrage connu).
 pub fn fuse(
     route: &PreparedRoute,
     raw: &RawProfile,
+    typo: Option<&TypologyOutput>,
     opts: &RequestOptions,
     rules: &Rules,
 ) -> Result<ElevationProfile, ElevationError> {
@@ -251,9 +319,18 @@ pub fn fuse(
     }
     let d: Vec<f64> = route.samples.iter().map(|s| s.d_m).collect();
     let length = route.length_m;
-    let ele: Vec<f64> = raw.terrain.iter().map(|t| t.ele.map_or(f64::NAN, f64::from)).collect();
-    let method: Vec<EleMethod> =
+    let mut ele: Vec<f64> = raw.terrain.iter().map(|t| t.ele.map_or(f64::NAN, f64::from)).collect();
+    let mut method: Vec<EleMethod> =
         ele.iter().map(|e| if e.is_nan() { EleMethod::None } else { EleMethod::Dem }).collect();
+    // Ouvrages d'abord, trous ensuite (doc 01 §3, T04 §8.10).
+    let correction = match typo {
+        Some(t) if opts.structure_correction => {
+            fusion::correct(route, &raw.terrain, raw.structures.as_ref(), t, rules, &mut ele, &mut method)
+        }
+        Some(t) => fusion::disabled(t),
+        None => fusion::Correction::default(),
+    };
+    let filled = fill_gaps(&d, length, &mut ele, &mut method, rules.elevation.gap_fill_max_m);
     let terrain: Vec<StationTerrain> = raw
         .terrain
         .iter()
@@ -280,7 +357,8 @@ pub fn fuse(
     let missing_keys: Vec<Option<Missing>> = raw
         .terrain
         .iter()
-        .map(|t| if t.ele.is_some() { None } else { Some(t.missing.unwrap_or(Missing::NoData)) })
+        .zip(&ele)
+        .map(|(t, e)| if !e.is_nan() { None } else { Some(t.missing.unwrap_or(Missing::NoData)) })
         .collect();
     let missing: Vec<MissingRange> = runs(&d, length, &missing_keys)
         .into_iter()
@@ -301,6 +379,12 @@ pub fn fuse(
             },
         })
         .collect();
+    warnings.extend(filled.iter().map(|&(from, to)| Warning {
+        code: WarningCode::ElevationGapFilled,
+        message: "short elevation gap filled linearly".into(),
+        range: Some(from..to),
+    }));
+    warnings.extend(correction.warnings.iter().cloned());
     // Repli subi : tuiles IGN en échec relues dans Mapterhorn (T06 §4).
     warnings.extend(terrain_ranges.iter().filter(|r: &&TerrainRange| r.fallback_after_error).map(|r| {
         Warning {
@@ -368,6 +452,13 @@ pub fn fuse(
         out
     });
 
+    let unavailable = typo.is_none_or(|t| {
+        let lost: f64 =
+            t.coverage.missing.iter().chain(&t.coverage.unavailable).map(|r| r.end - r.start).sum();
+        lost >= length - 1e-6
+    });
+    let report =
+        StructureCorrectionReport::new(&correction.outcomes, !opts.structure_correction, unavailable);
     Ok(ElevationProfile {
         d,
         ele,
@@ -379,6 +470,9 @@ pub fn fuse(
         missing,
         warnings,
         length_m: length,
+        structures: correction.outcomes,
+        verdicts: correction.verdicts,
+        correction: report,
     })
 }
 
@@ -400,6 +494,13 @@ pub(crate) mod tests {
         }
     }
 
+    /// Règles sans comblement des trous : les tests de manque gardent leurs trous courts.
+    pub(crate) fn no_fill() -> Rules {
+        let mut r = Rules::default();
+        r.elevation.gap_fill_max_m = 0.0;
+        r
+    }
+
     pub(crate) fn line(length_m: f64) -> PreparedRoute {
         let o = LatLon::new(45.0, 6.0);
         let b = LatLon::new(45.0 + (length_m / EARTH_RADIUS_M).to_degrees(), 6.0);
@@ -417,7 +518,14 @@ pub(crate) mod tests {
                 _ => sample(Some(100.0 + i as f32), None),
             })
             .collect();
-        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &no_fill(),
+        )
+        .unwrap();
         let total: f64 = p.terrain_ranges.iter().map(|r| r.to_m - r.from_m).sum();
         assert!((total - route.length_m).abs() < 1e-6);
         assert_eq!(p.terrain_ranges.len(), 3);
@@ -429,13 +537,66 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn short_gaps_are_filled_long_gaps_kept() {
+        let route = line(400.0);
+        let n = route.samples.len();
+        // Trou de 20 m (stations 10 à 13) comblé ; trou de 150 m (stations 40 à 69) gardé.
+        let terrain: Vec<TerrainSample> = (0..n)
+            .map(|i| {
+                if (10..14).contains(&i) || (40..70).contains(&i) {
+                    sample(None, Some(Missing::NoData))
+                } else {
+                    sample(Some(i as f32), None)
+                }
+            })
+            .collect();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
+        assert_eq!(p.method[11], EleMethod::GapFilled);
+        assert!((p.ele[11] - 11.0).abs() < 1e-9, "interpolation linéaire");
+        assert_eq!(p.method[50], EleMethod::None);
+        let codes: Vec<WarningCode> = p.warnings.iter().map(|w| w.code).collect();
+        assert!(
+            codes.contains(&WarningCode::ElevationGapFilled)
+                && codes.contains(&WarningCode::ElevationMissing)
+        );
+        assert_eq!(p.missing.len(), 1, "seul le trou long reste");
+        // Un trou au bout du parcours n'est jamais comblé (pas encadré).
+        let terrain: Vec<TerrainSample> = (0..n)
+            .map(|i| if i < 3 { sample(None, Some(Missing::NoData)) } else { sample(Some(1.0), None) })
+            .collect();
+        let q = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
+        assert_eq!(q.method[0], EleMethod::None);
+    }
+
+    #[test]
     fn at_interpolates_and_propagates_none() {
         let route = line(20.0);
         let terrain: Vec<TerrainSample> = [Some(10.0), Some(20.0), None, Some(40.0), Some(50.0)]
             .iter()
             .map(|e| sample(*e, e.is_none().then_some(Missing::NoData)))
             .collect();
-        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &no_fill(),
+        )
+        .unwrap();
         assert_eq!(p.at(2.5).ele, Some(15.0));
         assert_eq!(p.at(5.0).ele, Some(20.0));
         assert_eq!(p.at(7.0).ele, None);
@@ -471,9 +632,9 @@ pub(crate) mod tests {
                 }
             })
             .collect();
-        let raw = RawProfile { terrain };
+        let raw = RawProfile { terrain, structures: None };
         let opts = RequestOptions { gain_preset: GainPreset::Barometric, ..RequestOptions::default() };
-        let p = fuse(&route, &raw, &opts, &Rules::default()).unwrap();
+        let p = fuse(&route, &raw, None, &opts, &Rules::default()).unwrap();
         assert_eq!(p.gain.params.adapted.len(), 1);
         let a = &p.gain.params.adapted[0];
         assert!((a.from_m - 997.5).abs() < 1e-6 && (a.to_m - 2_000.0).abs() < 1e-6, "{a:?}");
@@ -482,13 +643,13 @@ pub(crate) mod tests {
         // Sans adaptation, les bosses de la seconde moitié compteraient.
         let mut rules = Rules::default();
         rules.elevation.gain.glo30_threshold_m = 0.0;
-        let q = fuse(&route, &raw, &opts, &rules).unwrap();
+        let q = fuse(&route, &raw, None, &opts, &rules).unwrap();
         assert!(q.gain.params.adapted.is_empty());
         assert!(q.gain.gain_m > p.gain.gain_m + 20.0, "{} vs {}", q.gain.gain_m, p.gain.gain_m);
         // Pas d'adaptation sous `raw`, ni quand le preset est déjà au-dessus.
         for preset in [GainPreset::Raw, GainPreset::Gps] {
             let o = RequestOptions { gain_preset: preset, ..RequestOptions::default() };
-            assert!(fuse(&route, &raw, &o, &Rules::default()).unwrap().gain.params.adapted.is_empty());
+            assert!(fuse(&route, &raw, None, &o, &Rules::default()).unwrap().gain.params.adapted.is_empty());
         }
     }
 
@@ -519,7 +680,14 @@ pub(crate) mod tests {
         let route = line(50.0);
         let n = route.samples.len();
         let terrain = (0..n).map(|i| glo(10.0, DemKind::Dtm, (3..=5).contains(&i))).collect();
-        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
         let w: Vec<_> = p.warnings.iter().filter(|w| w.code == WarningCode::TerrainFallback).collect();
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].range, Some(12.5..27.5));
@@ -539,7 +707,7 @@ pub(crate) mod tests {
             })
             .collect();
         let opts = RequestOptions { smoothing_m: 20.0, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
+        let p = fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &no_fill()).unwrap();
         let s = p.ele_smoothed.as_ref().unwrap();
         assert!(s[10].is_nan());
         assert!(s.iter().enumerate().all(|(i, v)| i == 10 || v.is_finite()));

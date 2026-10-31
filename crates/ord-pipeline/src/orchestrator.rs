@@ -1,4 +1,4 @@
-//! Orchestrateur (T01 §5.1, étapes 2, 3, 4a ∥ 4b, 5, 6, 7, 8, 9).
+//! Orchestrateur (T01 §5.1, étapes 2, 3, 4a ∥ 4b, 5, 4c, 6, 7, 8, 9).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +17,7 @@ use ord_domain::elevation::{Missing, TerrainReader};
 use ord_domain::request::ValidatedRequest;
 
 use crate::decision::decide_outcome;
-use crate::elevation::sample_raw;
+use crate::elevation::{sample_raw, sample_structures};
 use crate::typology::TypologyChain;
 use crate::{Outcome, PipelineError};
 
@@ -76,6 +76,11 @@ impl Orchestrator {
         &self.rules
     }
 
+    /// Sources du service (diagnostics du banc : étapes du pipeline rejouées une à une).
+    pub fn sources(&self) -> &Sources {
+        &self.sources
+    }
+
     /// Calcule le rapport ; l'échéance du contexte borne tout le pipeline (504, jamais de réponse
     /// tronquée).
     pub async fn run(&self, req: ValidatedRequest, ctx: &RequestCtx) -> Result<RouteReport, PipelineError> {
@@ -112,7 +117,7 @@ impl Orchestrator {
             self.sources.typology.run(Arc::clone(&route), ctx),
             sample_raw(&route, self.sources.terrain.as_ref(), ctx)
         );
-        let (typo, raw) = (typo?, raw?);
+        let (typo, mut raw) = (typo?, raw?);
 
         // 5. Décision. Un repli Mapterhorn absorbé est une donnée (`terrain_fallback`), pas une panne.
         let elevation = if raw.terrain.iter().any(|t| t.missing == Some(Missing::Failed)) {
@@ -130,6 +135,14 @@ impl Orchestrator {
             Outcome::Proceed { typology_failed, .. } => typology_failed,
         };
 
+        // 4c. Lectures des ouvrages (MNS des ponts, extensions hors du parcours), seulement si la
+        // correction est demandée.
+        if options.structure_correction {
+            check()?;
+            sample_structures(&mut raw, &route, &typo, self.sources.terrain.as_ref(), ctx, &self.rules)
+                .await?;
+        }
+
         let versions = Versions {
             api_version: self.api_version,
             rules_version: RULES_VERSION,
@@ -141,8 +154,14 @@ impl Orchestrator {
         // 6 à 9 : une seule tâche bloquante.
         let rules = Arc::clone(&self.rules);
         tokio::task::spawn_blocking(move || {
-            let profile = fuse(&route, &raw, &options, &rules)?;
-            let segments = build_segments(&typo.runs, &typo.classes, &route, rules.typology.min_segment_m);
+            let profile = fuse(&route, &raw, Some(&typo), &options, &rules)?;
+            let segments = build_segments(
+                &typo.runs,
+                &typo.classes,
+                &profile.verdicts,
+                &route,
+                rules.typology.min_segment_m,
+            );
             let points = sample_output(&route, &profile, &options.sampling);
             let part = TypologyPart {
                 output: &typo,
@@ -181,7 +200,8 @@ mod tests {
             pts.iter()
                 .enumerate()
                 .map(|(i, _)| {
-                    let missing = if i == 1 { self.0 } else { None };
+                    // Panne de la station 1 à la fin : trou non encadré, jamais comblé.
+                    let missing = if i >= 1 { self.0 } else { None };
                     TerrainSample {
                         ele: missing.is_none().then_some(42.0),
                         origin: if missing.is_none() {
@@ -260,6 +280,8 @@ mod tests {
                 coverage: Default::default(),
                 classes,
                 stats: Default::default(),
+                structures: Vec::new(),
+                passages: Vec::new(),
             })
         }
     }

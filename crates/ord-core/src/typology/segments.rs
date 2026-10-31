@@ -1,12 +1,13 @@
-//! Segments homogènes du contrat (T03 §8), sans verdicts d'ouvrage à l'incrément 3 : l'ouvrage est
-//! celui des tags OSM (`structure_source = osm`).
+//! Segments homogènes du contrat (T03 §8). Les verdicts de `reconcile` fixent la source d'un
+//! ouvrage : au MVP, tout ouvrage est `osm` ; un verdict `osm_heuristic` (V1) change seulement la
+//! source sur sa plage.
 
 use ord_domain::route::PreparedRoute;
 
 use super::graph::{ClassId, EdgeClass, LineId};
 use super::{RunMatch, TypedRun};
 use crate::classification::{
-    Classified, StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind,
+    Classified, StructureClass, StructureSource, StructureVerdict, SurfaceClass, SurfaceSource, WayKind,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,6 +80,7 @@ fn merge(segs: Vec<TypedSegment>) -> Vec<TypedSegment> {
 pub fn build_segments(
     runs: &[TypedRun],
     classes: &[EdgeClass],
+    verdicts: &[StructureVerdict],
     route: &PreparedRoute,
     min_segment_m: f64,
 ) -> Vec<TypedSegment> {
@@ -91,8 +93,13 @@ pub fn build_segments(
                 }
                 RunMatch::Unmatched | RunMatch::NoData { .. } => (Classified::UNMATCHED, false, None, None),
             };
-            let structure_source = matches!(c.structure, StructureClass::Bridge | StructureClass::Tunnel)
-                .then_some(StructureSource::Osm);
+            let mid = 0.5 * (r.from_m + r.to_m);
+            let source = verdicts
+                .iter()
+                .find(|v| v.from_m <= mid && mid <= v.to_m)
+                .map_or(StructureSource::Osm, |v| v.source);
+            let structure_source =
+                matches!(c.structure, StructureClass::Bridge | StructureClass::Tunnel).then_some(source);
             TypedSegment {
                 from_m: r.from_m,
                 to_m: r.to_m,

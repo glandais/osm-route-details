@@ -13,11 +13,11 @@ use crate::classification::{StructureClass, SurfaceClass, SurfaceSource, WayKind
 use crate::prepare::prepare;
 use crate::rules::TypologyRules;
 
-const ORIGIN: LatLon = LatLon::new(47.2, -1.5);
-const GRID: Grid = Grid::new(14, 4096);
+pub(crate) const ORIGIN: LatLon = LatLon::new(47.2, -1.5);
+pub(crate) const GRID: Grid = Grid::new(14, 4096);
 
 /// Mètres vers l'est et le nord de l'origine.
-fn at(east: f64, north: f64) -> LatLon {
+pub(crate) fn at(east: f64, north: f64) -> LatLon {
     let lat = ORIGIN.lat + (north / EARTH_RADIUS_M).to_degrees();
     let lon = ORIGIN.lon + (east / (EARTH_RADIUS_M * ORIGIN.lat.to_radians().cos())).to_degrees();
     LatLon::new(lat, lon)
@@ -27,17 +27,17 @@ fn u(east: f64, north: f64) -> [f64; 2] {
     GRID.to_units(at(east, north))
 }
 
-struct Net {
+pub(crate) struct Net {
     attrs: Vec<WayAttrs>,
     lines: Vec<StreetLine>,
 }
 
 impl Net {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { attrs: Vec::new(), lines: Vec::new() }
     }
 
-    fn add(mut self, a: WayAttrs, pts: &[(f64, f64)]) -> Self {
+    pub(crate) fn add(mut self, a: WayAttrs, pts: &[(f64, f64)]) -> Self {
         self.attrs.push(a);
         let points = pts.iter().map(|&(e, n)| u(e, n)).collect();
         self.lines.push(StreetLine { attr: (self.attrs.len() - 1) as u32, points, cut: [false, false] });
@@ -46,7 +46,7 @@ impl Net {
 
     /// Tuiles du couloir : la première porte tout le réseau, les autres sont vides ; `fail` met
     /// en panne la tuile qui contient ce point.
-    fn tiles(self, route: &[LatLon], fail: Option<LatLon>) -> Vec<(TileKey, TileState)> {
+    pub(crate) fn tiles(self, route: &[LatLon], fail: Option<LatLon>) -> Vec<(TileKey, TileState)> {
         let keys = corridor_tiles(GRID, route, 100.0);
         let failed = fail.map(|p| GRID.tile_of(GRID.to_units(p)));
         let mut tile = StreetTile::empty(keys[0]);
@@ -68,11 +68,11 @@ impl Net {
     }
 }
 
-fn with_surface(kind: &str, s: PavedGroup) -> WayAttrs {
+pub(crate) fn with_surface(kind: &str, s: PavedGroup) -> WayAttrs {
     WayAttrs { surface: SurfaceTag::Grouped(s), ..way(kind) }
 }
 
-fn bridge(kind: &str) -> WayAttrs {
+pub(crate) fn bridge(kind: &str) -> WayAttrs {
     WayAttrs { structure: StructureTag::Bridge, ..with_surface(kind, PavedGroup::Paved) }
 }
 
@@ -82,7 +82,7 @@ fn run(net: Net, pts: &[(f64, f64)], fail: Option<LatLon>) -> (Vec<TypedSegment>
     let rules = TypologyRules::default();
     let tiles = net.tiles(&route_pts, fail);
     let out = compute(&route, GRID, &tiles, &caps(), &rules, &Unbounded).expect("calcul");
-    let segs = build_segments(&out.runs, &out.classes, &route, rules.min_segment_m);
+    let segs = build_segments(&out.runs, &out.classes, &[], &route, rules.min_segment_m);
     // Partition exacte de [0, L].
     assert_eq!(segs.first().map(|s| s.from_m), Some(0.0));
     assert!((segs.last().unwrap().to_m - route.length_m).abs() < 1e-6);
@@ -148,7 +148,7 @@ fn far_points_are_unmatched() {
 
 /// Route au sol nord-sud sous un pont est-ouest ; le pont rejoint par ses culées une route au sol
 /// à chaque bout.
-fn overpass() -> Net {
+pub(crate) fn overpass() -> Net {
     Net::new()
         .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)])
         .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (-60.0, 0.0)])
@@ -256,4 +256,119 @@ fn contiguous_bridge_lines_are_two_elements() {
     let b: Vec<&TypedSegment> = segs.iter().filter(|s| s.structure == StructureClass::Bridge).collect();
     assert_eq!(b.len(), 2, "{segs:?}");
     assert_ne!(b[0].element, b[1].element);
+}
+
+pub(crate) fn tunnel(kind: &str) -> WayAttrs {
+    WayAttrs { structure: StructureTag::Tunnel, ..with_surface(kind, PavedGroup::Paved) }
+}
+
+/// Typologie d'un parcours (en mètres est, nord) sur un réseau.
+pub(crate) fn typology_of(net: Net, pts: &[(f64, f64)]) -> (PreparedRoute, TypologyOutput) {
+    let route_pts: Vec<LatLon> = pts.iter().map(|&(e, n)| at(e, n)).collect();
+    let route = prepare(&route_pts, 5.0);
+    let tiles = net.tiles(&route_pts, None);
+    let out = compute(&route, GRID, &tiles, &caps(), &TypologyRules::default(), &Unbounded).expect("calcul");
+    (route, out)
+}
+
+#[test]
+fn a_crossed_bridge_has_its_abutments_and_one_passage() {
+    let (route, out) = typology_of(overpass(), &[(-300.0, 0.0), (300.0, 0.0)]);
+    assert_eq!(out.structures.len(), 1, "{:?}", out.structures);
+    let s = &out.structures[0];
+    assert!((s.length_m - 120.0).abs() < 1.0, "{}", s.length_m);
+    assert!(s.ends.iter().all(|e| e.kind == EndKind::Abutment), "{:?}", s.ends);
+    assert!(s.ends.iter().all(|e| !e.approach.is_empty()));
+    assert_eq!(out.passages.len(), 1);
+    let p = &out.passages[0];
+    assert!(p.doubts.is_empty(), "{:?}", p.doubts);
+    assert!((p.from_m - 240.0).abs() < 12.0 && (p.to_m - 360.0).abs() < 12.0, "{p:?}");
+    // Chaînage : de A (ouest, plus petite coordonnée) vers B, un mètre de parcours par mètre.
+    let mid = p.chainage_at(300.0);
+    assert!((mid - 60.0).abs() < 2.0, "{mid}");
+    assert!(route.length_m > 590.0);
+}
+
+#[test]
+fn a_route_starting_on_the_deck_reaches_both_abutments() {
+    // Départ au milieu du pont : l'ouvrage garde ses deux culées (inv. 2).
+    let (_, out) = typology_of(overpass(), &[(0.0, 0.0), (300.0, 0.0)]);
+    assert_eq!(out.structures.len(), 1);
+    let s = &out.structures[0];
+    assert!((s.length_m - 120.0).abs() < 1.0, "{}", s.length_m);
+    assert!(s.ends.iter().all(|e| e.kind == EndKind::Abutment));
+    let (lo, hi) = out.passages[0].chain_extent();
+    assert!(lo > 50.0 && hi > 115.0, "{lo} {hi}");
+}
+
+#[test]
+fn a_u_turn_on_the_deck_is_one_passage_over_the_whole_structure() {
+    let (_, out) = typology_of(overpass(), &[(-300.0, 0.0), (10.0, 0.0), (-300.0, 0.0)]);
+    assert_eq!(out.structures.len(), 1);
+    assert!((out.structures[0].length_m - 120.0).abs() < 1.0, "prolongé jusqu'à la culée opposée");
+    assert_eq!(out.passages.len(), 1, "{:?}", out.passages);
+    let (lo, hi) = out.passages[0].chain_extent();
+    assert!(lo < 5.0 && (hi - 70.0).abs() < 6.0, "{lo} {hi}");
+}
+
+#[test]
+fn a_bridge_crossed_twice_is_one_structure_two_passages() {
+    let (_, out) = typology_of(overpass(), &[(-300.0, 0.0), (300.0, 0.0), (-300.0, 0.0)]);
+    assert_eq!(out.structures.len(), 1);
+    assert_eq!(out.passages.len(), 2);
+    assert_eq!(out.passages[0].structure, out.passages[1].structure);
+}
+
+#[test]
+fn bridge_then_tunnel_is_one_structure_with_two_elements() {
+    let net = Net::new()
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (-60.0, 0.0)])
+        .add(bridge("tertiary"), &[(-60.0, 0.0), (0.0, 0.0)])
+        .add(tunnel("tertiary"), &[(0.0, 0.0), (200.0, 0.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(200.0, 0.0), (500.0, 0.0)]);
+    let (_, out) = typology_of(net, &[(-300.0, 0.0), (400.0, 0.0)]);
+    assert_eq!(out.structures.len(), 1, "{:?}", out.structures);
+    let kinds: Vec<StructureKind> = out.structures[0].elements.iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, [StructureKind::Bridge, StructureKind::Tunnel]);
+}
+
+#[test]
+fn passing_under_a_bridge_makes_no_passage() {
+    let (_, out) = typology_of(overpass(), &[(0.0, -300.0), (0.0, 300.0)]);
+    assert!(out.passages.is_empty() && out.structures.is_empty());
+}
+
+#[test]
+fn an_end_in_an_unread_tile_needs_it() {
+    // Pont coupé au bord d'une tuile non lue : l'étape rend la tuile voisine.
+    let base = u(0.0, 0.0);
+    let tile = GRID.tile_of(base);
+    let origin = GRID.tile_origin(tile);
+    let edge = origin[0] + 4096.0;
+    let y = base[1];
+    let mut t = StreetTile::empty(tile);
+    t.attrs.push(with_surface("tertiary", PavedGroup::Paved));
+    t.attrs.push(bridge("tertiary"));
+    t.lines.push(StreetLine {
+        attr: 0,
+        points: vec![[edge - 600.0, y], [edge - 200.0, y]],
+        cut: [false, false],
+    });
+    t.lines.push(StreetLine { attr: 1, points: vec![[edge - 200.0, y], [edge, y]], cut: [false, true] });
+    let route_pts = vec![GRID.to_latlon([edge - 550.0, y]), GRID.to_latlon([edge - 50.0, y])];
+    let route = prepare(&route_pts, 5.0);
+    let mut tiles: Vec<(TileKey, TileState)> = corridor_tiles(GRID, &route_pts, 100.0)
+        .into_iter()
+        .filter(|k| k.x <= tile.x)
+        .map(|k| (k, if k == tile { TileState::Data(Arc::new(t.clone())) } else { TileState::Empty }))
+        .collect();
+    tiles.sort_by_key(|a| a.0);
+    let rules = TypologyRules::default();
+    let m = match_route(&route, GRID, &tiles, &caps(), &rules, &Unbounded).expect("appariement");
+    let need = finish(&m, &tiles, &rules, true).expect_err("tuile voisine demandée");
+    assert_eq!(need, vec![TileKey { z: tile.z, x: tile.x + 1, y: tile.y }]);
+    // Sans extension permise : extrémité non résolue, passage douteux.
+    let out = finish(&m, &tiles, &rules, false).expect("calcul");
+    assert!(out.structures[0].ends.iter().any(|e| matches!(e.kind, EndKind::Unresolved(_))));
+    assert!(out.passages[0].doubts.contains(&PassageDoubt::EndUnresolved));
 }

@@ -56,8 +56,8 @@ impl StaticCatalog {
                 id: None,
                 date: None,
                 zoom: Some(self.sources.ign_zoom),
-                // Le MNS n'est lu qu'avec les ouvrages (incrément 4) : MNT seul.
-                products: vec!["mnt"],
+                // Produits configurés ; une réponse ne liste que ceux qu'elle a lus.
+                products: vec!["mnt", "mns"],
                 role: SourceRole::Primary,
                 indicative: true,
             });
@@ -145,8 +145,13 @@ impl DataCatalog for StaticCatalog {
                         .filter_map(|id| log.oldest_read.get(id))
                         .min()
                         .copied()?;
-                    // Version IGN = date de la plus ancienne lecture (T02 §9).
+                    // Version IGN = date de la plus ancienne lecture (T02 §9) ; produits lus.
                     v.date = Some(utc_date(read));
+                    v.products = [(SourceId::IgnDtm, "mnt"), (SourceId::IgnDsm, "mns")]
+                        .iter()
+                        .filter(|(id, _)| log.oldest_read.contains_key(id))
+                        .map(|(_, p)| *p)
+                        .collect();
                     Some(v)
                 }
                 _ => used(&[SourceId::Mapterhorn]).then_some(v),

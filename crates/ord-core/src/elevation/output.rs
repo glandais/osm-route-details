@@ -120,7 +120,14 @@ mod tests {
     fn distance_mode_adds_the_last_point() {
         let route = line(52.0);
         let terrain = route.samples.iter().map(|s| sample(Some(s.d_m as f32), None)).collect();
-        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
         let pts = sample_output(&route, &p, &Sampling::Distance { step_m: 25.0 });
         let d: Vec<f64> = pts.iter().map(|p| p.d_m).collect();
         assert_eq!(d.len(), 4);
@@ -137,7 +144,14 @@ mod tests {
         let (a, b) = (route.samples[0].at, route.samples.last().unwrap().at);
         let route = prepare(&[a, a, b], 5.0);
         let terrain = route.samples.iter().map(|_| sample(Some(1.0), None)).collect();
-        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
         let pts = sample_output(&route, &p, &Sampling::Input);
         assert_eq!(pts.iter().map(|p| p.index).collect::<Vec<_>>(), [0, 2]);
         assert!(pts.iter().all(|p| p.origin == Some(PointOrigin::Input) && p.latlon.is_none()));
