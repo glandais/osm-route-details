@@ -1,4 +1,6 @@
 //! `/v1/capabilities` et `/v1/attribution` (T07 §4, T02 §9), sérialisés une fois au démarrage.
+//!
+//! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
 use ord_core::RULES_VERSION;
 use ord_data::catalog::StaticCatalog;
@@ -25,24 +27,25 @@ pub struct Capabilities {
     pub api_version: &'static str,
     pub rules_version: &'static str,
     pub limits: Limits,
-    /// Valeurs appliquées quand une option est absente.
+    /// Values applied when an option is absent.
     pub defaults: OptionDefaults,
     pub option_bounds: OptionBounds,
     pub enums: EnumCatalog,
     pub primary_zone: &'static str,
     pub data: DataFeatures,
-    /// Sources d'élévation configurées, dans l'ordre de priorité.
+    /// Configured elevation sources, in priority order.
     pub elevation_sources: Vec<DataVersion>,
 }
 
-/// Bornes d'entrée (doc 02 §7) ; au-delà, 413.
+// Doc 02 §7.
+/// Input bounds; beyond them, the request gets a 413.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct Limits {
     pub max_points: usize,
     pub max_length_m: f64,
     pub max_body_bytes: usize,
     pub station_step_m: f64,
-    /// Taille densifiée maximale qui découle des bornes ; ce n'est pas une borne.
+    /// Maximum number of internal stations implied by the bounds; not a bound itself.
     pub densified_max: usize,
 }
 
@@ -71,7 +74,7 @@ pub struct ElevationDefaults {
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct OptionBounds {
     pub step_m: NumberBounds,
-    /// `0` désactive le lissage ; sinon dans [min ; max].
+    /// `0` disables smoothing; otherwise within [min, max].
     pub smoothing_m: NumberBounds,
 }
 
@@ -82,7 +85,7 @@ pub struct NumberBounds {
     pub default: f64,
 }
 
-/// Toutes les valeurs publiques des enums du contrat.
+/// Every public value of the contract enums.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct EnumCatalog {
     pub sections: Vec<SectionV1>,
@@ -149,7 +152,7 @@ impl EnumCatalog {
     }
 }
 
-/// Capacités des données actives.
+/// Capabilities of the active data sources.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct DataFeatures {
     pub ford_detectable: bool,
@@ -208,10 +211,10 @@ impl Capabilities {
     }
 }
 
-/// Corps de `/v1/attribution`.
+/// Body of `/v1/attribution`.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct AttributionDoc {
-    /// Mention courte à relayer, toutes sources configurées.
+    /// Short notice to display, covering every configured source.
     pub text: String,
     pub sources: Vec<Attribution>,
 }

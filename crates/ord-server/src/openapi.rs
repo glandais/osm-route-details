@@ -1,6 +1,6 @@
 //! Contrat OpenAPI dérivé du code (T01 §10), écrit dans `contract/openapi.json`.
 
-use utoipa::openapi::OpenApi as OpenApiDoc;
+use utoipa::openapi::{LicenseBuilder, OpenApi as OpenApiDoc};
 use utoipa::OpenApi;
 
 use crate::app::paths::*;
@@ -24,6 +24,7 @@ pub fn openapi() -> OpenApiDoc {
         .title("osm-route-details")
         .version(API_VERSION)
         .description(Some("Elevation and typology (structure, surface) along a route."))
+        .license(Some(LicenseBuilder::new().name("Apache-2.0").identifier(Some("Apache-2.0")).build()))
         .build();
     doc
 }

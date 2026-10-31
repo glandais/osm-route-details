@@ -20,7 +20,7 @@ pub enum WarningCode {
     OutsidePrimaryZone,
     TypologyUnavailable,
     ElevationUnavailable,
-    /// V1 : ouvrage détecté par heuristique.
+    // V1 : ouvrage détecté par heuristique.
     StructureUntagged,
 }
 

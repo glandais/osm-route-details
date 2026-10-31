@@ -187,12 +187,15 @@ async fn method_not_allowed() -> Problem {
     Problem::method_not_allowed()
 }
 
-/// Calcul des détails d'un parcours.
-///
-/// Incrément 0 : la requête est validée, puis le service répond 500 `internal` (pas de pipeline).
+// Calcul des détails d'un parcours. Incrément 0 : la requête est validée, puis le service
+// répond 500 `internal` (pas encore de pipeline).
 #[utoipa::path(
     post,
     path = "/v1/route-details",
+    summary = "Compute elevation and typology along a route",
+    description = "Validates the route and its options before any computation. Unknown keys, \
+out-of-bounds options and coordinates outside the Web Mercator range give a 400 that lists every \
+faulty field by JSON pointer; input bounds give a 413 with `details.limit`.",
     operation_id = "postRouteDetails",
     tag = "route",
     request_body(content = RouteDetailsRequestV1, content_type = "application/json"),
@@ -215,10 +218,13 @@ async fn route_details(
     Err(PipelineError::Internal("pipeline not implemented yet (increment 0)".into()).into())
 }
 
-/// Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.
+// Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.
 #[utoipa::path(
     get,
     path = "/v1/capabilities",
+    summary = "Service capabilities",
+    description = "Input bounds, applied defaults, option bounds, enum values, data capabilities \
+and elevation sources.",
     operation_id = "getCapabilities",
     tag = "service",
     responses((status = 200, description = "Service capabilities", body = Capabilities))
@@ -227,10 +233,12 @@ async fn capabilities(State(state): State<AppState>) -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/json")], state.inner.capabilities.clone())
 }
 
-/// Attributions complètes des sources configurées.
+// Attributions complètes des sources configurées.
 #[utoipa::path(
     get,
     path = "/v1/attribution",
+    summary = "Data attributions",
+    description = "Full attributions of the configured data sources, to be relayed to end users.",
     operation_id = "getAttribution",
     tag = "service",
     responses((status = 200, description = "Attributions of the configured sources", body = AttributionDoc))
@@ -239,15 +247,17 @@ async fn attribution(State(state): State<AppState>) -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/json")], state.inner.attribution.clone())
 }
 
+/// Liveness status.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct HealthStatus {
     pub status: &'static str,
 }
 
-/// Le processus répond.
+// Le processus répond.
 #[utoipa::path(
     get,
     path = "/health/live",
+    summary = "Liveness probe",
     operation_id = "getHealthLive",
     tag = "health",
     responses((status = 200, description = "Process is up", body = HealthStatus))
@@ -256,10 +266,12 @@ async fn health_live() -> Json<HealthStatus> {
     Json(HealthStatus { status: "ok" })
 }
 
-/// Les données configurées sont lisibles.
+// Les données configurées sont lisibles.
 #[utoipa::path(
     get,
     path = "/health/ready",
+    summary = "Readiness probe",
+    description = "Ready when the configured local data is readable; remote sources are not checked.",
     operation_id = "getHealthReady",
     tag = "health",
     responses(

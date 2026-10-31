@@ -3,6 +3,10 @@
   "info": {
     "title": "osm-route-details",
     "description": "Elevation and typology (structure, surface) along a route.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
     "version": "1.0"
   },
   "paths": {
@@ -11,7 +15,7 @@
         "tags": [
           "health"
         ],
-        "summary": "Le processus répond.",
+        "summary": "Liveness probe",
         "operationId": "getHealthLive",
         "responses": {
           "200": {
@@ -32,7 +36,8 @@
         "tags": [
           "health"
         ],
-        "summary": "Les données configurées sont lisibles.",
+        "summary": "Readiness probe",
+        "description": "Ready when the configured local data is readable; remote sources are not checked.",
         "operationId": "getHealthReady",
         "responses": {
           "200": {
@@ -63,7 +68,8 @@
         "tags": [
           "service"
         ],
-        "summary": "Attributions complètes des sources configurées.",
+        "summary": "Data attributions",
+        "description": "Full attributions of the configured data sources, to be relayed to end users.",
         "operationId": "getAttribution",
         "responses": {
           "200": {
@@ -84,7 +90,8 @@
         "tags": [
           "service"
         ],
-        "summary": "Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.",
+        "summary": "Service capabilities",
+        "description": "Input bounds, applied defaults, option bounds, enum values, data capabilities and elevation sources.",
         "operationId": "getCapabilities",
         "responses": {
           "200": {
@@ -105,8 +112,8 @@
         "tags": [
           "route"
         ],
-        "summary": "Calcul des détails d'un parcours.",
-        "description": "Incrément 0 : la requête est validée, puis le service répond 500 `internal` (pas de pipeline).",
+        "summary": "Compute elevation and typology along a route",
+        "description": "Validates the route and its options before any computation. Unknown keys, out-of-bounds options and coordinates outside the Web Mercator range give a 400 that lists every faulty field by JSON pointer; input bounds give a 413 with `details.limit`.",
         "operationId": "postRouteDetails",
         "requestBody": {
           "content": {
@@ -197,7 +204,7 @@
     "schemas": {
       "Attribution": {
         "type": "object",
-        "description": "Mention d'une source configurée.",
+        "description": "Attribution of a configured source.",
         "required": [
           "source",
           "short",
@@ -209,7 +216,7 @@
           },
           "short": {
             "type": "string",
-            "description": "Mention courte à relayer."
+            "description": "Short notice to display."
           },
           "source": {
             "$ref": "#/components/schemas/SourceId"
@@ -224,7 +231,7 @@
       },
       "AttributionDoc": {
         "type": "object",
-        "description": "Corps de `/v1/attribution`.",
+        "description": "Body of `/v1/attribution`.",
         "required": [
           "text",
           "sources"
@@ -238,7 +245,7 @@
           },
           "text": {
             "type": "string",
-            "description": "Mention courte à relayer, toutes sources configurées."
+            "description": "Short notice to display, covering every configured source."
           }
         }
       },
@@ -264,14 +271,14 @@
           },
           "defaults": {
             "$ref": "#/components/schemas/OptionDefaults",
-            "description": "Valeurs appliquées quand une option est absente."
+            "description": "Values applied when an option is absent."
           },
           "elevation_sources": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DataVersion"
             },
-            "description": "Sources d'élévation configurées, dans l'ordre de priorité."
+            "description": "Configured elevation sources, in priority order."
           },
           "enums": {
             "$ref": "#/components/schemas/EnumCatalog"
@@ -292,7 +299,7 @@
       },
       "DataFeatures": {
         "type": "object",
-        "description": "Capacités des données actives.",
+        "description": "Capabilities of the active data sources.",
         "required": [
           "ford_detectable",
           "surface_detail",
@@ -316,7 +323,7 @@
       },
       "DataVersion": {
         "type": "object",
-        "description": "Version d'une source de données.",
+        "description": "Version of a data source.",
         "required": [
           "source",
           "role",
@@ -337,7 +344,7 @@
           },
           "indicative": {
             "type": "boolean",
-            "description": "Source lue en ligne : version seulement indicative (doc 01 §8.3)."
+            "description": "Source read online: the version is indicative only."
           },
           "products": {
             "type": "array",
@@ -384,7 +391,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/GainPreset",
-                "description": "Défaut : `dem`."
+                "description": "Default: `dem`."
               },
               {
                 "type": "null"
@@ -397,13 +404,13 @@
               "null"
             ],
             "format": "double",
-            "description": "0 (désactivé) ou dans les bornes publiées, en mètres."
+            "description": "0 (disabled) or within the published bounds, in metres."
           }
         }
       },
       "EnumCatalog": {
         "type": "object",
-        "description": "Toutes les valeurs publiques des enums du contrat.",
+        "description": "Every public value of the contract enums.",
         "required": [
           "sections",
           "sampling_modes",
@@ -530,7 +537,7 @@
       },
       "FieldError": {
         "type": "object",
-        "description": "Erreur sur un champ de l'entrée : un pointeur JSON, jamais la valeur.",
+        "description": "Error on an input field: a JSON pointer, never the value.",
         "required": [
           "pointer",
           "message"
@@ -541,13 +548,13 @@
           },
           "pointer": {
             "type": "string",
-            "description": "Pointeur JSON (RFC 6901) vers le champ fautif."
+            "description": "JSON pointer (RFC 6901) to the faulty field."
           }
         }
       },
       "GainPreset": {
         "type": "string",
-        "description": "Preset de D+ (valeurs : T04 §5.4).",
+        "description": "Elevation gain preset: threshold and smoothing scale of the gain computation.",
         "enum": [
           "raw",
           "dem",
@@ -557,6 +564,7 @@
       },
       "HealthStatus": {
         "type": "object",
+        "description": "Liveness status.",
         "required": [
           "status"
         ],
@@ -568,7 +576,7 @@
       },
       "LimitKind": {
         "type": "string",
-        "description": "Borne d'entrée dépassée (413).",
+        "description": "Input bound exceeded (413).",
         "enum": [
           "points",
           "length_m",
@@ -577,7 +585,7 @@
       },
       "Limits": {
         "type": "object",
-        "description": "Bornes d'entrée (doc 02 §7) ; au-delà, 413.",
+        "description": "Input bounds; beyond them, the request gets a 413.",
         "required": [
           "max_points",
           "max_length_m",
@@ -588,7 +596,7 @@
         "properties": {
           "densified_max": {
             "type": "integer",
-            "description": "Taille densifiée maximale qui découle des bornes ; ce n'est pas une borne.",
+            "description": "Maximum number of internal stations implied by the bounds; not a bound itself.",
             "minimum": 0
           },
           "max_body_bytes": {
@@ -640,7 +648,7 @@
         "properties": {
           "smoothing_m": {
             "$ref": "#/components/schemas/NumberBounds",
-            "description": "`0` désactive le lissage ; sinon dans [min ; max]."
+            "description": "`0` disables smoothing; otherwise within [min, max]."
           },
           "step_m": {
             "$ref": "#/components/schemas/NumberBounds"
@@ -689,14 +697,14 @@
               "boolean",
               "null"
             ],
-            "description": "Défaut : `false`."
+            "description": "Default: `false`."
           },
           "debug": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "Réservé à un usage interne ; refusé si le déploiement ne l'autorise pas."
+            "description": "Internal use only; refused unless the deployment allows it."
           },
           "elevation": {
             "oneOf": [
@@ -726,20 +734,20 @@
             "items": {
               "$ref": "#/components/schemas/SectionV1"
             },
-            "description": "Parties de la réponse ; défaut : toutes."
+            "description": "Response sections to return; default: all."
           },
           "structure_correction": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "Défaut : `true`."
+            "description": "Default: `true`."
           }
         }
       },
       "PointV1": {
         "type": "object",
-        "description": "Point d'entrée ; une altitude éventuelle (`ele` ou `alt`) est tolérée et ignorée.",
+        "description": "Input point; an optional altitude (`ele` or `alt`) is accepted and ignored.",
         "required": [
           "lat",
           "lon"
@@ -751,7 +759,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Ignorée."
+            "description": "Ignored."
           },
           "ele": {
             "type": [
@@ -759,7 +767,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Ignorée."
+            "description": "Ignored."
           },
           "lat": {
             "type": "number",
@@ -777,7 +785,7 @@
       },
       "ProblemBody": {
         "type": "object",
-        "description": "Corps `application/problem+json` (RFC 9457, doc 02 §5.1).",
+        "description": "`application/problem+json` body (RFC 9457).",
         "required": [
           "type",
           "title",
@@ -807,7 +815,7 @@
               "string",
               "null"
             ],
-            "description": "Identifiant de la requête (`X-Request-Id`)."
+            "description": "Request identifier (`X-Request-Id`)."
           },
           "status": {
             "type": "integer",
@@ -825,7 +833,7 @@
       },
       "ProblemCode": {
         "type": "string",
-        "description": "Code machine stable, suffixe du `type` (doc 02 §5.2).",
+        "description": "Stable machine code, suffix of `type`.",
         "enum": [
           "invalid_input",
           "route_too_large",
@@ -879,13 +887,13 @@
             "items": {
               "type": "string"
             },
-            "description": "Pointeurs JSON de toutes les clés inconnues."
+            "description": "JSON pointers of every unknown key."
           }
         }
       },
       "ProblemSource": {
         "type": "string",
-        "description": "Côté en panne d'un 503 `data_unavailable`.",
+        "description": "Failing side of a 503 `data_unavailable`.",
         "enum": [
           "typology",
           "elevation",
@@ -894,7 +902,7 @@
       },
       "Readiness": {
         "type": "object",
-        "description": "État observé des données locales, pour `/health/ready` ; jamais d'URL.",
+        "description": "Observed state of the configured local data.",
         "required": [
           "ready",
           "checks"
@@ -934,7 +942,7 @@
       },
       "RouteDetailsRequestV1": {
         "type": "object",
-        "description": "Corps de `POST /v1/route-details` : exactement un de `points` ou `polyline`.",
+        "description": "Body of `POST /v1/route-details`: exactly one of `points` or `polyline`.",
         "properties": {
           "options": {
             "oneOf": [
@@ -954,14 +962,14 @@
             "items": {
               "$ref": "#/components/schemas/PointV1"
             },
-            "description": "Points du parcours, dans le sens de parcours."
+            "description": "Route points, in travel order."
           },
           "polyline": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Polyline encodée (algorithme Google), à la précision `polyline_precision`."
+            "description": "Encoded polyline (Google algorithm), at precision `polyline_precision`."
           },
           "polyline_precision": {
             "type": [
@@ -969,7 +977,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "Précision de `polyline` (5 ou 6), obligatoire avec elle.",
+            "description": "Precision of `polyline` (5 or 6); required with `polyline`, refused with `points`.",
             "maximum": 6,
             "minimum": 5
           }
@@ -1006,7 +1014,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/SamplingModeV1",
-                "description": "Défaut : `input_with_breakpoints`."
+                "description": "Default: `input_with_breakpoints`."
               },
               {
                 "type": "null"
@@ -1019,7 +1027,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Pas du profil en mode `distance`, en mètres (bornes : `/v1/capabilities`)."
+            "description": "Profile step in `distance` mode, in metres (bounds: `/v1/capabilities`)."
           }
         }
       },
@@ -1051,7 +1059,7 @@
       },
       "TerrainOrigin": {
         "type": "string",
-        "description": "Origine du terrain lu (doc 02 §4.5).",
+        "description": "Origin of the terrain data.",
         "enum": [
           "ign_lidar_hd",
           "mapterhorn_measured",

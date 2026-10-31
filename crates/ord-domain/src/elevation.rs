@@ -5,7 +5,8 @@ use serde::Serialize;
 use crate::ctx::RequestCtx;
 use crate::LatLon;
 
-/// Origine du terrain lu (doc 02 §4.5).
+// Doc 02 §4.5 ; ce `///` est recopié dans le contrat OpenAPI, donc en anglais.
+/// Origin of the terrain data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]

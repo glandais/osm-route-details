@@ -107,3 +107,15 @@ async fn errors_are_rfc9457_problems() {
         assert_problem(reply, *status, code);
     }
 }
+
+/// Le contrat est en anglais : tout caractère non ASCII (accent, typographie française) y est une
+/// fuite d'un commentaire de doc français vers le contrat. Il déclare aussi sa licence.
+#[test]
+fn contract_is_english_ascii_and_licensed() {
+    let contract = render_contract();
+    if let Some((line, text)) = contract.lines().enumerate().find(|(_, l)| !l.is_ascii()) {
+        panic!("caractère non ASCII dans le contrat, ligne {} : {text}", line + 1);
+    }
+    let doc: serde_json::Value = serde_json::from_str(&contract).expect("JSON");
+    assert_eq!(doc["info"]["license"]["identifier"], "Apache-2.0");
+}

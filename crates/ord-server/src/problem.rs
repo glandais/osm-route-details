@@ -1,4 +1,6 @@
 //! Problèmes RFC 9457 : seul site de traduction des erreurs en HTTP (T01 §4.3).
+//!
+//! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
 use std::future::Future;
 use std::time::Duration;
@@ -25,7 +27,8 @@ fn current_request_id() -> Option<String> {
     REQUEST_ID.try_with(Clone::clone).ok()
 }
 
-/// Code machine stable, suffixe du `type` (doc 02 §5.2).
+// Doc 02 §5.2.
+/// Stable machine code, suffix of `type`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ProblemCode {
@@ -100,10 +103,10 @@ impl ProblemCode {
     }
 }
 
-/// Erreur sur un champ de l'entrée : un pointeur JSON, jamais la valeur.
+/// Error on an input field: a JSON pointer, never the value.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct FieldError {
-    /// Pointeur JSON (RFC 6901) vers le champ fautif.
+    /// JSON pointer (RFC 6901) to the faulty field.
     pub pointer: String,
     pub message: String,
 }
@@ -114,7 +117,7 @@ impl FieldError {
     }
 }
 
-/// Borne d'entrée dépassée (413).
+/// Input bound exceeded (413).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LimitKind {
@@ -123,7 +126,7 @@ pub enum LimitKind {
     BodyBytes,
 }
 
-/// Côté en panne d'un 503 `data_unavailable`.
+/// Failing side of a 503 `data_unavailable`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ProblemSource {
@@ -146,7 +149,7 @@ impl From<DataSide> for ProblemSource {
 pub struct ProblemDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub errors: Option<Vec<FieldError>>,
-    /// Pointeurs JSON de toutes les clés inconnues.
+    /// JSON pointers of every unknown key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unknown_keys: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -211,7 +214,8 @@ impl Problem {
     }
 }
 
-/// Corps `application/problem+json` (RFC 9457, doc 02 §5.1).
+// Doc 02 §5.1.
+/// `application/problem+json` body (RFC 9457).
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 pub struct ProblemBody {
     /// `urn:osm-route-details:problem:<code>`.
@@ -223,7 +227,7 @@ pub struct ProblemBody {
     pub code: ProblemCode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<ProblemDetails>,
-    /// Identifiant de la requête (`X-Request-Id`).
+    /// Request identifier (`X-Request-Id`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
 }

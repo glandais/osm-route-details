@@ -110,7 +110,8 @@ impl SectionSet {
     pub const NONE: Self = Self { elevation: false, typology: false, summary: false };
 }
 
-/// Preset de D+ (valeurs : T04 §5.4).
+// Valeurs : T04 §5.4.
+/// Elevation gain preset: threshold and smoothing scale of the gain computation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]

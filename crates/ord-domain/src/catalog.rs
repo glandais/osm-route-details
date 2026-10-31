@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+// Les `///` des types exposés par le contrat OpenAPI y sont recopiés : ils sont en anglais.
+
 use crate::ctx::DataLog;
 use crate::tiles::SourceId;
 
@@ -14,7 +16,7 @@ pub enum SourceRole {
     Coverage,
 }
 
-/// Version d'une source de données.
+/// Version of a data source.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DataVersion {
@@ -28,7 +30,8 @@ pub struct DataVersion {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub products: Vec<&'static str>,
     pub role: SourceRole,
-    /// Source lue en ligne : version seulement indicative (doc 01 §8.3).
+    // Source lue en ligne : version seulement indicative (doc 01 §8.3).
+    /// Source read online: the version is indicative only.
     pub indicative: bool,
 }
 
@@ -48,19 +51,20 @@ pub struct Versions {
     pub data_versions: DataVersions,
 }
 
-/// Mention d'une source configurée.
+/// Attribution of a configured source.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Attribution {
     pub source: SourceId,
-    /// Mention courte à relayer.
+    /// Short notice to display.
     pub short: String,
     pub licence: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
-/// État observé des données locales, pour `/health/ready` ; jamais d'URL.
+// État observé des données locales, pour `/health/ready` ; jamais d'URL.
+/// Observed state of the configured local data.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Readiness {
