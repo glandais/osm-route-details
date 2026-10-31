@@ -81,6 +81,12 @@ enum Command {
         #[arg(long, default_value_t = f64::INFINITY)]
         a: f64,
     },
+    /// Vidage local et privé des profils de traces perso de calibration (grille de 5 m, mode
+    /// `distance`) dans `bench/private/profils/` ; une trace tenue à l'écart est refusée.
+    DumpProfils {
+        #[arg(long, value_delimiter = ',', required = true)]
+        cas: Vec<String>,
+    },
     /// L1 : latence à froid (live, caches disque et mémoire neufs à chaque essai).
     Latency {
         /// Cas personnels (traces de 90 à 130 km).
@@ -168,6 +174,13 @@ async fn main_inner() -> anyhow::Result<bool> {
         Command::DiagnoseStructures { cas, de, a } => {
             let d = ord_bench::structures_diag::diagnose_structures(&paths, &cas, de, a).await?;
             println!("{}", serde_json::to_string_pretty(&d)?);
+            Ok(true)
+        }
+        Command::DumpProfils { cas } => {
+            // Contenu jamais affiché : chemin et nombre de lignes seulement.
+            for (path, rows) in ord_bench::dump::dump_profiles(&paths, &cas).await? {
+                println!("{} : {rows} lignes", path.display());
+            }
             Ok(true)
         }
         Command::Latency { cas, essais } => {

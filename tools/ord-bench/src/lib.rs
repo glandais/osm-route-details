@@ -6,13 +6,15 @@
 //! R1, R2, R3, M1, typologie à chaud ; incrément 4 : E3, E4, E5, S1, S2, S3, E1 hors ouvrage),
 //! `latency`
 //! (L1 à froid, live), `diagnose` (causes des plages M1 et R dans les tuiles du cache),
-//! `diagnose-structures` (groupes d'ouvrages rejoués étape par étape) ; scénarios golden sur des ouvrages de calibration.
+//! `diagnose-structures` (groupes d'ouvrages rejoués étape par étape), `dump-profils` (vidage
+//! privé des profils de traces de calibration, `bench/private/profils/`) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
 pub mod campaign;
 pub mod check;
 pub mod coherence;
 pub mod diagnose;
+pub mod dump;
 pub mod golden;
 pub mod gpx;
 pub mod hash;

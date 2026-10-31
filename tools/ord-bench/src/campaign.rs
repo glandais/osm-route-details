@@ -302,6 +302,8 @@ struct Profile {
     ign: Vec<bool>,
     matched: Vec<bool>,
     unmatched_warn: Vec<bool>,
+    /// `ele_method` de chaque station.
+    method: Vec<String>,
 }
 
 fn profile(r: &Value) -> anyhow::Result<Profile> {
@@ -346,6 +348,7 @@ fn profile(r: &Value) -> anyhow::Result<Profile> {
         p.ele.push(x["ele"].as_f64().unwrap_or(f64::NAN));
         p.on_structure.push(at(&segs, d));
         p.corrected.push(matches!(x["ele_method"].as_str(), Some("dsm_deck" | "interpolated_structure")));
+        p.method.push(x["ele_method"].as_str().unwrap_or("").to_owned());
         p.ign.push(at(&terrain, d));
         p.matched.push(at(&matched, d));
         p.unmatched_warn.push(warns.iter().any(|w| d >= w.0 - 1e-6 && d <= w.1 + 1e-6));
@@ -399,6 +402,7 @@ async fn recolle(
         p.ign.extend(q.ign.iter().skip(skip));
         p.matched.extend(q.matched.iter().skip(skip));
         p.unmatched_warn.extend(q.unmatched_warn.iter().skip(skip));
+        p.method.extend(q.method.iter().skip(skip).cloned());
         tau.extend(t.iter().skip(skip));
         offset += q.d.last().copied().unwrap_or(0.0);
         responses.push(r);
@@ -632,6 +636,81 @@ pub struct OuvrageEval<'a> {
     pub window: Option<std::ops::Range<f64>>,
     /// Extrait : repli 1–3 km lu sur la trace (`(abscisse, baro − MNT)`), hors service.
     pub ring: Option<Vec<(f64, f64)>>,
+}
+
+/// Profils d'un cas sur la grille de la campagne (mode `distance`), pour un vidage local et privé
+/// (`dump-profils`) : mêmes calculs que `measure_case` (baro transporté, fenêtres masquées,
+/// décalage global d'E1). Aucune coordonnée n'en sort.
+pub(crate) async fn case_dump(
+    service: &Service,
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    ouvrages: &[crate::ouvrages::Ouvrage],
+    rules: &BenchRules,
+    rules_core: &Rules,
+) -> anyhow::Result<crate::dump::CaseProfiles> {
+    let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
+    let (p, _, _) = recolle(service, case, true, rules, dem.threshold_m).await?;
+    let (p_raw, _, _) = recolle(service, case, false, rules, dem.threshold_m).await?;
+    if p_raw.d.len() != p.d.len() {
+        bail!("profils de longueurs différentes");
+    }
+    let d_srv = request_distances(case);
+    let baro_d = interpolate(&case.s_ref, &d_srv, &case.baro_s, f64::INFINITY);
+    let (bd, bz): (Vec<f64>, Vec<f64>) =
+        baro_d.iter().zip(&case.baro_z).filter(|(d, _)| !d.is_nan()).map(|(d, z)| (*d, *z)).unzip();
+    let baro = interpolate(&bd, &bz, &p.d, rules.baro_gap_max_m);
+    let mut windows = Vec::new();
+    for id in &case.masks {
+        if let Some(pts) = refs.get(id) {
+            windows.extend(passage_windows(&p.d, &p.pts, pts, rules.passage_tol_m, rules.mask_half_m));
+        }
+    }
+    let n = p.d.len();
+    let masked: Vec<bool> = p.d.iter().map(|d| windows.iter().any(|w| w.contains(d))).collect();
+    // Référence E2 : baro sur les stations non masquées où le service a une altitude.
+    let bar: Vec<f64> = (0..n)
+        .map(|i| if masked[i] || p.ele[i].is_nan() || baro[i].is_nan() { f64::NAN } else { baro[i] })
+        .collect();
+    let svc: Vec<f64> = (0..n).map(|i| if bar[i].is_nan() { f64::NAN } else { p.ele[i] }).collect();
+    let off = |v: &[f64]| -> Vec<f64> {
+        (0..n).map(|i| if p.on_structure[i] || p.corrected[i] { f64::NAN } else { v[i] }).collect()
+    };
+    let offset = e1(&p.d, &off(&svc), &off(&bar), rules.detrend_window_m, rules.detrend_step_m).offset_m;
+    // Ouvrage du corpus de chaque suite de stations corrigées : milieu à moins de la
+    // demi-longueur + tolérance de passage d'une station de la suite.
+    let mut ouvrage = vec![String::new(); n];
+    let mut i = 0;
+    while i < n {
+        if !p.corrected[i] {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && p.corrected[i] {
+            i += 1;
+        }
+        let best = ouvrages
+            .iter()
+            .filter_map(|o| {
+                let dist = (start..i).map(|k| haversine_m(p.pts[k], o.pts[1])).fold(f64::INFINITY, f64::min);
+                (dist <= 0.5 * o.length_m + rules.passage_tol_m).then_some((dist, &o.id))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        let id = best.map_or_else(|| "hors_corpus".to_owned(), |(_, id)| id.clone());
+        ouvrage[start..i].fill(id);
+    }
+    Ok(crate::dump::CaseProfiles {
+        id: case.id.clone(),
+        s: p.d,
+        baro_e2: bar,
+        offset_m: offset,
+        ele: p.ele,
+        ele_raw: p_raw.ele,
+        ouvrage,
+        method: p.method,
+        masked,
+    })
 }
 
 /// Mesure E1 et E2 d'un cas (service appelé deux fois : corrections actives, puis MNT brut).
