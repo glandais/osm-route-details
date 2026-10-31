@@ -162,7 +162,17 @@ rugosité et de canyon du détecteur. Les étapes, sur l'axe du groupe :
    côté : le tablier est tenu plat jusqu'à la jonction, comme vcyclist en bout de parcours (`:214-215`).
 8. **Cohérence MNS/MNT** [cal] : on abandonne le profil pour l'interpolation (avec journal) si une
    rampe dépasse `max_ramp_grade = 15 %` (ancre sur une superstructure lisse, ou pont au-dessus de la
-   trace), ou si plus de 10 % des stations ont un tablier sous `MNT − 0,5 m`.
+   trace), ou si plus de 10 % des stations ont un tablier sous `MNT − 0,5 m`. **Exception** : la
+   surface continue au-delà du way quand le MNS de la sonde ne descend pas sous le tablier plus vite
+   que `max_ramp_grade` (ouvrage qui se prolonge sans tag, way plus court que le pont) ; le tablier
+   est alors tenu plat jusqu'à l'extrémité du way et la rampe ne commence qu'au-delà. Elle ne vaut
+   que pour un tablier au-dessus du sol de la sonde (rampe qui descend), et le test est
+   **unilatéral** (règles 2026.10.7) : le MNS est une surface au-dessus du sol, un MNS de sonde plus
+   haut que le tablier (garde-corps, véhicule, végétation sur un pixel) ne dit jamais que la surface
+   s'arrête. Un tablier sous le sol de la sonde (tablier absent du MNS, qui lit l'eau d'une écluse)
+   n'est jamais prolongé. Le test symétrique faisait passer en interpolation un pont plat dont le way s'arrête
+   avant la culée réelle : sonde sur le vide de culée (MNT 4 m sous le tablier), MNS 2 m au-dessus
+   (`nv-13`, banc 2026.10.6, tablier interpolé 3 m sous le baromètre).
 
 Ligne de base vcyclist (exploration 01 §4) : Saint-Nazaire à 0,54 m de la vérité au pire au lieu
 de 65,8 m dessous ; D+ de 0,74 à 1,08 × vrai. OSM règle les échecs du **détecteur** (ponts courts,

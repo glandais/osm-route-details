@@ -80,8 +80,8 @@ impl BenchPaths {
 /// privées (`_…`) retirées à tous les niveaux du rapport. `bench3` (README §4 bis complété en
 /// 657d2c8) : balcon de moins de 120 m entre tunnels OSM, contrôle `hors_graphe_velo` satisfait
 /// par une voie parallèle du graphe ; un passage par traversée de l'ouvrage ; `limite_donnees` sur
-/// toute galerie `avalanche_protector` du corpus.
-pub const BENCH_REVISION: Option<&str> = Some("bench3");
+/// toute galerie `avalanche_protector` du corpus. Remise à `None` avec les règles 2026.10.7.
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

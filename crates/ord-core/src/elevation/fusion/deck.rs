@@ -157,9 +157,14 @@ pub fn build_deck(
     cap_slope(&c[u..=v], &mut deck, r.max_slope);
     // Étape 8 : cohérence MNS/MNT. Rampe trop raide (ancre sur une superstructure lisse, pont
     // au-dessus de la trace) ou tablier sous le sol sur trop de stations. Exception : le MNS de la
-    // sonde prolonge le tablier sans rupture (pente sous `max_ramp_grade`) ; la surface lue
+    // sonde ne descend pas sous le tablier plus vite que `max_ramp_grade` ; la surface lue
     // continue au-delà du way, c'est un ouvrage qui se prolonge sans tag (accès nord du pont de
-    // Saint-Nazaire), pas une superstructure : le tablier est gardé.
+    // Saint-Nazaire, way plus court que le pont), pas une superstructure : le tablier est gardé.
+    // Il ne vaut que pour un tablier au-dessus du sol de la sonde (rampe qui descend), et il est
+    // unilatéral : le MNS est une surface au-dessus du sol, un MNS de sonde plus haut que le
+    // tablier (garde-corps, véhicule, végétation sur un pixel) ne dit jamais que la surface
+    // s'arrête ; seul un MNS qui retombe vers le sol le dit. Un tablier sous le sol de la sonde
+    // (rampe qui monte : tablier absent du MNS, qui lit l'eau ou le fond) n'est jamais prolongé.
     let mut held = [false, false];
     for (side, (probe, k)) in [(probes[0], u), (probes[1], v)].into_iter().enumerate() {
         if let Some(p) = probe {
@@ -167,7 +172,7 @@ pub fn build_deck(
             let z = deck[k - u];
             let steep = run > 0.0 && (z - p.z).abs() / run > r.max_ramp_grade;
             // MNS de la sonde absent (`NaN`) : pas de prolongement.
-            let continues = run > 0.0 && (z - p.mns).abs() / run <= r.max_ramp_grade;
+            let continues = run > 0.0 && z > p.z && (z - p.mns) / run <= r.max_ramp_grade;
             if steep && !continues {
                 return DeckOutcome::Fallback(DeckFailure::RampTooSteep);
             }
@@ -289,6 +294,22 @@ mod tests {
         }
         let probes =
             [Some(Probe { c: -10.0, z: 29.0, mns: 30.0 }), Some(Probe { c: 210.0, z: 0.0, mns: 0.2 })];
+        assert_eq!(
+            build_deck(&c, &mnt, &mns, probes, &rules()),
+            DeckOutcome::Fallback(DeckFailure::RampTooSteep)
+        );
+        // MNS de la sonde au-dessus du tablier (garde-corps, véhicule sur un pixel), sol 30 m plus
+        // bas : la surface continue, le tablier est gardé.
+        let probes =
+            [Some(Probe { c: -10.0, z: 29.0, mns: 30.0 }), Some(Probe { c: 210.0, z: 0.0, mns: 37.0 })];
+        match build_deck(&c, &mnt, &mns, probes, &rules()) {
+            DeckOutcome::Deck { last, .. } => assert_eq!(last, 40, "tenu plat jusqu'au bout"),
+            other => panic!("{other:?}"),
+        }
+        // Tablier sous le sol de la sonde (rampe qui monte de 30 m) : jamais prolongé, même si le
+        // MNS de la sonde est plus haut encore.
+        let probes =
+            [Some(Probe { c: -10.0, z: 29.0, mns: 30.0 }), Some(Probe { c: 210.0, z: 70.0, mns: 72.0 })];
         assert_eq!(
             build_deck(&c, &mnt, &mns, probes, &rules()),
             DeckOutcome::Fallback(DeckFailure::RampTooSteep)

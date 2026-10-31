@@ -17,7 +17,8 @@ use serde::Serialize;
 // comblement des trous courts).
 // 2026.10.5 : ouvrage apparié à contre-cap rejeté (passages supérieurs croisés).
 // 2026.10.6 : état « hors graphe » des routes motorisées fermées au vélo dans le HMM.
-pub const RULES_VERSION: &str = "2026.10.6";
+// 2026.10.7 : prolongement du tablier jugé sur un MNS de sonde qui ne retombe pas (test unilatéral).
+pub const RULES_VERSION: &str = "2026.10.7";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -311,6 +312,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.6", "d533724602494282".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.7", "d533724602494282".to_owned()));
     }
 }
