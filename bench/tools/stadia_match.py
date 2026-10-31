@@ -49,6 +49,7 @@ PROJ_TOL_M = 10.0  # transport du baro : premier segment à moins de (plus proch
 MAX_KM = 200.0
 MAX_PTS = 16000
 GAP_M = 2000.0
+BARO_GAP_M = 100.0  # = baro_gap_max_m d'ord-bench : pas brut au-delà duquel le baro n'est pas interpolé
 MIN_SEG_KM = 5.0
 JUMP_EXCESS_M = 50.0  # 39 000 arêtes du corpus : excès < 25 m sauf sur les sauts
 JUMP_SNAP_M = 50.0  # point apparié encadrant ↔ sommet du shape avant ou après le saut
@@ -110,14 +111,19 @@ def read_gpx(path):
 
 
 def resample(pts, step):
-    out = [(0.0, *pts[0])]
+    """Points tous les `step` m : (s, lat, lon, baro, dans_un_trou). Un point tiré à l'intérieur d'un pas
+    brut de plus de BARO_GAP_M (GPS perdu, en tunnel ou galerie) sert au recalage mais ne porte pas de
+    baro : sa position est une ligne droite et son baro une interpolation (README §2.1, trou de
+    référence)."""
+    out = [(0.0, *pts[0], False)]
     s = 0.0
     nxt = step
     for a, b in zip(pts, pts[1:]):
         d = hav(a, b)
         while d > 0 and s + d >= nxt:
             t = (nxt - s) / d
-            out.append((nxt, a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])))
+            out.append((nxt, a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]),
+                        d > BARO_GAP_M))
             nxt += step
         s += d
     return out
@@ -341,6 +347,8 @@ def process(key, raw_pts, tid, outdir):
         for j, (p, m) in enumerate(zip(chunk, d["matched_points"])):
             if j < skip or j >= last:
                 continue
+            if p[4]:
+                continue  # dans un trou de la trace brute : pas de baro transporté
             if m.get("type") == "matched":
                 baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", "")))
             elif j in filled:  # point d'origine inséré à la place d'un saut : il est sur la géométrie

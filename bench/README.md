@@ -300,6 +300,11 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    transporté gagne 1 714 points (161 335 → 163 049), aucun n'est perdu, et les sauts d'abscisse de
    plus de 300 m sans contrepartie à l'origine passent de 47 à 24. Version précédente gardée dans
    `private/recales.v2/`.
+   **Trous de la trace brute** (corrigé le 2026-10-31, depuis le cache). Le rééchantillonnage à 25 m
+   tirait des points en ligne droite dans les pas bruts où le GPS est perdu (galeries, tunnels) et leur
+   donnait un baro interpolé, ce que la règle du banc interdit au-delà de 100 m
+   (`baro_gap_max_m`). Ces points servent encore au recalage, mais ne portent plus de baro : 176 points
+   retirés sur 12 traces, géométrie inchangée. Version précédente dans `private/recales.v3/`.
 2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
    16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
    aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie
