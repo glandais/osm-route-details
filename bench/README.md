@@ -30,6 +30,11 @@ modification dans `data/vcyclist/` (Apache-2.0 ; `LICENSE`, `PROVENANCE.md` et `
   droite entre portails, `S` Strava − offset sur balcon) ; `structures.csv` : 21 ponts, 4 tunnels,
   6 balcons, 15 ponts OSM non détectés.
 - Témoins : ponts `p01..p17` + négatifs `n01..n16`, tunnels `th*`, `tt*` + négatifs `hn*`.
+- Hors git : `demo/public/gpx/strava.gpx` (même commit), activité enregistrée de l'auteur en 2018
+  (horodatage, fréquence cardiaque) : règle des traces perso (§1.3), même si vcyclist la publie.
+  Régénérée dans `private/vcyclist/` par `tools/fetch_hors_git.py` et vérifiée par son sha256
+  (`manifest.yaml`, section `hors_git`). Elle sert au test de méthode du D+ (714 / 637 m) ; datée de
+  la période d'altitude dégradée, son baro n'est pas une référence.
 
 Chiffres de référence (ligne de base à égaler, pas à reproduire) :
 
@@ -408,6 +413,7 @@ représentent 90 % du cache ; il croît à peu près linéairement avec les kilo
 | `tools/build_perso_corpus.py` | Sélection → GPX, empreintes, séries, fragment du manifest |
 | `tools/deck_baro_vs_lidar.py` | Baro corrigé vs MNS LiDAR au milieu des ouvrages |
 | `tools/series_groups.py` | Groupes d'ouvrages, séries, passages masqués (§2) |
+| `tools/fetch_hors_git.py` | Régénère les fixtures `hors_git` du manifest depuis leur dépôt et commit, vérifie le sha256 |
 | `tools/ouvrages/` | Requêtes Overpass et scripts de constitution de `data/ouvrages.yaml` ; `mns_median25.py` ; `candidats_traces.py` (extension par les traces perso) |
 
 API utilisées : Géoplateforme altimétrie (`data.geopf.fr/altimetrie`, ≤ 4 req/s, User-Agent

@@ -91,6 +91,22 @@ vcyclist:
     serie: calibration
 
 # ---------------------------------------------------------------------------------------------
+# 1 bis. Fixtures hors git tirées d'un dépôt externe : régénérées par tools/fetch_hors_git.py
+# depuis le commit indiqué, vérifiées par leur sha256. Pas de série : tests de méthode.
+# ---------------------------------------------------------------------------------------------
+hors_git:
+  - id: vc-strava
+    fichier: "private/vcyclist/strava.gpx"
+    provenance_depot: {depot: vcyclist, commit: 4dfd6c5, chemin: "demo/public/gpx/strava.gpx"}
+    sha256: 6eefdf12c3abc0e25b56397a904524a675817901a032a6f8fee3abe49ba9c941
+    taille_octets: 2717928
+    teste: "Test de méthode d'ord-bench (T05 §3.4) : D+ preset dem / D+ baro ≈ 714 / 637 m ≈ 1,12, à ± 3 points"
+    reference: "vcyclist docs/guides/elevation.md:319-321"
+    raison_hors_git: "Activité enregistrée de l'utilisateur (horodatage, fréquence cardiaque, cadence, température) : règle des traces perso, hors git sans exception, même si vcyclist la publie ; 2,7 Mo"
+    note: "Enregistrée en 2018, dans la période d'altitude dégradée (2015-08 → 2020-08, README §1.3) : le D+ baro n'y est pas une référence fiable, seulement le chiffre publié que le test doit reproduire"
+    licence: "Apache-2.0 (dépôt vcyclist) ; géométrie de l'auteur"
+
+# ---------------------------------------------------------------------------------------------
 # 2. Éval d'osm-surface (copiée dans data/osm-surface/, Apache-2.0, provenance dans PROVENANCE.md)
 # ---------------------------------------------------------------------------------------------
 osm_surface:
