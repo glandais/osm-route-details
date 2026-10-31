@@ -1,0 +1,1443 @@
+{
+  "agregats": {
+    "E1": {
+      "dplus.p95_m_max": 6.443,
+      "dplus.p95_m_mediane": 3.082,
+      "dplus.rmse_m_max": 4.211,
+      "dplus.rmse_m_mediane": 1.558,
+      "hors_france.p95_m_max": 4.535,
+      "hors_france.p95_m_mediane": 4.48,
+      "hors_france.rmse_m_max": 4.344,
+      "hors_france.rmse_m_mediane": 2.537,
+      "ouvrage.p95_m_max": 4.569,
+      "ouvrage.p95_m_mediane": 1.139,
+      "ouvrage.rmse_m_max": 4.719,
+      "ouvrage.rmse_m_mediane": 1.504,
+      "plaine.p95_m_max": 2.62,
+      "plaine.p95_m_mediane": 1.254,
+      "plaine.rmse_m_max": 1.36,
+      "plaine.rmse_m_mediane": 0.859
+    },
+    "E2": {
+      "dplus.ratio_mediane": 1.0497,
+      "dplus.ratio_mnt_brut_mediane": 1.0497,
+      "hors_france.ratio_mediane": 1.1005,
+      "hors_france.ratio_mnt_brut_mediane": 1.1005,
+      "ouvrage.ratio_mediane": 1.0305,
+      "ouvrage.ratio_mnt_brut_mediane": 1.0305,
+      "plaine.ratio_mediane": 1.0107,
+      "plaine.ratio_mnt_brut_mediane": 1.0107
+    },
+    "E2b": {
+      "dplus": {
+        "mediane_ecart_log_mnt_brut": 0.0485,
+        "mediane_ecart_log_service": 0.0485,
+        "verdict": "non_discriminant"
+      },
+      "ouvrage": {
+        "mediane_ecart_log_mnt_brut": 0.04172,
+        "mediane_ecart_log_service": 0.04172,
+        "verdict": "non_discriminant"
+      },
+      "plaine": {
+        "mediane_ecart_log_mnt_brut": 0.02528,
+        "mediane_ecart_log_service": 0.02528,
+        "verdict": "non_discriminant"
+      }
+    }
+  },
+  "campagne": {
+    "api_version": "1.0",
+    "bench_rules": {
+      "baro_gap_max_m": 100.0,
+      "detrend_step_m": 50.0,
+      "detrend_window_m": 5000.0,
+      "grid_step_m": 5.0,
+      "mask_half_m": 500.0,
+      "match_max_m": 30.0,
+      "passage_tol_m": 40.0,
+      "request_resample_m": 10.0
+    },
+    "bench_rules_sha256": "bee2c543124eac09b9624b1579e6562b0849d69b5e25ca8113301fb780022103",
+    "commit": "c29ffce",
+    "criteria_sha256": "0bf787913565b6e535c95b6b055bffbc4e6a2a797796475aecb0d6c4b0800ee4",
+    "data_fingerprint": "c3ff8dca937b539cc067e3937be9463e91c3b6c99462b544dd02112bd6dfce8c",
+    "data_versions": {
+      "elevation": [
+        {
+          "date": "2026-10-31",
+          "indicative": true,
+          "products": [
+            "mnt"
+          ],
+          "role": "primary",
+          "source": "ign-lidar-hd",
+          "zoom": 15
+        }
+      ]
+    },
+    "date": "2026-10-31",
+    "exclus_serie_tenue_a_l_ecart": [
+      "perso-12",
+      "perso-13",
+      "perso-14",
+      "perso-15",
+      "perso-23",
+      "perso-26",
+      "perso-31",
+      "perso-35",
+      "perso-36"
+    ],
+    "groupes": [
+      "dplus",
+      "plaine",
+      "ouvrage",
+      "hors_france"
+    ],
+    "increment": "MVP",
+    "increment_plan": 2,
+    "manifest_sha256": "d81a2f48bdcf859335f76df23fb853a86d41762845209a77475a7d800652631d",
+    "notes": [
+      "E1 : toutes les stations hors fenêtres masquées (pas encore de typologie : les ouvrages ne sont pas exclus)",
+      "E2b : non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
+      "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
+    ],
+    "private_present": true,
+    "revision_banc": "bench1",
+    "rules_fingerprint": "02eac223a082717f1c81d328ecd909ab352f08577641fb1263d1713d9a32f07c",
+    "rules_version": "2026.10.2",
+    "type": "calibration"
+  },
+  "cas": [
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 36585.0,
+        "E1.max_abs_m": 26.0,
+        "E1.offset_baro_moins_service_m": -22.03,
+        "E1.part_au_dela_de_10m": 0.0015,
+        "E1.plage_10m_debut_d_m": 36525.0,
+        "E1.plage_10m_fin_d_m": 36615.0,
+        "E1.plage_10m_longueur_m": 90.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9832,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3736,
+        "stations": 22362,
+        "stations_comparees": 21987,
+        "status": "complete",
+        "summary_gain_m": 2383.22,
+        "summary_length_m": 111804.14,
+        "terrain_m": {
+          "ign_lidar_hd": 111804.14
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-01",
+      "metriques": {
+        "E1.p95_m": 3.014,
+        "E1.rmse_m": 1.627,
+        "E2.dplus_baro_m": 2148.9,
+        "E2.dplus_mnt_brut_m": 2352.1,
+        "E2.dplus_service_m": 2352.1,
+        "E2.ratio": 1.0946,
+        "E2.ratio_mnt_brut": 1.0946
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 56900.0,
+        "E1.max_abs_m": 16.07,
+        "E1.offset_baro_moins_service_m": -3.31,
+        "E1.part_au_dela_de_10m": 0.0007,
+        "E1.plage_10m_debut_d_m": 56890.0,
+        "E1.plage_10m_fin_d_m": 56905.0,
+        "E1.plage_10m_longueur_m": 15.0,
+        "avertissements": {},
+        "masque_m": 1170.0,
+        "part_comparee": 0.9814,
+        "passages_masques": [
+          "nv-42"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3221,
+        "stations": 19468,
+        "stations_comparees": 19106,
+        "status": "complete",
+        "summary_gain_m": 1665.76,
+        "summary_length_m": 97333.91,
+        "terrain_m": {
+          "ign_lidar_hd": 97333.91
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-02",
+      "metriques": {
+        "E1.p95_m": 3.042,
+        "E1.rmse_m": 1.397,
+        "E2.dplus_baro_m": 1496.3,
+        "E2.dplus_mnt_brut_m": 1634.5,
+        "E2.dplus_service_m": 1634.5,
+        "E2.ratio": 1.0924,
+        "E2.ratio_mnt_brut": 1.0924
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 46535.0,
+        "E1.max_abs_m": 24.18,
+        "E1.offset_baro_moins_service_m": -13.27,
+        "E1.part_au_dela_de_10m": 0.0003,
+        "E1.plage_10m_debut_d_m": 46525.0,
+        "E1.plage_10m_fin_d_m": 46545.0,
+        "E1.plage_10m_longueur_m": 20.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9838,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3436,
+        "stations": 18288,
+        "stations_comparees": 17991,
+        "status": "complete",
+        "summary_gain_m": 1879.44,
+        "summary_length_m": 91434.8,
+        "terrain_m": {
+          "ign_lidar_hd": 91434.8
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-03",
+      "metriques": {
+        "E1.p95_m": 3.667,
+        "E1.rmse_m": 1.489,
+        "E2.dplus_baro_m": 1718.5,
+        "E2.dplus_mnt_brut_m": 1854.1,
+        "E2.dplus_service_m": 1854.1,
+        "E2.ratio": 1.0789,
+        "E2.ratio_mnt_brut": 1.0789
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 49150.0,
+        "E1.max_abs_m": 11.94,
+        "E1.offset_baro_moins_service_m": 3.56,
+        "E1.part_au_dela_de_10m": 0.0016,
+        "E1.plage_10m_debut_d_m": 49050.0,
+        "E1.plage_10m_fin_d_m": 49160.0,
+        "E1.plage_10m_longueur_m": 110.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9981,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 2873,
+        "stations": 14473,
+        "stations_comparees": 14445,
+        "status": "complete",
+        "summary_gain_m": 1285.14,
+        "summary_length_m": 72355.96,
+        "terrain_m": {
+          "ign_lidar_hd": 72355.96
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-04",
+      "metriques": {
+        "E1.p95_m": 3.121,
+        "E1.rmse_m": 1.451,
+        "E2.dplus_baro_m": 1183.1,
+        "E2.dplus_mnt_brut_m": 1286.2,
+        "E2.dplus_service_m": 1286.2,
+        "E2.ratio": 1.0871,
+        "E2.ratio_mnt_brut": 1.0871
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 136930.0,
+        "E1.max_abs_m": 11.81,
+        "E1.offset_baro_moins_service_m": -1.92,
+        "E1.part_au_dela_de_10m": 0.0012,
+        "E1.plage_10m_debut_d_m": 136780.0,
+        "E1.plage_10m_fin_d_m": 136935.0,
+        "E1.plage_10m_longueur_m": 155.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9798,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 6834,
+        "stations": 28053,
+        "stations_comparees": 27487,
+        "status": "complete",
+        "summary_gain_m": 2538.89,
+        "summary_length_m": 140255.91,
+        "terrain_m": {
+          "ign_lidar_hd": 140255.91
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-05",
+      "metriques": {
+        "E1.p95_m": 1.49,
+        "E1.rmse_m": 0.849,
+        "E2.dplus_baro_m": 2365.9,
+        "E2.dplus_mnt_brut_m": 2480.8,
+        "E2.dplus_service_m": 2480.8,
+        "E2.ratio": 1.0486,
+        "E2.ratio_mnt_brut": 1.0486
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 88975.0,
+        "E1.max_abs_m": 12.69,
+        "E1.offset_baro_moins_service_m": -26.96,
+        "E1.part_au_dela_de_10m": 0.0003,
+        "E1.plage_10m_debut_d_m": 88965.0,
+        "E1.plage_10m_fin_d_m": 88990.0,
+        "E1.plage_10m_longueur_m": 25.0,
+        "avertissements": {},
+        "masque_m": 2600.0,
+        "part_comparee": 0.9198,
+        "passages_masques": [
+          "nv-06",
+          "nv-43"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 6340,
+        "stations": 41671,
+        "stations_comparees": 38331,
+        "status": [
+          "complete",
+          "complete"
+        ],
+        "summary_gain_m": [
+          1514.19,
+          863.79
+        ],
+        "summary_length_m": [
+          104202.57,
+          104140.51
+        ],
+        "terrain_m": {
+          "ign_lidar_hd": 208343.08
+        },
+        "troncons": 2
+      },
+      "groupe": "dplus",
+      "id": "perso-06",
+      "metriques": {
+        "E1.p95_m": 2.164,
+        "E1.rmse_m": 1.106,
+        "E2.dplus_baro_m": 2033.7,
+        "E2.dplus_mnt_brut_m": 2070.6,
+        "E2.dplus_service_m": 2070.6,
+        "E2.ratio": 1.0181,
+        "E2.ratio_mnt_brut": 1.0181
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 96565.0,
+        "E1.max_abs_m": 42.78,
+        "E1.offset_baro_moins_service_m": 1.84,
+        "E1.part_au_dela_de_10m": 0.0034,
+        "E1.plage_10m_debut_d_m": 1125.0,
+        "E1.plage_10m_fin_d_m": 1235.0,
+        "E1.plage_10m_longueur_m": 110.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9949,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4597,
+        "stations": 21655,
+        "stations_comparees": 21544,
+        "status": "complete",
+        "summary_gain_m": 1733.23,
+        "summary_length_m": 108267.97,
+        "terrain_m": {
+          "ign_lidar_hd": 108267.97
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-07",
+      "metriques": {
+        "E1.p95_m": 2.977,
+        "E1.rmse_m": 2.088,
+        "E2.dplus_baro_m": 1596.6,
+        "E2.dplus_mnt_brut_m": 1726.1,
+        "E2.dplus_service_m": 1726.1,
+        "E2.ratio": 1.0811,
+        "E2.ratio_mnt_brut": 1.0811
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 11285.0,
+        "E1.max_abs_m": 37.28,
+        "E1.offset_baro_moins_service_m": 8.33,
+        "E1.part_au_dela_de_10m": 0.0021,
+        "E1.plage_10m_debut_d_m": 11220.0,
+        "E1.plage_10m_fin_d_m": 11305.0,
+        "E1.plage_10m_longueur_m": 85.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9332,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5175,
+        "stations": 23464,
+        "stations_comparees": 21896,
+        "status": "complete",
+        "summary_gain_m": 2298.69,
+        "summary_length_m": 117311.62,
+        "terrain_m": {
+          "ign_lidar_hd": 117311.62
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-08",
+      "metriques": {
+        "E1.p95_m": 3.136,
+        "E1.rmse_m": 1.812,
+        "E2.dplus_baro_m": 1883.4,
+        "E2.dplus_mnt_brut_m": 1967.6,
+        "E2.dplus_service_m": 1967.6,
+        "E2.ratio": 1.0447,
+        "E2.ratio_mnt_brut": 1.0447
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 23280.0,
+        "E1.max_abs_m": 22.03,
+        "E1.offset_baro_moins_service_m": 1.59,
+        "E1.part_au_dela_de_10m": 0.0028,
+        "E1.plage_10m_debut_d_m": 12055.0,
+        "E1.plage_10m_fin_d_m": 12135.0,
+        "E1.plage_10m_longueur_m": 80.0,
+        "avertissements": {},
+        "masque_m": 2295.0,
+        "part_comparee": 0.9458,
+        "passages_masques": [
+          "nv-07",
+          "nv-18"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3800,
+        "stations": 18700,
+        "stations_comparees": 17686,
+        "status": "complete",
+        "summary_gain_m": 2561.53,
+        "summary_length_m": 93490.75,
+        "terrain_m": {
+          "ign_lidar_hd": 93490.75
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-09",
+      "metriques": {
+        "E1.p95_m": 4.023,
+        "E1.rmse_m": 1.965,
+        "E2.dplus_baro_m": 2240.1,
+        "E2.dplus_mnt_brut_m": 2353.8,
+        "E2.dplus_service_m": 2353.8,
+        "E2.ratio": 1.0508,
+        "E2.ratio_mnt_brut": 1.0508
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 50965.0,
+        "E1.max_abs_m": 20.7,
+        "E1.offset_baro_moins_service_m": 6.96,
+        "E1.part_au_dela_de_10m": 0.0026,
+        "E1.plage_10m_debut_d_m": 32200.0,
+        "E1.plage_10m_fin_d_m": 32290.0,
+        "E1.plage_10m_longueur_m": 90.0,
+        "avertissements": {},
+        "masque_m": 1190.0,
+        "part_comparee": 0.9307,
+        "passages_masques": [
+          "nv-29"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3279,
+        "stations": 13806,
+        "stations_comparees": 12849,
+        "status": "complete",
+        "summary_gain_m": 2128.63,
+        "summary_length_m": 69022.98,
+        "terrain_m": {
+          "ign_lidar_hd": 69022.98
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-10",
+      "metriques": {
+        "E1.p95_m": 3.915,
+        "E1.rmse_m": 1.858,
+        "E2.dplus_baro_m": 1802.0,
+        "E2.dplus_mnt_brut_m": 1882.0,
+        "E2.dplus_service_m": 1882.0,
+        "E2.ratio": 1.0444,
+        "E2.ratio_mnt_brut": 1.0444
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 88505.0,
+        "E1.max_abs_m": 131.48,
+        "E1.offset_baro_moins_service_m": 5.14,
+        "E1.part_au_dela_de_10m": 0.0081,
+        "E1.plage_10m_debut_d_m": 88365.0,
+        "E1.plage_10m_fin_d_m": 89010.0,
+        "E1.plage_10m_longueur_m": 645.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9766,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 6136,
+        "stations": 23848,
+        "stations_comparees": 23290,
+        "status": "complete",
+        "summary_gain_m": 2758.14,
+        "summary_length_m": 119233.46,
+        "terrain_m": {
+          "ign_lidar_hd": 119233.46
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-11",
+      "metriques": {
+        "E1.p95_m": 4.655,
+        "E1.rmse_m": 4.211,
+        "E2.dplus_baro_m": 2335.5,
+        "E2.dplus_mnt_brut_m": 2631.3,
+        "E2.dplus_service_m": 2631.3,
+        "E2.ratio": 1.1266,
+        "E2.ratio_mnt_brut": 1.1266
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 25095.0,
+        "E1.max_abs_m": 4.05,
+        "E1.offset_baro_moins_service_m": 0.27,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9997,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3041,
+        "stations": 13926,
+        "stations_comparees": 13922,
+        "status": "complete",
+        "summary_gain_m": 1450.47,
+        "summary_length_m": 69624.97,
+        "terrain_m": {
+          "ign_lidar_hd": 69624.97
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-16",
+      "metriques": {
+        "E1.p95_m": 1.353,
+        "E1.rmse_m": 0.677,
+        "E2.dplus_baro_m": 1441.5,
+        "E2.dplus_mnt_brut_m": 1450.4,
+        "E2.dplus_service_m": 1450.4,
+        "E2.ratio": 1.0062,
+        "E2.ratio_mnt_brut": 1.0062
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 30405.0,
+        "E1.max_abs_m": 12.99,
+        "E1.offset_baro_moins_service_m": 0.32,
+        "E1.part_au_dela_de_10m": 0.0011,
+        "E1.plage_10m_debut_d_m": 30350.0,
+        "E1.plage_10m_fin_d_m": 30385.0,
+        "E1.plage_10m_longueur_m": 35.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9319,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 2362,
+        "stations": 10430,
+        "stations_comparees": 9720,
+        "status": "complete",
+        "summary_gain_m": 832.66,
+        "summary_length_m": 52141.66,
+        "terrain_m": {
+          "ign_lidar_hd": 52141.66
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-17",
+      "metriques": {
+        "E1.p95_m": 1.705,
+        "E1.rmse_m": 0.912,
+        "E2.dplus_baro_m": 792.3,
+        "E2.dplus_mnt_brut_m": 793.4,
+        "E2.dplus_service_m": 793.4,
+        "E2.ratio": 1.0014,
+        "E2.ratio_mnt_brut": 1.0014
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 36190.0,
+        "E1.max_abs_m": 20.71,
+        "E1.offset_baro_moins_service_m": 1.76,
+        "E1.part_au_dela_de_10m": 0.0171,
+        "E1.plage_10m_debut_d_m": 43455.0,
+        "E1.plage_10m_fin_d_m": 43750.0,
+        "E1.plage_10m_longueur_m": 295.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9724,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 1406,
+        "stations": 9247,
+        "stations_comparees": 8992,
+        "status": "complete",
+        "summary_gain_m": 1468.59,
+        "summary_length_m": 46228.58,
+        "terrain_m": {
+          "mapterhorn_measured": 46228.58
+        },
+        "troncons": 1
+      },
+      "groupe": "dplus",
+      "id": "perso-18",
+      "metriques": {
+        "E1.p95_m": 6.443,
+        "E1.rmse_m": 2.845,
+        "E2.dplus_baro_m": 1369.9,
+        "E2.dplus_mnt_brut_m": 1434.4,
+        "E2.dplus_service_m": 1434.4,
+        "E2.ratio": 1.0471,
+        "E2.ratio_mnt_brut": 1.0471
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 53700.0,
+        "E1.max_abs_m": 15.74,
+        "E1.offset_baro_moins_service_m": -0.19,
+        "E1.part_au_dela_de_10m": 0.0004,
+        "E1.plage_10m_debut_d_m": 53690.0,
+        "E1.plage_10m_fin_d_m": 53730.0,
+        "E1.plage_10m_longueur_m": 40.0,
+        "avertissements": {},
+        "masque_m": 1145.0,
+        "part_comparee": 0.9882,
+        "passages_masques": [
+          "nv-23"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4401,
+        "stations": 21421,
+        "stations_comparees": 21168,
+        "status": "complete",
+        "summary_gain_m": 1199.0,
+        "summary_length_m": 107095.11,
+        "terrain_m": {
+          "ign_lidar_hd": 107095.11
+        },
+        "troncons": 1
+      },
+      "groupe": "plaine",
+      "id": "perso-19",
+      "metriques": {
+        "E1.p95_m": 2.62,
+        "E1.rmse_m": 1.36,
+        "E2.dplus_baro_m": 1176.8,
+        "E2.dplus_mnt_brut_m": 1189.4,
+        "E2.dplus_service_m": 1189.4,
+        "E2.ratio": 1.0107,
+        "E2.ratio_mnt_brut": 1.0107
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 67355.0,
+        "E1.max_abs_m": 52.13,
+        "E1.offset_baro_moins_service_m": -0.29,
+        "E1.part_au_dela_de_10m": 0.0152,
+        "E1.plage_10m_debut_d_m": 66555.0,
+        "E1.plage_10m_fin_d_m": 67610.0,
+        "E1.plage_10m_longueur_m": 1055.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9884,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4314,
+        "stations": 25868,
+        "stations_comparees": 25567,
+        "status": "complete",
+        "summary_gain_m": 693.33,
+        "summary_length_m": 129332.48,
+        "terrain_m": {
+          "ign_lidar_hd": 129332.48
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-20",
+      "metriques": {
+        "E1.p95_m": 0.851,
+        "E1.rmse_m": 4.444,
+        "E2.dplus_baro_m": 655.6,
+        "E2.dplus_mnt_brut_m": 685.8,
+        "E2.dplus_service_m": 685.8,
+        "E2.ratio": 1.046,
+        "E2.ratio_mnt_brut": 1.046
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 67825.0,
+        "E1.max_abs_m": 52.43,
+        "E1.offset_baro_moins_service_m": -0.21,
+        "E1.part_au_dela_de_10m": 0.0129,
+        "E1.plage_10m_debut_d_m": 67025.0,
+        "E1.plage_10m_fin_d_m": 68080.0,
+        "E1.plage_10m_longueur_m": 1055.0,
+        "avertissements": {},
+        "masque_m": 2345.0,
+        "part_comparee": 0.9813,
+        "passages_masques": [
+          "nv-01",
+          "nv-38"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5321,
+        "stations": 28786,
+        "stations_comparees": 28247,
+        "status": "complete",
+        "summary_gain_m": 890.78,
+        "summary_length_m": 143923.79,
+        "terrain_m": {
+          "ign_lidar_hd": 143923.79
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-21",
+      "metriques": {
+        "E1.p95_m": 0.956,
+        "E1.rmse_m": 4.242,
+        "E2.dplus_baro_m": 845.0,
+        "E2.dplus_mnt_brut_m": 860.9,
+        "E2.dplus_service_m": 860.9,
+        "E2.ratio": 1.0188,
+        "E2.ratio_mnt_brut": 1.0188
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 56520.0,
+        "E1.max_abs_m": 51.92,
+        "E1.offset_baro_moins_service_m": -0.42,
+        "E1.part_au_dela_de_10m": 0.0162,
+        "E1.plage_10m_debut_d_m": 56270.0,
+        "E1.plage_10m_fin_d_m": 57325.0,
+        "E1.plage_10m_longueur_m": 1055.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.994,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3596,
+        "stations": 22548,
+        "stations_comparees": 22412,
+        "status": "complete",
+        "summary_gain_m": 533.19,
+        "summary_length_m": 112730.3,
+        "terrain_m": {
+          "ign_lidar_hd": 112730.3
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-22",
+      "metriques": {
+        "E1.p95_m": 0.968,
+        "E1.rmse_m": 4.719,
+        "E2.dplus_baro_m": 508.2,
+        "E2.dplus_mnt_brut_m": 529.6,
+        "E2.dplus_service_m": 529.6,
+        "E2.ratio": 1.0423,
+        "E2.ratio_mnt_brut": 1.0423
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 3545.0,
+        "E1.max_abs_m": 6.48,
+        "E1.offset_baro_moins_service_m": -4.47,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9995,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 2425,
+        "stations": 12401,
+        "stations_comparees": 12395,
+        "status": "complete",
+        "summary_gain_m": 430.25,
+        "summary_length_m": 61999.57,
+        "terrain_m": {
+          "ign_lidar_hd": 61999.57
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-24",
+      "metriques": {
+        "E1.p95_m": 1.307,
+        "E1.rmse_m": 0.643,
+        "E2.dplus_baro_m": 437.3,
+        "E2.dplus_mnt_brut_m": 430.2,
+        "E2.dplus_service_m": 430.2,
+        "E2.ratio": 0.9839,
+        "E2.ratio_mnt_brut": 0.9839
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 6200.0,
+        "E1.max_abs_m": 6.58,
+        "E1.offset_baro_moins_service_m": 0.01,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 2280.0,
+        "part_comparee": 0.9709,
+        "passages_masques": [
+          "nv-05",
+          "nv-08"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3872,
+        "stations": 20153,
+        "stations_comparees": 19566,
+        "status": "complete",
+        "summary_gain_m": 907.11,
+        "summary_length_m": 100755.97,
+        "terrain_m": {
+          "ign_lidar_hd": 100755.97
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-25",
+      "metriques": {
+        "E1.p95_m": 0.993,
+        "E1.rmse_m": 0.576,
+        "E2.dplus_baro_m": 864.6,
+        "E2.dplus_mnt_brut_m": 869.4,
+        "E2.dplus_service_m": 869.4,
+        "E2.ratio": 1.0055,
+        "E2.ratio_mnt_brut": 1.0055
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 7000.0,
+        "E1.max_abs_m": 11.65,
+        "E1.offset_baro_moins_service_m": -0.68,
+        "E1.part_au_dela_de_10m": 0.0028,
+        "E1.plage_10m_debut_d_m": 6845.0,
+        "E1.plage_10m_fin_d_m": 7105.0,
+        "E1.plage_10m_longueur_m": 260.0,
+        "avertissements": {},
+        "masque_m": 2325.0,
+        "part_comparee": 0.976,
+        "passages_masques": [
+          "nv-31",
+          "nv-47"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4618,
+        "stations": 19478,
+        "stations_comparees": 19011,
+        "status": "complete",
+        "summary_gain_m": 799.76,
+        "summary_length_m": 97383.6,
+        "terrain_m": {
+          "ign_lidar_hd": 97383.6
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-27",
+      "metriques": {
+        "E1.p95_m": 1.285,
+        "E1.rmse_m": 1.02,
+        "E2.dplus_baro_m": 742.0,
+        "E2.dplus_mnt_brut_m": 773.8,
+        "E2.dplus_service_m": 773.8,
+        "E2.ratio": 1.0429,
+        "E2.ratio_mnt_brut": 1.0429
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 16630.0,
+        "E1.max_abs_m": 5.95,
+        "E1.offset_baro_moins_service_m": -7.05,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 3405.0,
+        "part_comparee": 0.9454,
+        "passages_masques": [
+          "nv-03",
+          "nv-19",
+          "nv-51"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4443,
+        "stations": 21940,
+        "stations_comparees": 20743,
+        "status": "complete",
+        "summary_gain_m": 940.09,
+        "summary_length_m": 109693.88,
+        "terrain_m": {
+          "ign_lidar_hd": 109693.88
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-28",
+      "metriques": {
+        "E1.p95_m": 1.396,
+        "E1.rmse_m": 0.743,
+        "E2.dplus_baro_m": 909.8,
+        "E2.dplus_mnt_brut_m": 862.5,
+        "E2.dplus_service_m": 862.5,
+        "E2.ratio": 0.9481,
+        "E2.ratio_mnt_brut": 0.9481
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 90970.0,
+        "E1.max_abs_m": 15.36,
+        "E1.offset_baro_moins_service_m": -2.53,
+        "E1.part_au_dela_de_10m": 0.0004,
+        "E1.plage_10m_debut_d_m": 90940.0,
+        "E1.plage_10m_fin_d_m": 90980.0,
+        "E1.plage_10m_longueur_m": 40.0,
+        "avertissements": {},
+        "masque_m": 2305.0,
+        "part_comparee": 0.9671,
+        "passages_masques": [
+          "nv-31",
+          "nv-40"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5217,
+        "stations": 23567,
+        "stations_comparees": 22792,
+        "status": "complete",
+        "summary_gain_m": 710.25,
+        "summary_length_m": 117825.69,
+        "terrain_m": {
+          "ign_lidar_hd": 117825.69
+        },
+        "troncons": 1
+      },
+      "groupe": "ouvrage",
+      "id": "perso-29",
+      "metriques": {
+        "E1.p95_m": 4.569,
+        "E1.rmse_m": 1.987,
+        "E2.dplus_baro_m": 631.8,
+        "E2.dplus_mnt_brut_m": 676.3,
+        "E2.dplus_service_m": 676.3,
+        "E2.ratio": 1.0704,
+        "E2.ratio_mnt_brut": 1.0704
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 63445.0,
+        "E1.max_abs_m": 6.61,
+        "E1.offset_baro_moins_service_m": -0.67,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 2305.0,
+        "part_comparee": 0.963,
+        "passages_masques": [
+          "nv-27",
+          "nv-40"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3243,
+        "stations": 17997,
+        "stations_comparees": 17331,
+        "status": "complete",
+        "summary_gain_m": 725.21,
+        "summary_length_m": 89978.17,
+        "terrain_m": {
+          "ign_lidar_hd": 89978.17
+        },
+        "troncons": 1
+      },
+      "groupe": "plaine",
+      "id": "perso-30",
+      "metriques": {
+        "E1.p95_m": 1.142,
+        "E1.rmse_m": 0.579,
+        "E2.dplus_baro_m": 729.6,
+        "E2.dplus_mnt_brut_m": 702.4,
+        "E2.dplus_service_m": 702.4,
+        "E2.ratio": 0.9628,
+        "E2.ratio_mnt_brut": 0.9628
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 77085.0,
+        "E1.max_abs_m": 8.45,
+        "E1.offset_baro_moins_service_m": -2.89,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 3920.0,
+        "part_comparee": 0.9637,
+        "passages_masques": [
+          "nv-06",
+          "nv-23",
+          "nv-27"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4162,
+        "stations": 22447,
+        "stations_comparees": 21632,
+        "status": "complete",
+        "summary_gain_m": 999.64,
+        "summary_length_m": 112229.09,
+        "terrain_m": {
+          "ign_lidar_hd": 112229.09
+        },
+        "troncons": 1
+      },
+      "groupe": "plaine",
+      "id": "perso-32",
+      "metriques": {
+        "E1.p95_m": 1.254,
+        "E1.rmse_m": 0.859,
+        "E2.dplus_baro_m": 919.2,
+        "E2.dplus_mnt_brut_m": 942.7,
+        "E2.dplus_service_m": 942.7,
+        "E2.ratio": 1.0256,
+        "E2.ratio_mnt_brut": 1.0256
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 15830.0,
+        "E1.max_abs_m": 5.96,
+        "E1.offset_baro_moins_service_m": -5.78,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9935,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3306,
+        "stations": 21028,
+        "stations_comparees": 20892,
+        "status": "complete",
+        "summary_gain_m": 761.93,
+        "summary_length_m": 105130.19,
+        "terrain_m": {
+          "ign_lidar_hd": 105130.19
+        },
+        "troncons": 1
+      },
+      "groupe": "plaine",
+      "id": "perso-33",
+      "metriques": {
+        "E1.p95_m": 1.176,
+        "E1.rmse_m": 0.648,
+        "E2.dplus_baro_m": 780.1,
+        "E2.dplus_mnt_brut_m": 761.7,
+        "E2.dplus_service_m": 761.7,
+        "E2.ratio": 0.9764,
+        "E2.ratio_mnt_brut": 0.9764
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 98240.0,
+        "E1.max_abs_m": 7.17,
+        "E1.offset_baro_moins_service_m": -7.73,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 1130.0,
+        "part_comparee": 0.9887,
+        "passages_masques": [
+          "nv-27"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3020,
+        "stations": 20481,
+        "stations_comparees": 20249,
+        "status": "complete",
+        "summary_gain_m": 794.29,
+        "summary_length_m": 102398.58,
+        "terrain_m": {
+          "ign_lidar_hd": 102398.58
+        },
+        "troncons": 1
+      },
+      "groupe": "plaine",
+      "id": "perso-34",
+      "metriques": {
+        "E1.p95_m": 1.931,
+        "E1.rmse_m": 0.989,
+        "E2.dplus_baro_m": 741.8,
+        "E2.dplus_mnt_brut_m": 783.1,
+        "E2.dplus_service_m": 783.1,
+        "E2.ratio": 1.0556,
+        "E2.ratio_mnt_brut": 1.0556
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 78725.0,
+        "E1.max_abs_m": 16.98,
+        "E1.offset_baro_moins_service_m": 7.42,
+        "E1.part_au_dela_de_10m": 0.0052,
+        "E1.plage_10m_debut_d_m": 78670.0,
+        "E1.plage_10m_fin_d_m": 78780.0,
+        "E1.plage_10m_longueur_m": 110.0,
+        "avertissements": {
+          "outside_primary_zone": 2
+        },
+        "masque_m": 1185.0,
+        "part_comparee": 0.9273,
+        "passages_masques": [
+          "donostia-zurriola"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5614,
+        "stations": 19714,
+        "stations_comparees": 18280,
+        "status": "complete",
+        "summary_gain_m": 1122.12,
+        "summary_length_m": 98562.42,
+        "terrain_m": {
+          "ign_lidar_hd": 61857.5,
+          "mapterhorn": 10299.92,
+          "mapterhorn_measured": 26405.0
+        },
+        "troncons": 1
+      },
+      "groupe": "hors_france",
+      "id": "perso-37",
+      "metriques": {
+        "E1.p95_m": 4.535,
+        "E1.rmse_m": 2.172,
+        "E2.dplus_baro_m": 884.6,
+        "E2.dplus_mnt_brut_m": 1023.2,
+        "E2.dplus_service_m": 1023.2,
+        "E2.ratio": 1.1566,
+        "E2.ratio_mnt_brut": 1.1566
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 36405.0,
+        "E1.max_abs_m": 78.26,
+        "E1.offset_baro_moins_service_m": -0.23,
+        "E1.part_au_dela_de_10m": 0.0072,
+        "E1.plage_10m_debut_d_m": 36300.0,
+        "E1.plage_10m_fin_d_m": 36560.0,
+        "E1.plage_10m_longueur_m": 260.0,
+        "avertissements": {
+          "outside_primary_zone": 1
+        },
+        "masque_m": 0.0,
+        "part_comparee": 0.8923,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5868,
+        "stations": 21931,
+        "stations_comparees": 19569,
+        "status": "complete",
+        "summary_gain_m": 3368.99,
+        "summary_length_m": 109648.13,
+        "terrain_m": {
+          "mapterhorn": 109648.13
+        },
+        "troncons": 1
+      },
+      "groupe": "hors_france",
+      "id": "perso-38",
+      "metriques": {
+        "E1.p95_m": 4.388,
+        "E1.rmse_m": 4.344,
+        "E2.dplus_baro_m": 2600.5,
+        "E2.dplus_mnt_brut_m": 2862.0,
+        "E2.dplus_service_m": 2862.0,
+        "E2.ratio": 1.1005,
+        "E2.ratio_mnt_brut": 1.1005
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 55535.0,
+        "E1.max_abs_m": 32.6,
+        "E1.offset_baro_moins_service_m": 2.28,
+        "E1.part_au_dela_de_10m": 0.0058,
+        "E1.plage_10m_debut_d_m": 55390.0,
+        "E1.plage_10m_fin_d_m": 55650.0,
+        "E1.plage_10m_longueur_m": 260.0,
+        "avertissements": {
+          "dsm_source": 1,
+          "outside_primary_zone": 1
+        },
+        "masque_m": 0.0,
+        "part_comparee": 0.9979,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 1,
+        "points_envoyes": 2242,
+        "stations": 18776,
+        "stations_comparees": 18736,
+        "status": "complete",
+        "summary_gain_m": 1612.57,
+        "summary_length_m": 93872.99,
+        "terrain_m": {
+          "mapterhorn": 93872.99
+        },
+        "troncons": 1
+      },
+      "groupe": "hors_france",
+      "id": "perso-39",
+      "metriques": {
+        "E1.p95_m": 4.48,
+        "E1.rmse_m": 2.537,
+        "E2.dplus_baro_m": 1705.3,
+        "E2.dplus_mnt_brut_m": 1608.8,
+        "E2.dplus_service_m": 1608.8,
+        "E2.ratio": 0.9434,
+        "E2.ratio_mnt_brut": 0.9434
+      },
+      "mode": "distance",
+      "serie": "calibration"
+    }
+  ],
+  "cas_sautes": [],
+  "diagnostics": {
+    "cache": {
+      "octets": 819606420,
+      "tuiles": 3196
+    }
+  },
+  "schema": 1,
+  "verdicts": {
+    "E1": "fail",
+    "E1_echecs": [
+      {
+        "groupe": "dplus",
+        "id": "perso-11",
+        "p95_m": 4.655,
+        "rmse_m": 4.211
+      }
+    ],
+    "E2": "reported",
+    "E2_indicatif": [
+      {
+        "groupe": "dplus",
+        "mediane": 1.0497,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      },
+      {
+        "groupe": "ouvrage",
+        "mediane": 1.0305,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      },
+      {
+        "groupe": "plaine",
+        "mediane": 1.0107,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      }
+    ],
+    "E2b": "non_discriminant",
+    "E2b_groupes_en_echec": [],
+    "Q1": "pass"
+  }
+}
