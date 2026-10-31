@@ -816,6 +816,9 @@ pub async fn measure_case(
         dplus_with(&p.d, &svc_raw, dem, &tau_raw),
         dplus(&p.d, &bar, g.preset(GainPreset::Barometric)),
     );
+    // E2b (criteria.yaml `preset_baro: dem`, README §4 bis.5) : D+ baro au preset `dem`, le même
+    // traitement que le service et sa référence sans correction ; E2 reste en `barometric`.
+    let dplus_baro_dem = dplus(&p.d, &bar, dem);
     let mut warning_codes: BTreeMap<String, usize> = BTreeMap::new();
     let mut terrain_m: BTreeMap<String, f64> = BTreeMap::new();
     let mut adapted = 0;
@@ -875,7 +878,10 @@ pub async fn measure_case(
             "E2.dplus_baro_m": round(dplus_baro, 1),
             "E2.ratio": round(dplus_svc / dplus_baro, 4),
             "E2.dplus_mnt_brut_m": round(dplus_raw, 1),
-            "E2.ratio_mnt_brut": round(dplus_raw / dplus_baro, 4)
+            "E2.ratio_mnt_brut": round(dplus_raw / dplus_baro, 4),
+            "E2b.dplus_baro_dem_m": round(dplus_baro_dem, 1),
+            "E2b.ratio": round(dplus_svc / dplus_baro_dem, 4),
+            "E2b.ratio_mnt_brut": round(dplus_raw / dplus_baro_dem, 4)
         },
         "typologie": typo,
         "diagnostics": {
@@ -1079,9 +1085,10 @@ fn judge(cases: &[Value]) -> (Value, Value) {
                 "mediane_dans_bornes": within(med, E2_GROUP_MEDIAN),
                 "traces_hors_bornes": traces_out
             }));
-            // E2b : médiane |ln(service / baro)| ≤ médiane |ln(MNT brut / baro)|.
-            let ln_svc: Vec<f64> = ratio.iter().map(|r| r.ln().abs()).collect();
-            let ln_raw: Vec<f64> = ratio_raw.iter().map(|r| r.ln().abs()).collect();
+            // E2b : médiane |ln(service / baro)| ≤ médiane |ln(MNT brut / baro)|, D+ baro au preset
+            // `dem` (`E2b.ratio*`, criteria.yaml `preset_baro: dem`).
+            let ln_of = |k: &str| -> Vec<f64> { list.iter().map(|c| metric(c, k).ln().abs()).collect() };
+            let (ln_svc, ln_raw) = (ln_of("E2b.ratio"), ln_of("E2b.ratio_mnt_brut"));
             let (ms, mr) = (median(&ln_svc), median(&ln_raw));
             // Service et référence identiques sur tous les cas : le critère ne mesure rien (ni
             // réussite ni échec), ce qui est le cas tant qu'aucun ouvrage n'est corrigé.
@@ -1470,7 +1477,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "increment": "MVP",
             "increment_plan": 5,
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1 et 53225a8)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1506,7 +1513,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain",
-                "E2b : non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
+                "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
             ]
         },
@@ -1738,6 +1745,33 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// E2b lit les ratios au D+ baro `dem` (`E2b.ratio*`), jamais ceux d'E2 (`barometric`) :
+    /// ici, E2 dirait « échec » et E2b, au même preset que le service, « réussite ».
+    #[test]
+    fn e2b_uses_the_dem_baro_gain_and_e2_stays_barometric() {
+        let case = |id: &str, e2: (f64, f64), e2b: (f64, f64)| {
+            json!({"id": id, "groupe": "plaine", "metriques": {
+                "E1.rmse_m": 1.0, "E1.p95_m": 2.0,
+                "E2.dplus_service_m": 100.0, "E2.dplus_mnt_brut_m": 110.0,
+                "E2.ratio": e2.0, "E2.ratio_mnt_brut": e2.1,
+                "E2b.ratio": e2b.0, "E2b.ratio_mnt_brut": e2b.1}})
+        };
+        // Baro barometric plus haut : le service paraît plus loin que sa référence brute.
+        let cases = [case("a", (0.80, 0.88), (1.01, 1.11)), case("b", (0.82, 0.90), (0.99, 1.09))];
+        let (agg, verdicts) = judge(&cases);
+        assert_eq!(verdicts["E2b"], "pass", "{agg}");
+        assert_eq!(agg["E2b"]["plaine"]["verdict"], "pass");
+        assert!(
+            (agg["E2b"]["plaine"]["mediane_ecart_log_service"].as_f64().unwrap() - 0.01005).abs() < 1e-4,
+            "{agg}"
+        );
+        // E2 indicatif reste lu en barometric.
+        assert_eq!(agg["E2"]["plaine.ratio_mediane"], 0.81);
+        // Ratios E2b inversés : échec.
+        let cases = [case("a", (0.80, 0.88), (1.11, 1.01)), case("b", (0.82, 0.90), (1.09, 0.99))];
+        assert_eq!(judge(&cases).1["E2b"], "fail");
+    }
 
     /// Trace synthétique est-ouest de 10 km (un point tous les 10 m), baro partout, qui franchit un
     /// ouvrage de calibration au kilomètre 5.

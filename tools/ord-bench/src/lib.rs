@@ -98,8 +98,11 @@ impl BenchPaths {
 /// 2026.10.9) : en mode `input_with_breakpoints`, références des ouvrages (MNT des approches E3,
 /// test de niveau, E5, bandes de portail E4, repli 1–3 km) et positions des passages lues en
 /// mode `distance` ; seule la sortie testée vient du mode `input_with_breakpoints` (E2b garde
-/// la sortie non corrigée de ce mode).
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// la sortie non corrigée de ce mode). `bench2` (règles 2026.10.9, banc 405f956, criteria.yaml
+/// `preset_baro: dem`, README §4 bis.5) : D+ baro d'E2b au preset `dem` (`E2b.dplus_baro_dem_m`,
+/// `E2b.ratio*`), le même que le service et sa référence sans correction ; E2 reste en
+/// `barometric`.
+pub const BENCH_REVISION: Option<&str> = Some("bench2");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
