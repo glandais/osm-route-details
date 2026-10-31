@@ -287,6 +287,21 @@ pub async fn measure_case(
     Ok((case_json, r["meta"]["data_versions"].clone()))
 }
 
+/// Fixture hors git du manifest, empreinte vérifiée ; `None` (cas sauté) sans `bench/private/`.
+pub fn hors_git_file(paths: &BenchPaths, manifest: &Manifest, id: &str) -> anyhow::Result<Option<PathBuf>> {
+    let entry =
+        manifest.hors_git(id).with_context(|| format!("{id} absent de la section hors_git du manifest"))?;
+    if !paths.private_present() {
+        return Ok(None);
+    }
+    let path = paths.resolve(&entry.fichier);
+    let actual = crate::hash::sha256_file(&path).with_context(|| format!("{id} : fichier absent"))?;
+    if actual != entry.sha256 {
+        bail!("{id} : empreinte différente de celle du manifest");
+    }
+    Ok(Some(path))
+}
+
 /// Date UTC du jour (`AAAA-MM-JJ`), sans dépendance de calendrier.
 pub fn today_utc() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
@@ -396,7 +411,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
     let measured = if cases.is_empty() { "skipped" } else { "reported" };
-    Ok(json!({
+    let results = json!({
         "schema": 1,
         "campagne": {
             "date": today_utc(),
@@ -422,7 +437,9 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
         "agregats": {"E1": e1_agg, "E2": e2_agg},
         "verdicts": {"E1": measured, "E2": measured, "Q1": if report.q1.pass() { "pass" } else { "fail" }},
         "diagnostics": {"cache": {"tuiles": fingerprint.tiles, "octets": fingerprint.bytes}}
-    }))
+    });
+    crate::privacy::assert_report_clean(&results, &crate::privacy::private_names(paths))?;
+    Ok(results)
 }
 
 /// `fill-cache` : mêmes requêtes que `run`, en ligne, plus la cohérence `test4` (deux conventions
@@ -432,6 +449,7 @@ pub async fn fill_cache(
     groupes: &[String],
     ids: &[String],
     coherence_routes: &[String],
+    hors_git: &[String],
     extra_gpx: &[PathBuf],
 ) -> anyhow::Result<Value> {
     let report = check(paths)?;
@@ -459,6 +477,17 @@ pub async fn fill_cache(
         eprintln!("vc-{route} : tuiles en cache (cohérence, deux conventions)");
         filled.push(format!("vc-{route}"));
     }
+    for id in hors_git {
+        match hors_git_file(paths, &manifest, id)? {
+            Some(path) => {
+                let pts: Vec<Pt> = gpx::read(&path)?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
+                crate::coherence::sample_points(&service, &pts).await?;
+                eprintln!("{id} : tuiles en cache");
+                filled.push(id.clone());
+            }
+            None => eprintln!("{id} : sauté (bench/private/ absent)"),
+        }
+    }
     for path in extra_gpx {
         let pts: Vec<Pt> = gpx::read(path)?.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
         crate::coherence::sample_points(&service, &pts).await?;
@@ -474,6 +503,7 @@ pub async fn fill_cache(
         "cas": filled,
         "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out
     });
+    crate::privacy::assert_report_clean(&lock, &crate::privacy::private_names(paths))?;
     std::fs::create_dir_all(&paths.cache)?;
     std::fs::write(paths.cache.join("cache.lock"), serde_json::to_string_pretty(&lock)? + "\n")?;
     Ok(lock)

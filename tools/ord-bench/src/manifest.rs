@@ -44,6 +44,15 @@ pub struct ExternalCopy {
     pub sha256_sommes: String,
 }
 
+/// Fixture hors git (section `hors_git` : activité enregistrée, jamais versionnée), lue dans
+/// `bench/private/`.
+#[derive(Clone, Debug)]
+pub struct HorsGitEntry {
+    pub id: String,
+    pub fichier: String,
+    pub sha256: String,
+}
+
 /// Trace barométrique personnelle (hors git) : jamais de coordonnée dans le manifest.
 #[derive(Clone, Debug)]
 pub struct Trace {
@@ -68,6 +77,7 @@ pub struct Manifest {
     /// `(fichier, sha256)` de l'extension perso des ouvrages.
     pub ouvrages_perso: Option<(String, String)>,
     pub traces: Vec<Trace>,
+    pub hors_git: Vec<HorsGitEntry>,
 }
 
 fn s(v: &Value, key: &str) -> Option<String> {
@@ -145,7 +155,22 @@ impl Manifest {
                 });
             }
         }
+        let hors_git = match root.get("hors_git") {
+            Some(Value::Sequence(items)) => items
+                .iter()
+                .map(|it| {
+                    let id = req(it, "id", "hors_git")?;
+                    Ok(HorsGitEntry {
+                        fichier: req(it, "fichier", &id)?,
+                        sha256: req(it, "sha256", &id)?,
+                        id,
+                    })
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            _ => Vec::new(),
+        };
         Ok(Self {
+            hors_git,
             sha256: sha256_bytes(text.as_bytes()),
             vcyclist: files(&root, "vcyclist")?,
             osm_surface: files(&root, "osm_surface")?,
@@ -161,6 +186,10 @@ impl Manifest {
         let text =
             std::fs::read_to_string(&path).with_context(|| format!("lecture de {}", path.display()))?;
         Self::parse(&text)
+    }
+
+    pub fn hors_git(&self, id: &str) -> Option<&HorsGitEntry> {
+        self.hors_git.iter().find(|e| e.id == id)
     }
 
     pub fn trace(&self, id: &str) -> Option<&Trace> {

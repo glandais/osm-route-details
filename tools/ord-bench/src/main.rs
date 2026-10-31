@@ -41,7 +41,10 @@ enum Command {
         /// Parcours vcyclist de la cohérence du demi-pixel.
         #[arg(long, value_delimiter = ',', default_value = "test4")]
         coherence: Vec<String>,
-        /// GPX supplémentaires (test de méthode `strava.gpx`).
+        /// Fixtures hors git du manifest (test de méthode `vc-strava`), lues dans bench/private/.
+        #[arg(long, value_delimiter = ',', default_value = "vc-strava")]
+        hors_git: Vec<String>,
+        /// GPX supplémentaires.
         #[arg(long)]
         gpx: Vec<PathBuf>,
     },
@@ -89,8 +92,8 @@ async fn main_inner() -> anyhow::Result<bool> {
             );
             Ok(r.ok())
         }
-        Command::FillCache { cas, groupes, coherence, gpx } => {
-            let lock = fill_cache(&paths, &groupes, &cas, &coherence, &gpx).await?;
+        Command::FillCache { cas, groupes, coherence, hors_git, gpx } => {
+            let lock = fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &gpx).await?;
             println!("{}", serde_json::to_string_pretty(&lock)?);
             Ok(true)
         }

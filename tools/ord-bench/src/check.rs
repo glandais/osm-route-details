@@ -127,18 +127,24 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
     if report.private_present {
         for t in &manifest.traces {
             if let Some(sum) = &t.sha256 {
-                verify(&mut report, &bench.join(&t.fichier), sum, &t.id);
+                verify(&mut report, &paths.resolve(&t.fichier), sum, &t.id);
             }
             if let Some(sum) = &t.sha256_trim1km {
                 let trim = t.fichier.trim_end_matches(".gpx").to_owned() + ".trim1km.gpx";
-                verify(&mut report, &bench.join(trim), sum, &format!("{} (rognée)", t.id));
+                verify(&mut report, &paths.resolve(&trim), sum, &format!("{} (rognée)", t.id));
             }
         }
         if let Some((fichier, sum)) = &manifest.ouvrages_perso {
-            verify(&mut report, &bench.join(fichier), sum, "ouvrages_perso");
+            verify(&mut report, &paths.resolve(fichier), sum, "ouvrages_perso");
+        }
+        for e in &manifest.hors_git {
+            verify(&mut report, &paths.resolve(&e.fichier), &e.sha256, &e.id);
         }
     } else {
         report.skipped.push(format!("{} traces personnelles : bench/private/ absent", manifest.traces.len()));
+        for e in &manifest.hors_git {
+            report.skipped.push(format!("{} (hors git) : bench/private/ absent", e.id));
+        }
     }
 
     // criteria.yaml ↔ README §3–§4.

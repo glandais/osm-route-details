@@ -12,6 +12,7 @@ pub mod gpx;
 pub mod hash;
 pub mod manifest;
 pub mod metrics;
+pub mod privacy;
 pub mod service;
 
 use std::path::{Path, PathBuf};
@@ -49,6 +50,15 @@ impl BenchPaths {
 
     pub fn private_present(&self) -> bool {
         self.private.join("traces").is_dir()
+    }
+
+    /// Chemin d'un fichier du manifest : `private/…` est lu dans le dossier privé (déplaçable par
+    /// `--private-dir`), le reste dans `bench/`.
+    pub fn resolve(&self, fichier: &str) -> PathBuf {
+        match fichier.strip_prefix("private/") {
+            Some(rest) => self.private.join(rest),
+            None => self.bench.join(fichier),
+        }
     }
 }
 

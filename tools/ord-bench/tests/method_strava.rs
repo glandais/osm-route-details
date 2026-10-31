@@ -1,14 +1,18 @@
 //! Test de méthode (T05 §3.4) : sur `strava.gpx` de vcyclist, le calcul de D+ d'`ord-bench`
-//! redonne le rapport publié par vcyclist, 714 / 637 m ≈ 1,12 au preset `dem` (Mapterhorn z12,
-//! centres de pixel ; `elevation.md`, « What the DEM costs »), à ± 3 points.
+//! redonne le rapport publié par vcyclist, 714 / 637 m ≈ 1,121 au preset `dem` (Mapterhorn z12,
+//! centres de pixel ; `elevation.md`, « What the DEM costs »), « à ± 3 points près » : écart
+//! absolu ≤ 0,03 sur le rapport.
 //!
-//! `strava.gpx` n'est pas encore copié dans `bench/data/` (T05 §11) : le chemin vient de
-//! `ORD_BENCH_STRAVA_GPX`, sinon `bench/data/vcyclist/strava.gpx`. Cache de banc requis :
-//! `ord-bench fill-cache --gpx <strava.gpx>`, puis
+//! Le fichier est une activité enregistrée : hors git, entrée `vc-strava` de la section `hors_git`
+//! du manifest, lue dans `bench/private/` après contrôle de son empreinte ; sans `bench/private/`,
+//! le cas est sauté. Elle date de la période d'altitude dégradée (bench README §1.3) : le D+ baro
+//! n'est pas une référence de justesse, le test reproduit seulement le chiffre de vcyclist.
+//!
+//! `ord-bench fill-cache` (inclut `vc-strava`), puis
 //! `cargo test -p ord-bench --test method_strava -- --ignored --nocapture`.
 
-use std::path::PathBuf;
-
+use ord_bench::campaign::hors_git_file;
+use ord_bench::manifest::Manifest;
 use ord_bench::service::{Pt, Service};
 use ord_bench::{gpx, metrics, BenchPaths};
 use ord_core::rules::Rules;
@@ -19,13 +23,15 @@ use ord_domain::LatLon;
 use serde_json::json;
 
 #[tokio::test]
-#[ignore = "strava.gpx et cache de banc requis (ord-bench fill-cache --gpx …)"]
+#[ignore = "bench/private/ et cache de banc requis (ord-bench fill-cache)"]
 async fn dplus_ratio_matches_vcyclist() {
     let bench = BenchPaths::repo_bench();
     let paths = BenchPaths::new(&bench, None, None);
-    let path = std::env::var_os("ORD_BENCH_STRAVA_GPX")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| bench.join("data/vcyclist/strava.gpx"));
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let Some(path) = hors_git_file(&paths, &manifest, "vc-strava").expect("empreinte de vc-strava") else {
+        println!("vc-strava : skipped (bench/private/ absent)");
+        return;
+    };
     let track = gpx::read(&path).expect("strava.gpx");
     let pts: Vec<Pt> = track.iter().map(|p| Pt { lat: p.lat, lon: p.lon }).collect();
 
@@ -47,6 +53,6 @@ async fn dplus_ratio_matches_vcyclist() {
         .expect("réponse du service");
     let dem_gain = r["summary"]["gain_m"].as_f64().expect("gain_m");
     let ratio = dem_gain / baro;
-    println!("strava.gpx : D+ service {dem_gain:.0} m, D+ baro {baro:.0} m, rapport {ratio:.3} (vcyclist 714 / 637 = 1,121)");
-    assert!((ratio - 714.0 / 637.0).abs() <= 0.03, "rapport {ratio:.3} hors de 1,12 ± 0,03");
+    println!("vc-strava : D+ service {dem_gain:.0} m, D+ baro {baro:.0} m, rapport {ratio:.3} (vcyclist 714 / 637 = 1,121)");
+    assert!((ratio - 714.0 / 637.0).abs() <= 0.03, "rapport {ratio:.3} hors de 1,121 ± 0,03");
 }
