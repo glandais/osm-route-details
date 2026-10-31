@@ -98,9 +98,24 @@ pub async fn mapterhorn_version(
     }
 }
 
+/// Date HTTP (`Mon, 14 Sep 2026 05:51:25 GMT`) → `2026-09-14`.
+fn http_date(v: &str) -> Option<String> {
+    const MONTHS: [&str; 12] =
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let parts: Vec<&str> = v.split_whitespace().collect();
+    let (day, month, year) = (parts.get(1)?, parts.get(2)?, parts.get(3)?);
+    let day: u32 = day.parse().ok()?;
+    let month = MONTHS.iter().position(|m| m == month)? + 1;
+    let year: u32 = year.parse().ok()?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
 /// Version lisible d'un index : date `Last-Modified` si connue, sinon l'ETag sans guillemets.
 fn index_version(s: &Sidecar) -> Option<String> {
-    s.last_modified.clone().or_else(|| s.etag.as_ref().map(|e| e.trim_matches('"').to_owned()))
+    s.last_modified
+        .as_deref()
+        .and_then(http_date)
+        .or_else(|| s.etag.as_ref().map(|e| e.trim_matches('"').to_owned()))
 }
 
 fn parse_index(bytes: Vec<u8>, version: Option<String>) -> Option<CoverageIndex> {
@@ -177,6 +192,14 @@ pub async fn coverage_index(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn index_version_is_the_last_modified_date() {
+        let s = Sidecar { last_modified: Some("Mon, 14 Sep 2026 05:51:25 GMT".into()), ..Sidecar::default() };
+        assert_eq!(index_version(&s).as_deref(), Some("2026-09-14"));
+        let e = Sidecar { etag: Some("\"abc\"".into()), ..Sidecar::default() };
+        assert_eq!(index_version(&e).as_deref(), Some("abc"));
+    }
 
     #[tokio::test]
     async fn offline_reads_the_cached_copies_only() {
