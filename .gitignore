@@ -1,3 +1,5 @@
 # Secrets locaux (clé Stadia Maps…) : jamais versionnés.
 .env
 .env.*
+# Produits de compilation Cargo.
+/target

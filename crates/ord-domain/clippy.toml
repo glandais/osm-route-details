@@ -1,0 +1,12 @@
+# Crate pur (T01 §2.1) : ni disque, ni réseau, ni horloge murale.
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "cœur pur : pas d'horloge murale" },
+    { path = "std::fs::read", reason = "cœur pur : pas d'accès disque" },
+    { path = "std::fs::read_to_string", reason = "cœur pur : pas d'accès disque" },
+    { path = "std::fs::write", reason = "cœur pur : pas d'accès disque" },
+    { path = "std::fs::File::open", reason = "cœur pur : pas d'accès disque" },
+    { path = "std::fs::File::create", reason = "cœur pur : pas d'accès disque" },
+    { path = "std::net::TcpStream::connect", reason = "cœur pur : pas de réseau" },
+    { path = "std::net::TcpListener::bind", reason = "cœur pur : pas de réseau" },
+    { path = "std::net::UdpSocket::bind", reason = "cœur pur : pas de réseau" },
+]

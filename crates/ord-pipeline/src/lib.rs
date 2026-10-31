@@ -1,0 +1,61 @@
+//! Orchestrateur : admission, budget, chaînes typologie et élévation, décision (T01 §3, §5).
+//!
+//! Incrément 0 : seules les erreurs de pipeline existent ; l'orchestrateur arrive à l'incrément 1.
+
+use std::time::Duration;
+
+/// Côté de données en panne (`details.source` du 503 `data_unavailable`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DataSide {
+    Typology,
+    Elevation,
+    Both,
+}
+
+impl DataSide {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Typology => "typology",
+            Self::Elevation => "elevation",
+            Self::Both => "both",
+        }
+    }
+}
+
+/// Erreur de pipeline ; traduite en problème HTTP par `ord-server` seulement (T01 §4.3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PipelineError {
+    Unavailable {
+        source: DataSide,
+        retry_after: Option<Duration>,
+    },
+    OutOfCoverage,
+    Timeout,
+    Overloaded,
+    /// Client parti : rien n'est envoyé, l'événement est journalisé.
+    Cancelled,
+    Internal(String),
+}
+
+// Écrit à la main : thiserror prendrait le champ `source` pour une cause chaînée.
+impl std::fmt::Display for PipelineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unavailable { source, .. } => write!(f, "{} data unavailable", source.as_str()),
+            Self::OutOfCoverage => f.write_str("no data from any source on the route"),
+            Self::Timeout => f.write_str("request budget exceeded"),
+            Self::Overloaded => f.write_str("too many requests in flight"),
+            Self::Cancelled => f.write_str("request cancelled"),
+            Self::Internal(cause) => write!(f, "internal error: {cause}"),
+        }
+    }
+}
+
+impl std::error::Error for PipelineError {}
+
+/// Décision du mode de réponse (T01 §5.3) ; `decide_outcome` arrive à l'incrément 6.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Proceed { typology_failed: bool, elevation_failed: bool },
+    Reject(PipelineError),
+}

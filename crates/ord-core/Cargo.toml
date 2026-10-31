@@ -1,0 +1,13 @@
+[package]
+name = "ord-core"
+description = "Cœur pur : préparation, typologie, élévation, assemblage (incréments 1 et suivants)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ord-domain.workspace = true
+
+[lints]
+workspace = true
