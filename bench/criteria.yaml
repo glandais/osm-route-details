@@ -1,6 +1,9 @@
 # Critères d'acceptation du banc, forme lisible par machine de bench/README.md §3–§4.
 # STATUT : gelé le 2026-10-30, avant tout passage du service. Toute modification est un commit dédié,
 # motivé, antérieur à la mesure qu'elle concerne (README §2).
+# Modifié le 2026-10-31 (décision de l'utilisateur, README §4 bis) : périmètre vélo des critères
+# d'ouvrage, E4 par tunnel OSM et portail en bande 10–30 m, E3 médiane des passages. Seuils inchangés ;
+# avant toute nouvelle mesure et avant le jugement de la série tenue à l'écart.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -21,6 +24,20 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Bornes 200 km / 16 000 points sur l'ENTRÉE seulement ; une trace plus longue est découpée par l'outil de banc en tronçons ≤ 200 km (perso-06) ; la sortie n'est pas bornée"
   - id: reference_r3
     decision: "Vérité du revêtement = réponse trace_attributes de Stadia Maps sur les traces recalées ; réponses hors git, régénérables"
+  - id: perimetre_velo   # 2026-10-31
+    decision: "Ouvrages portés par une voie hors graphe vélo (règle de tags du service) sortis de S1/E3/E4/E5, rapportés à part (hors_graphe_velo) ; les négatifs dont la trace est hors graphe restent dans S2/E5"
+  - id: e4_par_tunnel_osm   # 2026-10-31
+    decision: "E4 par tunnel OSM entre ses propres portails ; balcons non tagués rapportés avec S3 ; portail = médiane du MNT entre 10 et 30 m hors portail, sensibilité 5/10/20/30 m rapportée"
+  - id: e3_mediane_passages   # 2026-10-31
+    decision: "E3 par pont = médiane, sur les passages, de l'écart au milieu et de l'écart max ; le baro reste la référence"
+
+perimetre:   # README §4 bis.1
+  hors_graphe_velo:
+    regle: "voie OSM de l'ouvrage exclue du graphe vélo par la règle de tags du service (T03 §4.2 étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ; bicycle=* prime)"
+    exclus_de: [S1, E3, E4, E5]
+    controle: {matched: false, avertissement: unmatched_range, erreur_altitude: rapportee}
+    seuils: []
+    note: "Ne concerne que l'ouvrage dont la propre voie est hors graphe ; une trace hors graphe (n04, n08, n09) reste dans S2/E5"
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}
@@ -73,6 +90,8 @@ criteres:
     reference: {priorite: [baro_corrige_local, mns_mediane_25m], note: "mns = cohérence seulement"}
     terrain: france
     agregation: par_pont
+    agregation_passages: mediane   # écart au milieu et écart max : médianes sur les passages du pont
+    perimetre: graphe_velo
     seuils:
       - {strate: pont_court, longueur_m_max: 300, milieu_abs_m_max: 2.0, max_abs_m_max: 3.0}
       - {strate: grand_pont, longueur_m_min: 300, milieu_abs_m_max: 2.0, max_abs_m_max: 5.0}
@@ -92,7 +111,10 @@ criteres:
     metrique: "Erreur max vs droite entre portails ; D+ fictif dans le tunnel"
     cas: {manifest: [ouvrages, ouvrages_perso, vcyclist], types: [tunnel]}
     terrain: france
-    agregation: par_tunnel
+    agregation: par_tunnel_osm   # chaque way tunnel (ou suite contiguë) entre ses propres portails ; balcons non tagués → S3
+    perimetre: graphe_velo
+    reference: {droite_entre_portails: true, altitude_portail: "médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche"}
+    sensibilite: {portail_m: [5, 10, 20, 30], marque: reference_ambigue_si_le_verdict_bascule}
     seuils:
       - {max_abs_m_max: 5.0, dplus_fictif_m_max: 5.0}
     passe_si: {part_min: 0.857}   # 6/7
@@ -102,6 +124,7 @@ criteres:
     metrique: "|service − MNT| au croisement d'un passage sous un pont"
     cas: {manifest: [ouvrages, perso], types: [passage_sous_pont]}
     agregation: par_croisement
+    perimetre: graphe_velo   # l'ouvrage du dessus peut être hors graphe ; c'est le passage dessous qui doit l'être
     seuils:
       - {abs_m_max: 1.0}
     passe_si: tous
@@ -111,6 +134,7 @@ criteres:
     metrique: "Rappel en longueur des ponts/tunnels tagués OSM"
     cas: {manifest: [ouvrages, ouvrages_perso, vcyclist]}
     agregation: longueur_totale
+    perimetre: graphe_velo   # balcons non tagués entre tunnels exclus
     seuils:
       - {rappel_min: 0.95}
     passe_si: tous
@@ -126,8 +150,8 @@ criteres:
     bloquant: true
 
   - id: S3
-    metrique: "Ouvrage non tagué (stn-acces-nord) : altitude au milieu, rapportée"
-    cas: {manifest: [ouvrages, perso], ids: [stn-acces-nord]}
+    metrique: "Ouvrage non tagué (stn-acces-nord ; balcons non tagués entre tunnels, réf. vcyclist S) : altitude, rapportée"
+    cas: {manifest: [ouvrages, perso, vcyclist], ids: [stn-acces-nord], balcons_entre_tunnels: true}
     seuils: []
     passe_si: rapporte
     bloquant: false

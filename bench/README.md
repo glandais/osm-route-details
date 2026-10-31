@@ -316,12 +316,12 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
 | **E1** | Erreur d'altitude hors ouvrage | RMSE et P95 de (service − baro), après décalage et retrait de tendance, sur les stations `ground` | traces `dplus`, `plaine` |
 | **E2** | D+ comparé au baro (indicatif) | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
 | **E2b** | Les corrections ne dégradent pas le D+ | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ service avec `structure_correction: false` / D+ baro)\| ; mêmes sources, géométrie recalée, preset `dem` et masques | idem |
-| **E3** | Erreur d'altitude sur tablier | Par pont : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
-| **E4** | Erreur en tunnel | Par tunnel : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel | `ouvrages.yaml`, vcyclist `N` |
+| **E3** | Erreur d'altitude sur tablier | Par passage : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier ; par pont : **médiane sur les passages** de l'une et de l'autre (§4 bis) | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
+| **E4** | Erreur en tunnel | Par tunnel **OSM**, entre ses propres portails : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel. Altitude de portail = médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche (§4 bis) | `ouvrages.yaml`, vcyclist `N` (par tunnel OSM) |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
-| **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels du corpus typés `bridge`/`tunnel` par le service ÷ longueur de référence | `ouvrages.yaml`, `structures.csv` |
+| **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels OSM du corpus, **portés par une voie du graphe vélo**, typés `bridge`/`tunnel` par le service ÷ longueur de référence ; balcons non tagués exclus (§4 bis) | `ouvrages.yaml`, `structures.csv` |
 | **S2** | Faux positifs d'ouvrage | Longueur typée `bridge`/`tunnel` hors de tout ouvrage de référence ÷ longueur totale ; nombre d'ouvrages fictifs | témoins négatifs vcyclist `n*`, `hn*` ; traces `dplus` |
-| **S3** | Ouvrage non tagué | MVP : altitude au milieu de `stn-acces-nord` (mesurée, signalée, pas de seuil). V1 : détecté oui/non | baro `perso-20..22` |
+| **S3** | Ouvrage non tagué | MVP : altitude au milieu de `stn-acces-nord`, et erreur sur les balcons non tagués entre tunnels (Petits Goulets, Combe Laval) (mesurées, signalées, pas de seuil). V1 : détecté oui/non | baro `perso-20..22` ; vcyclist `S` sur les balcons |
 | **R1** | Accord du revêtement vs Stadia | Part de longueur où `surface.class` = classe Stadia ; variante hors inconnu Stadia | osm-surface |
 | **R2** | Accord revêtu / non revêtu | Idem sur la partition binaire, mètres classables des deux côtés | osm-surface |
 | **R3** | Accord vs Stadia sur les traces perso | Comme R1 et R2, référence = `edge.surface` de la réponse `trace_attributes` de Stadia Maps | traces perso recalées (§2.1) |
@@ -355,6 +355,42 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | L1 | p95 ≤ 20 s pour 100 km en France à froid ; ≤ 5 s hors France | vcyclist : 130 km IGN à froid 19 s / 264 tuiles, Mapterhorn 3 s / 16 tuiles |
 | L2 | p95 ≤ 500 ms pour 100 km à chaud | osm-surface : 55–77 ms pour la typologie ; marge pour l'élévation et l'assemblage |
 | Q1 | 4/4 négatifs non `fiable` | Contrôle du banc |
+
+**§4 bis. Périmètre et agrégation des critères d'ouvrage** (décision de l'utilisateur, 2026-10-31 ;
+écrit avant toute nouvelle mesure et avant le jugement de la série tenue à l'écart ; seuils
+inchangés). Motif : la campagne de l'incrément 4, en calibration, a montré que trois règles de
+lecture étaient ambiguës ou mal posées pour un service vélo. Aucune n'est taillée sur un cas : ce
+sont des règles générales, appliquées de la même façon aux deux séries.
+
+1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
+   de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
+   `bicycle=*` prime) sort de S1, E3, E4 et E5. Exemples : Millau A75, Cheviré, Lioran, Galibier. La
+   règle s'applique aux tags du way, jamais à une liste de cas. Pour E5, c'est la voie du passage
+   dessous qui compte : la piste sous Cheviré (`chevire-dessous`) reste. Ces ouvrages sont rapportés à part
+   (`hors_graphe_velo`) avec leur contrôle propre, sans seuil : la portion est non appariée
+   (`matched: false`) et l'avertissement `unmatched_range` est présent ; l'erreur d'altitude est
+   rapportée. Les négatifs dont c'est la **trace** qui emprunte une voie hors graphe (`n04`, `n08`,
+   `n09`) restent dans S2 et E5 : y inventer un ouvrage, en accrochant une voie qui croise, est un
+   défaut du service.
+2. **Tunnels.**
+   - E4 se mesure **par tunnel OSM**, chacun entre ses propres portails. Une série de tunnels séparés
+     par des balcons non tagués (Petits Goulets, Combe Laval), qu'un span vcyclist réunit en un seul
+     tunnel, donne autant de tunnels que de ways `tunnel` contigus.
+   - Les balcons intermédiaires non tagués sortent d'E4 et de S1. Ils sont rapportés avec S3, contre
+     la référence vcyclist `S` (Strava − décalage), sans seuil au MVP.
+   - Altitude de portail de la référence = **médiane du MNT des stations entre 10 et 30 m hors du
+     portail**, sur l'approche. Le MNT de la première station hors portail n'est pas la chaussée sur un
+     portail en falaise ; la bande reste distincte de la sonde ponctuelle du service à 10 m, ce qui
+     évite une référence circulaire.
+   - Sensibilité rapportée : E4 recalculé avec un portail pris à 5, 10, 20 et 30 m. Un tunnel dont le
+     verdict bascule entre ces distances est marqué « référence ambiguë » ; son verdict reste celui de
+     la règle ci-dessus.
+3. **E3 par pont = médiane des passages.** Pour un pont franchi plusieurs fois, l'écart au milieu et
+   l'écart max sont les médianes, sur ses passages, des valeurs mesurées passage par passage. Le
+   bruit baro d'un passage (≈ 1 m) est du même ordre que la tolérance de 2 m : exiger que tous les
+   passages passent pénalisait les ponts les mieux documentés. La référence reste le baro corrigé
+   localement, y compris à Audibert (5 passages concordants, 2,4–4,5 m sous le MNS du tablier) et à
+   Anne-de-Bretagne.
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
