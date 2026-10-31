@@ -1,0 +1,83 @@
+# CI (T05 §6). Les jobs `bench-report` et `docker` arrivent avec les incréments 1 et 6.
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Crates purs sans runtime ni réseau (T01 §2.1)
+        run: |
+          status=0
+          for crate in ord-domain ord-core ord-adapters; do
+            if cargo tree --locked -p "$crate" -e normal --prefix none | grep -E '^(tokio|reqwest|axum|hyper) '; then
+              echo "::error::$crate dépend d'un runtime ou d'un client réseau"
+              status=1
+            fi
+          done
+          exit $status
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: cargo nextest run --workspace --locked
+      - run: cargo test --workspace --locked --doc
+
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Contrat commité = contrat du code (T05 §2.5)
+        run: cargo test --locked -p ord-server --test contract
+      - name: Aucune rupture de /v1 par rapport à la branche principale
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          if ! git cat-file -e "$base:contract/openapi.json" 2>/dev/null; then
+            echo "pas de contrat sur $base : comparaison sautée"
+            exit 0
+          fi
+          git show "$base:contract/openapi.json" > /tmp/base-openapi.json
+          go install github.com/oasdiff/oasdiff@latest
+          "$(go env GOPATH)/bin/oasdiff" breaking /tmp/base-openapi.json contract/openapi.json --fail-on ERR
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check

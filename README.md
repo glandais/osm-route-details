@@ -3,7 +3,12 @@
 Microservice Rust (à venir) : en entrée un parcours, en sortie l'**élévation** et la
 **typologie** (structure : sol / pont / tunnel ; revêtement : enum simple) le long du parcours.
 
-Aucun code pour l'instant : phase d'exploration puis de conception.
+Code : incrément 0 du MVP, le squelette contractuel (workspace `crates/`, validation, erreurs
+RFC 9457, `/health/*`, `/v1/capabilities`, `/v1/attribution`, contrat
+[`contract/openapi.json`](contract/openapi.json)). Le pipeline n'est pas encore branché :
+`POST /v1/route-details` valide la requête puis répond 500 `internal`. Plan des incréments :
+[technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris ;
+`cargo run -p ord-server -- openapi` régénère le contrat.
 
 ## Conception
 
