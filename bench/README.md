@@ -364,7 +364,10 @@ sont des règles générales, appliquées de la même façon aux deux séries.
 Complété le même jour (décision de l'utilisateur, 2026-10-31, commit dédié, toujours avant toute
 nouvelle mesure et avant le jugement) après l'analyse de la campagne 2026.10.5 en calibration : source
 des tags du périmètre vélo (point 1), bandes de portail invalides dans une série de tunnels
-(point 2), limite des données pour les galeries pare-avalanche (point 4).
+(point 2), limite des données pour les galeries pare-avalanche (point 4). Complété une seconde fois
+(décision de l'utilisateur, 2026-10-31, commit dédié, avant toute nouvelle mesure) après la campagne
+2026.10.6-bench2 en calibration : bande sur un balcon court entre deux tunnels (point 2), contrôle
+`hors_graphe_velo` quand la trace longe l'ouvrage sur une voie cyclable parallèle (point 1).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -383,9 +386,11 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
    candidats à moins de 3 m d'écart de médiane, de périmètres différents : « périmètre ambigu »,
    rapporté. Pour E5, c'est la voie du passage
    dessous qui compte : la piste sous Cheviré (`chevire-dessous`) reste. Ces ouvrages sont rapportés à part
-   (`hors_graphe_velo`) avec leur contrôle propre, sans seuil : la portion est non appariée
-   (`matched: false`) et l'avertissement `unmatched_range` est présent ; l'erreur d'altitude est
-   rapportée. Les négatifs dont c'est la **trace** qui emprunte une voie hors graphe (`n04`, `n08`,
+   (`hors_graphe_velo`) avec leur contrôle propre, sans seuil : le service n'apparie pas la portion
+   à la voie hors graphe. Le contrôle passe si la portion est non appariée (`matched: false`, avec
+   l'avertissement `unmatched_range`) **ou** appariée à une voie du graphe vélo distincte de celle de
+   l'ouvrage (trace qui longe l'ouvrage sur une piste parallèle, cas `nv-49`). L'erreur d'altitude
+   est rapportée quand une référence existe, sinon `null` avec sa raison. Les négatifs dont c'est la **trace** qui emprunte une voie hors graphe (`n04`, `n08`,
    `n09`) restent dans S2 et E5 : y inventer un ouvrage, en accrochant une voie qui croise, est un
    défaut du service.
 2. **Tunnels.**
@@ -399,7 +404,10 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
      portail en falaise ; la bande reste distincte de la sonde ponctuelle du service à 10 m, ce qui
      évite une référence circulaire.
    - **Bande de portail invalide** : la bande 10–30 m d'un portail est invalide si elle chevauche un
-     autre ouvrage (tunnel, galerie, balcon S3) ou si elle compte moins de 3 stations hors ouvrage.
+     autre ouvrage (tunnel, galerie, balcon S3), si elle compte moins de 3 stations hors ouvrage, ou
+     si elle est située sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM (balcon
+     non tagué : sur ces routes en falaise, le MNT lit la paroi, pas la chaussée ; les tronçons entre
+     tunnels d'une même série du corpus mesurent 15 à 116 m).
      Elle est alors remplacée par la première bande valide plus loin dans la série, du même côté (en
      pratique le portail extérieur de la série). Sans bande valide à moins de 1 km de ce côté, le
      tunnel est noté « référence indisponible », rapporté et non compté. L'erreur reste mesurée sur

@@ -8,6 +8,10 @@
 # = tuiles de la campagne (absent_des_donnees), bandes de portail invalides dans une série de tunnels
 # (référence indisponible), limite_donnees comptée (Arly). Seuils inchangés ; avant toute nouvelle
 # mesure et avant le jugement de la série tenue à l'écart.
+# Complété à nouveau le 2026-10-31 (décision de l'utilisateur, README §4 bis) : bande invalide sur un
+# tronçon à l'air libre < 120 m entre deux tunnels OSM ; contrôle hors_graphe_velo satisfait aussi par
+# un appariement à une voie du graphe vélo distincte de l'ouvrage. Seuils inchangés ; avant toute
+# nouvelle mesure.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -38,6 +42,10 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Tags du périmètre vélo lus dans les tuiles de la campagne (data_versions), pas dans le corpus Overpass ; géométrie du corpus absente des données = absent_des_donnees, rapporté, non compté"
   - id: bande_portail_invalide   # 2026-10-31
     decision: "Bande 10–30 m invalide (chevauche un autre ouvrage ou < 3 stations hors ouvrage) remplacée par la première bande valide plus loin dans la série ; aucune à moins de 1 km = référence indisponible, rapporté, non compté"
+  - id: balcon_court_invalide   # 2026-10-31
+    decision: "Bande de portail sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM invalide ; remplacement existant (première bande valide plus loin, même côté, 1 km, sinon référence indisponible)"
+  - id: controle_hors_graphe_parallele   # 2026-10-31
+    decision: "Contrôle hors_graphe_velo satisfait si la portion est non appariée ou appariée à une voie du graphe vélo distincte de celle de l'ouvrage"
   - id: limite_donnees_comptee   # 2026-10-31
     decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
 
@@ -45,7 +53,9 @@ perimetre:   # README §4 bis.1
   hors_graphe_velo:
     regle: "voie OSM de l'ouvrage exclue du graphe vélo par la règle de tags du service (T03 §4.2 étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ; bicycle=* prime)"
     exclus_de: [S1, E3, E4, E5]
-    controle: {matched: false, avertissement: unmatched_range, erreur_altitude: rapportee}
+    controle:   # passe si l'une des deux conditions est vraie
+      passe_si_un_de: [{matched: false, avertissement: unmatched_range}, apparie_a_une_voie_du_graphe_velo_distincte_de_l_ouvrage]
+      erreur_altitude: rapportee_si_reference_sinon_null_avec_raison
     seuils: []
     note: "Ne concerne que l'ouvrage dont la propre voie est hors graphe ; une trace hors graphe (n04, n08, n09) reste dans S2/E5"
     source_tags: {donnees: campagne.data_versions, couche: streets, attributs: [kind, bicycle, bridge, tunnel], pas: corpus_overpass}
@@ -137,7 +147,8 @@ criteres:
     reference: {droite_entre_portails: true, altitude_portail: "médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche"}
     sensibilite: {portail_m: [5, 10, 20, 30], marque: reference_ambigue_si_le_verdict_bascule}
     bande_invalide:   # README §4 bis.2
-      si: [chevauche_autre_ouvrage, stations_hors_ouvrage_moins_de_3]   # autre ouvrage : tunnel, galerie, balcon S3
+      si: [chevauche_autre_ouvrage, stations_hors_ouvrage_moins_de_3, balcon_entre_tunnels_osm]   # autre ouvrage : tunnel, galerie, balcon S3
+      balcon_entre_tunnels_osm: {troncon_air_libre_m_max: 120}   # bande sur un tronçon à l'air libre < 120 m entre deux tunnels OSM
       remplacement: premiere_bande_valide_plus_loin_dans_la_serie_meme_cote
       distance_max_m: 1000
       sinon: {marque: reference_indisponible, rapporte: true, compte: false}
