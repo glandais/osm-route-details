@@ -27,11 +27,22 @@ impl Reply {
     }
 }
 
-/// Configuration de test : hors ligne, cache disque dans un dossier temporaire neuf. Une requête
-/// valide y lit des tuiles absentes du disque : 503 `data_unavailable`, sans aucun réseau.
+/// Adresse sans service (port discard) : aucune URL de test ne sort de la machine.
+pub const NOWHERE: &str = "http://127.0.0.1:9";
+
+/// Configuration de test : hors ligne, cache disque dans un dossier temporaire neuf, IGN désactivé
+/// et toutes les URL vers `NOWHERE`. Une requête valide y lit des tuiles absentes du disque :
+/// 503 `data_unavailable`, sans aucun réseau.
 pub fn test_config() -> Config {
     let mut config = Config::default();
     config.cache.offline = true;
+    config.elevation.ign.enabled = false;
+    config.elevation.ign.wms_url = format!("{NOWHERE}/wms");
+    config.elevation.mapterhorn.url = format!("{NOWHERE}/{{z}}/{{x}}/{{y}}.webp");
+    config.elevation.mapterhorn.tilejson_url = format!("{NOWHERE}/tilejson.json");
+    config.elevation.mapterhorn.versions_url = format!("{NOWHERE}/download_urls.json");
+    config.coverage.coverage_index_url = None;
+    config.coverage.polygons_url = None;
     config.cache.dir = std::env::temp_dir().join(format!("ord-test-{}", uuid_like()));
     config
 }

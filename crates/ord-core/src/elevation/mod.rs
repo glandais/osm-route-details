@@ -1,8 +1,9 @@
 //! Profil d'élévation (T04) : profil brut lu par le pipeline, fusion, dérivés, points de sortie.
 //!
-//! Incrément 1 : MNT seul. `fuse` ne corrige aucun ouvrage (pas de typologie) et ne comble aucun
-//! trou (incrément 4) : il pose la méthode `dem` ou `none`, les plages de terrain et de manque, le
-//! D+ du preset et le lissage optionnel.
+//! Incrément 2 : MNT seul (IGN LiDAR HD et repli Mapterhorn). `fuse` ne corrige aucun ouvrage
+//! (pas de typologie) et ne comble aucun trou (incrément 4) : il pose la méthode `dem` ou `none`,
+//! les plages de terrain et de manque, le D+ du preset avec adaptation du seuil sur GLO-30, le
+//! lissage optionnel, et les avertissements `terrain_fallback` et `dsm_source`.
 
 pub mod derive;
 pub mod output;
@@ -16,7 +17,7 @@ use ord_domain::route::PreparedRoute;
 use serde::Serialize;
 
 use crate::rules::Rules;
-use derive::{gain_on_runs, smooth_profile, GainParams, GainResult};
+use derive::{gain_on_runs_with, smooth_profile, AdaptedRange, GainParams, GainResult};
 
 pub use output::{sample_output, OutputPoint, PointOrigin};
 
@@ -176,7 +177,7 @@ fn station_span(d: &[f64], length: f64, i: usize, j: usize) -> (f64, f64) {
 }
 
 /// Suites de stations de même clé, en plages de distance.
-fn runs<K: PartialEq + Copy>(d: &[f64], length: f64, keys: &[K]) -> Vec<(f64, f64, K)> {
+pub(crate) fn runs<K: PartialEq + Copy>(d: &[f64], length: f64, keys: &[K]) -> Vec<(f64, f64, K)> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < keys.len() {
@@ -189,6 +190,44 @@ fn runs<K: PartialEq + Copy>(d: &[f64], length: f64, keys: &[K]) -> Vec<(f64, f6
         i = j + 1;
     }
     out
+}
+
+/// Plages GLO-30 retenues pour l'adaptation du seuil (T04 §5.4) : stations `Glo30` ou `Seam`
+/// d'origine Mapterhorn, trous de moins de `min_m` fermés, plages de moins de `min_m` écartées.
+/// Renvoie des plages de stations `[i, j]` (bornes incluses).
+fn glo30_station_ranges(d: &[f64], terrain: &[StationTerrain], min_m: f64) -> Vec<(usize, usize)> {
+    let is_glo = |t: &StationTerrain| {
+        matches!(t.dem_kind, DemKind::Glo30 | DemKind::Seam)
+            && matches!(t.origin, TerrainOrigin::Mapterhorn | TerrainOrigin::MapterhornMeasured)
+    };
+    let mut raw: Vec<(usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < terrain.len() {
+        if !is_glo(&terrain[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i + 1 < terrain.len() && is_glo(&terrain[i + 1]) {
+            i += 1;
+        }
+        raw.push((start, i));
+        i += 1;
+    }
+    // Trous courts fermés : l'écart entre deux plages, de station à station, est < min_m.
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for r in raw {
+        match merged.last_mut() {
+            Some(last) if d[r.0] - d[last.1] < min_m => last.1 = r.1,
+            _ => merged.push(r),
+        }
+    }
+    let span = |r: &(usize, usize)| {
+        let from = if r.0 == 0 { d[0] } else { 0.5 * (d[r.0 - 1] + d[r.0]) };
+        let to = if r.1 + 1 >= d.len() { d[d.len() - 1] } else { 0.5 * (d[r.1] + d[r.1 + 1]) };
+        to - from
+    };
+    merged.into_iter().filter(|r| span(r) >= min_m).collect()
 }
 
 fn measured(origin: TerrainOrigin) -> bool {
@@ -227,7 +266,7 @@ pub fn fuse(
 
     let keys: Vec<(TerrainOrigin, bool)> =
         terrain.iter().map(|t| (t.origin, t.fallback_after_error)).collect();
-    let terrain_ranges = runs(&d, length, &keys)
+    let terrain_ranges: Vec<TerrainRange> = runs(&d, length, &keys)
         .into_iter()
         .map(|(from_m, to_m, (origin, fallback_after_error))| TerrainRange {
             from_m,
@@ -247,7 +286,7 @@ pub fn fuse(
         .into_iter()
         .filter_map(|(from_m, to_m, kind)| kind.map(|kind| MissingRange { from_m, to_m, kind }))
         .collect();
-    let warnings = missing
+    let mut warnings: Vec<Warning> = missing
         .iter()
         .map(|m| match m.kind {
             Missing::NoData => Warning {
@@ -262,9 +301,42 @@ pub fn fuse(
             },
         })
         .collect();
+    // Repli subi : tuiles IGN en échec relues dans Mapterhorn (T06 §4).
+    warnings.extend(terrain_ranges.iter().filter(|r: &&TerrainRange| r.fallback_after_error).map(|r| {
+        Warning {
+            code: WarningCode::TerrainFallback,
+            message: "IGN tiles failed, read from Mapterhorn".into(),
+            range: Some(r.from_m..r.to_m),
+        }
+    }));
 
-    let preset = rules.elevation.gain.preset(opts.gain_preset);
-    let (gain_m, loss_m, partial) = gain_on_runs(&d, &ele, preset);
+    // D+ du preset ; seuil adapté sur les plages GLO-30 (T04 §5.4). Pas d'adaptation sous `raw`,
+    // et un seuil de preset plus haut n'est pas abaissé.
+    let gain_rules = &rules.elevation.gain;
+    let preset = gain_rules.preset(opts.gain_preset);
+    let adapt = preset.threshold_m > 0.0 && gain_rules.glo30_threshold_m > preset.threshold_m;
+    let glo30 =
+        if adapt { glo30_station_ranges(&d, &terrain, gain_rules.glo30_min_range_m) } else { Vec::new() };
+    let tau: Option<Vec<f64>> = (!glo30.is_empty()).then(|| {
+        let mut tau = vec![preset.threshold_m; n];
+        for &(i, j) in &glo30 {
+            tau[i..=j].fill(gain_rules.glo30_threshold_m);
+        }
+        tau
+    });
+    let (gain_m, loss_m, partial) = gain_on_runs_with(&d, &ele, preset, tau.as_deref());
+    let adapted: Vec<AdaptedRange> = glo30
+        .iter()
+        .map(|&(i, j)| {
+            let (from_m, to_m) = station_span(&d, length, i, j);
+            AdaptedRange { from_m, to_m, threshold_m: gain_rules.glo30_threshold_m }
+        })
+        .collect();
+    warnings.extend(adapted.iter().map(|a| Warning {
+        code: WarningCode::DsmSource,
+        message: "range read on GLO-30, a surface model: gain threshold adapted".into(),
+        range: Some(a.from_m..a.to_m),
+    }));
     let gain = GainResult {
         gain_m,
         loss_m,
@@ -272,7 +344,7 @@ pub fn fuse(
             preset: opts.gain_preset,
             threshold_m: preset.threshold_m,
             smoothing_m: preset.smoothing_m,
-            adapted: Vec::new(),
+            adapted,
             partial,
         },
     };
@@ -315,6 +387,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::prepare::prepare;
     use ord_domain::geo::EARTH_RADIUS_M;
+    use ord_domain::request::GainPreset;
     use ord_domain::LatLon;
 
     pub(crate) fn sample(ele: Option<f32>, missing: Option<Missing>) -> TerrainSample {
@@ -370,6 +443,86 @@ pub(crate) mod tests {
         assert_eq!(p.at(20.0).ele, Some(50.0));
         assert_eq!(p.grade_pct(15.0, 20.0), Some(200.0));
         assert_eq!(p.grade_pct(5.0, 10.0), None);
+    }
+
+    fn glo(ele: f32, kind: DemKind, fallback_after_error: bool) -> TerrainSample {
+        TerrainSample {
+            ele: Some(ele),
+            origin: TerrainOrigin::Mapterhorn,
+            fallback_after_error,
+            dem_kind: kind,
+            missing: None,
+        }
+    }
+
+    #[test]
+    fn glo30_ranges_adapt_the_threshold_and_warn() {
+        // 2 km : 1 km de MNT, puis 1 km de GLO-30 avec des bosses de 6 m tous les 100 m.
+        let route = line(2_000.0);
+        let n = route.samples.len();
+        let terrain: Vec<TerrainSample> = (0..n)
+            .map(|i| {
+                let d = route.samples[i].d_m;
+                let bump = if ((d / 50.0) as i64) % 2 == 0 { 0.0 } else { 6.0 };
+                if d < 1_000.0 {
+                    glo(100.0 + bump, DemKind::Dtm, false)
+                } else {
+                    glo(100.0 + bump, if d < 1_100.0 { DemKind::Seam } else { DemKind::Glo30 }, false)
+                }
+            })
+            .collect();
+        let raw = RawProfile { terrain };
+        let opts = RequestOptions { gain_preset: GainPreset::Barometric, ..RequestOptions::default() };
+        let p = fuse(&route, &raw, &opts, &Rules::default()).unwrap();
+        assert_eq!(p.gain.params.adapted.len(), 1);
+        let a = &p.gain.params.adapted[0];
+        assert!((a.from_m - 997.5).abs() < 1e-6 && (a.to_m - 2_000.0).abs() < 1e-6, "{a:?}");
+        assert_eq!(a.threshold_m, 10.0);
+        assert!(p.warnings.iter().any(|w| w.code == WarningCode::DsmSource));
+        // Sans adaptation, les bosses de la seconde moitié compteraient.
+        let mut rules = Rules::default();
+        rules.elevation.gain.glo30_threshold_m = 0.0;
+        let q = fuse(&route, &raw, &opts, &rules).unwrap();
+        assert!(q.gain.params.adapted.is_empty());
+        assert!(q.gain.gain_m > p.gain.gain_m + 20.0, "{} vs {}", q.gain.gain_m, p.gain.gain_m);
+        // Pas d'adaptation sous `raw`, ni quand le preset est déjà au-dessus.
+        for preset in [GainPreset::Raw, GainPreset::Gps] {
+            let o = RequestOptions { gain_preset: preset, ..RequestOptions::default() };
+            assert!(fuse(&route, &raw, &o, &Rules::default()).unwrap().gain.params.adapted.is_empty());
+        }
+    }
+
+    #[test]
+    fn short_glo30_ranges_are_ignored_and_short_gaps_closed() {
+        let d: Vec<f64> = (0..200).map(|i| i as f64 * 5.0).collect();
+        let t = |kind| StationTerrain {
+            origin: TerrainOrigin::Mapterhorn,
+            fallback_after_error: false,
+            dem_kind: kind,
+        };
+        // 0–100 m GLO-30 (trop court, à 205 m de la suivante), 300–500 GLO-30, trou de 100 m, 600–800.
+        let terrain: Vec<StationTerrain> = d
+            .iter()
+            .map(|&x| {
+                if x < 100.0 || (300.0..500.0).contains(&x) || (600.0..800.0).contains(&x) {
+                    t(DemKind::Glo30)
+                } else {
+                    t(DemKind::Dtm)
+                }
+            })
+            .collect();
+        assert_eq!(glo30_station_ranges(&d, &terrain, 200.0), [(60, 159)]);
+    }
+
+    #[test]
+    fn fallback_after_error_warns_terrain_fallback() {
+        let route = line(50.0);
+        let n = route.samples.len();
+        let terrain = (0..n).map(|i| glo(10.0, DemKind::Dtm, (3..=5).contains(&i))).collect();
+        let p = fuse(&route, &RawProfile { terrain }, &RequestOptions::default(), &Rules::default()).unwrap();
+        let w: Vec<_> = p.warnings.iter().filter(|w| w.code == WarningCode::TerrainFallback).collect();
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].range, Some(12.5..27.5));
     }
 
     #[test]

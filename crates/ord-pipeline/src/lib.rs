@@ -1,7 +1,8 @@
 //! Orchestrateur : admission, budget, chaînes typologie et élévation, décision (T01 §3, §5).
 //!
-//! Incrément 1 : pipeline séquentiel, élévation seule (pas de typologie ni de zonage) :
-//! préparation → lecture du MNT → décision → fusion, points de sortie et assemblage.
+//! Incrément 2 : pipeline séquentiel, élévation seule (pas de typologie) : préparation → zonage
+//! (zone France) → lecture du MNT (IGN et repli Mapterhorn) → décision → fusion, points de sortie
+//! et assemblage.
 //! L'admission (file bornée, 503 `overloaded`) arrive à l'incrément 6.
 
 pub mod decision;

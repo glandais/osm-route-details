@@ -1,5 +1,6 @@
 //! `POST /v1/route-details` sur un terrain synthétique servi par un faux serveur local
-//! (incrément 1 : profil Mapterhorn seul, modes `input` et `distance`).
+//! (Mapterhorn seul, IGN désactivé : modes `input` et `distance`). Le parcours est à Nantes, en
+//! zone France : origine `mapterhorn_measured` (pas de fichier de couverture, donc pas de GLO-30).
 
 mod common;
 
@@ -74,12 +75,12 @@ async fn input_mode_profile_and_summary() {
         s["gain_params"],
         json!({"preset": "dem", "threshold_m": 3.0, "smoothing_m": 30.0, "adapted": [], "partial": false})
     );
-    assert_eq!(s["terrain_m"], json!({"mapterhorn": 2_000.0}));
+    assert_eq!(s["terrain_m"], json!({"mapterhorn_measured": 2_000.0}));
     let q = &r["quality"];
     assert_eq!(q["elevation_coverage"], 1.0);
     assert_eq!(
         q["terrain"],
-        json!([{"from_m": 0.0, "to_m": 2_000.0, "origin": "mapterhorn", "measured": false, "fallback_after_error": false}])
+        json!([{"from_m": 0.0, "to_m": 2_000.0, "origin": "mapterhorn_measured", "measured": true, "fallback_after_error": false}])
     );
     assert_eq!(q["warnings"], json!([]));
     assert_eq!(r["attribution"]["url"], "/v1/attribution");

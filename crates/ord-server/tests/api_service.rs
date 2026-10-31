@@ -15,9 +15,16 @@ async fn health_endpoints() {
     assert_eq!(ready.json()["ready"], true);
 }
 
+/// Configuration de test avec l'IGN activé (aucune requête : seules les capacités sont lues).
+fn with_ign() -> axum::Router {
+    let mut config = test_config();
+    config.elevation.ign.enabled = true;
+    app_with(&config)
+}
+
 #[tokio::test]
 async fn capabilities_publish_bounds_and_defaults() {
-    let reply = send(app(), get("/v1/capabilities")).await;
+    let reply = send(with_ign(), get("/v1/capabilities")).await;
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.content_type(), "application/json");
     let caps = reply.json();
@@ -34,7 +41,13 @@ async fn capabilities_publish_bounds_and_defaults() {
     assert_eq!(caps["defaults"]["elevation"]["smoothing_m"], 0.0);
     assert_eq!(caps["defaults"]["elevation"]["gain_preset"], "dem");
     assert_eq!(caps["primary_zone"], "FR-metropole+corse");
-    assert_eq!(caps["data"]["bridge_dsm"], true);
+    // Le MNS des ponts n'est lu qu'avec les ouvrages (incrément 4).
+    assert_eq!(caps["data"]["bridge_dsm"], false);
+    assert_eq!(caps["elevation_rules"]["glo30_threshold_m"], 10.0);
+    assert_eq!(
+        caps["elevation_rules"]["gain_presets"][1],
+        serde_json::json!({"preset": "dem", "threshold_m": 3.0, "smoothing_m": 30.0})
+    );
     let sources: Vec<&str> = caps["elevation_sources"]
         .as_array()
         .expect("sources")
@@ -63,7 +76,7 @@ async fn capabilities_follow_configuration() {
 
 #[tokio::test]
 async fn attribution_lists_configured_sources() {
-    let reply = send(app(), get("/v1/attribution")).await;
+    let reply = send(with_ign(), get("/v1/attribution")).await;
     assert_eq!(reply.status, StatusCode::OK);
     let doc = reply.json();
     let text = doc["text"].as_str().expect("text");

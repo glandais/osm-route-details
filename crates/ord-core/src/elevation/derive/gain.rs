@@ -10,7 +10,7 @@ use serde::Serialize;
 use super::smooth::smooth_profile;
 use crate::rules::PresetParams;
 
-/// Plage GLO-30 où le seuil a été adapté (incrément 2 ; toujours vide à l'incrément 1).
+/// Plage GLO-30 où le seuil a été adapté (T04 §5.4), sérialisée avec `"dsm": "glo30"`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AdaptedRange {
     pub from_m: f64,
@@ -41,9 +41,18 @@ pub struct GainResult {
 /// Accumulateur à points de retournement sur un profil déjà lissé ; renvoie `(gain, perte)`,
 /// la perte en valeur positive. `threshold ≤ 0` : somme brute des montées et descentes.
 pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
+    accumulate_with(h, |_| threshold)
+}
+
+/// Accumulateur à seuil variable par station (adaptation GLO-30, T04 §5.4) : une jambe est
+/// confirmée quand le retour depuis l'extremum atteint `max(τ(extremum), τ(courant))`, si bien
+/// qu'à cheval sur une frontière le seuil le plus prudent s'applique. Avec un seuil constant,
+/// identique à `accumulate`. `τ(0) ≤ 0` : somme brute des montées et descentes.
+pub fn accumulate_with(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64) {
     if h.len() < 2 {
         return (0.0, 0.0);
     }
+    let threshold = tau(0);
     if threshold.is_nan() || threshold <= 0.0 {
         let (mut gain, mut loss) = (0.0, 0.0);
         for w in h.windows(2) {
@@ -61,6 +70,7 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
     let (mut i_hi, mut i_lo) = (0usize, 0usize);
     let mut dir = 0i8;
     let (mut reference, mut ext) = (h[0], h[0]);
+    let mut i_ext = 0usize;
     for (i, &e) in h.iter().enumerate().skip(1) {
         match dir {
             0 => {
@@ -72,7 +82,7 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
                     lo = e;
                     i_lo = i;
                 }
-                if hi - lo >= threshold {
+                if hi - lo >= tau(i_hi).max(tau(i_lo)) {
                     // Jambe d'ouverture : de h[0] au premier point de retournement, quelle que
                     // soit sa taille (fermeture gain − perte = dénivelé net à un seuil près).
                     if i_hi > i_lo {
@@ -82,6 +92,7 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
                         dir = 1;
                         reference = lo;
                         ext = hi;
+                        i_ext = i_hi;
                     } else {
                         if hi > h[0] {
                             gain += hi - h[0];
@@ -89,26 +100,31 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
                         dir = -1;
                         reference = hi;
                         ext = lo;
+                        i_ext = i_lo;
                     }
                 }
             }
             1 => {
                 if e > ext {
                     ext = e;
-                } else if ext - e >= threshold {
+                    i_ext = i;
+                } else if ext - e >= tau(i_ext).max(tau(i)) {
                     gain += ext - reference;
                     reference = ext;
                     ext = e;
+                    i_ext = i;
                     dir = -1;
                 }
             }
             _ => {
                 if e < ext {
                     ext = e;
-                } else if e - ext >= threshold {
+                    i_ext = i;
+                } else if e - ext >= tau(i_ext).max(tau(i)) {
                     loss += reference - ext;
                     reference = ext;
                     ext = e;
+                    i_ext = i;
                     dir = 1;
                 }
             }
@@ -126,6 +142,17 @@ pub fn accumulate(h: &[f64], threshold: f64) -> (f64, f64) {
 /// D+/D− d'un profil à trous (`NaN` = altitude absente) : l'accumulateur redémarre après chaque
 /// trou et les sommes s'additionnent (T04 §5.4, « Trous »). Renvoie `(gain, perte, partiel)`.
 pub fn gain_on_runs(d: &[f64], ele: &[f64], params: PresetParams) -> (f64, f64, bool) {
+    gain_on_runs_with(d, ele, params, None)
+}
+
+/// Comme `gain_on_runs`, avec un seuil par station (`tau`, même longueur que `ele`) : adaptation
+/// GLO-30. `None` : seuil du preset partout.
+pub fn gain_on_runs_with(
+    d: &[f64],
+    ele: &[f64],
+    params: PresetParams,
+    tau: Option<&[f64]>,
+) -> (f64, f64, bool) {
     assert_eq!(d.len(), ele.len(), "distances et altitudes de même longueur");
     let (mut gain, mut loss, mut partial) = (0.0, 0.0, false);
     let mut i = 0;
@@ -140,7 +167,13 @@ pub fn gain_on_runs(d: &[f64], ele: &[f64], params: PresetParams) -> (f64, f64, 
             i += 1;
         }
         let smoothed = smooth_profile(&d[start..i], &ele[start..i], params.smoothing_m);
-        let (g, l) = accumulate(&smoothed, params.threshold_m);
+        let (g, l) = match tau {
+            Some(t) => {
+                let t = &t[start..i];
+                accumulate_with(&smoothed, |k| t[k])
+            }
+            None => accumulate(&smoothed, params.threshold_m),
+        };
         gain += g;
         loss += l;
     }
@@ -201,6 +234,20 @@ mod tests {
         assert_eq!((g, l), (21.0, 0.0), "le saut de 10 à 50 m à travers le trou n'est pas compté");
         let (_, _, partial) = gain_on_runs(&d[..3], &e[..3], DEM);
         assert!(!partial);
+    }
+
+    #[test]
+    fn variable_threshold_uses_the_most_prudent_side() {
+        // Bosse de 6 m : comptée à 3 m, ignorée si l'un de ses côtés est sur GLO-30 (10 m).
+        let h = [0.0, 6.0, 0.0, 6.0, 0.0];
+        assert_eq!(accumulate_with(&h, |_| 3.0), accumulate(&h, 3.0));
+        let (g, _) = accumulate_with(&h, |i| if i >= 2 { 10.0 } else { 3.0 });
+        assert!(g < accumulate(&h, 3.0).0, "{g}");
+        let (g10, _) = accumulate_with(&h, |_| 10.0);
+        assert_eq!(g10, 0.0);
+        // Montée de 50 m suivie d'une descente de 50 m : comptée sous tous les seuils.
+        let big = [0.0, 50.0, 0.0];
+        assert_eq!(accumulate_with(&big, |i| if i == 1 { 10.0 } else { 3.0 }), (50.0, 50.0));
     }
 
     #[test]

@@ -1,15 +1,16 @@
-//! Orchestrateur séquentiel (T01 §5.1, étapes 2, 4b, 5, 6, 8, 9).
+//! Orchestrateur séquentiel (T01 §5.1, étapes 2, 3, 4b, 5, 6, 8, 9).
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use ord_core::assemble::{assemble, RouteReport};
+use ord_core::coverage::zone_ranges;
 use ord_core::elevation::{fuse, sample_output};
 use ord_core::prepare::prepare;
 use ord_core::{Rules, RULES_VERSION};
 use ord_domain::budget::Budget;
 use ord_domain::catalog::{DataCatalog, Versions};
-use ord_domain::coverage::SourceOutcome;
+use ord_domain::coverage::{CoverageRef, SourceOutcome};
 use ord_domain::ctx::RequestCtx;
 use ord_domain::elevation::{Missing, TerrainReader};
 use ord_domain::request::ValidatedRequest;
@@ -18,11 +19,12 @@ use crate::decision::decide_outcome;
 use crate::elevation::sample_raw;
 use crate::{Outcome, PipelineError};
 
-/// Implémentations des ports, assemblées par `ord-server` (T01 §2.1). Incrément 1 : terrain et
-/// catalogue ; `streets` et `coverage` arrivent aux incréments 2 et 3.
+/// Implémentations des ports, assemblées par `ord-server` (T01 §2.1). Incrément 2 : terrain,
+/// référentiel de couverture et catalogue ; `streets` arrive à l'incrément 3.
 #[derive(Clone)]
 pub struct Sources {
     pub terrain: Arc<dyn TerrainReader>,
+    pub coverage: Arc<dyn CoverageRef>,
     pub catalog: Arc<dyn DataCatalog>,
 }
 
@@ -88,16 +90,25 @@ impl Orchestrator {
         check()?;
         let options = req.options.clone();
         let step = self.rules.elevation.station_step_m;
-        // 2. Préparation (bloquante).
+        // 2. Préparation et 3. zonage (bloquants).
         let points = req.points;
-        let route =
-            Arc::new(tokio::task::spawn_blocking(move || prepare(&points, step)).await.map_err(join_error)?);
+        let coverage = Arc::clone(&self.sources.coverage);
+        let (route, cov) = tokio::task::spawn_blocking(move || {
+            let route = prepare(&points, step);
+            let in_zone: Vec<bool> = route.samples.iter().map(|s| coverage.in_primary_zone(s.at)).collect();
+            let cov = zone_ranges(&route, &in_zone);
+            (route, cov)
+        })
+        .await
+        .map_err(join_error)?;
+        let route = Arc::new(route);
 
         check()?;
         // 4b. MNT aux stations.
         let raw = sample_raw(&route, self.sources.terrain.as_ref(), ctx).await?;
 
-        // 5. Décision (typologie absente à l'incrément 1 : jamais en panne).
+        // 5. Décision (typologie absente jusqu'à l'incrément 3 : jamais en panne). Un repli
+        // Mapterhorn absorbé est une donnée (`terrain_fallback`), pas une panne.
         let elevation = if raw.terrain.iter().any(|t| t.missing == Some(Missing::Failed)) {
             SourceOutcome::Failed { retry_after: Some(self.retry_after(ctx)) }
         } else {
@@ -121,7 +132,7 @@ impl Orchestrator {
         tokio::task::spawn_blocking(move || {
             let profile = fuse(&route, &raw, &options, &rules)?;
             let points = sample_output(&route, &profile, &options.sampling);
-            Ok(assemble(&route, profile, points, versions, attribution))
+            Ok(assemble(&route, &cov, profile, points, versions, attribution))
         })
         .await
         .map_err(join_error)?
@@ -192,9 +203,32 @@ mod tests {
         }
     }
 
+    /// Zone France = latitudes au-dessus de 45,0005° (seconde moitié du parcours de test).
+    struct HalfZone;
+
+    #[async_trait::async_trait]
+    impl CoverageRef for HalfZone {
+        fn ign_may_have_data(&self, _: ord_domain::tiles::TileKey) -> bool {
+            false
+        }
+        fn in_primary_zone(&self, p: LatLon) -> bool {
+            p.lat > 45.0005
+        }
+        async fn dem_kinds(&self, pts: &[LatLon], _: &RequestCtx) -> Vec<DemKind> {
+            vec![DemKind::Unknown; pts.len()]
+        }
+        fn extent(&self, _: ord_domain::tiles::SourceId) -> &ord_domain::coverage::Extent {
+            &ord_domain::coverage::Extent::World
+        }
+    }
+
     fn orchestrator(missing: Option<Missing>) -> Orchestrator {
         Orchestrator::new(
-            Sources { terrain: Arc::new(Flat(missing)), catalog: Arc::new(NoCatalog) },
+            Sources {
+                terrain: Arc::new(Flat(missing)),
+                coverage: Arc::new(HalfZone),
+                catalog: Arc::new(NoCatalog),
+            },
             Rules::default(),
             "1.0",
             RetryAfterPolicy::default(),
@@ -226,7 +260,10 @@ mod tests {
         );
         let report = orchestrator(Some(Missing::Failed)).run(request(true), &ctx()).await.unwrap();
         assert_eq!(report.status, ord_core::assemble::Status::Partial);
-        assert_eq!(report.warnings[0].code, ord_domain::report::WarningCode::ElevationUnavailable);
+        assert!(report
+            .warnings
+            .iter()
+            .any(|w| w.code == ord_domain::report::WarningCode::ElevationUnavailable));
     }
 
     #[tokio::test]
@@ -234,6 +271,13 @@ mod tests {
         let report = orchestrator(None).run(request(false), &ctx()).await.unwrap();
         assert_eq!(report.status, ord_core::assemble::Status::Complete);
         assert_eq!(report.summary.ele_max_m, Some(42.0));
+        let outside: Vec<_> = report
+            .warnings
+            .iter()
+            .filter(|w| w.code == ord_domain::report::WarningCode::OutsidePrimaryZone)
+            .collect();
+        assert_eq!(outside.len(), 1, "zonage : première moitié hors zone France");
+        assert_eq!(outside[0].range.as_ref().map(|r| r.start), Some(0.0));
         let expired = RequestCtx::new(RequestId("t".into()), Deadline::after(Duration::ZERO));
         assert_eq!(
             orchestrator(None).run(request(false), &expired).await.unwrap_err(),

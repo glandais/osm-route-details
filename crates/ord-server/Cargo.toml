@@ -29,6 +29,7 @@ figment.workspace = true
 http-body-util.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_ignored.workspace = true
 serde_json.workspace = true
@@ -46,7 +47,7 @@ uuid.workspace = true
 ord-testkit.workspace = true
 ord-domain.workspace = true
 figment = { workspace = true, features = ["test"] }
-flate2 = "1"
+flate2.workspace = true
 http-body-util.workspace = true
 tempfile.workspace = true
 

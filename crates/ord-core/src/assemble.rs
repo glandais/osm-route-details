@@ -1,6 +1,6 @@
-//! Assembleur (T06), partiel à l'incrément 1 : `summary.length_m`, `gain_*`, extrema,
-//! `terrain_m`, `quality.terrain`, `quality.elevation_coverage`, avertissements d'élévation,
-//! `status`, versions et attributions. Segments, typologie et ouvrages arrivent aux incréments 3–4.
+//! Assembleur (T06), partiel : `summary.length_m`, `gain_*` (`adapted[]` compris), extrema,
+//! `terrain_m`, `quality.terrain`, `quality.elevation_coverage`, avertissements d'élévation et
+//! `outside_primary_zone`, `status`, versions et attributions. Segments, typologie et ouvrages arrivent aux incréments 3–4.
 //!
 //! Fonction pure ; les arrondis de sortie sont appliqués ici (T01 §9).
 
@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use ord_domain::catalog::{Attribution, Versions};
+use ord_domain::coverage::CoverageRanges;
 use ord_domain::elevation::TerrainOrigin;
 use ord_domain::report::{Warning, WarningCode};
 use ord_domain::route::PreparedRoute;
@@ -68,6 +69,7 @@ const PARTIAL_CODES: [WarningCode; 4] = [
 
 pub fn assemble(
     route: &PreparedRoute,
+    cov: &CoverageRanges,
     profile: ElevationProfile,
     points: Vec<OutputPoint>,
     versions: Versions,
@@ -86,7 +88,14 @@ pub fn assemble(
     let missing_m: f64 = profile.missing.iter().map(|m| m.to_m - m.from_m).sum();
     let elevation_coverage = if length > 0.0 { ((length - missing_m) / length).clamp(0.0, 1.0) } else { 0.0 };
 
-    let warnings = merge_warnings(profile.warnings.clone());
+    let mut warnings = profile.warnings.clone();
+    // Producteur unique d'`outside_primary_zone` (T06 §4).
+    warnings.extend(cov.outside_primary_zone.iter().map(|r| Warning {
+        code: WarningCode::OutsidePrimaryZone,
+        message: "outside France, Mapterhorn only".into(),
+        range: Some(r.clone()),
+    }));
+    let warnings = merge_warnings(warnings);
     let status = if warnings.iter().any(|w| PARTIAL_CODES.contains(&w.code)) {
         Status::Partial
     } else {
@@ -193,7 +202,7 @@ mod tests {
             RequestOptions { sampling: Sampling::Distance { step_m: 10.0 }, ..RequestOptions::default() };
         let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
         let pts = sample_output(&route, &p, &opts.sampling);
-        assemble(&route, p, pts, versions(), Vec::new())
+        assemble(&route, &CoverageRanges::default(), p, pts, versions(), Vec::new())
     }
 
     #[test]
@@ -223,6 +232,20 @@ mod tests {
         assert!(r.summary.gain.params.partial);
         let none: f64 = r.summary.terrain_m.get(&TerrainOrigin::None).copied().unwrap_or(0.0);
         assert_eq!(none, 20.0);
+    }
+
+    #[test]
+    fn outside_primary_zone_warns_without_making_it_partial() {
+        let route = line(100.0);
+        let terrain = (0..route.samples.len()).map(|_| sample(Some(5.0), None)).collect();
+        let opts = RequestOptions::default();
+        let p = fuse(&route, &RawProfile { terrain }, &opts, &Rules::default()).unwrap();
+        let cov = CoverageRanges { outside_primary_zone: vec![40.0..100.0], ..CoverageRanges::default() };
+        let r = assemble(&route, &cov, p, Vec::new(), versions(), Vec::new());
+        assert_eq!(r.status, Status::Complete);
+        assert_eq!(r.warnings.len(), 1);
+        assert_eq!(r.warnings[0].code, WarningCode::OutsidePrimaryZone);
+        assert_eq!(r.warnings[0].range, Some(40.0..100.0));
     }
 
     #[test]

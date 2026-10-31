@@ -313,7 +313,8 @@
           "enums",
           "primary_zone",
           "data",
-          "elevation_sources"
+          "elevation_sources",
+          "elevation_rules"
         ],
         "properties": {
           "api_version": {
@@ -325,6 +326,10 @@
           "defaults": {
             "$ref": "#/components/schemas/OptionDefaults",
             "description": "Values applied when an option is absent."
+          },
+          "elevation_rules": {
+            "$ref": "#/components/schemas/ElevationRulesV1",
+            "description": "Elevation rules that shape the output."
           },
           "elevation_sources": {
             "type": "array",
@@ -493,6 +498,40 @@
             ],
             "format": "double",
             "description": "0 (disabled) or within the published bounds, in metres."
+          }
+        }
+      },
+      "ElevationRulesV1": {
+        "type": "object",
+        "description": "Elevation rules of `rules_version`.",
+        "required": [
+          "station_step_m",
+          "gain_presets",
+          "glo30_threshold_m",
+          "glo30_min_range_m"
+        ],
+        "properties": {
+          "gain_presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GainPresetRuleV1"
+            },
+            "description": "Hysteresis threshold and smoothing half-width of each gain preset, in metres."
+          },
+          "glo30_min_range_m": {
+            "type": "number",
+            "format": "double",
+            "description": "GLO-30 ranges shorter than this are not adapted, and shorter gaps are closed, in metres."
+          },
+          "glo30_threshold_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Threshold applied on GLO-30 ranges (a surface model), in metres."
+          },
+          "station_step_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Spacing of the internal stations, in metres."
           }
         }
       },
@@ -684,6 +723,28 @@
           "barometric",
           "gps"
         ]
+      },
+      "GainPresetRuleV1": {
+        "type": "object",
+        "description": "Parameters of one gain preset.",
+        "required": [
+          "preset",
+          "threshold_m",
+          "smoothing_m"
+        ],
+        "properties": {
+          "preset": {
+            "$ref": "#/components/schemas/GainPreset"
+          },
+          "smoothing_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "threshold_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "HealthStatus": {
         "type": "object",

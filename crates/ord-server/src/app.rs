@@ -11,7 +11,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, MethodRouter};
 use axum::{Json, Router};
 use metrics_exporter_prometheus::PrometheusHandle;
-use ord_data::catalog::{ConfiguredSources, StaticCatalog};
+use ord_data::catalog::StaticCatalog;
 use ord_domain::budget::{Deadline, RequestId};
 use ord_domain::catalog::{DataCatalog, Readiness};
 use ord_domain::ctx::RequestCtx;
@@ -31,7 +31,7 @@ use crate::dto::{to_dto, RouteDetailsRequestV1, RouteDetailsResponseV1};
 use crate::problem::{problem_for_status, with_request_id, Problem, ProblemBody};
 use crate::strict_json::{MaxBodyBytes, StrictJson};
 use crate::validate::validate;
-use crate::wiring::{StartupError, Wiring};
+use crate::wiring::{Startup, StartupError, Wiring};
 
 pub const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 const MAX_REQUEST_ID_LEN: usize = 128;
@@ -60,22 +60,27 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     /// Construit l'état, les sources et l'orchestrateur, et précalcule les documents servis tels
-    /// quels. Aucune I/O ici : le cache disque est créé à la première écriture.
+    /// quels. Aucune I/O ici, ni lecture de démarrage (version Mapterhorn, index de couverture) :
+    /// voir `bootstrap`. Le cache disque est créé à la première écriture.
     pub fn new(config: &Config) -> Result<Self, StartupError> {
-        Self::with_wiring(config, Wiring::default())
+        Self::with_startup(config, Wiring::default(), Startup::default())
     }
 
     pub fn with_wiring(config: &Config, wiring: Wiring) -> Result<Self, StartupError> {
-        let catalog = Arc::new(StaticCatalog::new(ConfiguredSources {
-            ign_enabled: config.elevation.ign.enabled,
-            ign_zoom: config.elevation.ign.zoom,
-            mapterhorn_zoom: config.elevation.mapterhorn.zoom,
-            mapterhorn_version: config.elevation.mapterhorn.version.clone(),
-            streets_zoom: config.typology.zoom,
-        }));
+        Self::with_startup(config, wiring, Startup::default())
+    }
+
+    /// Lectures de démarrage (en ligne, ou cache disque hors ligne), puis construction.
+    pub async fn bootstrap(config: &Config, wiring: Wiring) -> Result<Self, StartupError> {
+        let startup = crate::wiring::startup(config).await?;
+        Self::with_startup(config, wiring, startup)
+    }
+
+    pub fn with_startup(config: &Config, wiring: Wiring, startup: Startup) -> Result<Self, StartupError> {
+        let catalog = Arc::new(StaticCatalog::new(crate::wiring::configured_sources(config, &startup)));
         let capabilities = Capabilities::build(config, &catalog);
         let attribution = AttributionDoc::build(catalog.as_ref());
-        let orchestrator = crate::wiring::orchestrator(config, Arc::clone(&catalog), wiring)?;
+        let orchestrator = crate::wiring::orchestrator(config, &startup, Arc::clone(&catalog), wiring)?;
         Ok(Self {
             inner: Arc::new(Inner {
                 limits: config.limits.clone(),

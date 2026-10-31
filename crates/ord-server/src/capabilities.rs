@@ -2,7 +2,7 @@
 //!
 //! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
-use ord_core::RULES_VERSION;
+use ord_core::{Rules, RULES_VERSION};
 use ord_data::catalog::StaticCatalog;
 use ord_domain::catalog::{Attribution, DataCatalog, DataVersion};
 use ord_domain::elevation::TerrainOrigin;
@@ -35,6 +35,48 @@ pub struct Capabilities {
     pub data: DataFeatures,
     /// Configured elevation sources, in priority order.
     pub elevation_sources: Vec<DataVersion>,
+    /// Elevation rules that shape the output.
+    pub elevation_rules: ElevationRulesV1,
+}
+
+// Règles publiées (T04 §5.4, T07 §4) : un ajout au contrat.
+/// Elevation rules of `rules_version`.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct ElevationRulesV1 {
+    /// Spacing of the internal stations, in metres.
+    pub station_step_m: f64,
+    /// Hysteresis threshold and smoothing half-width of each gain preset, in metres.
+    pub gain_presets: Vec<GainPresetRuleV1>,
+    /// Threshold applied on GLO-30 ranges (a surface model), in metres.
+    pub glo30_threshold_m: f64,
+    /// GLO-30 ranges shorter than this are not adapted, and shorter gaps are closed, in metres.
+    pub glo30_min_range_m: f64,
+}
+
+/// Parameters of one gain preset.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct GainPresetRuleV1 {
+    pub preset: GainPreset,
+    pub threshold_m: f64,
+    pub smoothing_m: f64,
+}
+
+impl ElevationRulesV1 {
+    fn new(rules: &Rules) -> Self {
+        let g = &rules.elevation.gain;
+        Self {
+            station_step_m: rules.elevation.station_step_m,
+            gain_presets: GainPreset::ALL
+                .iter()
+                .map(|&preset| {
+                    let p = g.preset(preset);
+                    GainPresetRuleV1 { preset, threshold_m: p.threshold_m, smoothing_m: p.smoothing_m }
+                })
+                .collect(),
+            glo30_threshold_m: g.glo30_threshold_m,
+            glo30_min_range_m: g.glo30_min_range_m,
+        }
+    }
 }
 
 // Doc 02 §7.
@@ -203,10 +245,12 @@ impl Capabilities {
                 // Shortbread (VersaTiles) : revêtement groupé, pas de gué (T03 §3).
                 ford_detectable: false,
                 surface_detail: false,
-                bridge_dsm: config.elevation.ign.enabled,
+                // Le MNS des ponts n'est lu qu'avec les ouvrages (incrément 4) : sources réellement lues.
+                bridge_dsm: false,
                 heuristics: false,
             },
             elevation_sources: catalog.elevation_sources(),
+            elevation_rules: ElevationRulesV1::new(&Rules::default()),
         }
     }
 }

@@ -16,6 +16,8 @@ use serde_json::json;
 async fn elevation_at(p: LatLon) -> f64 {
     let mut config = test_config();
     config.cache.offline = false;
+    // Seul test qui sort de la machine : la vraie source Mapterhorn (IGN laissé désactivé).
+    config.elevation.mapterhorn = ord_server::config::Config::default().elevation.mapterhorn;
     let body = request_body(&meridian(p, 10.0, 2), Some(json!({"sampling": {"mode": "input"}})));
     let reply = send(app_with(&config), post_json(&body)).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text);

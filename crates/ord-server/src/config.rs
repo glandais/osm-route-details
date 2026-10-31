@@ -180,6 +180,8 @@ pub struct IgnConfig {
     pub rate_per_s: f64,
     pub max_attempts: u32,
     pub mode: IgnMode,
+    /// Requêtes en vol vers l'hôte (≈ débit × latence, T02 §4.2) [à calibrer].
+    pub concurrency: usize,
 }
 
 impl Default for IgnConfig {
@@ -193,6 +195,7 @@ impl Default for IgnConfig {
             rate_per_s: 20.0,
             max_attempts: 6,
             mode: IgnMode::Direct,
+            concurrency: 12,
         }
     }
 }
@@ -205,8 +208,12 @@ pub struct MapterhornConfig {
     /// Côté des tuiles Terrarium, en pixels (512 chez Mapterhorn).
     pub tile_size: u16,
     pub concurrency: usize,
-    /// Entre dans l'espace de noms du cache disque ; `None` : `unversioned`.
+    /// Fixe la version (espace de noms du cache disque) ; `None` : version lue au démarrage.
     pub version: Option<String>,
+    /// TileJSON lu au démarrage (champ `version` s'il existe, T02 §9).
+    pub tilejson_url: String,
+    /// Liste des téléchargements, dont le champ `version` sert quand le TileJSON n'en a pas.
+    pub versions_url: String,
 }
 
 impl Default for MapterhornConfig {
@@ -217,15 +224,39 @@ impl Default for MapterhornConfig {
             tile_size: 512,
             concurrency: 4,
             version: None,
+            tilejson_url: "https://tiles.mapterhorn.com/tilejson.json".into(),
+            versions_url: "https://download.mapterhorn.com/download_urls.json".into(),
         }
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// Fichiers de couverture de Mapterhorn (T02 §7.3).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CoverageConfig {
+    /// `coverage-index.pmtiles` local ; sinon téléchargé depuis `coverage_index_url`.
     pub coverage_index: Option<PathBuf>,
+    /// `coverage.pmtiles` local : pas encore lu (polygones lus en MVT par `polygons_url`).
     pub coverage: Option<PathBuf>,
+    /// `None` : pas d'index (`DemKind::Unknown` hors des 404 à z13).
+    pub coverage_index_url: Option<String>,
+    /// Polygones `coverage` en MVT `{z}/{x}/{y}` ; `None` : index seul.
+    pub polygons_url: Option<String>,
+    pub polygons_zoom: u8,
+    pub polygons_concurrency: usize,
+}
+
+impl Default for CoverageConfig {
+    fn default() -> Self {
+        Self {
+            coverage_index: None,
+            coverage: None,
+            coverage_index_url: Some("https://download.mapterhorn.com/coverage-index.pmtiles".into()),
+            polygons_url: Some("https://single-archive-tiles.mapterhorn.com/coverage/{z}/{x}/{y}.mvt".into()),
+            polygons_zoom: 12,
+            polygons_concurrency: 2,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -372,6 +403,12 @@ impl Config {
         }
         if self.elevation.ign.rate_per_s.is_nan() || self.elevation.ign.rate_per_s <= 0.0 {
             return invalid("elevation.ign.rate_per_s", "must be positive");
+        }
+        if self.elevation.ign.concurrency == 0 {
+            return invalid("elevation.ign.concurrency", "must be positive");
+        }
+        if !(1..=14).contains(&self.coverage.polygons_zoom) || self.coverage.polygons_concurrency == 0 {
+            return invalid("coverage.polygons_zoom", "zoom within [1, 14] and positive concurrency");
         }
         if self.typology.source == TypologySourceKind::VersatilesFile && self.typology.path.is_none() {
             return invalid("typology.path", "required when typology.source = versatiles_file");

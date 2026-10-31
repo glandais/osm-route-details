@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use ord_adapters::bil::encode_bil;
 use ord_adapters::terrarium::encode_terrarium_webp;
 use ord_data::elevation::pixel_center;
 use ord_domain::LatLon;
@@ -47,6 +48,21 @@ impl SyntheticTerrain {
         })
     }
 
+    /// Réponse BIL32 d'un `GetMap` WMS 1.3.0 en EPSG:4326 (`BBOX=s,w,n,e`, `WIDTH`) : chaque
+    /// pixel vaut le terrain en son centre, lignes régulières en latitude ; `None` si la requête
+    /// n'est pas lisible.
+    pub fn bil(&self, req: &ScriptedRequest) -> Option<Vec<u8>> {
+        let b: Vec<f64> = req.param("BBOX")?.split(',').map(str::parse).collect::<Result<_, _>>().ok()?;
+        let size: u16 = req.param("WIDTH")?.parse().ok()?;
+        let [s, w, n, e] = b[..] else { return None };
+        let k = f64::from(size);
+        Some(encode_bil(size, |px, py| {
+            let lon = w + (f64::from(px) + 0.5) / k * (e - w);
+            let lat = n - (f64::from(py) + 0.5) / k * (n - s);
+            (self.f)(LatLon::new(lat, lon))
+        }))
+    }
+
     /// Serveur scripté qui sert ce terrain (tuiles mémoïsées), avec un script facultatif qui
     /// remplace la réponse de certaines requêtes.
     pub async fn serve(
@@ -57,6 +73,12 @@ impl SyntheticTerrain {
         ScriptedServer::start(move |n, req| {
             if let Some(reply) = script(n, req) {
                 return reply;
+            }
+            if req.query.is_some() {
+                return match self.bil(req) {
+                    Some(body) => ScriptedResponse::ok(body).header("content-type", "image/x-bil;bits=32"),
+                    None => ScriptedResponse::status(400),
+                };
             }
             let mut memo = memo.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let body =
