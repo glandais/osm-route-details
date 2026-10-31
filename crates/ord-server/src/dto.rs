@@ -9,7 +9,9 @@ use std::fmt;
 
 use ord_core::assemble::{ReportSegment, RouteReport, Status};
 use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
+use ord_core::elevation::fusion::{CorrectionStatus, OutcomeMethod};
 use ord_core::elevation::{EleMethod, PointOrigin};
+use ord_core::typology::StructureKind;
 use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
 use ord_domain::elevation::TerrainOrigin;
@@ -243,6 +245,62 @@ pub struct SummaryV1 {
     pub by_way_kind_m: BTreeMap<String, f64>,
     /// Length not matched on the street network, in metres.
     pub unknown_m: f64,
+    /// Bridges and tunnels met, sorted by distance: one entry per run of elements of the same
+    /// kind on each passage.
+    pub structures: Vec<StructureEntryV1>,
+}
+
+/// Kind of a structure entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StructureKindV1 {
+    Bridge,
+    Tunnel,
+}
+
+/// Method applied to a structure: `kept_ground` is a bridge with no deck above the ground (counted
+/// as corrected), `none` an uncorrected structure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StructureMethodV1 {
+    DsmDeck,
+    InterpolatedStructure,
+    KeptGround,
+    None,
+}
+
+/// A bridge or tunnel met on the route.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StructureEntryV1 {
+    pub kind: StructureKindV1,
+    pub from_m: f64,
+    pub to_m: f64,
+    pub length_m: f64,
+    pub structure_source: StructureSourceV1,
+    pub method: StructureMethodV1,
+}
+
+/// Correction status of one kind of structure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CorrectionStatusV1 {
+    Applied,
+    Partial,
+    NoneFound,
+    Disabled,
+    Unavailable,
+}
+
+/// Structure correction: a status per kind, and counters of `summary.structures[]` entries.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StructureCorrectionV1 {
+    pub bridges: CorrectionStatusV1,
+    pub tunnels: CorrectionStatusV1,
+    /// Entries per method (`dsm_deck`, `interpolated_structure`, `kept_ground`, `uncorrected`);
+    /// zero counters are omitted.
+    pub counts: BTreeMap<String, u32>,
+    /// Entries per `structure_source`; zero counters are omitted.
+    pub counts_by_source: BTreeMap<String, u32>,
 }
 
 /// Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch.
@@ -492,6 +550,7 @@ pub struct QualityV1 {
     pub inferred_surface_ratio: f64,
     /// Share of the length with an elevation, in [0, 1].
     pub elevation_coverage: f64,
+    pub structure_correction: StructureCorrectionV1,
     /// Terrain provenance by range.
     pub terrain: Vec<TerrainRangeV1>,
     pub warnings: Vec<WarningV1>,
@@ -591,7 +650,35 @@ pub fn to_dto(
         by_surface_source_m: keyed(&s.by_surface_source_m, SurfaceSource::as_str),
         by_way_kind_m: keyed(&s.by_way_kind_m, WayKind::as_str),
         unknown_m: s.unknown_m,
+        structures: s
+            .structures
+            .iter()
+            .map(|o| StructureEntryV1 {
+                kind: match o.kind {
+                    StructureKind::Bridge => StructureKindV1::Bridge,
+                    StructureKind::Tunnel => StructureKindV1::Tunnel,
+                },
+                from_m: o.from_m,
+                to_m: o.to_m,
+                length_m: ((o.to_m - o.from_m) * 100.0).round() / 100.0,
+                structure_source: o.source.into(),
+                method: match o.method {
+                    OutcomeMethod::DsmDeck => StructureMethodV1::DsmDeck,
+                    OutcomeMethod::InterpolatedStructure => StructureMethodV1::InterpolatedStructure,
+                    OutcomeMethod::KeptGround => StructureMethodV1::KeptGround,
+                    OutcomeMethod::Uncorrected(_) => StructureMethodV1::None,
+                },
+            })
+            .collect(),
     });
+    let status = |c: CorrectionStatus| match c {
+        CorrectionStatus::Applied => CorrectionStatusV1::Applied,
+        CorrectionStatus::Partial => CorrectionStatusV1::Partial,
+        CorrectionStatus::NoneFound => CorrectionStatusV1::NoneFound,
+        CorrectionStatus::Disabled => CorrectionStatusV1::Disabled,
+        CorrectionStatus::Unavailable => CorrectionStatusV1::Unavailable,
+    };
+    let sc = &report.quality.structure_correction;
     RouteDetailsResponseV1 {
         meta: MetaV1 {
             api_version: report.versions.api_version,
@@ -611,6 +698,12 @@ pub fn to_dto(
             matched_ratio: report.quality.matched_ratio,
             inferred_surface_ratio: report.quality.inferred_surface_ratio,
             elevation_coverage: report.quality.elevation_coverage,
+            structure_correction: StructureCorrectionV1 {
+                bridges: status(sc.bridges),
+                tunnels: status(sc.tunnels),
+                counts: sc.counts.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect(),
+                counts_by_source: sc.by_source.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect(),
+            },
             terrain: report
                 .quality
                 .terrain

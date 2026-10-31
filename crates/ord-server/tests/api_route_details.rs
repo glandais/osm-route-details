@@ -60,7 +60,10 @@ async fn input_mode_profile_and_summary() {
         assert_eq!(p["index"], i);
         assert_eq!(p["origin"], "input");
         assert!(p.get("lat").is_none(), "un point d'entrée n'est jamais déplacé");
-        assert_eq!(p["ele_method"], "dem");
+        // Tuiles de 64 px : pixel de ≈ 150 m, sonde de culée à ≈ 300 m du pont (600–700 m) ; le
+        // point de 500 m est sur la rampe du pont interpolé, sur ce plan incliné la même valeur.
+        let method = p["ele_method"].as_str().unwrap();
+        assert!(method == "dem" || (i == 1 && method == "interpolated_structure"), "{i} : {method}");
         let expected = terrain().at(*q);
         let ele = p["ele"].as_f64().expect("altitude");
         assert!((ele - expected).abs() < 0.02, "point {i} : {ele} vs {expected}");
@@ -172,7 +175,10 @@ async fn failed_tiles_give_503_or_a_partial_200() {
     assert_eq!(r["status"], "partial");
     assert_eq!(
         r["quality"]["warnings"],
-        json!([{"code": "elevation_unavailable", "message": "elevation sources failed on this range", "from_m": 0.0, "to_m": 800.0}])
+        json!([
+            {"code": "elevation_unavailable", "message": "elevation sources failed on this range", "from_m": 0.0, "to_m": 800.0},
+            {"code": "structure_uncorrected", "message": "structure left uncorrected", "from_m": 599.83, "to_m": 699.89}
+        ])
     );
     assert!(r["points"].as_array().unwrap().iter().all(|p| p["ele"].is_null() && p["ele_method"] == "none"));
     assert_eq!(r["quality"]["elevation_coverage"], 0.0);
@@ -217,8 +223,17 @@ async fn segments_cover_the_route_with_the_bridge() {
     assert_eq!(bridge["surface"], json!({"class": "paved", "source": "tagged"}));
     assert_eq!(bridge["way_kind"], "minor_road");
     assert_eq!(bridge["matched"], true);
-    assert_eq!(bridge["ele_method"], "dem");
+    // Mapterhorn seul : pas de MNS, le pont est interpolé entre ses sondes de culée.
+    assert_eq!(bridge["ele_method"], "interpolated_structure", "{r}");
     assert!(bridge["ele_start"].is_f64() && bridge["grade_pct"].is_f64());
+    let entries = r["summary"]["structures"].as_array().expect("structures");
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0]["kind"], "bridge");
+    assert_eq!(entries[0]["method"], "interpolated_structure");
+    assert_eq!(entries[0]["structure_source"], "osm");
+    let sc = &r["quality"]["structure_correction"];
+    assert_eq!((sc["bridges"].as_str(), sc["tunnels"].as_str()), (Some("applied"), Some("none_found")));
+    assert_eq!(sc["counts"], json!({"interpolated_structure": 1}));
     let s = &r["summary"];
     assert_eq!(s["unknown_m"], 0.0);
     assert_eq!(s["by_surface_class_m"], json!({"paved": 2_000.0}));
@@ -228,6 +243,18 @@ async fn segments_cover_the_route_with_the_bridge() {
     assert!((ground + deck - 2_000.0).abs() < 0.02);
     assert_eq!(r["quality"]["matched_ratio"], 1.0);
     assert_eq!(r["quality"]["inferred_surface_ratio"], 0.0);
+}
+
+#[tokio::test]
+async fn disabled_structure_correction_keeps_the_dem() {
+    let (server, dir) = served(|_, _| None).await;
+    let pts = meridian(START, 2_000.0, 5);
+    let body = request_body(&pts, Some(json!({"structure_correction": false})));
+    let r = send(app_with(&online_config(&server, dir.path())), post_json(&body)).await.json();
+    let sc = &r["quality"]["structure_correction"];
+    assert_eq!((sc["bridges"].as_str(), sc["tunnels"].as_str()), (Some("disabled"), Some("disabled")));
+    assert_eq!(r["summary"]["structures"][0]["method"], "none");
+    assert!(r["points"].as_array().unwrap().iter().all(|p| p["ele_method"] == "dem"));
 }
 
 #[tokio::test]

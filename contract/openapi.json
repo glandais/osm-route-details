@@ -360,6 +360,17 @@
           }
         }
       },
+      "CorrectionStatusV1": {
+        "type": "string",
+        "description": "Correction status of one kind of structure.",
+        "enum": [
+          "applied",
+          "partial",
+          "none_found",
+          "disabled",
+          "unavailable"
+        ]
+      },
       "DataFeatures": {
         "type": "object",
         "description": "Capabilities of the active data sources.",
@@ -1204,6 +1215,7 @@
           "matched_ratio",
           "inferred_surface_ratio",
           "elevation_coverage",
+          "structure_correction",
           "terrain",
           "warnings"
         ],
@@ -1222,6 +1234,9 @@
             "type": "number",
             "format": "double",
             "description": "Share of the length matched on the street network, in [0, 1]."
+          },
+          "structure_correction": {
+            "$ref": "#/components/schemas/StructureCorrectionV1"
           },
           "terrain": {
             "type": "array",
@@ -1563,6 +1578,101 @@
           "partial"
         ]
       },
+      "StructureCorrectionV1": {
+        "type": "object",
+        "description": "Structure correction: a status per kind, and counters of `summary.structures[]` entries.",
+        "required": [
+          "bridges",
+          "tunnels",
+          "counts",
+          "counts_by_source"
+        ],
+        "properties": {
+          "bridges": {
+            "$ref": "#/components/schemas/CorrectionStatusV1"
+          },
+          "counts": {
+            "type": "object",
+            "description": "Entries per method (`dsm_deck`, `interpolated_structure`, `kept_ground`, `uncorrected`);\nzero counters are omitted.",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "counts_by_source": {
+            "type": "object",
+            "description": "Entries per `structure_source`; zero counters are omitted.",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tunnels": {
+            "$ref": "#/components/schemas/CorrectionStatusV1"
+          }
+        }
+      },
+      "StructureEntryV1": {
+        "type": "object",
+        "description": "A bridge or tunnel met on the route.",
+        "required": [
+          "kind",
+          "from_m",
+          "to_m",
+          "length_m",
+          "structure_source",
+          "method"
+        ],
+        "properties": {
+          "from_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/StructureKindV1"
+          },
+          "length_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/StructureMethodV1"
+          },
+          "structure_source": {
+            "$ref": "#/components/schemas/StructureSourceV1"
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "StructureKindV1": {
+        "type": "string",
+        "description": "Kind of a structure entry.",
+        "enum": [
+          "bridge",
+          "tunnel"
+        ]
+      },
+      "StructureMethodV1": {
+        "type": "string",
+        "description": "Method applied to a structure: `kept_ground` is a bridge with no deck above the ground (counted\nas corrected), `none` an uncorrected structure.",
+        "enum": [
+          "dsm_deck",
+          "interpolated_structure",
+          "kept_ground",
+          "none"
+        ]
+      },
       "StructureSourceV1": {
         "type": "string",
         "description": "Origin of a structure: OSM tags, heuristic detection, or both.",
@@ -1596,7 +1706,8 @@
           "by_surface_class_m",
           "by_surface_source_m",
           "by_way_kind_m",
-          "unknown_m"
+          "unknown_m",
+          "structures"
         ],
         "properties": {
           "by_structure_m": {
@@ -1671,6 +1782,13 @@
           "loss_m": {
             "type": "number",
             "format": "double"
+          },
+          "structures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StructureEntryV1"
+            },
+            "description": "Bridges and tunnels met, sorted by distance: one entry per run of elements of the same\nkind on each passage."
           },
           "terrain_m": {
             "type": "object",
