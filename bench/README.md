@@ -262,6 +262,22 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    parcours recalés (`perso-13` coupée en `.s1`/`.s2` après 10,8 km de transport ; `perso-12` réduite
    à son segment principal après 32,7 km de transport), 96 à 100 % des points appariés, longueur
    recalée entre 0,99 et 1,03 fois la longueur d'origine.
+   **Sauts de Valhalla** (corrigé le 2026-10-31, depuis le cache, sans nouvel appel). Quand Valhalla
+   ne sait pas enchaîner deux sous-parcours, son `shape` les relie par une ligne droite à travers
+   champs, jusqu'à 1,5 km, portée par une arête bien plus courte. Ces lignes droites étaient passées
+   au service : elles ont produit les « trous » M1 de `perso-06` et `perso-18` à l'incrément 3. Pourtant
+   les ways que Stadia apparie de part et d'autre sont bien dans les tuiles VersaTiles, et ils
+   existaient dans OSM avant les données VersaTiles (réplication du 2026-06-07). Une arête dont la forme dépasse sa
+   longueur de plus de 50 m (excès < 25 m sur les autres arêtes du corpus) contient un saut. Le saut
+   est remplacé par la trace d'origine entre le dernier point apparié avant lui et le premier après,
+   si le shape retiré n'excède pas deux fois cette trace + 200 m (sinon une boucle serait coupée).
+   Les points insérés gardent leur baro. La plage n'a pas de référence de revêtement (`use` =
+   `discontinuite`, surface vide), à exclure de R3. Résultat : 19 parcours touchés, 82 sauts dont 6
+   restés droits (2,2 km au total, sans point apparié de part et d'autre). Les longueurs restent
+   entre 0,98 et 1,03 fois celles d'origine. Sur `perso-06`, 9,0 des 9,7 km insérés suivent une voie
+   VersaTiles (≤ 15 m). Sur `perso-18`, 0,8 km reste hors de toute voie : la sortie y passe hors du
+   réseau cartographié, ce qui est un vrai non apparié. Ancienne version gardée dans
+   `private/recales.v1/`.
 2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
    16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
    aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie

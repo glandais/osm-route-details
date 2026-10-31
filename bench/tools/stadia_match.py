@@ -13,6 +13,12 @@ la réponse comme référence de revêtement (R3).
    chevauchants de OVERLAP_PTS ; réponses brutes écrites telles quelles (régénérables, hors git).
 3. Géométrie recalée = concaténation des `shape` (polyline6) ; chaque point d'origine apparié reçoit
    son abscisse curviligne sur la géométrie recalée (projection monotone du point apparié).
+   Quand Valhalla ne sait pas enchaîner deux sous-parcours (points `unmatched` entre les deux), son
+   `shape` les relie par une ligne droite, à travers champs, portée par une arête bien plus courte
+   que ce segment. Une arête dont la forme dépasse sa longueur de plus de JUMP_EXCESS_M contient un
+   tel saut : son plus long segment est remplacé par les points d'origine de la trace entre les deux
+   sous-parcours (ils gardent leur baro), et cette plage n'a pas de référence de revêtement
+   (`use` = `discontinuite`, surface vide, à exclure de R3).
 4. Écritures :
    - <id>.gpx : géométrie recalée, sans altitude (l'entrée du service) ; découpée en <id>.partN.gpx si
      elle dépasse MAX_KM ou MAX_PTS (bornes d'entrée de l'API) ;
@@ -42,6 +48,9 @@ MAX_KM = 200.0
 MAX_PTS = 16000
 GAP_M = 2000.0
 MIN_SEG_KM = 5.0
+JUMP_EXCESS_M = 50.0  # 39 000 arêtes du corpus : excès < 25 m sauf sur les sauts
+JUMP_SNAP_M = 50.0  # point apparié encadrant ↔ sommet du shape avant ou après le saut
+JUMP_WINDOW = 400  # sommets examinés de part et d'autre du saut
 ATTRS = ["edge.surface", "edge.road_class", "edge.use", "edge.length", "edge.way_id",
          "edge.begin_shape_index", "edge.end_shape_index", "matched.point", "matched.type",
          "matched.edge_index", "matched.distance_from_trace_point", "shape"]
@@ -156,6 +165,102 @@ def write_gpx(path, pts, name):
         f.write("</trkseg></trk></gpx>\n")
 
 
+def fill_jumps(shape, d, chunk):
+    """Remplace les sauts du shape par les points d'origine. Renvoie (shape, indice ancien → nouveau,
+    plages [début, fin] des sauts dans le nouveau shape, indices des points d'origine insérés)."""
+    pos = {j: (m["lat"], m["lon"]) for j, m in enumerate(d["matched_points"]) if m.get("type") != "unmatched"}
+    n = len(shape)
+
+    def near(p, lo, hi):
+        """(distance, v) de p au plus proche segment shape[v]–shape[v + 1], lo ≤ v < hi."""
+        return min(((seg_dist(p, shape[v], shape[v + 1]), v) for v in range(max(0, lo), min(n - 1, hi))),
+                   default=(math.inf, None))
+
+    jumps = []  # (va, vb, ja, jb) : shape[va + 1 .. vb] remplacé par P(ja), points d'origine, P(jb)
+    for e in d["edges"]:
+        b, en = e.get("begin_shape_index"), e.get("end_shape_index")
+        if b is None or en is None or en <= b:
+            continue
+        segs = [hav(shape[i], shape[i + 1]) for i in range(b, en)]
+        if sum(segs) - e.get("length", 0) * 1000 <= JUMP_EXCESS_M:
+            continue
+        i = b + max(range(len(segs)), key=segs.__getitem__)
+        cand = [j for j, p in pos.items() if min(hav(p, shape[i]), hav(p, shape[i + 1])) < 2000]
+        found = None
+        for w in (JUMP_WINDOW, 40, 8):  # fenêtre resserrée si la première enjambe une boucle
+            # A : points appariés sur le shape avant le saut ; B : après. Dernier de A avant le premier de B.
+            A = {j: near(pos[j], i - w, i) for j in cand}
+            B = {j: near(pos[j], i + 1, i + 1 + w) for j in cand}
+            A = {j: v for j, (dd, v) in A.items() if dd <= JUMP_SNAP_M}
+            B = {j: v for j, (dd, v) in B.items() if dd <= JUMP_SNAP_M}
+            jb = min((j for j in B if A and j > min(A)), default=None)
+            ja = max((j for j in A if jb is not None and j < jb), default=None)
+            if ja is None:
+                continue
+            # le shape retiré, saut compris, ne doit pas dépasser de beaucoup la trace d'origine qui le remplace
+            cut = sum(hav(shape[v], shape[v + 1]) for v in range(A[ja], B[jb] + 1)) - hav(shape[i], shape[i + 1])
+            if cut <= 2 * (jb - ja) * STEP_M + 200:
+                found = (A[ja], B[jb], ja, jb)
+                break
+        # sinon le saut reste droit, mais sans référence de revêtement
+        jumps.append(found or (i, i, None, None))
+    jumps.sort()
+    out, imap, gaps, filled = [], [], [], set()
+    v = 0
+    for va, vb, ja, jb in jumps:
+        if va < v:
+            continue  # chevauche un saut déjà traité
+        while v <= va:
+            imap.append(len(out))
+            out.append(shape[v])
+            v += 1
+        if ja is None:
+            gaps.append((len(out) - 1, len(out)))  # segment droit shape[va]–shape[va + 1]
+            continue
+        start = len(out)
+        out.append(pos[ja])
+        for j in range(ja + 1, jb):
+            out.append((chunk[j][1], chunk[j][2]))
+            filled.add(j)
+        out.append(pos[jb])
+        while v <= vb:  # sommets du saut, retirés
+            imap.append(start)
+            v += 1
+        gaps.append((start, len(out) - 1))
+    while v < n:
+        imap.append(len(out))
+        out.append(shape[v])
+        v += 1
+    return out, imap, gaps, filled
+
+
+def seg_dist(p, a, b):
+    """Distance (m) du point p au segment a–b, en projection locale."""
+    c = math.cos(math.radians(p[0])) * 111195.0
+    ax, ay = (a[1] - p[1]) * c, (a[0] - p[0]) * 111195.0
+    bx, by = (b[1] - p[1]) * c, (b[0] - p[0]) * 111195.0
+    dx, dy = bx - ax, by - ay
+    L = dx * dx + dy * dy
+    t = 0.0 if L == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L))
+    return math.hypot(ax + t * dx, ay + t * dy)
+
+
+def split_gaps(row, gaps):
+    """Découpe une ligne de revêtement (début, fin, …) autour des sauts."""
+    b, en, *rest = row
+    out = []
+    for g0, g1 in gaps:
+        if g1 <= b or g0 >= en:
+            continue
+        if g0 > b:
+            out.append((b, g0, *rest))
+        out.append((max(b, g0), min(en, g1), "", "", "discontinuite", ""))
+        b = min(en, g1)
+    if b < en:
+        out.append((b, en, *rest))
+    return out
+
+
 def segments(raw):
     segs, cur = [], [raw[0]]
     for a, b in zip(raw, raw[1:]):
@@ -181,6 +286,7 @@ def main(gpx, tid, outdir):
 def process(key, raw_pts, tid, outdir):
     pts = resample(raw_pts, STEP_M)
     poly, baro_rows, surf_rows = [], [], []
+    n_jumps = 0
     starts = list(range(0, len(pts), CHUNK_PTS - OVERLAP_PTS))
     for k, st in enumerate(starts):
         chunk = pts[st:st + CHUNK_PTS]
@@ -193,7 +299,8 @@ def process(key, raw_pts, tid, outdir):
             d = call(key, chunk)
             json.dump(d, open(raw, "w"))
             time.sleep(0.5)
-        shape = decode6(d["shape"])
+        shape, imap, gaps, filled = fill_jumps(decode6(d["shape"]), d, chunk)
+        n_jumps += len(gaps)
         # raccord : on reprend après le point recalé le plus proche de la fin du tronçon précédent
         first = 0
         if poly and k > 0:
@@ -204,19 +311,26 @@ def process(key, raw_pts, tid, outdir):
         poly += shape[start_i:]
         offset = base - start_i  # indice dans shape → indice dans poly
         floor = max(0, base - 1)
+        gaps = [(g0 + offset, g1 + offset) for g0, g1 in gaps if g1 + offset > floor]
         for e in d["edges"]:
             b, en = e.get("begin_shape_index"), e.get("end_shape_index")
-            if b is None or en is None or en + offset <= floor and base:
+            if b is None or en is None:
+                continue
+            b, en = imap[b], imap[en]
+            if en + offset <= floor and base:
                 continue  # arête du chevauchement, déjà couverte par le tronçon précédent
-            surf_rows.append((max(floor, b + offset), en + offset, e.get("surface", ""),
-                              e.get("road_class", ""), e.get("use", ""), e.get("way_id", "")))
+            surf_rows += split_gaps((max(floor, b + offset), en + offset, e.get("surface", ""),
+                                     e.get("road_class", ""), e.get("use", ""), e.get("way_id", "")), gaps)
         # chevauchement partagé à mi-chemin : chaque point d'origine n'est gardé qu'une fois
         skip = OVERLAP_PTS // 2 if k > 0 else 0
         last = len(chunk) if st + len(chunk) >= len(pts) else len(chunk) - OVERLAP_PTS // 2
         for j, (p, m) in enumerate(zip(chunk, d["matched_points"])):
-            if j < skip or j >= last or m.get("type") != "matched":
+            if j < skip or j >= last:
                 continue
-            baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", "")))
+            if m.get("type") == "matched":
+                baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", "")))
+            elif j in filled:  # point d'origine inséré à la place d'un saut : il est sur la géométrie
+                baro_rows.append((p[0], p[3], (p[1], p[2]), 0.0))
     cum = [0.0]
     for a, b in zip(poly, poly[1:]):
         cum.append(cum[-1] + hav(a, b))
@@ -251,7 +365,7 @@ def process(key, raw_pts, tid, outdir):
             if idx < len(poly):
                 part.append(poly[idx])  # raccord : le tronçon suivant repart de ce point
             write_gpx(os.path.join(outdir, f"{tid}.part{n + 1}.gpx"), part, f"{tid} {n + 1}/{nparts}")
-    print(f"{tid},{len(pts)},{len(baro_rows)},{len(poly)},{total_km:.1f},{nparts}")
+    print(f"{tid},{len(pts)},{len(baro_rows)},{len(poly)},{total_km:.1f},{nparts},{n_jumps}")
 
 
 if __name__ == "__main__":
