@@ -160,7 +160,7 @@ Le contrat OpenAPI est **généré depuis le code** et commité (`contract/opena
    `code` identique au suffixe, `status` = statut HTTP (doc 02 §5.1) ;
 6. enums gelées : les valeurs de `surface.class`, `structure`, `ele_method`, `origin` du terrain sont
    comparées à une liste écrite en dur dans le test ; une valeur retirée ou renommée échoue ;
-7. en CI, `oasdiff breaking` entre le contrat de `main` et celui de la branche : toute rupture dans
+7. en CI, `oasdiff breaking` entre le contrat de `develop` et celui de la branche : toute rupture dans
    `/v1` échoue (doc 02 §6 : ajouter ne casse pas, retirer casse).
 
 ### 2.6 Golden files
@@ -459,17 +459,17 @@ lit des données vivantes : si l'empreinte change, c'est un **changement de donn
 
 ## 6. CI (GitHub Actions)
 
-`ci.yml`, sur chaque PR et sur `main` :
+`ci.yml`, sur chaque PR et sur `develop` :
 
 | Job | Commandes | Bloquant |
 |---|---|---|
 | `fmt` | `cargo fmt --all --check` | oui |
 | `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` | oui |
 | `test` | `cargo nextest run --workspace --locked` puis `cargo test --doc` ; `proptest` à 256 cas | oui |
-| `contract` | test §2.5 + `oasdiff breaking` contre `main` | oui |
+| `contract` | test §2.5 + `oasdiff breaking` contre `develop` | oui |
 | `deny` | `cargo deny check` (licences, avis de sécurité, doublons) | oui |
 | `bench-report` | sans cache ni `bench/private/` : vérifie que le `results.json` commité par la PR porte le `RulesFingerprint` courant, l'empreinte de `bench/cache.lock` et les empreintes **courantes** de `bench/manifest.yaml`, `bench/criteria.yaml` et des `BenchRules`, puis `ord-bench compare` contre `baseline.json` et règle du §4 | oui |
-| `docker` | construction de l'image, `/health/live` sur le conteneur | oui sur `main` |
+| `docker` | construction de l'image, `/health/live` sur le conteneur | oui sur `develop` |
 
 **`bench-offline` en local** (la CI n'a ni le cache, §5.3, ni les traces privées) :
 `cargo test --test golden` ; `ord-bench check` ; `ord-bench run --offline` (tous les cas de
