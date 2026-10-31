@@ -3,12 +3,17 @@
 Microservice Rust (à venir) : en entrée un parcours, en sortie l'**élévation** et la
 **typologie** (structure : sol / pont / tunnel ; revêtement : enum simple) le long du parcours.
 
-Code : incrément 0 du MVP, le squelette contractuel (workspace `crates/`, validation, erreurs
+Code : incrément 1 du MVP, le profil Mapterhorn seul (workspace `crates/`, validation, erreurs
 RFC 9457, `/health/*`, `/v1/capabilities`, `/v1/attribution`, contrat
-[`contract/openapi.json`](contract/openapi.json)). Le pipeline n'est pas encore branché :
-`POST /v1/route-details` valide la requête puis répond 500 `internal`. Plan des incréments :
-[technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris ;
-`cargo run -p ord-server -- openapi` régénère le contrat.
+[`contract/openapi.json`](contract/openapi.json)). `POST /v1/route-details` répond 200 avec le
+profil d'élévation Mapterhorn z12 (modes `input` et `distance`), le D+ du preset, la provenance du
+terrain et l'attribution ; ni typologie, ni IGN, ni ouvrages pour l'instant. Plan des incréments :
+[technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris,
+sans réseau ; `cargo run -p ord-server -- openapi` régénère le contrat.
+
+Banc (`tools/ord-bench`, T05 §5) : `ord-bench check` (empreintes du manifest, Q1),
+`ord-bench fill-cache` (cache de banc local, `~/.cache/osm-route-details/bench`),
+`ord-bench run --offline` (E1, E2 ; `results.json` dans `bench/reports/<date>-<rules_version>/`).
 
 ## Conception
 
