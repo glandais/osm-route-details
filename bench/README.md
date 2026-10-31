@@ -283,7 +283,7 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    longueur de plus de 50 m (excès < 25 m sur les autres arêtes du corpus) contient un saut. Le saut
    est remplacé par la trace d'origine entre le dernier point apparié avant lui et le premier après,
    si le shape retiré n'excède pas deux fois cette trace + 200 m (sinon une boucle serait coupée).
-   Les points insérés gardent leur baro. La plage n'a pas de référence de revêtement (`use` =
+   Les points insérés gardent leur baro (marqués `insere = 1`), sous la condition du point 3. La plage n'a pas de référence de revêtement (`use` =
    `discontinuite`, surface vide), à exclure de R3. Résultat : 19 parcours touchés, 82 sauts dont 6
    restés droits (2,2 km au total, sans point apparié de part et d'autre). Les longueurs restent
    entre 0,98 et 1,03 fois celles d'origine. Sur `perso-06`, 9,0 des 9,7 km insérés suivent une voie
@@ -311,7 +311,21 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    n'est pas bornée.
 3. **Comparaison au baro sur la géométrie recalée.** Chaque point d'origine apparié par Stadia est
    projeté sur la géométrie recalée ; son abscisse y porte l'altitude baro. Les points non appariés,
-   ou à plus de 30 m de leur point apparié, sont écartés. Pourquoi la géométrie recalée plutôt que
+   ou à plus de 30 m de leur point apparié, sont écartés.
+   **Points insérés** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle mesure) : un point
+   d'origine inséré à la place d'un saut (`insere = 1`) n'a pas été validé par l'appariement ; sa
+   position est celle du GPS, qui peut errer hors de la route (perso-10, galerie de la D921 : jusqu'à
+   146 m de toute voie, au fond de la gorge). Il ne garde son baro que si sa position sur la géométrie
+   recalée est à 30 m au plus d'une ligne de la couche `streets` (tuile du point et ses 8 voisines),
+   même seuil que pour les points appariés. Les tuiles sont celles de la **campagne qui juge la
+   trace** : ord-bench applique le test au chargement du baro, le recalage ne tranche pas. Pour une
+   trace tenue à l'écart, c'est donc la campagne de jugement, cache rempli à ce moment ; une tuile
+   réellement absente à la source compte comme « sans voie ». Aucun terme du service. Mesure sur la
+   calibration et les traces tenues à l'écart (cache de calibration, 2026-10-31) : 501 points insérés
+   portent du baro, environ 75 seraient retirés (≈ 1,9 km), dont les 29 de la sortie hors réseau de
+   perso-18 ; l'alternative « aucun baro sur les points insérés » en retirait 503 (≈ 12,6 km), dont
+   ≈ 10,7 km à moins de 30 m d'une voie.
+   Pourquoi la géométrie recalée plutôt que
    l'originale : (a) c'est celle que lit le service, donc la seule où le service et sa référence
    sans correction (E2b) sont comparables point à point ; (b) le vélo roulait sur la route, et le baromètre mesure l'altitude de
    la route ; (c) lire le relief sur la géométrie d'origine ajouterait l'erreur latérale du GPS

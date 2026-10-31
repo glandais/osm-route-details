@@ -17,13 +17,16 @@ la réponse comme référence de revêtement (R3).
    `shape` les relie par une ligne droite, à travers champs, portée par une arête bien plus courte
    que ce segment. Une arête dont la forme dépasse sa longueur de plus de JUMP_EXCESS_M contient un
    tel saut : son plus long segment est remplacé par les points d'origine de la trace entre les deux
-   sous-parcours (ils gardent leur baro), et cette plage n'a pas de référence de revêtement
+   sous-parcours (ils gardent leur baro, marqués insere = 1), et cette plage n'a pas de référence de revêtement
    (`use` = `discontinuite`, surface vide, à exclure de R3).
 4. Écritures :
    - <id>.gpx : géométrie recalée, sans altitude (l'entrée du service) ; découpée en <id>.partN.gpx si
      elle dépasse MAX_KM ou MAX_PTS (bornes d'entrée de l'API) ;
-   - <id>.baro.csv : s_recale_m, baro_m, s_origine_m, distance_au_trace_m, pour les points appariés
-     (la référence d'altitude, transportée sur la géométrie recalée) ;
+   - <id>.baro.csv : s_recale_m, baro_m, s_origine_m, distance_au_trace_m, insere, pour les points
+     appariés et les points d'origine insérés à la place d'un saut (insere = 1) : la référence
+     d'altitude, transportée sur la géométrie recalée. Un point inséré ne garde son baro qu'à 30 m au
+     plus d'une voie des tuiles de la campagne qui juge la trace : ce test est fait par ord-bench, pas
+     ici (README §2.1) ;
    - <id>.surface.csv : s_debut_m, s_fin_m, surface, road_class, use, way_id (référence R3).
 La clé est lue dans STADIAMAPS_KEY, ou dans le premier .env trouvé en remontant ; elle n'est jamais
 écrite ni affichée.
@@ -350,23 +353,23 @@ def process(key, raw_pts, tid, outdir):
             if p[4]:
                 continue  # dans un trou de la trace brute : pas de baro transporté
             if m.get("type") == "matched":
-                baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", "")))
+                baro_rows.append((p[0], p[3], (m["lat"], m["lon"]), m.get("distance_from_trace_point", ""), 0))
             elif j in filled:  # point d'origine inséré à la place d'un saut : il est sur la géométrie
-                baro_rows.append((p[0], p[3], (p[1], p[2]), 0.0))
+                baro_rows.append((p[0], p[3], (p[1], p[2]), 0.0, 1))
     cum = [0.0]
     for a, b in zip(poly, poly[1:]):
         cum.append(cum[-1] + hav(a, b))
     with open(os.path.join(outdir, f"{tid}.baro.csv"), "w") as f:
-        f.write("s_recale_m,baro_m,s_origine_m,distance_au_trace_m\n")
+        f.write("s_recale_m,baro_m,s_origine_m,distance_au_trace_m,insere\n")
         i = 0
         last_s = -math.inf
-        for s0, z, mp, dd in baro_rows:
+        for s0, z, mp, dd, ins in baro_rows:
             s, j = project_forward(poly, cum, mp, max(0, i - 5), last_s - 20)
             if s is None:
                 continue  # projection ambiguë (lacet, boucle) : point écarté plutôt qu'un recul
             i = j
             last_s = max(last_s, s)
-            f.write(f"{s:.1f},{z:.2f},{s0:.1f},{dd}\n")
+            f.write(f"{s:.1f},{z:.2f},{s0:.1f},{dd},{ins}\n")
     with open(os.path.join(outdir, f"{tid}.surface.csv"), "w") as f:
         f.write("s_debut_m,s_fin_m,surface,road_class,use,way_id\n")
         for b, en, *rest in surf_rows:

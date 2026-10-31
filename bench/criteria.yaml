@@ -18,6 +18,8 @@
 # nouvelle mesure. Puis plausibilité E4 : pente implicite entre portails retenus > 25 % = référence
 # indisponible (vérifiée sur la calibration avant adoption). Puis passage en hauteur sur un pont
 # (README §2.1) : test de niveau si MNH au milieu ≥ 10 m (vérifié sur la calibration avant adoption).
+# Puis baro des points insérés (README §2.1) : gardé à 30 m au plus d'une voie des tuiles de la
+# campagne qui juge la trace.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -60,6 +62,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Pente implicite entre portails retenus > 25 % = référence indisponible, rapportée, non comptée ; borne de géométrie routière, indépendante du service"
   - id: passage_en_hauteur   # 2026-10-31
     decision: "Pont à MNH au milieu ≥ 10 m : passage compté seulement si médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) ≥ ½ MNH ; sinon critère horizontal avec niveau_non_discriminant ou niveau_sans_baro ; partition des séries inchangée"
+  - id: baro_points_inseres   # 2026-10-31
+    decision: "Point d'origine inséré à la place d'un saut (insere = 1) : baro gardé seulement à ≤ 30 m d'une voie de la couche streets des tuiles de la campagne qui juge la trace ; tuile absente à la source = sans voie ; test fait par ord-bench"
   - id: limite_donnees_comptee   # 2026-10-31
     decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
 
@@ -99,6 +103,12 @@ passage_pont:   # README §2.1
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}
   decoupage: {max_km: 200, max_points: 16000, cas: [perso-06]}
+  baro_points_inseres:   # README §2.1, étape 3
+    colonne: insere   # <id>.baro.csv, 1 = point d'origine inséré par fill_jumps
+    garde_si: {distance_voie_m_max: 30.0, couche: streets, tuiles: [point, 8_voisines]}
+    tuiles: campagne_qui_juge_la_trace   # série tenue à l'écart : campagne de jugement
+    tuile_absente_a_la_source: sans_voie
+    applique_par: ord-bench   # au chargement du baro ; le recalage ne tranche pas
 
 criteres:
   - id: E1
