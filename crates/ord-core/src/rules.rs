@@ -201,7 +201,9 @@ pub struct BreakpointRules {
     /// Événement rattaché au point d'entrée le plus proche, sans créer de point.
     pub snap_m: f64,
     /// Extremum ou rupture de pente abandonné à moins de cette distance d'un point retenu
-    /// (entrée, ouvrage, trou, terrain, revêtement).
+    /// (entrée, ouvrage, trou, terrain, revêtement). Calibré à 5 m sur `test1..4` (point de
+    /// départ de T04 : 20 m) : à 20 m, un sommet remplacé par un point d'entrée voisin fausse
+    /// le D+ des points (test1 − 6 %, test2 − 2 %).
     pub min_spacing_m: f64,
     /// Points insérés au plus sur toute fenêtre glissante d'un km.
     pub max_inserted_per_km: usize,
@@ -220,7 +222,7 @@ impl Default for BreakpointRules {
         Self {
             merge_m: 5.0,
             snap_m: 5.0,
-            min_spacing_m: 20.0,
+            min_spacing_m: 5.0,
             max_inserted_per_km: 20,
             max_inserted_total: 16_000,
             grade_tolerance_m: 2.0,
@@ -355,6 +357,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.9", "774c78d37a5e4c66".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.9", "024fdfea1f054807".to_owned()));
     }
 }

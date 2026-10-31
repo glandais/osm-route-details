@@ -52,6 +52,13 @@ pub struct TurningPoint {
     pub max: bool,
     /// Altitude lissée à cette station.
     pub value: f64,
+    /// Distance de la station (`gain_turns_on_runs` ; 0 pour `accumulate_turns`, sans distances).
+    pub d_m: f64,
+    /// Extremum recalé sur `ele` non lissé (argmax d'un sommet, argmin d'un creux) à ± lissage du
+    /// preset dans la même suite (T04 §6.1) ; un bout de suite n'est pas recalé. Distance et
+    /// altitude (`gain_turns_on_runs` ; la station elle-même pour `accumulate_turns`).
+    pub peak_d_m: f64,
+    pub peak_value: f64,
 }
 
 /// Accumulateur à points de retournement sur un profil déjà lissé ; renvoie `(gain, perte)`,
@@ -77,7 +84,14 @@ pub fn accumulate_turns(h: &[f64], tau: impl Fn(usize) -> f64) -> (f64, f64, Vec
     if h.len() < 2 {
         return (0.0, 0.0, turns);
     }
-    let turn = |station: usize, max: bool| TurningPoint { station, max, value: h[station] };
+    let turn = |station: usize, max: bool| TurningPoint {
+        station,
+        max,
+        value: h[station],
+        d_m: 0.0,
+        peak_d_m: 0.0,
+        peak_value: h[station],
+    };
     let threshold = tau(0);
     if threshold.is_nan() || threshold <= 0.0 {
         // Somme brute : chaque changement de sens est une extrémité de jambe.
@@ -240,7 +254,23 @@ pub fn gain_turns_on_runs(
         };
         gain += g;
         loss += l;
-        turns.extend(t.into_iter().map(|p| TurningPoint { station: p.station + start, ..p }));
+        let (rd, re) = (&d[start..i], &ele[start..i]);
+        let window = params.smoothing_m.max(0.0);
+        turns.extend(t.into_iter().map(|p| {
+            let k = p.station;
+            let mut best = k;
+            if k > 0 && k + 1 < rd.len() {
+                let lo = rd.partition_point(|&x| x < rd[k] - window);
+                let hi = rd.partition_point(|&x| x <= rd[k] + window);
+                for j in lo..hi {
+                    let better = if p.max { re[j] > re[best] } else { re[j] < re[best] };
+                    if better || (re[j] == re[best] && j < best) {
+                        best = j;
+                    }
+                }
+            }
+            TurningPoint { station: k + start, d_m: rd[k], peak_d_m: rd[best], peak_value: re[best], ..p }
+        }));
     }
     (gain, loss, partial, turns)
 }

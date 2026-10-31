@@ -182,12 +182,16 @@ fn surface_change_is_class_b_and_survives_spacing() {
     let segs = [segment(0.0, 512.0, SurfaceClass::Paved), segment(512.0, 1_000.0, SurfaceClass::Unpaved)];
     let pts = select(&r, &p, &segs);
     assert_eq!(with(&pts, BreakpointReason::SurfaceChange), [512.0]);
-    // Un extremum à 12 m d'un point d'entrée est abandonné, à 3 m rattaché.
+    // Espacement à 20 m : un extremum à 12 m d'un point d'entrée est abandonné ; à 5 m (défaut),
+    // il est inséré ; à 3 m, rattaché.
     let r = route(&[0.0, 488.0, 1_000.0]);
     let bump = |c: f64| move |d: f64| Some(100.0 - (d - c).abs() * 0.05);
-    let pts = select(&r, &profile(&r, bump(500.0)), &[]);
+    let wide = BreakpointRules { min_spacing_m: 20.0, ..BreakpointRules::default() };
+    let pts = select_breakpoints(&r, &profile(&r, bump(500.0)), &[], &wide);
     assert!(with(&pts, BreakpointReason::LocalMax).is_empty(), "{pts:?}");
     assert_eq!(inserted(&pts).len(), 0);
+    let pts = select(&r, &profile(&r, bump(500.0)), &[]);
+    assert_eq!(with(&pts, BreakpointReason::LocalMax), [500.0]);
     let pts = select(&r, &profile(&r, bump(491.0)), &[]);
     let max = with(&pts, BreakpointReason::LocalMax);
     assert!(max.len() == 1 && (max[0] - 488.0).abs() < 1e-6, "{max:?}");

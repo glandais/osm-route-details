@@ -179,11 +179,10 @@ fn events(
             push(w[1].from_m, BreakpointReason::SurfaceChange, 0.0);
         }
     }
-    // C : extrema confirmés par l'accumulateur du D+, recalés sur l'argmax (argmin) de `ele` non
-    // lissé à ± lissage du preset, sans quitter la suite lue. Les bouts de suite (départ,
-    // arrivée, bords de trou) sont déjà des points.
+    // C : extrema confirmés par l'accumulateur du D+, recalés (dans `gain_turns_on_runs`) sur
+    // l'argmax (argmin) de `ele` non lissé à ± lissage du preset, sans quitter la suite lue. Les
+    // bouts de suite (départ, arrivée, bords de trou) sont déjà des points.
     let turns = &p.gain.turning_points;
-    let window = p.gain.params.smoothing_m.max(0.0);
     let mut nan_before = vec![0usize; n + 1];
     for i in 0..n {
         nan_before[i + 1] = nan_before[i] + usize::from(p.ele[i].is_nan());
@@ -197,20 +196,8 @@ fn events(
         let leg =
             |j: usize| if same_run(i, turns[j].station) { (t.value - turns[j].value).abs() } else { 0.0 };
         let weight = leg(k.saturating_sub(1)).max(if k + 1 < turns.len() { leg(k + 1) } else { 0.0 });
-        let lo = p.d.partition_point(|&x| x < p.d[i] - window);
-        let hi = p.d.partition_point(|&x| x <= p.d[i] + window);
-        let mut best = i;
-        for j in lo..hi {
-            if !same_run(i, j) {
-                continue;
-            }
-            let better = if t.max { p.ele[j] > p.ele[best] } else { p.ele[j] < p.ele[best] };
-            if better || (p.ele[j] == p.ele[best] && j < best) {
-                best = j;
-            }
-        }
         let reason = if t.max { BreakpointReason::LocalMax } else { BreakpointReason::LocalMin };
-        push(p.d[best], reason, weight);
+        push(t.peak_d_m, reason, weight);
     }
     // C : ruptures de pente, Douglas-Peucker vertical entre points fixes consécutifs (points
     // d'entrée, événements A et B, extrema).
