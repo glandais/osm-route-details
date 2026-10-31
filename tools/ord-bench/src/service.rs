@@ -73,6 +73,12 @@ impl Service {
         Ok(Self { app: router(state) })
     }
 
+    /// Service en processus sur une configuration donnée (diagnostics : `debug` permis).
+    pub async fn start_with(config: &Config) -> anyhow::Result<Self> {
+        let state = AppState::bootstrap(config, Wiring { pixel_convention: PixelConvention::Center }).await?;
+        Ok(Self { app: router(state) })
+    }
+
     /// `POST /v1/route-details` ; une réponse non 200 est une erreur qui porte le `code` du
     /// problème RFC 9457 (jamais de coordonnée).
     pub async fn route_details(&self, points: &[Pt], options: Value) -> anyhow::Result<Value> {

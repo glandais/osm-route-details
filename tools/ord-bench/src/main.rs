@@ -66,6 +66,11 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Causes des plages non appariées et des désaccords de revêtement d'un cas (tuiles du cache).
+    Diagnose {
+        #[arg(long, value_delimiter = ',', required = true)]
+        cas: Vec<String>,
+    },
     /// L1 : latence à froid (live, caches disque et mémoire neufs à chaque essai).
     Latency {
         /// Cas personnels (traces de 90 à 130 km).
@@ -141,6 +146,13 @@ async fn main_inner() -> anyhow::Result<bool> {
                 );
             }
             println!("écrit : {}", out.display());
+            Ok(true)
+        }
+        Command::Diagnose { cas } => {
+            for id in &cas {
+                let d = ord_bench::diagnose::diagnose_case(&paths, id).await?;
+                println!("{}", serde_json::to_string_pretty(&d)?);
+            }
             Ok(true)
         }
         Command::Latency { cas, essais } => {

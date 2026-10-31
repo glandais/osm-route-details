@@ -52,6 +52,47 @@ pub struct Ours {
     pub to: f64,
     pub class: Class,
     pub matched: bool,
+    /// `surface.source` du service (enum du contrat).
+    pub source: Source,
+}
+
+/// `surface.source` du contrat.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Tagged,
+    InferredTracktype,
+    InferredHighway,
+    None,
+}
+
+impl Source {
+    pub fn of_service(s: &str) -> Self {
+        match s {
+            "tagged" => Self::Tagged,
+            "inferred_tracktype" => Self::InferredTracktype,
+            "inferred_highway" => Self::InferredHighway,
+            _ => Self::None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tagged => "tagged",
+            Self::InferredTracktype => "inferred_tracktype",
+            Self::InferredHighway => "inferred_highway",
+            Self::None => "none",
+        }
+    }
+}
+
+impl Class {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Paved => "paved",
+            Self::Unpaved => "unpaved",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 
 /// Plage de référence.
@@ -139,11 +180,74 @@ pub fn ours_of(responses: &[Value], offsets: &[f64], to_ref: &dyn Fn(f64) -> f64
                     to,
                     class: Class::of_service(s["surface"]["class"].as_str().unwrap_or("")),
                     matched: s["matched"].as_bool().unwrap_or(false),
+                    source: Source::of_service(s["surface"]["source"].as_str().unwrap_or("")),
                 });
             }
         }
     }
     out
+}
+
+fn r1(x: f64) -> f64 {
+    (x * 10.0).round() / 10.0 + 0.0
+}
+
+/// Diagnostic M1 : plages non appariées (contiguës fusionnées), les `max` plus longues, en
+/// distance curviligne du service (`to_d` ramène l'abscisse de référence au `d_m` du service).
+pub fn unmatched_ranges(ours: &[Ours], max: usize, to_d: &dyn Fn(f64) -> f64) -> Vec<Value> {
+    let mut ranges: Vec<(f64, f64)> = Vec::new();
+    for o in ours.iter().filter(|o| !o.matched) {
+        match ranges.last_mut() {
+            Some(last) if (last.1 - o.from).abs() < 1e-6 => last.1 = o.to,
+            _ => ranges.push((o.from, o.to)),
+        }
+    }
+    ranges.sort_by(|a, b| (b.1 - b.0).total_cmp(&(a.1 - a.0)));
+    ranges
+        .into_iter()
+        .take(max)
+        .map(|(a, b)| {
+            let (da, db) = (to_d(a), to_d(b));
+            json!({"d_debut_m": r1(da), "d_fin_m": r1(db), "longueur_plage_m": r1(db - da)})
+        })
+        .collect()
+}
+
+/// Diagnostic R3 : plages de désaccord revêtu / non revêtu (mètres classables des deux côtés),
+/// contiguës de même nature fusionnées, triées par longueur décroissante, au plus `max`.
+pub fn disagreements(ours: &[Ours], reference: &[Ref], max: usize, to_d: &dyn Fn(f64) -> f64) -> Vec<Value> {
+    let mut out: Vec<(f64, f64, Class, Class, Source)> = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < ours.len() && j < reference.len() {
+        let from = ours[i].from.max(reference[j].from);
+        let to = ours[i].to.min(reference[j].to);
+        let (us, rf) = (ours[i].class, reference[j].class);
+        if to > from && us != Class::Unknown && rf != Class::Unknown && us != rf {
+            let src = ours[i].source;
+            match out.last_mut() {
+                Some(last) if (last.1 - from).abs() < 1e-6 && (last.2, last.3, last.4) == (us, rf, src) => {
+                    last.1 = to
+                }
+                _ => out.push((from, to, us, rf, src)),
+            }
+        }
+        if ours[i].to <= reference[j].to {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    out.sort_by(|a, b| (b.1 - b.0).total_cmp(&(a.1 - a.0)));
+    out.into_iter()
+        .take(max)
+        .map(|(a, b, us, rf, src)| {
+            let (da, db) = (to_d(a), to_d(b));
+            json!({
+                "d_debut_m": r1(da), "d_fin_m": r1(db), "longueur_plage_m": r1(db - da),
+                "classe_service": us.as_str(), "classe_stadia": rf.as_str(), "source_service": src.as_str()
+            })
+        })
+        .collect()
 }
 
 /// `<id>.surface.csv` de `stadia_match.py` : `s_debut_m,s_fin_m,surface,…`, triée par abscisse.
@@ -202,9 +306,15 @@ mod tests {
     #[test]
     fn sweep_agreement() {
         let ours = [
-            Ours { from: 0.0, to: 50.0, class: Class::Paved, matched: true },
-            Ours { from: 50.0, to: 90.0, class: Class::Unpaved, matched: true },
-            Ours { from: 90.0, to: 100.0, class: Class::Unknown, matched: false },
+            Ours { from: 0.0, to: 50.0, class: Class::Paved, matched: true, source: Source::Tagged },
+            Ours {
+                from: 50.0,
+                to: 90.0,
+                class: Class::Unpaved,
+                matched: true,
+                source: Source::InferredHighway,
+            },
+            Ours { from: 90.0, to: 100.0, class: Class::Unknown, matched: false, source: Source::None },
         ];
         let reference = [
             Ref { from: 0.0, to: 60.0, class: Class::Paved },
@@ -217,6 +327,14 @@ mod tests {
         assert!((a.paved - 70.0 / 80.0).abs() < 1e-9);
         assert!((a.unmatched - 0.1).abs() < 1e-9 && (a.unknown - 0.1).abs() < 1e-9);
         assert!(!m1_pass(&a) && !r_pass(&a));
+        let id = |x: f64| x;
+        let u = unmatched_ranges(&ours, 10, &id);
+        assert_eq!(u, vec![json!({"d_debut_m": 90.0, "d_fin_m": 100.0, "longueur_plage_m": 10.0})]);
+        let d = disagreements(&ours, &reference, 10, &id);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0]["classe_service"], "unpaved");
+        assert_eq!(d[0]["source_service"], "inferred_highway");
+        assert_eq!(d[0]["longueur_plage_m"], 10.0);
     }
 
     #[test]

@@ -4,12 +4,13 @@
 //! `check` (empreintes du manifest, cohérence `criteria.yaml` ↔ README, Q1), `fill-cache` (cache
 //! de banc local), `run --offline` (incrément 2 : E1 jugé, E2 indicatif, E2b jugé ; incrément 3 :
 //! R1, R2, R3, M1, typologie à chaud), `latency`
-//! (L1 à froid, live) ; scénarios golden sur des ouvrages de calibration.
+//! (L1 à froid, live), `diagnose` (causes des plages M1 et R dans les tuiles du cache) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
 pub mod campaign;
 pub mod check;
 pub mod coherence;
+pub mod diagnose;
 pub mod golden;
 pub mod gpx;
 pub mod hash;
@@ -69,8 +70,9 @@ impl BenchPaths {
 
 /// Révision de l'outil de mesure à `rules_version` égale : suffixe du dossier de rapport
 /// (`<date>-<rules_version>-<révision>`), remis à `None` à la prochaine montée des règles.
-/// `None` depuis `rules_version` 2026.10.3 (incrément 3 : typologie, R1–R3, M1).
-pub const BENCH_REVISION: Option<&str> = None;
+/// `bench1` (règles 2026.10.3) : diagnostics curvilignes de M1 (plages non appariées) et de R3
+/// (désaccords revêtu / non revêtu), commande `diagnose`.
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

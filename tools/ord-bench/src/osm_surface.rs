@@ -16,7 +16,9 @@ use serde_json::{json, Value};
 use crate::campaign::interp_one;
 use crate::manifest::FileEntry;
 use crate::service::{Pt, Service};
-use crate::typology::{agreement, metrics_json, ours_of, r_pass, Class, Ref};
+use crate::typology::{
+    agreement, disagreements, metrics_json, ours_of, r_pass, unmatched_ranges, Class, Ref,
+};
 
 /// Référence d'un parcours : points envoyés, abscisse de chacun, plages de classe Stadia.
 #[derive(Clone)]
@@ -81,6 +83,7 @@ pub async fn measure(service: &Service, route: &OsRoute) -> anyhow::Result<Value
     let r = service.route_details(&route.points, options()).await?;
     let cum = cumulative(&route.points);
     let to_ref = |x: f64| interp_one(&cum, &route.dist, x);
+    let to_d = |x: f64| interp_one(&route.dist, &cum, x);
     let ours = ours_of(std::slice::from_ref(&r), &[0.0], &to_ref);
     let a = agreement(&ours, &route.reference);
     let mut warnings: std::collections::BTreeMap<String, usize> = Default::default();
@@ -101,7 +104,11 @@ pub async fn measure(service: &Service, route: &OsRoute) -> anyhow::Result<Value
             "inferred_surface_ratio": r["quality"]["inferred_surface_ratio"],
             "by_surface_class_m": r["summary"]["by_surface_class_m"],
             "by_structure_m": r["summary"]["by_structure_m"],
-            "avertissements": warnings
+            "avertissements": warnings,
+            "typologie": {
+                "M1.plages_non_appariees": unmatched_ranges(&ours, 10, &to_d),
+                "R2.desaccords_revetu": disagreements(&ours, &route.reference, 10, &to_d)
+            }
         }
     }))
 }

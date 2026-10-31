@@ -24,7 +24,9 @@ use crate::hash::{cache_fingerprint, sha256_bytes};
 use crate::manifest::{Manifest, Serie, Trace};
 use crate::metrics::{dplus, dplus_with, e1, interpolate, median, passage_windows};
 use crate::service::{Pt, Service, Variant};
-use crate::typology::{agreement, metrics_json, ours_of, read_stadia_surface, Class, Ref};
+use crate::typology::{
+    agreement, disagreements, metrics_json, ours_of, read_stadia_surface, unmatched_ranges, Class, Ref,
+};
 use crate::{gpx, BenchPaths, BenchRules};
 
 /// Sélection des cas : la série tenue à l'écart est exclue ici, avant toute lecture.
@@ -441,6 +443,12 @@ pub async fn measure_case(
     } else {
         metrics_json(&agreement(&ours, &stadia), "R3")
     };
+    let to_d = |s: f64| interp_one(&case.s_ref, &d_srv, s);
+    let typo_diag = json!({
+        "M1.plages_non_appariees": unmatched_ranges(&ours, 10, &to_d),
+        "R3.desaccords_revetu": disagreements(&ours, &stadia, 10, &to_d),
+        "raccords_troncons_d_m": offsets.iter().skip(1).map(|o| round(*o, 1)).collect::<Vec<_>>()
+    });
     let step = rules.grid_step_m;
     let masked_m = masked.iter().filter(|m| **m).count() as f64 * step;
     let compared = bar.iter().filter(|x| !x.is_nan()).count();
@@ -481,7 +489,8 @@ pub async fn measure_case(
             "status": per_part(&|x| x["status"].clone()),
             "terrain_m": terrain_m.into_iter().map(|(k, v)| (k, json!(round(v, 2)))).collect::<serde_json::Map<_, _>>(),
             "plages_glo30_adaptees": adapted,
-            "avertissements": warning_codes
+            "avertissements": warning_codes,
+            "typologie": typo_diag
         }
     });
     Ok((case_json, r["meta"]["data_versions"].clone()))
