@@ -919,7 +919,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
         );
     }
     items.extend(crate::ouvrages::perimeter_items(&ouvrages));
-    crate::ouvrages::annotate_data_limits(&mut items, &crate::ouvrages::data_limits(&paths.bench)?);
+    let limits = crate::ouvrages::corpus_data_limits(&ouvrages, &crate::ouvrages::data_limits(&paths.bench)?);
+    crate::ouvrages::annotate_data_limits(&mut items, &limits);
     let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
     let (agregats, mut verdicts) = judge(&cases);
     let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
@@ -953,7 +954,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 4,
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f et 657d2c8)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -971,14 +972,15 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "notes": [
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
                 "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
-                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
+                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
                 "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel, dans les tuiles de la campagne (data_versions, couche streets), de la voie de l'ouvrage = élément de même nature (pont, tunnel, voie au sol d'un passage dessous) de plus petite médiane de distance aux stations du corpus (tous les 5 m sur la géométrie Overpass, sinon A–milieu–B), accepté à ≤ 15 m, sinon toute voie avec le même critère ; deux candidats à moins de 3 m de médiane et de périmètres différents : perimetre_ambigu, rapporté ; jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
-                "hors_graphe_velo : ecart_max_m = altitude rendue (MNT brut) contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées ; null avec raison_ecart sans référence (témoins vcyclist) ou sans station non appariée",
-                "Limite des données (README §4 bis.4) : ouvrages de criteria.yaml perimetre.limite_donnees comptés, avec la note limite_donnees",
+                "hors_graphe_velo : contrôle satisfait si la portion est non appariée avec unmatched_range (controle_par = non_apparie) ou appariée sur toute sa longueur à une voie du graphe vélo, nécessairement distincte de la voie de l'ouvrage exclue du graphe (controle_par = voie_parallele_du_graphe) ; ecart_max_m = altitude rendue contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées, ou sur toute la portion sur une voie parallèle ; null avec raison_ecart sans référence",
+                "Limite des données (README §4 bis.4) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread), comptés avec la note limite_donnees",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
                 "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart non envoyées : leurs passages d'ouvrages de calibration ne sont pas mesurés",
+                "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain",

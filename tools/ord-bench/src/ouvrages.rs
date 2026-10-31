@@ -82,6 +82,9 @@ pub struct Ouvrage {
     /// différents : rapporté (`perimetre_ambigu`).
     pub perimeter_ambiguous: bool,
     pub chain: Vec<u64>,
+    /// Une way de l'ouvrage porte `tunnel=avalanche_protector` dans le corpus : le schéma
+    /// Shortbread n'a pas cette valeur, la galerie y est une voie ordinaire (§4 bis.4).
+    pub avalanche_protector: bool,
 }
 
 /// Périmètre vélo d'un ouvrage du corpus, lu dans les tuiles de la campagne (couche `streets` :
@@ -175,6 +178,25 @@ pub fn data_limits(bench: &Path) -> anyhow::Result<Vec<(String, String)>> {
         .collect())
 }
 
+/// Limites des données lues dans le corpus lui-même (§4 bis.4, règle générale ; `cas_connus` de
+/// `criteria.yaml` n'est pas une liste fermée) : toute galerie `tunnel=avalanche_protector`, que le
+/// schéma Shortbread rend en voie ordinaire, porte la note de la galerie de l'Arly.
+pub fn corpus_data_limits(ouvrages: &[Ouvrage], known: &[(String, String)]) -> Vec<(String, String)> {
+    let note = known
+        .iter()
+        .map(|(_, n)| n)
+        .find(|n| n.contains("avalanche_protector"))
+        .cloned()
+        .unwrap_or_else(|| "shortbread sans avalanche_protector".to_owned());
+    let mut out = known.to_vec();
+    for o in ouvrages.iter().filter(|o| o.avalanche_protector) {
+        if !out.iter().any(|(id, _)| id == &o.id) {
+            out.push((o.id.clone(), note.clone()));
+        }
+    }
+    out
+}
+
 /// Porte la note `limite_donnees` sur les mesures de ces ouvrages (comptées, §4 bis.4).
 pub fn annotate_data_limits(items: &mut [Value], limits: &[(String, String)]) {
     for i in items.iter_mut() {
@@ -213,6 +235,9 @@ pub fn calibration_ouvrages(
             let (Some(a), Some(m), Some(b)) = (p("A"), p("milieu"), p("B")) else { continue };
             let chain: Vec<u64> =
                 o["chain"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+            let avalanche_protector = chain
+                .iter()
+                .any(|w| o["tags"][w.to_string()]["tunnel"].as_str() == Some("avalanche_protector"));
             out.push(Ouvrage {
                 id: id.to_owned(),
                 kind: kind_of(o["type"].as_str().unwrap_or("bridge")),
@@ -223,6 +248,7 @@ pub fn calibration_ouvrages(
                 perimeter: Perimeter::Unknown,
                 perimeter_ambiguous: false,
                 chain,
+                avalanche_protector,
             });
         }
     }
@@ -316,6 +342,24 @@ fn band(d: &[f64], raw: &[f64], blocked: &[bool], p: usize, dir: f64) -> Option<
     }
     let z: Vec<f64> = ks.iter().map(|&k| raw[k]).filter(|z| z.is_finite()).collect();
     (z.len() >= 3).then(|| median(&z))
+}
+
+/// Tronçon à l'air libre maximal entre deux tunnels OSM pour qu'une bande de portail qui s'y trouve
+/// soit invalide (balcon non tagué, README §4 bis.2, `bande_invalide.balcon_entre_tunnels_osm`).
+const SHORT_BALCONY_M: f64 = 120.0;
+
+/// Marque dans `blocked` les stations des tronçons à l'air libre de moins de 120 m entre deux
+/// tunnels OSM consécutifs du parcours (`tunnels` : stations des portails, entrée et sortie) : sur
+/// ces balcons non tagués, le MNT lit la paroi, pas la chaussée (README §4 bis.2).
+fn block_short_balconies(d: &[f64], tunnels: &[(usize, usize)], blocked: &mut [bool]) {
+    let mut spans = tunnels.to_vec();
+    spans.sort_unstable();
+    for w in spans.windows(2) {
+        let (out, back) = (w[0].1, w[1].0);
+        if back > out + 1 && d[back] - d[out] < SHORT_BALCONY_M {
+            blocked[out + 1..back].fill(true);
+        }
+    }
 }
 
 /// Portail retenu d'un côté du tunnel dont le portail est `i` : le sien si sa bande est valide,
@@ -440,9 +484,13 @@ fn tunnel_item(
 /// Référence d'altitude d'une portion hors graphe : nom et altitudes par station.
 type AltRef<'a> = Option<(&'static str, &'a [f64])>;
 
-/// Contrôle d'un ouvrage hors graphe vélo : part non appariée, `unmatched_range`, et erreur de
-/// l'altitude rendue (le MNT brut, rien n'étant apparié) contre la référence sur les stations non
-/// appariées ; `null` avec une raison sans référence ou sans station non appariée.
+/// Contrôle d'un ouvrage hors graphe vélo (README §4 bis.1, `hors_graphe_velo.controle`) : il passe
+/// si la portion est non appariée avec `unmatched_range`, **ou** appariée à une voie du graphe vélo
+/// distincte de celle de l'ouvrage (trace qui longe l'ouvrage sur une piste parallèle). La voie de
+/// l'ouvrage étant exclue du graphe (même règle de tags que le service), toute portion appariée
+/// l'est à une autre voie : appariée sur toute sa longueur suffit. Une portion en partie appariée
+/// échoue. Erreur d'altitude rendue contre la référence (stations non appariées, ou toutes les
+/// stations si la portion suit une voie parallèle) ; `null` avec une raison sans référence.
 #[allow(clippy::too_many_arguments)]
 fn hors_graphe_item(
     id: &str,
@@ -457,22 +505,25 @@ fn hors_graphe_item(
     let n = (i1 - i0 + 1) as f64;
     let unmatched = (i0..=i1).filter(|&k| !matched[k]).count() as f64 / n;
     let warned = (i0..=i1).any(|k| warn[k]);
+    let unmatched_ok = unmatched >= 0.99 && warned;
+    let parallel_ok = unmatched <= 0.01;
     let mut item = json!({"ouvrage": id, "cas": case, "metrique": "hors_graphe_velo",
         "part_non_appariee": r4(unmatched), "unmatched_range": warned,
-        "controle": unmatched >= 0.99 && warned});
+        "controle": unmatched_ok || parallel_ok,
+        "controle_par": if unmatched_ok { json!("non_apparie") } else if parallel_ok { json!("voie_parallele_du_graphe") } else { Value::Null }});
     let Some((name, z)) = reference.filter(|(_, z)| (i0..=i1).any(|k| z[k].is_finite())) else {
         item["ecart_max_m"] = Value::Null;
         item["raison_ecart"] = json!("aucune référence d'altitude sur cette portion");
         return item;
     };
     let err = (i0..=i1)
-        .filter(|&k| !matched[k] && z[k].is_finite() && svc[k].is_finite())
+        .filter(|&k| (parallel_ok || !matched[k]) && z[k].is_finite() && svc[k].is_finite())
         .map(|k| (svc[k] - z[k]).abs())
         .fold(f64::NAN, f64::max);
     item["reference"] = json!(name);
     item["ecart_max_m"] = r2(err);
     if !err.is_finite() {
-        item["raison_ecart"] = json!("aucune station non appariée avec référence");
+        item["raison_ecart"] = json!("aucune station comparable avec référence");
     }
     item
 }
@@ -484,16 +535,19 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
     // Passages de chaque ouvrage : (ouvrage, station du milieu, A, B).
     let mut found: Vec<(&Ouvrage, usize, usize, usize)> = Vec::new();
     for o in ouvrages {
-        // Stations près du milieu, regroupées en passages (écart > 1 km).
+        // Un passage par traversée du disque de rayon `tol` autour du milieu : suite de stations
+        // dans le disque, coupée dès que la trace en sort (écart de plus de deux pas). Deux
+        // traversées proches (aller-retour, pont parcouru deux fois par deux voies parallèles)
+        // restent deux passages : chaque ouvrage garde tous ses passages baro (README §2).
         let near_mid: Vec<usize> = (0..n).filter(|&i| haversine_m(p.pts[i], o.pts[1]) <= tol).collect();
         let mut passages: Vec<Vec<usize>> = Vec::new();
         for i in near_mid {
             match passages.last_mut() {
-                Some(g) if p.d[i] - p.d[*g.last().unwrap()] <= 1_000.0 => g.push(i),
+                Some(g) if i <= *g.last().unwrap() + 2 => g.push(i),
                 _ => passages.push(vec![i]),
             }
         }
-        for g in passages {
+        for (k, g) in passages.iter().enumerate() {
             let Some(&im) = g.iter().min_by(|&&a, &&b| {
                 haversine_m(p.pts[a], o.pts[1]).total_cmp(&haversine_m(p.pts[b], o.pts[1]))
             }) else {
@@ -501,10 +555,18 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             };
             let dm = p.d[im];
             let span = o.length_m + 200.0;
-            let (Some((ia, da)), Some((ib, db))) = (
-                nearest(p.d, p.pts, o.pts[0], dm - span, dm + span),
-                nearest(p.d, p.pts, o.pts[2], dm - span, dm + span),
-            ) else {
+            // Extrémités cherchées sur cette traversée seulement : jamais au-delà du point médian
+            // qui la sépare de la traversée voisine.
+            let lo = k
+                .checked_sub(1)
+                .map_or(f64::NEG_INFINITY, |j| 0.5 * (p.d[*passages[j].last().unwrap()] + p.d[g[0]]));
+            let hi = passages
+                .get(k + 1)
+                .map_or(f64::INFINITY, |next| 0.5 * (p.d[*g.last().unwrap()] + p.d[next[0]]));
+            let (lo, hi) = ((dm - span).max(lo), (dm + span).min(hi));
+            let (Some((ia, da)), Some((ib, db))) =
+                (nearest(p.d, p.pts, o.pts[0], lo, hi), nearest(p.d, p.pts, o.pts[2], lo, hi))
+            else {
                 continue;
             };
             if da > tol || db > tol {
@@ -570,6 +632,15 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     let mid = err(im);
                     item.insert("ecart_milieu_m".into(), r2(mid));
                     item.insert("ecart_max_m".into(), r2(max));
+                    if !mid.is_finite() || !max.is_finite() {
+                        // Passage sans référence : non compté dans la médiane du pont.
+                        let why = if offset.is_finite() {
+                            "pas de baro transporté sur l'emprise (points non appariés par le recalage ou à plus de 30 m)"
+                        } else {
+                            "pas de décalage local (aucune station au sol avec baro entre 1 et 3 km)"
+                        };
+                        item.insert("raison_ecart".into(), json!(why));
+                    }
                     item.insert("ecart_max_d_m".into(), worst.map_or(Value::Null, |i| r2(p.d[i])));
                     item.insert(format!("{pre}emprise_d_m"), json!([r2(p.d[i0]), r2(p.d[i1])]));
                     item.insert("decalage_local_m".into(), r2(offset));
@@ -584,9 +655,10 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     }
                 }
                 Kind::Tunnel => {
-                    let blocked: Vec<bool> = (0..n)
+                    let mut blocked: Vec<bool> = (0..n)
                         .map(|k| tunnels.iter().any(|&(a, b)| (a, b) != (i0, i1) && k > a && k < b))
                         .collect();
+                    block_short_balconies(p.d, &tunnels, &mut blocked);
                     let t = tunnel_item(&o.id, case, p.d, p.svc, p.raw, p.on_structure, &blocked, i0, i1);
                     for (k, v) in t.as_object().into_iter().flatten() {
                         if !k.starts_with("S1.") {
@@ -986,18 +1058,37 @@ pub async fn vc_items(
     }
     // Stations dans un autre ouvrage, par parcours (bandes de portail, §4 bis.2) : tunnels
     // d'`ouvrages.yaml`, plages `N` des témoins et balcons `S`.
+    // Balcons de moins de 120 m entre deux tunnels OSM : bandes invalides.
     let inside: Vec<Vec<bool>> = routes
         .iter()
         .map(|r| {
-            (0..r.s.pts.len())
-                // Les plages `N` de `test4` couvrent des séries entières (balcons compris) : seules
-                // celles des témoins sont des tunnels OSM.
+            let n = r.s.pts.len();
+            // Les plages `N` de `test4` couvrent des séries entières (balcons compris) : seules
+            // celles des témoins sont des tunnels OSM.
+            let osm_n = |i: usize| r.role != "route" && r.s.kind[i] == "N";
+            let mut blocked: Vec<bool> = (0..n)
                 .map(|i| {
-                    (r.role != "route" && r.s.kind[i] == "N")
+                    osm_n(i)
                         || r.s.kind[i] == "S"
                         || covered.iter().any(|c| c.0 == r.id && i > c.1 && i < c.2)
                 })
-                .collect()
+                .collect();
+            // Tunnels OSM du parcours, en stations de portail : ceux d'`ouvrages.yaml` et les
+            // plages `N` des témoins (portail = première station hors du tunnel).
+            let mut tunnels: Vec<(usize, usize)> =
+                covered.iter().filter(|c| c.0 == r.id).map(|c| (c.1, c.2)).collect();
+            let mut i = 0;
+            while i < n {
+                if osm_n(i) {
+                    let j = (i..n).take_while(|&k| osm_n(k)).last().unwrap_or(i);
+                    tunnels.push((i.saturating_sub(1), (j + 1).min(n - 1)));
+                    i = j + 1;
+                } else {
+                    i += 1;
+                }
+            }
+            block_short_balconies(&r.d, &tunnels, &mut blocked);
+            blocked
         })
         .collect();
     for (o, ri, groups) in found {
@@ -1509,6 +1600,71 @@ mod tests {
     }
 
     #[test]
+    fn off_graph_control_passes_on_a_parallel_way_of_the_graph() {
+        // Trace qui longe l'ouvrage sur une piste parallèle : appariée de bout en bout.
+        let matched = [true; 5];
+        let warn = [false; 5];
+        let svc = [10.0, 11.0, 12.0, 11.0, 10.0];
+        let baro = [10.0, 10.0, 10.0, 10.0, 10.0];
+        let h = hors_graphe_item("o", "c", &matched, &warn, &svc, Some(("baro_corrige_local", &baro)), 0, 4);
+        assert_eq!(h["controle"], true, "{h}");
+        assert_eq!(h["controle_par"], "voie_parallele_du_graphe");
+        assert_eq!(h["ecart_max_m"], 2.0, "erreur rapportée sur la portion : {h}");
+        // Non appariée avec `unmatched_range` : l'autre branche.
+        let h = hors_graphe_item("o", "c", &[false; 5], &[true; 5], &svc, None, 0, 4);
+        assert_eq!((h["controle"].clone(), h["controle_par"].clone()), (json!(true), json!("non_apparie")));
+        assert!(h["ecart_max_m"].is_null() && h["raison_ecart"].is_string());
+    }
+
+    #[test]
+    fn a_short_balcony_between_two_tunnels_invalidates_the_band() {
+        let d: Vec<f64> = (0..121).map(|k| k as f64 * 5.0).collect();
+        // Tunnels des stations 20–40 et 60–80 (balcon de 100 m), puis 100–110 (balcon de 100 m).
+        // MNT : 100 m partout, paroi à 140 m sur les balcons.
+        let raw: Vec<f64> = (0..121)
+            .map(|k| if (41..60).contains(&k) || (81..100).contains(&k) { 140.0 } else { 100.0 })
+            .collect();
+        let svc = vec![100.0; 121];
+        let tunnels = [(20, 40), (60, 80), (100, 110)];
+        let mut blocked: Vec<bool> =
+            (0..121).map(|k| tunnels.iter().any(|&(a, b)| (a, b) != (20, 40) && k > a && k < b)).collect();
+        block_short_balconies(&d, &tunnels, &mut blocked);
+        let t = tunnel_item("t", "c", &d, &svc, &raw, &[true; 121], &blocked, 20, 40);
+        assert_eq!(t["bande_remplacee"]["sortie"]["remplacee"], true, "{t}");
+        // Sortie du 1er tunnel, puis entrée et sortie du 2e, entrée du 3e : bande retenue à la
+        // sortie du dernier tunnel de la série.
+        assert_eq!(t["bande_remplacee"]["sortie"]["bandes_sautees"], 4, "{t}");
+        assert_eq!(t["bande_remplacee"]["sortie"]["distance_m"], 350.0, "{t}");
+        assert_eq!(t["pass"], true, "{t}");
+        // Un tronçon de 120 m ou plus n'est pas un balcon : rien n'est marqué.
+        let tunnels = [(20, 40), (64, 80)];
+        let mut b = vec![false; 121];
+        block_short_balconies(&d, &tunnels, &mut b);
+        assert!(b.iter().all(|x| !x));
+    }
+
+    #[test]
+    fn avalanche_galleries_of_the_corpus_carry_the_data_limit() {
+        let mut o = Ouvrage {
+            id: "nv-01".into(),
+            kind: Kind::Tunnel,
+            length_m: 100.0,
+            pts: [LatLon::new(47.0, -1.0); 3],
+            perso: true,
+            perimeter: Perimeter::InGraph,
+            perimeter_ambiguous: false,
+            chain: vec![1],
+            avalanche_protector: true,
+        };
+        let known = vec![("arly-galerie".to_owned(), "shortbread sans avalanche_protector".to_owned())];
+        let l = corpus_data_limits(std::slice::from_ref(&o), &known);
+        assert_eq!(l.len(), 2);
+        assert_eq!(l[1], ("nv-01".to_owned(), "shortbread sans avalanche_protector".to_owned()));
+        o.avalanche_protector = false;
+        assert_eq!(corpus_data_limits(&[o], &known).len(), 1);
+    }
+
+    #[test]
     fn private_keys_are_stripped_at_every_level() {
         let i = json!({"ouvrage": "nv-01", "_longueur_m": 1.0,
             "bande_remplacee": {"entree": {"_distance_m": 5.0, "altitude_m": 1.0}}});
@@ -1527,6 +1683,7 @@ mod tests {
             perimeter: Perimeter::Absent,
             perimeter_ambiguous: false,
             chain: Vec::new(),
+            avalanche_protector: false,
         };
         let mut items = vec![
             absent_item(&o, "c1"),

@@ -1,6 +1,7 @@
 //! `diagnose-structures` : groupes d'ouvrages d'un cas rejoués étape par étape (typologie, MNT,
 //! lectures des ouvrages, fusion) sur le cache de banc, hors ligne. Sortie sur la console :
-//! distances curvilignes, chaînages et altitudes seulement ; ni coordonnée ni nom.
+//! distances curvilignes, chaînages et altitudes seulement ; ni coordonnée ni nom. Explorations :
+//! `ORD_DIAG_TRAVERS=1` (MNS en travers de l'axe), `ORD_DIAG_PROFIL=1` (profil sur `[de, a]`).
 
 use std::sync::Arc;
 
@@ -103,7 +104,7 @@ pub async fn diagnose_structures(
         let probes: Vec<Value> = g
             .probes
             .iter()
-            .map(|p| p.map_or(Value::Null, |p| json!({"c": r2(p.c), "mnt": r2(terrain(p.at).ele.map_or(f64::NAN, f64::from)), "hors_parcours": matches!(p.at, AxisPoint::Off(_))})))
+            .map(|p| p.map_or(Value::Null, |p| json!({"c": r2(p.c), "mnt": r2(terrain(p.at).ele.map_or(f64::NAN, f64::from)), "mns": match dsm(p.at) { Some(DsmSample::Value(v)) => r2(f64::from(v)), _ => Value::Null }, "hors_parcours": matches!(p.at, AxisPoint::Off(_))})))
             .collect();
         groups.push(json!({
             "passages": g.passages.iter().map(|&k| {
@@ -183,12 +184,28 @@ pub async fn diagnose_structures(
             }
         }
     }
+    // Exploration : profil complet (MNT brut, sortie, méthode) des stations du parcours dans
+    // `[de, a]`, avec ORD_DIAG_PROFIL=1 (distances et altitudes seulement).
+    let mut profil: Vec<Value> = Vec::new();
+    if std::env::var_os("ORD_DIAG_PROFIL").is_some() {
+        for (i, x) in route.samples.iter().enumerate() {
+            if x.d_m < from || x.d_m > to {
+                continue;
+            }
+            profil.push(json!([
+                r2(x.d_m),
+                r2(raw.terrain[i].ele.map_or(f64::NAN, f64::from)),
+                r2(profile.ele[i]),
+                format!("{:?}", profile.method[i])
+            ]));
+        }
+    }
     let corrected = profile
         .method
         .iter()
         .filter(|m| matches!(m, EleMethod::DsmDeck | EleMethod::InterpolatedStructure))
         .count();
-    let out = json!({"id": id, "travers": travers, "segments": segments, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
+    let out = json!({"id": id, "profil": profil, "travers": travers, "segments": segments, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
     crate::privacy::assert_report_clean(&out, &crate::privacy::private_names(paths))?;
     Ok(out)
 }
