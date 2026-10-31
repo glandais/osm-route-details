@@ -372,7 +372,8 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
 Complété une troisième fois (décision de l'utilisateur, 2026-10-31, commit dédié, avant toute nouvelle
 mesure) après l'analyse des échecs E3/E4 de la campagne 2026.10.7 en calibration : décalage local
 E3 pris sur les approches et référence « incertaine » (point 3), bande de portail sur un pont ou un
-tunnel des tuiles (point 2).
+tunnel des tuiles (point 2) ; puis, après vérification sur la calibration, plausibilité de la pente
+entre portails (point 2).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -420,6 +421,12 @@ tunnel des tuiles (point 2).
      tunnel est noté « référence indisponible », rapporté et non compté. L'erreur reste mesurée sur
      le seul tunnel OSM (droite entre les deux altitudes de portail retenues) ; les balcons restent
      en S3.
+   - **Plausibilité** : une pente implicite entre les portails retenus, |z sortie − z entrée| ÷
+     distance curviligne entre eux, supérieure à 25 % est impossible pour une route ouverte : la
+     référence est « indisponible », rapportée et non comptée. La borne vient de la géométrie
+     routière, pas du paramètre du service (`max_tunnel_chord_grade`), qui la rendrait circulaire.
+     Vérifié avant adoption (2026.10.7) : les tunnels qui passent vont jusqu'à 9,3 %, les galeries
+     en échec jusqu'à 15,7 % ; seul combe-laval#0 (120,6 %) dépasse la borne.
    - Sensibilité rapportée : E4 recalculé avec un portail pris à 5, 10, 20 et 30 m. Un tunnel dont le
      verdict bascule entre ces distances est marqué « référence ambiguë » ; son verdict reste celui de
      la règle ci-dessus.
