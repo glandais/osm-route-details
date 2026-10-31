@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 # Schémas OpenAPI des types exposés tels quels par le contrat (activé par ord-server).

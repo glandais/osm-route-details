@@ -25,7 +25,7 @@ allow = [
 ]
 
 [licenses.private]
-# Crates du workspace : non publiés, pas encore de licence choisie.
+# Crates du workspace : non publiés (Apache-2.0).
 ignore = true
 
 [bans]
