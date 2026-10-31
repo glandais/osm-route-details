@@ -76,8 +76,9 @@ impl BenchPaths {
 /// (`<date>-<rules_version>-<révision>`), remis à `None` à la prochaine montée des règles.
 /// Remise à `None` avec les règles 2026.10.4 (incrément 4 : métriques d'ouvrage).
 /// `bench1` (règles 2026.10.6) : périmètre lu sur la voie de l'ouvrage, détail des bandes de
-/// portail retenues, erreur des ouvrages hors graphe contre leur référence.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// portail retenues, erreur des ouvrages hors graphe contre leur référence. `bench2` : clés
+/// privées (`_…`) retirées à tous les niveaux du rapport.
+pub const BENCH_REVISION: Option<&str> = Some("bench2");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

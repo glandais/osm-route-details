@@ -1330,15 +1330,21 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
 
 /// Items sans leurs clés privées (`_…`), pour le rapport.
 pub fn public(items: &[Value]) -> Vec<Value> {
-    items
-        .iter()
-        .map(|i| match i {
-            Value::Object(m) => Value::Object(
-                m.iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), v.clone())).collect(),
-            ),
-            v => v.clone(),
-        })
-        .collect()
+    items.iter().map(strip_private).collect()
+}
+
+/// Valeur sans ses clés privées (`_…`), à tous les niveaux.
+fn strip_private(v: &Value) -> Value {
+    match v {
+        Value::Object(m) => Value::Object(
+            m.iter()
+                .filter(|(k, _)| !k.starts_with('_'))
+                .map(|(k, x)| (k.clone(), strip_private(x)))
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.iter().map(strip_private).collect()),
+        x => x.clone(),
+    }
 }
 
 #[cfg(test)]
@@ -1500,6 +1506,14 @@ mod tests {
         let h = hors_graphe_item("o", "c", &matched, &warn, &svc, Some(("vcyclist_T", &none)), 0, 4);
         assert!(h["ecart_max_m"].is_null() && h["raison_ecart"].is_string(), "{h}");
         assert_eq!(h["controle"], false, "part non appariée 0,6");
+    }
+
+    #[test]
+    fn private_keys_are_stripped_at_every_level() {
+        let i = json!({"ouvrage": "nv-01", "_longueur_m": 1.0,
+            "bande_remplacee": {"entree": {"_distance_m": 5.0, "altitude_m": 1.0}}});
+        let p = public(&[i]);
+        assert_eq!(p[0], json!({"ouvrage": "nv-01", "bande_remplacee": {"entree": {"altitude_m": 1.0}}}));
     }
 
     #[test]
