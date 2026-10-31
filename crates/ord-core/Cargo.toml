@@ -1,6 +1,6 @@
 [package]
 name = "ord-core"
-description = "Cœur pur : préparation, typologie, élévation, assemblage (incréments 1 et suivants)"
+description = "Cœur pur : préparation, élévation, assemblage (typologie aux incréments suivants)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,8 @@ license.workspace = true
 
 [dependencies]
 ord-domain.workspace = true
+serde.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
