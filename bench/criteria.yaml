@@ -4,6 +4,10 @@
 # Modifié le 2026-10-31 (décision de l'utilisateur, README §4 bis) : périmètre vélo des critères
 # d'ouvrage, E4 par tunnel OSM et portail en bande 10–30 m, E3 médiane des passages. Seuils inchangés ;
 # avant toute nouvelle mesure et avant le jugement de la série tenue à l'écart.
+# Complété le 2026-10-31 (décision de l'utilisateur, README §4 bis) : source des tags du périmètre vélo
+# = tuiles de la campagne (absent_des_donnees), bandes de portail invalides dans une série de tunnels
+# (référence indisponible), limite_donnees comptée (Arly). Seuils inchangés ; avant toute nouvelle
+# mesure et avant le jugement de la série tenue à l'écart.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -30,6 +34,12 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E4 par tunnel OSM entre ses propres portails ; balcons non tagués rapportés avec S3 ; portail = médiane du MNT entre 10 et 30 m hors portail, sensibilité 5/10/20/30 m rapportée"
   - id: e3_mediane_passages   # 2026-10-31
     decision: "E3 par pont = médiane, sur les passages, de l'écart au milieu et de l'écart max ; le baro reste la référence"
+  - id: source_tags_perimetre   # 2026-10-31
+    decision: "Tags du périmètre vélo lus dans les tuiles de la campagne (data_versions), pas dans le corpus Overpass ; géométrie du corpus absente des données = absent_des_donnees, rapporté, non compté"
+  - id: bande_portail_invalide   # 2026-10-31
+    decision: "Bande 10–30 m invalide (chevauche un autre ouvrage ou < 3 stations hors ouvrage) remplacée par la première bande valide plus loin dans la série ; aucune à moins de 1 km = référence indisponible, rapporté, non compté"
+  - id: limite_donnees_comptee   # 2026-10-31
+    decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -38,6 +48,17 @@ perimetre:   # README §4 bis.1
     controle: {matched: false, avertissement: unmatched_range, erreur_altitude: rapportee}
     seuils: []
     note: "Ne concerne que l'ouvrage dont la propre voie est hors graphe ; une trace hors graphe (n04, n08, n09) reste dans S2/E5"
+    source_tags: {donnees: campagne.data_versions, couche: streets, attributs: [kind, bicycle, bridge, tunnel], pas: corpus_overpass}
+  absent_des_donnees:
+    regle: "géométrie de l'ouvrage du corpus sans équivalent dans les tuiles de la campagne"
+    rapporte_en: {tunnel: E4_non_couvert, bridge: E3_non_couvert}
+    compte: false
+    cas_connus: [nantes-anne-de-bretagne]
+  limite_donnees:
+    regle: "ouvrage que la source ne décrit pas comme tel : compté, avec une note"
+    compte: true
+    cas_connus:
+      - {ouvrage: arly-galerie, criteres: [E4, S1], note: "shortbread sans avalanche_protector"}
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}
@@ -115,6 +136,11 @@ criteres:
     perimetre: graphe_velo
     reference: {droite_entre_portails: true, altitude_portail: "médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche"}
     sensibilite: {portail_m: [5, 10, 20, 30], marque: reference_ambigue_si_le_verdict_bascule}
+    bande_invalide:   # README §4 bis.2
+      si: [chevauche_autre_ouvrage, stations_hors_ouvrage_moins_de_3]   # autre ouvrage : tunnel, galerie, balcon S3
+      remplacement: premiere_bande_valide_plus_loin_dans_la_serie_meme_cote
+      distance_max_m: 1000
+      sinon: {marque: reference_indisponible, rapporte: true, compte: false}
     seuils:
       - {max_abs_m_max: 5.0, dplus_fictif_m_max: 5.0}
     passe_si: {part_min: 0.857}   # 6/7

@@ -361,11 +361,22 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 inchangés). Motif : la campagne de l'incrément 4, en calibration, a montré que trois règles de
 lecture étaient ambiguës ou mal posées pour un service vélo. Aucune n'est taillée sur un cas : ce
 sont des règles générales, appliquées de la même façon aux deux séries.
+Complété le même jour (décision de l'utilisateur, 2026-10-31, commit dédié, toujours avant toute
+nouvelle mesure et avant le jugement) après l'analyse de la campagne 2026.10.5 en calibration : source
+des tags du périmètre vélo (point 1), bandes de portail invalides dans une série de tunnels
+(point 2), limite des données pour les galeries pare-avalanche (point 4).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
    `bicycle=*` prime) sort de S1, E3, E4 et E5. Exemples : Millau A75, Cheviré, Lioran, Galibier. La
-   règle s'applique aux tags du way, jamais à une liste de cas. Pour E5, c'est la voie du passage
+   règle s'applique aux tags du way, jamais à une liste de cas. **Source des tags** : les attributs des tuiles de
+   la campagne (`campagne.data_versions` du rapport, couche `streets` : `kind`, `bicycle`, `bridge`,
+   `tunnel`), c'est-à-dire les données que lit le service, et non le corpus Overpass du banc, de date
+   différente. Si la géométrie de l'ouvrage du corpus n'a pas d'équivalent dans ces données (way créé
+   ou retracé après la date des tuiles), l'ouvrage est marqué `absent_des_donnees`, rapporté
+   (`E4_non_couvert`, ou `E3_non_couvert` pour un pont) et non compté ; exemple : Anne-de-Bretagne.
+   Inversement, un ouvrage interdit au vélo dans OSM récent mais franchissable dans les tuiles reste
+   dans le périmètre (cas `nv-49`, mesuré en E3 normal). Pour E5, c'est la voie du passage
    dessous qui compte : la piste sous Cheviré (`chevire-dessous`) reste. Ces ouvrages sont rapportés à part
    (`hors_graphe_velo`) avec leur contrôle propre, sans seuil : la portion est non appariée
    (`matched: false`) et l'avertissement `unmatched_range` est présent ; l'erreur d'altitude est
@@ -382,6 +393,13 @@ sont des règles générales, appliquées de la même façon aux deux séries.
      portail**, sur l'approche. Le MNT de la première station hors portail n'est pas la chaussée sur un
      portail en falaise ; la bande reste distincte de la sonde ponctuelle du service à 10 m, ce qui
      évite une référence circulaire.
+   - **Bande de portail invalide** : la bande 10–30 m d'un portail est invalide si elle chevauche un
+     autre ouvrage (tunnel, galerie, balcon S3) ou si elle compte moins de 3 stations hors ouvrage.
+     Elle est alors remplacée par la première bande valide plus loin dans la série, du même côté (en
+     pratique le portail extérieur de la série). Sans bande valide à moins de 1 km de ce côté, le
+     tunnel est noté « référence indisponible », rapporté et non compté. L'erreur reste mesurée sur
+     le seul tunnel OSM (droite entre les deux altitudes de portail retenues) ; les balcons restent
+     en S3.
    - Sensibilité rapportée : E4 recalculé avec un portail pris à 5, 10, 20 et 30 m. Un tunnel dont le
      verdict bascule entre ces distances est marqué « référence ambiguë » ; son verdict reste celui de
      la règle ci-dessus.
@@ -391,6 +409,11 @@ sont des règles générales, appliquées de la même façon aux deux séries.
    passages passent pénalisait les ponts les mieux documentés. La référence reste le baro corrigé
    localement, y compris à Audibert (5 passages concordants, 2,4–4,5 m sous le MNS du tablier) et à
    Anne-de-Bretagne.
+4. **Limite des données, comptée.** Un ouvrage que la source choisie ne décrit pas comme tel reste
+   compté : l'échec appartient au service tel qu'il est construit, et le rapport doit le montrer. Il
+   porte la note `limite_donnees`. Cas connu : la galerie pare-avalanche de l'Arly
+   (`tunnel=avalanche_protector`), que le schéma Shortbread de VersaTiles rend en voie ordinaire sans
+   `tunnel` ; elle reste dans E4 et S1 avec `limite_donnees: shortbread sans avalanche_protector`.
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
