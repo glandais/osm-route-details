@@ -52,3 +52,27 @@ pub trait CoverageRef: Send + Sync {
     async fn dem_kinds(&self, pts: &[LatLon], ctx: &RequestCtx) -> Vec<DemKind>;
     fn extent(&self, source: SourceId) -> &Extent;
 }
+
+/// Polygone d'une source dans une tuile de couverture Mapterhorn : anneaux en unités de la tuile
+/// (`[0, extent]`, y vers le sud), règle pair-impair entre anneaux.
+#[derive(Clone, PartialEq)]
+pub struct CoveragePolygon {
+    pub source: String,
+    pub rings: Vec<Vec<[f64; 2]>>,
+}
+
+impl std::fmt::Debug for CoveragePolygon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoveragePolygon")
+            .field("source", &self.source)
+            .field("rings", &self.rings.len())
+            .finish()
+    }
+}
+
+/// Tuile décodée de la couche `coverage` (un polygone par source présente).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoverageTile {
+    pub extent: u32,
+    pub polygons: Vec<CoveragePolygon>,
+}

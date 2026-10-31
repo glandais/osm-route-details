@@ -1,6 +1,6 @@
 [package]
 name = "ord-adapters"
-description = "Codecs purs de tuiles : Terrarium (incrément 1), BIL et streets aux incréments suivants"
+description = "Codecs purs de tuiles : Terrarium, BIL, couverture Mapterhorn (MVT) ; streets à l'incrément 3"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
