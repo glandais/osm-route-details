@@ -398,7 +398,129 @@ fn request_distances(case: &PersoCase) -> Vec<f64> {
     out
 }
 
+/// Marge de l'extrait d'une trace tenue à l'écart autour de la fenêtre évaluée (effets de bord).
+const HELD_OUT_MARGIN_M: f64 = 1_000.0;
+
+/// Extraits d'un cas d'une trace tenue à l'écart autour des passages de ses ouvrages de
+/// calibration (`passages_masques`) : la fenêtre de ± 500 m autour de l'ouvrage franchi appartient
+/// à la série de l'ouvrage, et chaque ouvrage garde tous ses passages baro (README §2). Chaque
+/// extrait couvre la fenêtre ± 1 km ; seule la fenêtre est évaluée. Renvoie l'extrait et la
+/// fenêtre évaluée, en abscisse de l'extrait.
+pub fn held_out_extracts(
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<(PersoCase, std::ops::Range<f64>)> {
+    let pts: Vec<Pt> = case
+        .parts
+        .iter()
+        .enumerate()
+        .flat_map(|(k, part)| part.iter().skip(usize::from(k > 0)).cloned())
+        .collect();
+    if pts.len() != case.s_ref.len() {
+        return Vec::new();
+    }
+    let ll: Vec<LatLon> = pts.iter().map(|q| LatLon::new(q.lat, q.lon)).collect();
+    let mut windows: Vec<std::ops::Range<f64>> = case
+        .masks
+        .iter()
+        .filter_map(|id| refs.get(id))
+        .flat_map(|r| passage_windows(&case.s_ref, &ll, r, rules.passage_tol_m, rules.mask_half_m))
+        .collect();
+    windows.sort_by(|a, b| a.start.total_cmp(&b.start));
+    let mut merged: Vec<std::ops::Range<f64>> = Vec::new();
+    for w in windows {
+        match merged.last_mut() {
+            Some(m) if w.start <= m.end => m.end = m.end.max(w.end),
+            _ => merged.push(w),
+        }
+    }
+    let mut out = Vec::new();
+    for (k, w) in merged.into_iter().enumerate() {
+        let (lo, hi) = (w.start - HELD_OUT_MARGIN_M, w.end + HELD_OUT_MARGIN_M);
+        let idx: Vec<usize> =
+            (0..pts.len()).filter(|&i| case.s_ref[i] >= lo && case.s_ref[i] <= hi).collect();
+        let (Some(&first), Some(&last)) = (idx.first(), idx.last()) else { continue };
+        if last <= first {
+            continue;
+        }
+        let s0 = case.s_ref[first];
+        let (baro_s, baro_z): (Vec<f64>, Vec<f64>) = case
+            .baro_s
+            .iter()
+            .zip(&case.baro_z)
+            .filter(|(x, _)| **x >= lo && **x <= hi)
+            .map(|(x, z)| (x - s0, *z))
+            .unzip();
+        let extract = PersoCase {
+            id: format!("{}#extrait{k}", case.id),
+            groupe: case.groupe.clone(),
+            serie: case.serie,
+            parts: vec![pts[first..=last].to_vec()],
+            s_ref: case.s_ref[first..=last].iter().map(|x| x - s0).collect(),
+            baro_s,
+            baro_z,
+            // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
+            masks: Vec::new(),
+        };
+        out.push((extract, (w.start - s0)..(w.end - s0)));
+    }
+    out
+}
+
+/// Mesures d'ouvrage d'une trace tenue à l'écart, sur ses extraits : seuls les passages de ses
+/// ouvrages de calibration dans la fenêtre évaluée, sans position (distances retirées) ; aucune
+/// métrique de trace ni sortie du service hors fenêtre.
+#[allow(clippy::too_many_arguments)]
+pub async fn measure_held_out(
+    service: &Service,
+    trace: &Trace,
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    ouvrages: &[crate::ouvrages::Ouvrage],
+    rules: &BenchRules,
+    rules_core: &Rules,
+    cache: &Path,
+) -> anyhow::Result<Vec<Value>> {
+    let mut items = Vec::new();
+    for (extract, window) in held_out_extracts(case, refs, rules) {
+        let eval = OuvrageEval { cache, window: Some(window) };
+        let (_trace_metrics, _, its) =
+            measure_case(service, &extract, None, refs, ouvrages, rules, rules_core, &eval).await?;
+        items.extend(held_out_items(its, &trace.id, &trace.passages_masques));
+    }
+    Ok(items)
+}
+
+/// Items d'un extrait tenu à l'écart : ouvrages de `passages_masques` seulement, cas = la trace,
+/// distances curvilignes de l'extrait retirées.
+pub fn held_out_items(items: Vec<Value>, trace: &str, calibration: &[String]) -> Vec<Value> {
+    items
+        .into_iter()
+        .filter(|i| i["ouvrage"].as_str().is_some_and(|o| calibration.iter().any(|c| c == o)))
+        .map(|mut i| {
+            if let Some(m) = i.as_object_mut() {
+                for k in ["d_milieu_m", "ecart_max_d_m", "emprise_d_m", "_emprise_d_m"] {
+                    m.remove(k);
+                }
+                m.insert("cas".into(), json!(trace));
+                m.insert("extrait_tenu_a_l_ecart".into(), json!(true));
+            }
+            i
+        })
+        .collect()
+}
+
+/// Contexte des mesures d'ouvrage d'un cas : cache de banc (tuiles de rues de la campagne) et,
+/// pour un extrait de trace tenue à l'écart, la fenêtre évaluée (abscisses de l'extrait).
+#[derive(Clone, Debug)]
+pub struct OuvrageEval<'a> {
+    pub cache: &'a Path,
+    pub window: Option<std::ops::Range<f64>>,
+}
+
 /// Mesure E1 et E2 d'un cas (service appelé deux fois : corrections actives, puis MNT brut).
+#[allow(clippy::too_many_arguments)]
 pub async fn measure_case(
     service: &Service,
     case: &PersoCase,
@@ -407,6 +529,7 @@ pub async fn measure_case(
     ouvrages: &[crate::ouvrages::Ouvrage],
     rules: &BenchRules,
     rules_core: &Rules,
+    eval: &OuvrageEval<'_>,
 ) -> anyhow::Result<(Value, Value, Vec<Value>)> {
     let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
     let (p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
@@ -551,17 +674,34 @@ pub async fn measure_case(
         }
     });
     // Ouvrages du corpus franchis : fenêtres masquées exclues (série de l'ouvrage différente).
-    let baro_unmasked: Vec<f64> = (0..n).map(|i| if masked[i] { f64::NAN } else { baro[i] }).collect();
+    // Extrait de trace tenue à l'écart : rien n'est lu hors de la fenêtre évaluée (service,
+    // MNT, baro), le reste de l'extrait ne sert qu'à éviter les effets de bord.
+    let inside = |i: usize| eval.window.as_ref().is_none_or(|w| w.contains(&p.d[i]));
+    let keep = |v: &[f64]| -> Vec<f64> { (0..n).map(|i| if inside(i) { v[i] } else { f64::NAN }).collect() };
+    let baro_unmasked: Vec<f64> =
+        (0..n).map(|i| if masked[i] || !inside(i) { f64::NAN } else { baro[i] }).collect();
+    let (svc_eval, raw_eval) = (keep(&p.ele), keep(&p_raw.ele));
+    // Ponts et tunnels des tuiles de la campagne (§4 bis.2, §4 bis.3) : tuiles des abords des
+    // ouvrages du corpus seulement.
+    let near: Vec<LatLon> = p
+        .pts
+        .iter()
+        .copied()
+        .filter(|q| ouvrages.iter().any(|o| haversine_m(*q, o.pts[1]) <= o.length_m + 2_500.0))
+        .collect();
+    let tiles = crate::ouvrages::Tiles::load(eval.cache, &near).await?;
+    let tile_structure = tiles.structure_mask(&p.pts);
     let cp = crate::ouvrages::CaseProfile {
         d: &p.d,
         pts: &p.pts,
-        svc: &p.ele,
-        raw: &p_raw.ele,
+        svc: &svc_eval,
+        raw: &raw_eval,
         baro: &baro_unmasked,
         on_structure: &p.on_structure,
         ign: &p.ign,
         matched: &p.matched,
         unmatched_warn: &p.unmatched_warn,
+        tile_structure: &tile_structure,
     };
     let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
@@ -881,7 +1021,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
             )
             .ok();
-            match measure_case(&service, &case, csv, &refs, &ouvrages, &rules, &rules_core).await {
+            let eval = OuvrageEval { cache: &paths.cache, window: None };
+            match measure_case(&service, &case, csv, &refs, &ouvrages, &rules, &rules_core, &eval).await {
                 Ok((c, dv, its)) => {
                     eprintln!("{} : mesuré", case.id);
                     cases.push(c);
@@ -891,6 +1032,32 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                     }
                 }
                 Err(e) => skipped.push(json!({"id": case.id, "raison": e.to_string()})),
+            }
+        }
+    }
+    // Traces tenues à l'écart : passages de leurs ouvrages de calibration seulement, sur des
+    // extraits (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
+    let mut held_out_measured = Vec::new();
+    for t in manifest.traces.iter().filter(|t| {
+        selection.excluded_held_out.contains(&t.id)
+            && !t.passages_masques.is_empty()
+            && paths.private_present()
+    }) {
+        let Ok(loaded) = load_perso(paths, t, &rules) else {
+            skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
+            continue;
+        };
+        for case in loaded {
+            match measure_held_out(&service, t, &case, &refs, &ouvrages, &rules, &rules_core, &paths.cache)
+                .await
+            {
+                Ok(its) => {
+                    eprintln!("{} : extraits mesurés ({} mesures d'ouvrage)", case.id, its.len());
+                    held_out_measured.push(json!({"id": case.id, "mesures": its.len()}));
+                    items.extend(its);
+                }
+                Err(_) => skipped
+                    .push(json!({"id": case.id, "raison": "extraits tenus à l'écart : échec du service"})),
             }
         }
     }
@@ -954,7 +1121,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 4,
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f et 657d2c8)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f et 4304838)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -969,17 +1136,18 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "private_present": paths.private_present(),
             "groupes": groupes,
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
+            "extraits_tenus_a_l_ecart": held_out_measured,
             "notes": [
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
-                "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
-                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
+                "E3 : baro corrigé localement sur les traces perso, décalage = médiane (baro − MNT LiDAR, profil du service sans correction d'ouvrage) sur les approches de 50 à 300 m de chaque côté du pont, hors autres ouvrages (service ou tuiles) et fenêtres masquées ; moins de 20 stations d'un côté : repli sur la médiane baro − service au sol entre 1 et 3 km du milieu (decalage_repli_1_3km) ; côtés différant de plus de 2 m : reference_incertaine, rapportée, non comptée (README §4 bis.3) ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
+                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM ; ou sur un pont ou un tunnel des tuiles de la campagne, station à moins de 10 m à l'intérieur de sa ligne) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule ; pente implicite entre portails retenus (pente_implicite_portails) au-delà de 25 % : référence indisponible, rapportée, non comptée (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
                 "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel, dans les tuiles de la campagne (data_versions, couche streets), de la voie de l'ouvrage = élément de même nature (pont, tunnel, voie au sol d'un passage dessous) de plus petite médiane de distance aux stations du corpus (tous les 5 m sur la géométrie Overpass, sinon A–milieu–B), accepté à ≤ 15 m, sinon toute voie avec le même critère ; deux candidats à moins de 3 m de médiane et de périmètres différents : perimetre_ambigu, rapporté ; jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
                 "hors_graphe_velo : contrôle satisfait si la portion est non appariée avec unmatched_range (controle_par = non_apparie) ou appariée sur toute sa longueur à une voie du graphe vélo, nécessairement distincte de la voie de l'ouvrage exclue du graphe (controle_par = voie_parallele_du_graphe) ; ecart_max_m = altitude rendue contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées, ou sur toute la portion sur une voie parallèle ; null avec raison_ecart sans référence",
                 "Limite des données (README §4 bis.4) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread), comptés avec la note limite_donnees",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
                 "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
-                "Traces perso tenues à l'écart non envoyées : leurs passages d'ouvrages de calibration ne sont pas mesurés",
+                "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
                 "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
@@ -1032,6 +1200,29 @@ pub async fn fill_cache(
                 }
                 eprintln!("{} : tuiles en cache", case.id);
                 filled.push(case.id.clone());
+            }
+        }
+    }
+    // Traces tenues à l'écart : tuiles des seuls extraits autour de leurs ouvrages de calibration
+    // (fenêtre ± 1 km, README §2), jamais de la trace entière.
+    if paths.private_present() {
+        let refs = ouvrage_refs(paths)?;
+        for t in manifest
+            .traces
+            .iter()
+            .filter(|t| selection.excluded_held_out.contains(&t.id) && !t.passages_masques.is_empty())
+        {
+            let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
+            for case in loaded {
+                for (extract, _) in held_out_extracts(&case, &refs, &rules) {
+                    for part in &extract.parts {
+                        for sc in [true, false] {
+                            service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;
+                        }
+                    }
+                }
+                eprintln!("{} : tuiles des extraits en cache", case.id);
+                filled.push(format!("{}#extraits", case.id));
             }
         }
     }
@@ -1157,4 +1348,67 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
     let result = json!({"date": today_utc(), "rules_version": ord_core::RULES_VERSION, "L1": out});
     crate::privacy::assert_report_clean(&result, &crate::privacy::private_names(paths))?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trace synthétique est-ouest de 10 km (un point tous les 10 m), baro partout, qui franchit un
+    /// ouvrage de calibration au kilomètre 5.
+    fn straight_case() -> (PersoCase, BTreeMap<String, Vec<LatLon>>) {
+        let m_per_deg = haversine_m(LatLon::new(47.0, 0.0), LatLon::new(47.0, 1.0));
+        let pts: Vec<Pt> = (0..=1_000).map(|k| Pt { lat: 47.0, lon: k as f64 * 10.0 / m_per_deg }).collect();
+        let s_ref = cumulative(&pts);
+        let refs = BTreeMap::from([("pont".to_owned(), vec![LatLon::new(47.0, 5_000.0 / m_per_deg)])]);
+        let case = PersoCase {
+            id: "perso-99".into(),
+            groupe: "ouvrage".into(),
+            serie: Serie::TenueALEcart,
+            parts: vec![pts],
+            baro_s: s_ref.clone(),
+            baro_z: vec![10.0; s_ref.len()],
+            s_ref,
+            masks: vec!["pont".into()],
+        };
+        (case, refs)
+    }
+
+    #[test]
+    fn held_out_extract_covers_the_window_and_a_margin_only() {
+        let (case, refs) = straight_case();
+        let rules = BenchRules::default();
+        let ex = held_out_extracts(&case, &refs, &rules);
+        assert_eq!(ex.len(), 1);
+        let (e, w) = &ex[0];
+        // Fenêtre : ± 500 m autour des stations à moins de 40 m de l'ouvrage (≈ 1 040 à 1 080 m) ;
+        // extrait : ± 1 km de plus (à un pas de points près), la fenêtre commence à 1 km du début.
+        let len = e.s_ref.last().unwrap() - e.s_ref[0];
+        let width = w.end - w.start;
+        assert!((1_030.0..=1_090.0).contains(&width), "{w:?}");
+        assert!((len - (width + 2_000.0)).abs() <= 25.0, "{len} {w:?}");
+        assert!((w.start - 1_000.0).abs() <= 15.0, "{w:?}");
+        assert_eq!(e.s_ref[0], 0.0);
+        assert!(e.baro_s.iter().all(|s| (-1e-6..=len + 1e-6).contains(s)), "baro de l'extrait seulement");
+        assert!(e.masks.is_empty(), "l'ouvrage de calibration est mesuré, pas masqué");
+        // Sans ouvrage de calibration franchi : aucun extrait.
+        let none = PersoCase { masks: Vec::new(), ..case };
+        assert!(held_out_extracts(&none, &refs, &rules).is_empty());
+    }
+
+    #[test]
+    fn held_out_items_keep_calibration_structures_without_positions() {
+        let items = vec![
+            json!({"ouvrage": "pont", "cas": "perso-99#extrait0", "metrique": "E3", "d_milieu_m": 1500.0,
+                "ecart_max_d_m": 1510.0, "emprise_d_m": [1450.0, 1550.0], "ecart_milieu_m": 0.5}),
+            json!({"ouvrage": "nv-99", "cas": "perso-99#extrait0", "metrique": "E3", "ecart_milieu_m": 9.0}),
+        ];
+        let out = held_out_items(items, "perso-99", &["pont".to_owned()]);
+        assert_eq!(out.len(), 1, "seuls les ouvrages de calibration de la trace");
+        assert_eq!(
+            out[0],
+            json!({"ouvrage": "pont", "cas": "perso-99", "metrique": "E3", "ecart_milieu_m": 0.5,
+                "extrait_tenu_a_l_ecart": true})
+        );
+    }
 }

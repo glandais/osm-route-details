@@ -295,6 +295,8 @@ pub struct CaseProfile<'a> {
     pub matched: &'a [bool],
     /// Station couverte par un avertissement `unmatched_range`.
     pub unmatched_warn: &'a [bool],
+    /// Station sur un pont ou un tunnel des tuiles de la campagne (`Tiles::structure_mask`).
+    pub tile_structure: &'a [bool],
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -435,6 +437,10 @@ fn portal(d: &[f64], raw: &[f64], blocked: &[bool], i: usize, dir: f64) -> Optio
     Some(Portal { at: p, z, variants: [at(5.0), at(10.0), at(20.0), at(30.0)], skipped })
 }
 
+/// Pente implicite maximale entre les portails retenus de la référence E4 (`E4.plausibilite`,
+/// géométrie routière) ; au-delà, référence indisponible, rapportée, non comptée.
+const IMPLICIT_GRADE_MAX: f64 = 0.25;
+
 /// E4 d'un tunnel OSM entre ses portails `i0` (entrée) et `i1` (sortie) sur un parcours ;
 /// `blocked` : stations dans un autre ouvrage (bandes de portail invalides, §4 bis.2). L'erreur
 /// est mesurée sur le seul tunnel, contre la droite entre les deux portails retenus.
@@ -454,9 +460,18 @@ fn tunnel_item(
     let (Some(a), Some(b)) = (portal(d, raw, blocked, i0, -1.0), portal(d, raw, blocked, i1, 1.0)) else {
         // Rapporté, non compté en E4 (pas de `pass`) ; S1 reste mesuré.
         return json!({"ouvrage": id, "cas": case, "metrique": "E4", "reference_indisponible": true,
+            "raison": "aucune bande de portail valide à moins de 1 km",
             "S1.emprise_m": r2(d[i1] - d[i0]), "S1.type_m": r2(typed)});
     };
     let (pa, pb) = (a.at, b.at);
+    // Plausibilité (§4 bis.2, `E4.plausibilite`) : pente implicite entre les portails retenus.
+    let grade = (b.z - a.z).abs() / (d[pb] - d[pa]).abs().max(1e-9);
+    if grade > IMPLICIT_GRADE_MAX {
+        return json!({"ouvrage": id, "cas": case, "metrique": "E4", "reference_indisponible": true,
+            "raison": "pente implicite entre portails retenus au-delà de 25 %",
+            "pente_implicite_portails": r4(grade),
+            "S1.emprise_m": r2(d[i1] - d[i0]), "S1.type_m": r2(typed)});
+    }
     // Droite entre les deux portails retenus, chacun à sa place ; erreur sur le seul tunnel.
     let judge = |za: f64, zb: f64| -> (f64, f64, bool) {
         let line = |k: usize| za + (zb - za) * (d[k] - d[pa]) / (d[pb] - d[pa]).max(1e-9);
@@ -478,6 +493,7 @@ fn tunnel_item(
         "bande_remplacee": {"entree": side(&a, i0), "sortie": side(&b, i1)},
         "sensibilite_portail_m": {"5": variants[0], "10": variants[1], "20": variants[2], "30": variants[3]},
         "reference_ambigue": ambiguous,
+        "pente_implicite_portails": r4(grade),
         "S1.emprise_m": r2(d[i1] - d[i0]), "S1.type_m": r2(typed)})
 }
 
@@ -526,6 +542,49 @@ fn hors_graphe_item(
         item["raison_ecart"] = json!("aucune station comparable avec référence");
     }
     item
+}
+
+/// Approches du décalage local E3 (§4 bis.3) : de 50 à 300 m de chaque extrémité du pont.
+const APPROACH_M: (f64, f64) = (50.0, 300.0);
+/// Stations au moins, par côté ; sinon repli sur la règle 1–3 km.
+const APPROACH_MIN_STATIONS: usize = 20;
+/// Écart maximal entre les décalages des deux côtés (tolérance E3) ; au-delà, référence incertaine.
+const APPROACH_SIDES_MAX_DIFF_M: f64 = 2.0;
+
+/// Décalage local d'un passage de pont sur ses approches.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Approaches {
+    /// Médianes de (baro − MNT LiDAR) avant et après le pont, et médiane des deux côtés réunis.
+    Sides { before: f64, after: f64, offset: f64 },
+    /// Moins de 20 stations d'un côté : repli 1–3 km (`decalage_repli_1_3km`).
+    Fallback,
+}
+
+/// Décalage local E3 (§4 bis.3) : médiane de (baro − MNT LiDAR) sur les approches de 50 à 300 m
+/// de chaque côté de l'emprise `[i0, i1]`, hors stations d'un autre ouvrage (service, tuiles, ou
+/// emprise `others` d'un autre ouvrage du corpus franchi : accès non tagué compris)
+/// et hors fenêtres masquées (baro absent). Le MNT LiDAR est le profil du service appelé sans
+/// correction d'ouvrage (`raw`) : baro et MNT seulement, jamais la sortie corrigée.
+fn approach_offset(p: &CaseProfile<'_>, i0: usize, i1: usize, others: &[(usize, usize)]) -> Approaches {
+    let side = |from: f64, dir: f64| -> Vec<f64> {
+        (0..p.d.len())
+            .filter(|&i| {
+                let x = dir * (p.d[i] - from);
+                (APPROACH_M.0..=APPROACH_M.1).contains(&x)
+                    && !p.on_structure[i]
+                    && !p.tile_structure[i]
+                    && !others.iter().any(|&(a, b)| i >= a && i <= b)
+            })
+            .map(|i| p.baro[i] - p.raw[i])
+            .filter(|x| x.is_finite())
+            .collect()
+    };
+    let (before, after) = (side(p.d[i0], -1.0), side(p.d[i1], 1.0));
+    if before.len() < APPROACH_MIN_STATIONS || after.len() < APPROACH_MIN_STATIONS {
+        return Approaches::Fallback;
+    }
+    let all: Vec<f64> = before.iter().chain(&after).copied().collect();
+    Approaches::Sides { before: median(&before), after: median(&after), offset: median(&all) }
 }
 
 /// Mesures d'ouvrage sur les passages d'un cas perso.
@@ -588,7 +647,9 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             // Ouvrage perso : longueurs sous des clés `_`, retirées avant le rapport (vie privée).
             let pre = if o.perso { "_" } else { "" };
             item.insert(format!("{pre}longueur_m"), json!(o.length_m));
-            // Baro corrigé localement : décalage au sol entre 1 et 3 km du milieu.
+            // Baro corrigé localement. Pont (E3, §4 bis.3) : médiane de (baro − MNT LiDAR) sur les
+            // approches de 50 à 300 m de chaque côté, hors autres ouvrages et fenêtres masquées ;
+            // repli sur la règle 1–3 km sans 20 stations d'un côté. Autres natures : 1–3 km.
             let ring: Vec<f64> = (0..n)
                 .filter(|&i| {
                     let x = (p.d[i] - dm).abs();
@@ -597,7 +658,13 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                 .map(|i| p.baro[i] - p.svc[i])
                 .filter(|x| x.is_finite())
                 .collect();
-            let offset = median(&ring);
+            let others: Vec<(usize, usize)> =
+                found.iter().filter(|f| (f.2, f.3) != (i0, i1)).map(|f| (f.2, f.3)).collect();
+            let approaches = (o.kind == Kind::Bridge).then(|| approach_offset(p, i0, i1, &others));
+            let offset = match approaches {
+                Some(Approaches::Sides { offset, .. }) => offset,
+                _ => median(&ring),
+            };
             let err = |i: usize| p.svc[i] - (p.baro[i] - offset);
             // Stations d'extrémité exclues du max : la station la plus proche d'un point de
             // référence peut tomber jusqu'à un demi-pas (2,5 m) au-delà de la culée.
@@ -644,6 +711,19 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     item.insert("ecart_max_d_m".into(), worst.map_or(Value::Null, |i| r2(p.d[i])));
                     item.insert(format!("{pre}emprise_d_m"), json!([r2(p.d[i0]), r2(p.d[i1])]));
                     item.insert("decalage_local_m".into(), r2(offset));
+                    match approaches {
+                        Some(Approaches::Sides { before, after, .. }) => {
+                            item.insert("decalage_approches_m".into(), json!([r2(before), r2(after)]));
+                            if (before - after).abs() > APPROACH_SIDES_MAX_DIFF_M {
+                                // Rapportée, non comptée (§4 bis.3).
+                                item.insert("reference_incertaine".into(), json!(true));
+                            }
+                        }
+                        Some(Approaches::Fallback) => {
+                            item.insert("decalage_repli_1_3km".into(), json!(true));
+                        }
+                        None => {}
+                    }
                     if o.kind == Kind::Untagged {
                         item.insert("metrique".into(), json!("S3"));
                         item.insert("service_milieu_m".into(), r2(p.svc[im]));
@@ -659,6 +739,10 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         .map(|k| tunnels.iter().any(|&(a, b)| (a, b) != (i0, i1) && k > a && k < b))
                         .collect();
                     block_short_balconies(p.d, &tunnels, &mut blocked);
+                    // Pont ou tunnel des tuiles de la campagne (§4 bis.2), hors du tunnel mesuré.
+                    for k in (0..n).filter(|&k| k <= i0 || k >= i1) {
+                        blocked[k] |= p.tile_structure[k];
+                    }
                     let t = tunnel_item(&o.id, case, p.d, p.svc, p.raw, p.on_structure, &blocked, i0, i1);
                     for (k, v) in t.as_object().into_iter().flatten() {
                         if !k.starts_with("S1.") {
@@ -917,6 +1001,39 @@ impl Tiles {
         }
     }
 
+    /// Stations sur un pont ou un tunnel des tuiles de la campagne (`bridge` / `tunnel`, du corpus ou
+    /// non, §4 bis.2) : projection à moins de 10 m d'une ligne d'ouvrage, à l'intérieur de la ligne
+    /// (une projection sur l'une de ses extrémités ne compte pas : la station 10 m au-delà d'un
+    /// portail n'est pas dans ce tunnel). Tuile absente : `false`.
+    pub fn structure_mask(&self, pts: &[LatLon]) -> Vec<bool> {
+        let grid = Shortbread::GRID;
+        pts.iter()
+            .map(|p| {
+                let u = grid.to_units(*p);
+                let mpu = grid.metres_per_unit(p.lat);
+                let Some(Some(t)) = self.tiles.get(&grid.tile_of(u)) else { return false };
+                t.lines.iter().any(|l| {
+                    let a = &t.attrs[l.attr as usize];
+                    if !matches!(
+                        a.structure,
+                        StructureTag::Bridge
+                            | StructureTag::Tunnel
+                            | StructureTag::Covered
+                            | StructureTag::BuildingPassage
+                    ) {
+                        return false;
+                    }
+                    let last = l.points.len().saturating_sub(2);
+                    l.points.windows(2).enumerate().any(|(k, w)| {
+                        let pr = project_on_segment(u, w[0], w[1]);
+                        let at_end = (k == 0 && pr.t <= 0.0) || (k == last && pr.t >= 1.0);
+                        !at_end && pr.dist2.sqrt() * mpu <= TILE_STRUCTURE_TOL_M
+                    })
+                })
+            })
+            .collect()
+    }
+
     /// Les ouvrages (`tunnel` ou pont) à moins de 15 m de `p` sont-ils dans le graphe vélo ?
     /// `None` : aucun ouvrage trouvé (tuile absente ou ouvrage non tagué).
     fn routable(&self, p: LatLon, tunnel: bool) -> Option<bool> {
@@ -946,6 +1063,10 @@ impl Tiles {
         found
     }
 }
+
+/// Distance latérale maximale d'une station à une ligne de pont ou de tunnel des tuiles pour
+/// qu'elle soit « sur » cet ouvrage (bandes de portail, §4 bis.2).
+const TILE_STRUCTURE_TOL_M: f64 = 10.0;
 
 /// Points de tous les parcours vcyclist mesurés (tuiles de rues à charger).
 pub fn vc_points(bench: &Path) -> anyhow::Result<Vec<LatLon>> {
@@ -1088,6 +1209,12 @@ pub async fn vc_items(
                 }
             }
             block_short_balconies(&r.d, &tunnels, &mut blocked);
+            // Pont ou tunnel des tuiles de la campagne (§4 bis.2) ; les stations d'un tunnel
+            // mesuré ne sont jamais dans sa propre bande.
+            let ll: Vec<LatLon> = r.s.pts.iter().map(|p| LatLon::new(p.lat, p.lon)).collect();
+            for (b, t) in blocked.iter_mut().zip(tiles.structure_mask(&ll)) {
+                *b |= t;
+            }
             blocked
         })
         .collect();
@@ -1313,6 +1440,10 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     // E3 par pont : médiane, sur les passages, de l'écart au milieu et de l'écart max (§4 bis.3).
     let mut ponts: BTreeMap<String, (Vec<f64>, Vec<f64>, f64)> = BTreeMap::new();
     for i in by("E3") {
+        // Référence incertaine (§4 bis.3) : rapportée, non comptée.
+        if i["reference_incertaine"] == true {
+            continue;
+        }
         let (Some(mid), Some(max)) = (i["ecart_milieu_m"].as_f64(), i["ecart_max_m"].as_f64()) else {
             continue;
         };
@@ -1391,7 +1522,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         }
     };
     let agg = json!({
-        "E3": {"ponts": e3_n, "ponts_ok": e3_ok, "part": r4(e3_ok as f64 / e3_n.max(1) as f64), "seuil": 0.90, "par_pont": e3_ponts},
+        "E3": {"ponts": e3_n, "ponts_ok": e3_ok, "part": r4(e3_ok as f64 / e3_n.max(1) as f64), "seuil": 0.90, "par_pont": e3_ponts,
+            "references_incertaines": by("E3").into_iter().filter(|i| i["reference_incertaine"] == true).collect::<Vec<_>>()},
         "E3_hors_france": by("E3_hors_france"),
         "E3_non_couverts": not_covered("E3_non_couvert"),
         "E4": {"tunnels": e4_n, "tunnels_ok": e4_ok, "part": r4(e4_ok as f64 / e4_n.max(1) as f64), "seuil": 0.857, "reference_ambigue": e4_amb, "reference_indisponible": e4_unavailable},
@@ -1561,6 +1693,14 @@ mod tests {
         let read = |ways: Vec<(WayAttrs, f64)>, kind: Kind| tiles_with(ways).perimeter(mid, &stations, kind);
         let closed = || (way("trunk", Some("no"), StructureTag::Bridge), 0.0);
         assert_eq!(read(vec![closed()], Kind::Bridge), (Perimeter::OffGraph, false));
+        // Bandes de portail (§4 bis.2) : sur la ligne de pont, oui ; au-delà de son extrémité ou à
+        // plus de 10 m de côté, non.
+        let on_mask = tiles_with(vec![closed()]).structure_mask(&[
+            mid,
+            grid.to_latlon([u[0] + 60.0, u[1]]),
+            grid.to_latlon([u[0], u[1] + 40.0]),
+        ]);
+        assert_eq!(on_mask, vec![true, false, false]);
         // Un pont cyclable voisin (≈ 10 m) ne change rien : la voie de l'ouvrage est celle qui
         // suit le mieux sa géométrie.
         let cycle = |north: f64| (way("cycleway", None, StructureTag::Bridge), north);
@@ -1662,6 +1802,58 @@ mod tests {
         assert_eq!(l[1], ("nv-01".to_owned(), "shortbread sans avalanche_protector".to_owned()));
         o.avalanche_protector = false;
         assert_eq!(corpus_data_limits(&[o], &known).len(), 1);
+    }
+
+    #[test]
+    fn e3_offset_is_read_on_the_approaches_and_flags_a_baro_step() {
+        // Pont des stations 100 à 120 sur une grille de 5 m ; MNT plat à 0, baro décalé de +3 m.
+        let n = 221;
+        let d: Vec<f64> = (0..n).map(|k| k as f64 * 5.0).collect();
+        let pts = vec![LatLon::new(47.0, -1.0); n];
+        let raw = vec![0.0; n];
+        let flags = vec![false; n];
+        let profile_with = |baro: &[f64], others: &[(usize, usize)]| -> Approaches {
+            let p = CaseProfile {
+                d: &d,
+                pts: &pts,
+                svc: &raw,
+                raw: &raw,
+                baro,
+                on_structure: &flags,
+                ign: &flags,
+                matched: &flags,
+                unmatched_warn: &flags,
+                tile_structure: &flags,
+            };
+            approach_offset(&p, 100, 120, others)
+        };
+        let profile = |baro: &[f64]| profile_with(baro, &[]);
+        let baro = vec![3.0; n];
+        assert_eq!(profile(&baro), Approaches::Sides { before: 3.0, after: 3.0, offset: 3.0 });
+        // Saut de baro de 3 m juste avant la culée (hors des approches) : les deux côtés diffèrent.
+        let step: Vec<f64> = (0..n).map(|k| if k < 95 { 6.0 } else { 3.0 }).collect();
+        match profile(&step) {
+            Approaches::Sides { before, after, .. } => {
+                assert!((before - after).abs() > APPROACH_SIDES_MAX_DIFF_M, "{before} {after}")
+            }
+            other => panic!("{other:?}"),
+        }
+        // Baro absent sur une approche (fenêtre masquée) : repli 1–3 km.
+        let gap: Vec<f64> = (0..n).map(|k| if k > 120 { f64::NAN } else { 3.0 }).collect();
+        assert_eq!(profile(&gap), Approaches::Fallback);
+        // Approche sur un autre ouvrage du corpus (accès non tagué) : stations exclues, repli.
+        assert_eq!(profile_with(&baro, &[(40, 95)]), Approaches::Fallback);
+    }
+
+    #[test]
+    fn an_implausible_implicit_grade_makes_the_reference_unavailable() {
+        let d: Vec<f64> = (0..41).map(|k| k as f64 * 5.0).collect();
+        // Tunnel des stations 10 à 14 (20 m) ; MNT à 100 m avant, 140 m après : 40 m sur 40 m.
+        let raw: Vec<f64> = (0..41).map(|k| if k < 12 { 100.0 } else { 140.0 }).collect();
+        let t = tunnel_item("t", "c", &d, &raw, &raw, &[true; 41], &[false; 41], 10, 14);
+        assert_eq!(t["reference_indisponible"], true, "{t}");
+        assert!(t["pass"].is_null(), "non compté");
+        assert!(t["pente_implicite_portails"].as_f64().unwrap() > IMPLICIT_GRADE_MAX);
     }
 
     #[test]
