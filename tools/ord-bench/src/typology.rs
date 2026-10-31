@@ -251,12 +251,19 @@ pub fn disagreements(ours: &[Ours], reference: &[Ref], max: usize, to_d: &dyn Fn
 }
 
 /// `<id>.surface.csv` de `stadia_match.py` : `s_debut_m,s_fin_m,surface,…`, triée par abscisse.
+///
+/// Les plages `use=discontinuite` (sauts de Valhalla remplacés par la trace d'origine au
+/// recalage) n'ont aucune référence de revêtement : elles sont écartées, donc hors de R2 et R3.
+/// Elles restent comptées dans M1, qui ne lit que le service.
 pub fn read_stadia_surface(text: &str) -> Vec<Ref> {
     let mut out: Vec<Ref> = text
         .lines()
         .skip(1)
         .filter_map(|l| {
             let f: Vec<&str> = l.split(',').collect();
+            if f.get(4).is_some_and(|u| u.trim() == "discontinuite") {
+                return None;
+            }
             Some(Ref {
                 from: f.first()?.trim().parse().ok()?,
                 to: f.get(1)?.trim().parse().ok()?,
@@ -335,6 +342,26 @@ mod tests {
         assert_eq!(d[0]["classe_service"], "unpaved");
         assert_eq!(d[0]["source_service"], "inferred_highway");
         assert_eq!(d[0]["longueur_plage_m"], 10.0);
+    }
+
+    #[test]
+    fn discontinuities_have_no_surface_reference() {
+        let csv = "s_debut_m,s_fin_m,surface,road_class,use,way_id\n\
+                   0.0,100.0,paved,tertiary,road,1\n\
+                   100.0,200.0,,,discontinuite,\n\
+                   200.0,300.0,gravel,track,road,2\n";
+        let r = read_stadia_surface(csv);
+        assert_eq!(r.len(), 2);
+        assert!(r.iter().all(|x| x.to <= 100.0 || x.from >= 200.0));
+        // Service : revêtu partout, non apparié sur la discontinuité.
+        let ours = [
+            Ours { from: 0.0, to: 100.0, class: Class::Paved, matched: true, source: Source::Tagged },
+            Ours { from: 100.0, to: 200.0, class: Class::Unknown, matched: false, source: Source::None },
+            Ours { from: 200.0, to: 300.0, class: Class::Unpaved, matched: true, source: Source::Tagged },
+        ];
+        let a = agreement(&ours, &r);
+        assert_eq!((a.compared_m, a.paved, a.class), (200.0, 1.0, 1.0), "discontinuité hors de R2 et R3");
+        assert!((a.unmatched - 1.0 / 3.0).abs() < 1e-9, "mais comptée dans M1");
     }
 
     #[test]
