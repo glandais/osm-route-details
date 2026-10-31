@@ -4,7 +4,7 @@
 //!
 //! Lit le cache de banc (hors ligne) : `ord-bench fill-cache` d'abord, puis
 //! `cargo test -p ord-bench --test golden -- --ignored --nocapture`. `ORD_GOLDEN_UPDATE=1` réécrit
-//! les snapshots `tests/golden/<id>.json`.
+//! les snapshots `tests/golden/<id>.json`. Scénario des trois modes de sortie : `golden_three_modes`.
 
 use ord_bench::golden::{diff, response, scenario, snapshot_path, SCENARIOS};
 use ord_bench::manifest::Manifest;
@@ -106,4 +106,52 @@ async fn golden_structures() {
         assert!(out.is_empty(), "{id} : {out:#?}");
         println!("{id} : conforme au snapshot");
     }
+}
+
+/// Les trois modes de sortie sur le même parcours (T05 §2.6) : traversée du pont de Pirmil
+/// (calibration), points d'entrée espacés autour du pont.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_three_modes() {
+    use ord_bench::golden::{modes_response, structure_scenario, MODES_SCENARIO};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let s = structure_scenario(&paths, &manifest, MODES_SCENARIO).expect("scénario");
+    let r = modes_response(&service, &s).await.expect("réponses");
+    let pts = |m: &str| r[m]["points"].as_array().expect("points").clone();
+    let (input, distance, bp) = (pts("input"), pts("distance"), pts("input_with_breakpoints"));
+    assert_eq!(input.len(), 3);
+    // Points d'entrée identiques en `input` et en `input_with_breakpoints`.
+    let bp_inputs: Vec<&Value> = bp.iter().filter(|p| p["origin"] == "input").collect();
+    assert_eq!(bp_inputs.len(), 3);
+    for (a, b) in input.iter().zip(&bp_inputs) {
+        assert_eq!((&a["d_m"], &a["ele"], &a["index"]), (&b["d_m"], &b["ele"], &b["index"]));
+    }
+    // Bornes du pont portées par des points insérés.
+    let entry = &r["input_with_breakpoints"]["summary"]["structures"][0];
+    for (k, reason) in [("from_m", "structure_start"), ("to_m", "structure_end")] {
+        assert!(
+            bp.iter().any(|p| p["d_m"] == entry[k]
+                && p["reasons"].as_array().is_some_and(|x| x.contains(&reason.into()))),
+            "{k}"
+        );
+    }
+    // Même résumé dans les trois modes ; `distance` au pas de 25 m, sans origine.
+    assert_eq!(r["input"]["summary"], r["distance"]["summary"]);
+    assert_eq!(r["input"]["summary"], r["input_with_breakpoints"]["summary"]);
+    assert!(distance.iter().all(|p| p.get("origin").is_none()));
+    assert!(r.to_string().find("\"lat\"").is_none(), "aucune coordonnée dans le snapshot");
+    let path = snapshot_path(MODES_SCENARIO);
+    if std::env::var_os("ORD_GOLDEN_UPDATE").is_some() || !path.exists() {
+        std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+        println!("{MODES_SCENARIO} : snapshot écrit");
+        return;
+    }
+    let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut out = Vec::new();
+    diff("", &expected, &r, &mut out);
+    assert!(out.is_empty(), "{out:#?}");
+    println!("{MODES_SCENARIO} : conforme au snapshot");
 }

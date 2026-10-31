@@ -1614,6 +1614,12 @@ pub async fn fill_cache(
         crate::golden::response_with(&service, &scenario, crate::golden::structure_options()).await?;
         filled.push(format!("golden-{id}"));
     }
+    {
+        let id = crate::golden::MODES_SCENARIO;
+        let scenario = crate::golden::structure_scenario(paths, &manifest, id)?;
+        crate::golden::modes_response(&service, &scenario).await?;
+        filled.push(format!("golden-{id}"));
+    }
     for id in goldens {
         let scenario = crate::golden::scenario(paths, &manifest, id)?;
         crate::golden::response(&service, &scenario).await?;

@@ -27,6 +27,36 @@ pub const SCENARIOS: [&str; 2] = ["krk", "liege-belle-liegeoise"];
 pub const STRUCTURE_SCENARIOS: [&str; 3] =
     ["test1-depart-sur-tablier", "nantes-pirmil-deux-fois", "nantes-pirmil-demi-tour"];
 
+/// Scénario des trois modes de sortie sur le même parcours (T05 §2.6) : traversée du pont de
+/// Pirmil (calibration), points d'entrée à 300 m au-delà des culées et au milieu.
+pub const MODES_SCENARIO: &str = "nantes-pirmil-trois-modes";
+
+/// Modes du scénario, avec leurs options.
+pub fn modes() -> [(&'static str, Value); 3] {
+    [
+        ("input", json!({"sampling": {"mode": "input"}})),
+        ("distance", json!({"sampling": {"mode": "distance", "step_m": 25.0}})),
+        ("input_with_breakpoints", json!({"sampling": {"mode": "input_with_breakpoints"}})),
+    ]
+}
+
+/// Réponses du scénario dans les trois modes, `{mode: réponse}`, champs volatils effacés et
+/// positions des points retirées (aucune coordonnée dans le snapshot).
+pub async fn modes_response(service: &Service, s: &Scenario) -> anyhow::Result<Value> {
+    let mut out = serde_json::Map::new();
+    for (mode, options) in modes() {
+        let mut r = response_with(service, s, options).await?;
+        for p in r["points"].as_array_mut().into_iter().flatten() {
+            if let Some(m) = p.as_object_mut() {
+                m.remove("lat");
+                m.remove("lon");
+            }
+        }
+        out.insert(mode.to_owned(), r);
+    }
+    Ok(Value::Object(out))
+}
+
 /// Options des scénarios d'ouvrage : profil à 10 m (le tablier se lit), toutes les sections.
 pub fn structure_options() -> Value {
     json!({"sampling": {"mode": "distance", "step_m": 10.0}})
@@ -79,6 +109,11 @@ pub fn structure_scenario(paths: &BenchPaths, manifest: &Manifest, id: &str) -> 
         bail!("{ouvrage} : ouvrage de la série tenue à l'écart, refusé en golden (T05 §2.6)");
     }
     let points = match id {
+        MODES_SCENARIO => {
+            let (a, m, b) = (point(ouvrage, "A")?, point(ouvrage, "milieu")?, point(ouvrage, "B")?);
+            // Points d'entrée espacés : le pont tombe entre deux points (insertion attendue).
+            vec![beyond(a, m, 300.0), m, beyond(b, m, 300.0)]
+        }
         "nantes-pirmil-deux-fois" | "nantes-pirmil-demi-tour" => {
             let (a, m, b) = (point(ouvrage, "A")?, point(ouvrage, "milieu")?, point(ouvrage, "B")?);
             let (ea, eb) = (beyond(a, m, 60.0), beyond(b, m, 60.0));
