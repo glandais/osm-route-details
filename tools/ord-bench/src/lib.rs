@@ -94,8 +94,12 @@ impl BenchPaths {
 /// (règles 2026.10.8, banc 53225a8 et adbf6f1) : baro des points insérés gardé à 30 m d'une voie
 /// des tuiles de la campagne ; recalages régénérés (colonne `insere`, pas de baro dans les trous de
 /// la trace brute). Remise à `None` avec les règles 2026.10.9 (incrément 5 : points de rupture ;
-/// campagne dans les deux modes, `distance` et `input_with_breakpoints`).
-pub const BENCH_REVISION: Option<&str> = None;
+/// campagne dans les deux modes, `distance` et `input_with_breakpoints`). `bench1` (règles
+/// 2026.10.9) : en mode `input_with_breakpoints`, références des ouvrages (MNT des approches E3,
+/// test de niveau, E5, bandes de portail E4, repli 1–3 km) et positions des passages lues en
+/// mode `distance` ; seule la sortie testée vient du mode `input_with_breakpoints` (E2b garde
+/// la sortie non corrigée de ce mode).
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

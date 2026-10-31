@@ -313,8 +313,15 @@ pub fn way_geometries(bench: &Path) -> BTreeMap<u64, Vec<LatLon>> {
 pub struct CaseProfile<'a> {
     pub d: &'a [f64],
     pub pts: &'a [LatLon],
+    /// Sortie testée du service (mode de la passe), ramenée sur la grille.
     pub svc: &'a [f64],
+    /// Références « MNT » (approches E3, test de niveau, E5, bandes de portail E4) : sortie
+    /// `structure_correction: false` du mode `distance`, quel que soit le mode testé. Le passage
+    /// compté et sa référence sont des propriétés de la trace et des données, pas du mode.
     pub raw: &'a [f64],
+    /// Sortie corrigée du mode `distance` : repli 1–3 km du décalage local (baro − service au
+    /// sol), égale à `svc` en mode `distance`.
+    pub ref_svc: &'a [f64],
     /// Baro transporté, sans décalage (`NaN` = absent ou masqué).
     pub baro: &'a [f64],
     /// Station sur un pont ou un tunnel du service.
@@ -693,7 +700,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     let x = (p.d[i] - dm).abs();
                     (1_000.0..=3_000.0).contains(&x) && !p.on_structure[i]
                 })
-                .map(|i| p.baro[i] - p.svc[i])
+                .map(|i| p.baro[i] - p.ref_svc[i])
                 .filter(|x| x.is_finite())
                 .collect();
             let others: Vec<(usize, usize)> =
@@ -1908,6 +1915,7 @@ mod tests {
                 pts: &pts,
                 svc: &raw,
                 raw: &raw,
+                ref_svc: &raw,
                 baro,
                 on_structure: &flags,
                 ign: &flags,
@@ -1986,6 +1994,7 @@ mod tests {
                 pts: &pts,
                 svc: &raw,
                 raw: &raw,
+                ref_svc: &raw,
                 baro,
                 on_structure: &flags,
                 ign: &ign,
@@ -2016,6 +2025,89 @@ mod tests {
         let gap: Vec<f64> = (0..n).map(|k| if (190..=210).contains(&k) { f64::NAN } else { 0.0 }).collect();
         let i = items(&gap, Some(50.0));
         assert_eq!(i[0]["niveau_sans_baro"], true, "{i:?}");
+    }
+
+    #[test]
+    fn references_do_not_depend_on_the_tested_output() {
+        // Pont de 200 m (stations 180 à 220) et tunnel (stations 300 à 340) sur un MNT en pente
+        // douce ; même référence (`raw`, `ref_svc`), deux sorties testées différentes : mêmes
+        // passages, décalages, mentions de niveau et bandes de portail ; seuls les écarts changent.
+        let n = 401;
+        let m_per_deg = haversine_m(LatLon::new(47.0, 0.0), LatLon::new(47.0, 1.0));
+        let d: Vec<f64> = (0..n).map(|k| k as f64 * 5.0).collect();
+        let pts: Vec<LatLon> = d.iter().map(|x| LatLon::new(47.0, x / m_per_deg)).collect();
+        let raw: Vec<f64> = d.iter().map(|x| 100.0 + 0.01 * x).collect();
+        let flags = vec![false; n];
+        let ign = vec![true; n];
+        let on: Vec<bool> = (0..n).map(|k| (180..=220).contains(&k) || (300..=340).contains(&k)).collect();
+        let ouvrage = |id: &str, kind: Kind, a: usize, b: usize, mnh: Option<f64>| Ouvrage {
+            id: id.into(),
+            kind,
+            length_m: d[b] - d[a],
+            pts: [pts[a], pts[(a + b) / 2], pts[b]],
+            perso: false,
+            perimeter: Perimeter::InGraph,
+            perimeter_ambiguous: false,
+            chain: Vec::new(),
+            avalanche_protector: false,
+            mnh_milieu: mnh,
+        };
+        let os = [
+            ouvrage("pont", Kind::Bridge, 180, 220, Some(12.0)),
+            ouvrage("tunnel", Kind::Tunnel, 300, 340, None),
+        ];
+        let baro: Vec<f64> =
+            (0..n).map(|k| raw[k] + 3.0 + if (180..=220).contains(&k) { 12.0 } else { 0.0 }).collect();
+        let items = |svc: &[f64]| {
+            let p = CaseProfile {
+                d: &d,
+                pts: &pts,
+                svc,
+                raw: &raw,
+                ref_svc: &raw,
+                baro: &baro,
+                on_structure: &on,
+                ign: &ign,
+                matched: &flags,
+                unmatched_warn: &flags,
+                tile_structure: &flags,
+                ring: None,
+            };
+            perso_items("c", &p, &os, 40.0)
+        };
+        let a = items(&raw);
+        // Sortie testée interpolée grossièrement (points tous les 50 m) et bruitée sur les ouvrages.
+        let coarse: Vec<f64> =
+            (0..n).map(|k| raw[k - k % 10] + if on[k] { 12.0 + (k % 7) as f64 * 0.3 } else { 0.0 }).collect();
+        let b = items(&coarse);
+        assert_eq!(a.len(), b.len());
+        let metrics: Vec<&str> = a.iter().filter_map(|i| i["metrique"].as_str()).collect();
+        assert!(metrics.contains(&"E3") && metrics.contains(&"E4"), "{metrics:?}");
+        let reference_keys = |v: &Value| -> Value {
+            let keep = [
+                "ouvrage",
+                "metrique",
+                "decalage_approches_m",
+                "decalage_local_m",
+                "bande_remplacee",
+                "niveau_non_discriminant",
+                "niveau_sans_baro",
+                "reference_incertaine",
+                "d_milieu_m",
+            ];
+            Value::Object(
+                v.as_object()
+                    .unwrap()
+                    .iter()
+                    .filter(|(k, _)| keep.contains(&k.as_str()))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+            )
+        };
+        for (x, y) in a.iter().zip(&b) {
+            assert_eq!(reference_keys(x), reference_keys(y));
+        }
+        assert_ne!(a, b, "les écarts du service changent");
     }
 
     #[test]

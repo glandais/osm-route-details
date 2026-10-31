@@ -726,11 +726,26 @@ pub async fn measure_case(
     eval: &OuvrageEval<'_>,
 ) -> anyhow::Result<(Value, Value, Vec<Value>)> {
     let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
-    let (p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
+    let (mut p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
     let (p_raw, tau_raw, _) = recolle(service, case, false, rules, dem.threshold_m).await?;
     if p_raw.d.len() != p.d.len() {
         bail!("profils de longueurs différentes");
     }
+    // Références des ouvrages (MNT des approches, du niveau, d'E5, des portails ; repli 1–3 km)
+    // et positions des passages : toujours lues en mode `distance`, quel que soit le mode testé.
+    // E2b garde la sortie non corrigée du mode testé (`p_raw`).
+    let (ref_svc, ref_raw) = if service.mode() == BenchMode::Reference {
+        (p.ele.clone(), p_raw.ele.clone())
+    } else {
+        let reference = service.with_mode(BenchMode::Reference);
+        let (q, _, _) = recolle(&reference, case, true, rules, dem.threshold_m).await?;
+        let (q_raw, _, _) = recolle(&reference, case, false, rules, dem.threshold_m).await?;
+        if q.d != p.d || q_raw.d != p.d {
+            bail!("grilles de référence et testée différentes");
+        }
+        p.pts = q.pts;
+        (q.ele, q_raw.ele)
+    };
     let r = &responses[0];
     // Abscisse recalée → distance du service (identiques sans rééchantillonnage), tronçons
     // recollés comme les profils.
@@ -874,7 +889,7 @@ pub async fn measure_case(
     let keep = |v: &[f64]| -> Vec<f64> { (0..n).map(|i| if inside(i) { v[i] } else { f64::NAN }).collect() };
     let baro_unmasked: Vec<f64> =
         (0..n).map(|i| if masked[i] || !inside(i) { f64::NAN } else { baro[i] }).collect();
-    let (svc_eval, raw_eval) = (keep(&p.ele), keep(&p_raw.ele));
+    let (svc_eval, raw_eval, ref_svc_eval) = (keep(&p.ele), keep(&ref_raw), keep(&ref_svc));
     // Ponts et tunnels des tuiles de la campagne (§4 bis.2, §4 bis.3) : tuiles des abords des
     // ouvrages du corpus seulement.
     let near: Vec<LatLon> = p
@@ -890,6 +905,7 @@ pub async fn measure_case(
         pts: &p.pts,
         svc: &svc_eval,
         raw: &raw_eval,
+        ref_svc: &ref_svc_eval,
         baro: &baro_unmasked,
         on_structure: &p.on_structure,
         ign: &p.ign,
@@ -1451,7 +1467,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "extraits_tenus_a_l_ecart": held_out_measured,
             "baro_points_inseres": inserted_report,
             "notes": [
-                "Deux modes (README §2.2, étape 2) : cas, ouvrages, agrégats et verdicts de premier niveau en sampling.mode = distance au pas de 5 m (les mesures point par point des témoins et des parcours vcyclist en mode input) ; clé input_with_breakpoints : mêmes requêtes envoyées dans le mode par défaut, sortie rééchantillonnée sur la même grille de 5 m (étape 3 ; altitude interpolée linéairement entre points consécutifs, null si l'un est sans altitude ; position des points d'entrée = position envoyée ; méthode de la station = none si l'un des deux points est none, sinon dsm_deck ou interpolated_structure si l'un des deux la porte, sinon celle du plus proche), et réduite aux points d'entrée pour les mesures point par point ; points_inseres = bilan des points insérés par cas de calibration (sans position), jamais pour les extraits tenus à l'écart ; typologie à chaud mesurée dans la première passe seulement",
+                "Deux modes (README §2.2, étape 2) : cas, ouvrages, agrégats et verdicts de premier niveau en sampling.mode = distance au pas de 5 m (les mesures point par point des témoins et des parcours vcyclist en mode input) ; clé input_with_breakpoints : mêmes requêtes envoyées dans le mode par défaut, sortie rééchantillonnée sur la même grille de 5 m (étape 3 ; altitude interpolée linéairement entre points consécutifs, null si l'un est sans altitude ; position des points d'entrée = position envoyée ; méthode de la station = none si l'un des deux points est none, sinon dsm_deck ou interpolated_structure si l'un des deux la porte, sinon celle du plus proche), et réduite aux points d'entrée pour les mesures point par point ; références des ouvrages (MNT des approches E3, test de niveau, E5, bandes de portail E4, repli 1–3 km du décalage local) et positions des passages toujours lues en mode distance, seule la sortie testée venant du mode input_with_breakpoints ; E2b de ce mode compare ses sorties corrigée et non corrigée ; points_inseres = bilan des points insérés par cas de calibration (sans position), jamais pour les extraits tenus à l'écart ; typologie à chaud mesurée dans la première passe seulement",
                 "Baro des points insérés (README §2.1, étape 3 ; criteria.yaml preparation.baro_points_inseres) : point insere = 1 gardé seulement si sa position sur la géométrie recalée est à ≤ 30 m d'une ligne de la couche streets (toutes classes, tuile z14 et 8 voisines, cache de la campagne) ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté ; baro_points_inseres = bilan par cas de calibration ; traces tenues à l'écart : règle appliquée sur les seules plages lues des extraits, bilan non rapporté",
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
                 "E3 : baro corrigé localement sur les traces perso, décalage = médiane (baro − MNT LiDAR, profil du service sans correction d'ouvrage) sur les approches de 50 à 300 m de chaque côté du pont, hors autres ouvrages (service ou tuiles) et fenêtres masquées ; moins de 20 stations d'un côté : repli sur la médiane baro − service au sol entre 1 et 3 km du milieu (decalage_repli_1_3km) ; côtés différant de plus de 2 m : reference_incertaine, rapportée, non comptée (README §4 bis.3) ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
