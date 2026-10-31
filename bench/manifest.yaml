@@ -10,8 +10,8 @@ depots_externes:
   vcyclist: {depot: "git@github.com:glandais/vcyclist.git", commit: 4dfd6c5, version: "6.11.0-1", licence_code: "Apache-2.0",
              copie: data/vcyclist/, sommes: data/vcyclist/SHA256SUMS, sha256_sommes: b572a94f489c083d89be36e627e43cfb54eca0cc64fee20401d50b63c40f91ac}
   osm-surface: {depot: "osm-surface (dépôt local de l'utilisateur, sans remote)", commit: 44e5da6, licence_code: "Apache-2.0",
-                licence_sha256: e27423bbbba12e73fc6ef134fec4596d321a000d414db097c960c5c5f23c79bb, licence_note: "LICENSE ajouté le 2026-10-30, pas encore commité dans osm-surface",
-                copie: data/osm-surface/, sommes: data/osm-surface/SHA256SUMS, sha256_sommes: 8042a50b526f89084d5b84ee0523bc1bfcdf78b63f7d06db604c3ecf5535789a}
+                licence_sha256: e27423bbbba12e73fc6ef134fec4596d321a000d414db097c960c5c5f23c79bb, licence_commit: 53b441b, licence_note: "LICENSE copié du commit 53b441b (« Licence Apache 2.0 ») ; les autres fixtures du commit 44e5da6",
+                copie: data/osm-surface/, sommes: data/osm-surface/SHA256SUMS, sha256_sommes: ba40cda87febd99a075f41060004f4cfd968875b7f280696ce977033b27f90e7}
 
 # ---------------------------------------------------------------------------------------------
 # 1. Bancs de vcyclist (copiés dans data/vcyclist/, Apache-2.0, provenance dans PROVENANCE.md)
