@@ -14,3 +14,8 @@ pub(crate) fn ratio(v: f64) -> f64 {
 pub(crate) fn coord(v: f64) -> f64 {
     (v * 1_000_000.0).round() / 1_000_000.0
 }
+
+/// Pentes : au 0,01 %.
+pub(crate) fn pct(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}

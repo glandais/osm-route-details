@@ -1,17 +1,18 @@
 //! Orchestrateur : admission, budget, chaînes typologie et élévation, décision (T01 §3, §5).
 //!
-//! Incrément 2 : pipeline séquentiel, élévation seule (pas de typologie) : préparation → zonage
-//! (zone France) → lecture du MNT (IGN et repli Mapterhorn) → décision → fusion, points de sortie
-//! et assemblage.
+//! Incrément 3 : préparation → zonage (zone France) → typologie et lecture du MNT en parallèle
+//! (`tokio::join!`) → décision → fusion, segments, points de sortie et assemblage.
 //! L'admission (file bornée, 503 `overloaded`) arrive à l'incrément 6.
 
 pub mod decision;
 pub mod elevation;
 mod orchestrator;
+pub mod typology;
 
 use std::time::Duration;
 
 use ord_core::elevation::ElevationError;
+use ord_core::typology::TypologyError;
 
 pub use decision::decide_outcome;
 pub use orchestrator::{Orchestrator, RetryAfterPolicy, Sources};
@@ -71,6 +72,16 @@ impl From<ElevationError> for PipelineError {
             ElevationError::Timeout => Self::Timeout,
             ElevationError::Cancelled => Self::Cancelled,
             ElevationError::Internal(cause) => Self::Internal(cause),
+        }
+    }
+}
+
+impl From<TypologyError> for PipelineError {
+    fn from(e: TypologyError) -> Self {
+        match e {
+            TypologyError::Timeout => Self::Timeout,
+            TypologyError::Cancelled => Self::Cancelled,
+            TypologyError::Internal(cause) => Self::Internal(cause),
         }
     }
 }

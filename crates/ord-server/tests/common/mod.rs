@@ -32,7 +32,7 @@ pub const NOWHERE: &str = "http://127.0.0.1:9";
 
 /// Configuration de test : hors ligne, cache disque dans un dossier temporaire neuf, IGN désactivé
 /// et toutes les URL vers `NOWHERE`. Une requête valide y lit des tuiles absentes du disque :
-/// 503 `data_unavailable`, sans aucun réseau.
+/// 503 `data_unavailable` (typologie et élévation), sans aucun réseau.
 pub fn test_config() -> Config {
     let mut config = Config::default();
     config.cache.offline = true;
@@ -41,6 +41,7 @@ pub fn test_config() -> Config {
     config.elevation.mapterhorn.url = format!("{NOWHERE}/{{z}}/{{x}}/{{y}}.webp");
     config.elevation.mapterhorn.tilejson_url = format!("{NOWHERE}/tilejson.json");
     config.elevation.mapterhorn.versions_url = format!("{NOWHERE}/download_urls.json");
+    config.typology.url = format!("{NOWHERE}/{{z}}/{{x}}/{{y}}");
     config.coverage.coverage_index_url = None;
     config.coverage.polygons_url = None;
     config.cache.dir = std::env::temp_dir().join(format!("ord-test-{}", uuid_like()));
@@ -53,6 +54,37 @@ fn uuid_like() -> String {
     format!("{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed))
 }
 
+/// Réseau des tests : une route revêtue le long du méridien de `START` sur 4 km, avec un pont de
+/// 100 m à partir de 600 m, et une route le long du méridien de `KRK`.
+pub fn streets() -> ord_testkit::SyntheticStreets {
+    use ord_testkit::routes::{meridian, START};
+    use ord_testkit::SyntheticStreet;
+    let north = |from: f64, to: f64| meridian(ord_testkit::routes::offset_north(START, from), to - from, 2);
+    ord_testkit::SyntheticStreets::new(vec![
+        SyntheticStreet::new("residential", north(-200.0, 600.0)).with("surface", "paved"),
+        SyntheticStreet::new("residential", north(600.0, 700.0))
+            .with("surface", "paved")
+            .with("bridge", "true"),
+        SyntheticStreet::new("residential", north(700.0, 4_000.0)).with("surface", "paved"),
+        SyntheticStreet::new("track", meridian(ord_testkit::routes::offset_north(KRK, -200.0), 2_000.0, 2)),
+    ])
+}
+
+/// Hors de France (Krk, Croatie).
+pub const KRK: ord_domain::LatLon = ord_domain::LatLon::new(45.2423, 14.5621);
+
+/// Script de serveur : les tuiles de rues z14 de `streets()`, sinon `script`.
+pub fn with_streets(
+    script: impl Fn(usize, &ord_testkit::ScriptedRequest) -> Option<ord_testkit::ScriptedResponse>
+        + Send
+        + Sync
+        + 'static,
+) -> impl Fn(usize, &ord_testkit::ScriptedRequest) -> Option<ord_testkit::ScriptedResponse> + Send + Sync + 'static
+{
+    let streets = streets().script();
+    move |n, r| script(n, r).or_else(|| streets(n, r))
+}
+
 pub fn app() -> Router {
     app_with(&test_config())
 }
@@ -61,17 +93,11 @@ pub fn app_with(config: &Config) -> Router {
     router(AppState::new(config).expect("état du service"))
 }
 
-/// La requête a passé la validation : sans tuile en cache, l'élévation est en panne (503, ou 200
-/// `partial` avec `accept_partial`).
+/// La requête a passé la validation : sans tuile en cache, typologie et élévation sont en panne
+/// (503 `both`, même avec `accept_partial`).
 pub fn assert_passed_validation(reply: &Reply) {
-    if reply.status == StatusCode::OK {
-        let body = reply.json();
-        assert_eq!(body["status"], "partial", "{}", reply.text);
-        assert_eq!(body["quality"]["warnings"][0]["code"], "elevation_unavailable");
-        return;
-    }
     let body = assert_problem(reply, StatusCode::SERVICE_UNAVAILABLE, "data_unavailable");
-    assert_eq!(body["details"]["source"], "elevation");
+    assert_eq!(body["details"]["source"], "both");
     assert!(reply.headers.get("retry-after").is_some(), "Retry-After toujours présent");
 }
 

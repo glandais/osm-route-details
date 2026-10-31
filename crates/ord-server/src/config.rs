@@ -410,6 +410,9 @@ impl Config {
         if !(1..=14).contains(&self.coverage.polygons_zoom) || self.coverage.polygons_concurrency == 0 {
             return invalid("coverage.polygons_zoom", "zoom within [1, 14] and positive concurrency");
         }
+        if self.typology.concurrency == 0 || self.typology.zoom != 14 {
+            return invalid("typology", "zoom must be 14 (Shortbread) and concurrency positive");
+        }
         if self.typology.source == TypologySourceKind::VersatilesFile && self.typology.path.is_none() {
             return invalid("typology.path", "required when typology.source = versatiles_file");
         }

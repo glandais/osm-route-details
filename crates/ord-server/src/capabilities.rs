@@ -2,6 +2,7 @@
 //!
 //! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
+use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
 use ord_core::{Rules, RULES_VERSION};
 use ord_data::catalog::StaticCatalog;
 use ord_domain::catalog::{Attribution, DataCatalog, DataVersion};
@@ -37,6 +38,58 @@ pub struct Capabilities {
     pub elevation_sources: Vec<DataVersion>,
     /// Elevation rules that shape the output.
     pub elevation_rules: ElevationRulesV1,
+    /// Typology rules that shape the output.
+    pub typology_rules: TypologyRulesV1,
+}
+
+// Paramètres effectifs du HMM et des segments (T03 §5.2, §8) : un ajout au contrat.
+/// Map matching and segmentation rules of `rules_version`.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct TypologyRulesV1 {
+    /// Street tile schema read.
+    pub schema: &'static str,
+    /// Zoom of the street tiles.
+    pub zoom: u8,
+    /// Candidate search radius, in metres.
+    pub search_radius_m: f64,
+    pub max_candidates: usize,
+    /// Standard deviation of the distance between an observation and its street, in metres.
+    pub sigma_z_m: f64,
+    /// Scale of the transition cost, in metres.
+    pub beta_m: f64,
+    /// Spacing of the observations along the route, in metres.
+    pub step_m: f64,
+    /// Cost of a straight jump between two streets the network does not join.
+    pub jump_cost: f64,
+    /// Longest straight jump, in metres.
+    pub max_jump_m: f64,
+    /// Extra emission cost of a footway, steps or pedestrian street.
+    pub footway_cost: f64,
+    /// A matched chain shorter than this is dropped as unmatched, in metres.
+    pub min_chain_m: f64,
+    /// A matched ground stretch shorter than this is merged into its longest neighbour, in metres.
+    pub min_segment_m: f64,
+}
+
+impl TypologyRulesV1 {
+    fn new(rules: &Rules, zoom: u8) -> Self {
+        let t = &rules.typology;
+        let m = &t.matcher;
+        Self {
+            schema: ord_adapters::Shortbread::ID,
+            zoom,
+            search_radius_m: m.search_radius_m,
+            max_candidates: m.max_candidates,
+            sigma_z_m: m.sigma_z,
+            beta_m: m.beta,
+            step_m: m.step_m,
+            jump_cost: m.jump_cost,
+            max_jump_m: m.max_jump_m,
+            footway_cost: m.footway_cost,
+            min_chain_m: m.min_chain_m,
+            min_segment_m: t.min_segment_m,
+        }
+    }
 }
 
 // Règles publiées (T04 §5.4, T07 §4) : un ajout au contrat.
@@ -151,27 +204,22 @@ pub struct EnumCatalog {
 
 impl EnumCatalog {
     fn new() -> Self {
-        // Les listes en dur seront remplacées par les enums d'ord-core quand ils existeront
-        // (classification : incrément 3 ; élévation et points de rupture : incréments 1, 4, 5).
+        // Classification : enums d'ord-core ; élévation et points de rupture : listes en dur.
         Self {
             sections: SectionV1::ALL.to_vec(),
             sampling_modes: SamplingModeV1::ALL.to_vec(),
             gain_presets: GainPreset::ALL.to_vec(),
             status: vec!["complete", "partial"],
-            structure: vec!["ground", "bridge", "tunnel", "unknown"],
-            structure_source: vec!["osm", "heuristic", "osm_heuristic"],
-            surface_class: vec!["paved", "unpaved", "unknown"],
-            surface_source: vec!["tagged", "inferred_tracktype", "inferred_highway", "none"],
-            way_kind: vec![
-                "major_road",
-                "minor_road",
-                "track",
-                "path",
-                "cycleway",
-                "footway",
-                "steps",
-                "unknown",
-            ],
+            // `ford` est réservé (V2) : pas encore publié.
+            structure: StructureClass::ALL
+                .iter()
+                .filter(|s| **s != StructureClass::Ford)
+                .map(|s| s.as_str())
+                .collect(),
+            structure_source: StructureSource::ALL.iter().map(|s| s.as_str()).collect(),
+            surface_class: SurfaceClass::ALL.iter().map(|s| s.as_str()).collect(),
+            surface_source: SurfaceSource::ALL.iter().map(|s| s.as_str()).collect(),
+            way_kind: WayKind::ALL.iter().map(|s| s.as_str()).collect(),
             ele_method: vec!["dem", "dsm_deck", "interpolated_structure", "gap_filled", "none"],
             terrain_origin: TerrainOrigin::ALL.to_vec(),
             point_origin: vec!["input", "inserted"],
@@ -251,6 +299,7 @@ impl Capabilities {
             },
             elevation_sources: catalog.elevation_sources(),
             elevation_rules: ElevationRulesV1::new(&Rules::default()),
+            typology_rules: TypologyRulesV1::new(&Rules::default(), config.typology.zoom),
         }
     }
 }

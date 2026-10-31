@@ -22,6 +22,7 @@ fn online_config(server: &ScriptedServer, dir: &std::path::Path) -> Config {
     config.cache.offline = false;
     config.cache.dir = dir.to_path_buf();
     config.elevation.mapterhorn.url = server.url_template.clone();
+    config.typology.url = server.url_template.clone();
     config.elevation.mapterhorn.tile_size = 64;
     config
 }
@@ -29,7 +30,7 @@ fn online_config(server: &ScriptedServer, dir: &std::path::Path) -> Config {
 async fn served(
     script: impl Fn(usize, &ord_testkit::ScriptedRequest) -> Option<ScriptedResponse> + Send + Sync + 'static,
 ) -> (ScriptedServer, tempfile::TempDir) {
-    (terrain().serve(script).await, tempfile::tempdir().expect("dossier temporaire"))
+    (terrain().serve(with_streets(script)).await, tempfile::tempdir().expect("dossier temporaire"))
 }
 
 fn without_volatile(mut v: Value) -> Value {
@@ -52,7 +53,7 @@ async fn input_mode_profile_and_summary() {
     assert_eq!(r["meta"]["api_version"], ord_server::API_VERSION);
     assert_eq!(r["meta"]["rules_version"], ord_core::RULES_VERSION);
     assert_eq!(r["meta"]["data_versions"]["elevation"][0]["source"], "mapterhorn");
-    assert!(r["meta"]["data_versions"].get("typology").is_none(), "typologie non lue à l'incrément 1");
+    assert_eq!(r["meta"]["data_versions"]["typology"]["source"], "versatiles-shortbread");
     let points = r["points"].as_array().expect("points");
     assert_eq!(points.len(), 5);
     for (i, (p, q)) in points.iter().zip(&pts).enumerate() {
@@ -158,7 +159,7 @@ async fn sections_filter_the_response() {
 
 #[tokio::test]
 async fn failed_tiles_give_503_or_a_partial_200() {
-    let (server, dir) = served(|_, _| Some(ScriptedResponse::status(400))).await;
+    let (server, dir) = served(|_, r| (r.z != 14).then(|| ScriptedResponse::status(400))).await;
     let config = online_config(&server, dir.path());
     let pts = meridian(START, 800.0, 3);
     let reply = send(app_with(&config), post_json(&request_body(&pts, None))).await;
@@ -182,7 +183,7 @@ async fn failed_tiles_give_503_or_a_partial_200() {
 
 #[tokio::test]
 async fn absent_tiles_give_elevation_missing() {
-    let (server, dir) = served(|_, _| Some(ScriptedResponse::status(404))).await;
+    let (server, dir) = served(|_, r| (r.z != 14).then(|| ScriptedResponse::status(404))).await;
     let r = send(
         app_with(&online_config(&server, dir.path())),
         post_json(&request_body(&meridian(START, 300.0, 2), None)),
@@ -192,4 +193,74 @@ async fn absent_tiles_give_elevation_missing() {
     assert_eq!(r["status"], "partial");
     assert_eq!(r["quality"]["warnings"][0]["code"], "elevation_missing");
     assert_eq!(r["summary"]["terrain_m"], json!({"none": 300.0}));
+}
+
+#[tokio::test]
+async fn segments_cover_the_route_with_the_bridge() {
+    let (server, dir) = served(|_, _| None).await;
+    let pts = meridian(START, 2_000.0, 5);
+    let r = send(app_with(&online_config(&server, dir.path())), post_json(&request_body(&pts, None)))
+        .await
+        .json();
+    assert_eq!(r["status"], "complete", "{r}");
+    let segs = r["segments"].as_array().expect("segments");
+    let kinds: Vec<&str> = segs.iter().map(|s| s["structure"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["ground", "bridge", "ground"], "{segs:?}");
+    assert_eq!(segs[0]["from_m"], 0.0);
+    assert_eq!(segs[2]["to_m"], 2_000.0);
+    let bridge = &segs[1];
+    let (from, to) = (bridge["from_m"].as_f64().unwrap(), bridge["to_m"].as_f64().unwrap());
+    assert!((from - 600.0).abs() < 10.0 && (to - 700.0).abs() < 10.0, "{bridge}");
+    assert_eq!(bridge["structure_source"], "osm");
+    assert!(segs[0].get("structure_source").is_none());
+    assert_eq!((bridge["from_index"].as_u64(), bridge["to_index"].as_u64()), (Some(1), Some(2)));
+    assert_eq!(bridge["surface"], json!({"class": "paved", "source": "tagged"}));
+    assert_eq!(bridge["way_kind"], "minor_road");
+    assert_eq!(bridge["matched"], true);
+    assert_eq!(bridge["ele_method"], "dem");
+    assert!(bridge["ele_start"].is_f64() && bridge["grade_pct"].is_f64());
+    let s = &r["summary"];
+    assert_eq!(s["unknown_m"], 0.0);
+    assert_eq!(s["by_surface_class_m"], json!({"paved": 2_000.0}));
+    assert_eq!(s["by_way_kind_m"], json!({"minor_road": 2_000.0}));
+    let ground = s["by_structure_m"]["ground"].as_f64().unwrap();
+    let deck = s["by_structure_m"]["bridge"].as_f64().unwrap();
+    assert!((ground + deck - 2_000.0).abs() < 0.02);
+    assert_eq!(r["quality"]["matched_ratio"], 1.0);
+    assert_eq!(r["quality"]["inferred_surface_ratio"], 0.0);
+}
+
+#[tokio::test]
+async fn off_network_is_unmatched_but_complete() {
+    let (server, dir) = served(|_, _| None).await;
+    // 1 km plein est depuis le départ : loin de toute rue.
+    let east = LatLon::new(START.lat, START.lon + 0.0135);
+    let body = request_body(&[START, east], Some(json!({"sections": ["typology", "summary"]})));
+    let r = send(app_with(&online_config(&server, dir.path())), post_json(&body)).await.json();
+    assert_eq!(r["status"], "complete", "{r}");
+    let w: Vec<&str> =
+        r["quality"]["warnings"].as_array().unwrap().iter().map(|w| w["code"].as_str().unwrap()).collect();
+    assert!(w.contains(&"unmatched_range"), "{w:?}");
+    assert!(r["quality"]["matched_ratio"].as_f64().unwrap() < 0.1);
+    assert!(r["summary"]["unknown_m"].as_f64().unwrap() > 900.0);
+    let last = r["segments"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(last["structure"], "unknown");
+    assert_eq!(last["matched"], false);
+    assert_eq!(last["surface"], json!({"class": "unknown", "source": "none"}));
+}
+
+#[tokio::test]
+async fn failed_street_tiles_give_503_or_typology_unavailable() {
+    let (server, dir) = served(|_, r| (r.z == 14).then(|| ScriptedResponse::status(404))).await;
+    let config = online_config(&server, dir.path());
+    let pts = meridian(START, 800.0, 3);
+    let reply = send(app_with(&config), post_json(&request_body(&pts, None))).await;
+    let problem = assert_problem(&reply, StatusCode::SERVICE_UNAVAILABLE, "data_unavailable");
+    assert_eq!(problem["details"]["source"], "typology", "404 VersaTiles : panne, jamais « pas de rue »");
+    let body = request_body(&pts, Some(json!({"accept_partial": true})));
+    let r = send(app_with(&config), post_json(&body)).await.json();
+    assert_eq!(r["status"], "partial");
+    assert_eq!(r["quality"]["warnings"][0]["code"], "typology_unavailable");
+    assert_eq!(r["quality"]["matched_ratio"], 0.0);
+    assert!(r["points"][0]["ele"].is_f64(), "l'élévation reste servie");
 }

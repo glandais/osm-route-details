@@ -32,6 +32,7 @@ fn config(ign: &ScriptedServer, mapterhorn: &ScriptedServer, dir: &std::path::Pa
     // Une relance (1 s) : le repli s'applique après les relances, sans attendre 31 s.
     config.elevation.ign.max_attempts = 2;
     config.elevation.mapterhorn.url = mapterhorn.url_template.clone();
+    config.typology.url = mapterhorn.url_template.clone();
     config.elevation.mapterhorn.tile_size = 64;
     config
 }
@@ -54,7 +55,7 @@ fn codes(r: &Value) -> Vec<String> {
 #[tokio::test]
 async fn ign_is_read_first_in_france() {
     let ign = ign_terrain().serve(|_, _| None).await;
-    let mt = mapterhorn_terrain().serve(|_, _| None).await;
+    let mt = mapterhorn_terrain().serve(with_streets(|_, _| None)).await;
     let dir = tempfile::tempdir().unwrap();
     let pts = meridian(START, 1_000.0, 3);
     let (status, r) = post_route(&config(&ign, &mt, dir.path()), &pts).await;
@@ -74,7 +75,7 @@ async fn ign_is_read_first_in_france() {
 #[tokio::test]
 async fn ign_503_gives_200_with_terrain_fallback() {
     let ign = ScriptedServer::start(|_, _| ScriptedResponse::status(503)).await;
-    let mt = mapterhorn_terrain().serve(|_, _| None).await;
+    let mt = mapterhorn_terrain().serve(with_streets(|_, _| None)).await;
     let dir = tempfile::tempdir().unwrap();
     let pts = meridian(START, 1_000.0, 3);
     let (status, r) = post_route(&config(&ign, &mt, dir.path()), &pts).await;
@@ -104,7 +105,7 @@ async fn outside_the_hull_no_ign_request() {
     .await;
     let krk = LatLon::new(45.2423, 14.5621);
     let mt = SyntheticTerrain::new(64, move |p: LatLon| 20.0 + 1_000.0 * (p.lat - krk.lat))
-        .serve(|_, _| None)
+        .serve(with_streets(|_, _| None))
         .await;
     let dir = tempfile::tempdir().unwrap();
     let pts = meridian(krk, 1_000.0, 3);
@@ -125,7 +126,7 @@ async fn outside_the_hull_no_ign_request() {
 #[tokio::test]
 async fn ign_nodata_falls_back_without_warning() {
     let ign = SyntheticTerrain::new(64, |_| f64::NAN).serve(|_, _| None).await;
-    let mt = mapterhorn_terrain().serve(|_, _| None).await;
+    let mt = mapterhorn_terrain().serve(with_streets(|_, _| None)).await;
     let dir = tempfile::tempdir().unwrap();
     let (status, r) = post_route(&config(&ign, &mt, dir.path()), &meridian(START, 500.0, 2)).await;
     assert_eq!(status, StatusCode::OK, "{r}");

@@ -15,6 +15,11 @@ pub fn meridian(start: LatLon, length_m: f64, n: usize) -> Vec<LatLon> {
     (0..n).map(|i| LatLon::new(start.lat + dlat * i as f64 / (n - 1) as f64, start.lon)).collect()
 }
 
+/// Point à `m` mètres au nord de `start` (au sud si négatif).
+pub fn offset_north(start: LatLon, m: f64) -> LatLon {
+    LatLon::new(start.lat + (m / EARTH_RADIUS_M).to_degrees(), start.lon)
+}
+
 /// Corps JSON `{"points": [...]}` d'une requête, options éventuelles fusionnées.
 pub fn request_body(points: &[LatLon], options: Option<Value>) -> Value {
     let pts: Vec<Value> = points.iter().map(|p| json!({ "lat": p.lat, "lon": p.lon })).collect();

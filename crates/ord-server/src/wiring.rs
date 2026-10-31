@@ -2,12 +2,13 @@
 //!
 //! Incrément 2 : MNT IGN LiDAR HD (WMS-R, BIL32, z15) sous un budget d'hôte de 20 req/s, repli
 //! Mapterhorn point par point, référentiel de couverture (contour embarqué, index et polygones de
-//! Mapterhorn). Les lectures de démarrage (`Startup`) sont faites une fois, avant de servir.
+//! Mapterhorn). Incrément 3 : tuiles de rues VersaTiles (Shortbread z14) et chaîne typologie. Les
+//! lectures de démarrage (`Startup`) sont faites une fois, avant de servir.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use ord_adapters::{BilCodec, CoverageCodec, TerrariumCodec};
+use ord_adapters::{BilCodec, CoverageCodec, Shortbread, StreetsCodec, TerrariumCodec};
 use ord_core::Rules;
 use ord_data::budget::HostBudgets;
 use ord_data::catalog::{ConfiguredSources, StaticCatalog};
@@ -20,10 +21,12 @@ use ord_data::port::{
 };
 use ord_domain::coverage::{CoverageRef, CoverageTile};
 use ord_domain::elevation::TerrainMode;
+use ord_domain::street::{StreetSchemaAdapter, StreetTile};
 use ord_domain::tiles::{ElevationTile, SourceId, TileStore};
+use ord_pipeline::typology::TileTypology;
 use ord_pipeline::{Orchestrator, RetryAfterPolicy, Sources};
 
-use crate::config::{Config, IgnMode};
+use crate::config::{Config, IgnMode, TypologySourceKind};
 use crate::API_VERSION;
 
 /// Côté des tuiles BIL demandées au WMS (vcyclist : 256 px à z15, ≈ 3,4 m par pixel).
@@ -50,6 +53,8 @@ pub struct Startup {
 pub enum StartupError {
     #[error("http client: {0}")]
     HttpClient(String),
+    #[error("typology source not supported yet: {0}")]
+    Unsupported(&'static str),
 }
 
 fn client(config: &Config) -> Result<reqwest::Client, StartupError> {
@@ -209,22 +214,75 @@ impl Builder<'_> {
     }
 }
 
+/// Espace de noms disque des tuiles de rues : schéma, zoom et hachage du gabarit.
+pub fn streets_namespace(config: &Config) -> String {
+    let t = &config.typology;
+    namespace(&format!("versatiles-shortbread-z{}", t.zoom), &t.url)
+}
+
+/// Chaîne typologie seule (aussi utilisée par le banc pour la mesurer à chaud).
+pub fn typology_chain(config: &Config) -> Result<TileTypology, StartupError> {
+    let b = Builder::new(config)?;
+    b.typology()
+}
+
+impl<'a> Builder<'a> {
+    fn new(config: &'a Config) -> Result<Self, StartupError> {
+        Ok(Builder {
+            config,
+            client: client(config)?,
+            budgets: HostBudgets::default(),
+            settings: ReaderSettings {
+                offline: config.cache.offline,
+                memory_bytes: config.cache.memory_elevation_mb.saturating_mul(1024 * 1024),
+                negative_ttl: Duration::from_secs(config.cache.negative_ttl_s),
+            },
+        })
+    }
+
+    fn typology(&self) -> Result<TileTypology, StartupError> {
+        let t = &self.config.typology;
+        if t.source == TypologySourceKind::VersatilesFile {
+            return Err(StartupError::Unsupported("versatiles_file"));
+        }
+        let budget = self.budgets.for_url(&t.url, None, t.concurrency);
+        // VersaTiles : 204 = tuile vide, 404 = URL fausse (jamais « pas de rue »).
+        let descriptor = self.descriptor(
+            SourceId::Streets,
+            t.zoom,
+            t.url.clone(),
+            streets_namespace(self.config),
+            StatusPolicy::VERSATILES,
+            t.concurrency,
+        );
+        let source = Arc::new(XyzHttpSource::with_budget(descriptor, self.client.clone(), budget));
+        let codec = StreetsCodec::new(
+            Shortbread,
+            Duration::from_secs(self.config.cache.ttl_streets_days.saturating_mul(86_400)),
+        );
+        let ns = source.descriptor().namespace.clone();
+        let settings = ReaderSettings {
+            memory_bytes: self.config.cache.memory_streets_mb.saturating_mul(1024 * 1024),
+            ..self.settings.clone()
+        };
+        let store: Arc<dyn TileStore<StreetTile>> = Arc::new(TileReader::new(
+            source,
+            codec,
+            Some(DiskStore::new(&self.config.cache.dir, &ns)),
+            &settings,
+        ));
+        Ok(TileTypology::new(store, Shortbread::GRID, Shortbread.capabilities(), Rules::default().typology))
+    }
+}
+
 pub fn orchestrator(
     config: &Config,
     startup: &Startup,
     catalog: Arc<StaticCatalog>,
     wiring: Wiring,
 ) -> Result<Orchestrator, StartupError> {
-    let b = Builder {
-        config,
-        client: client(config)?,
-        budgets: HostBudgets::default(),
-        settings: ReaderSettings {
-            offline: config.cache.offline,
-            memory_bytes: config.cache.memory_elevation_mb.saturating_mul(1024 * 1024),
-            negative_ttl: Duration::from_secs(config.cache.negative_ttl_s),
-        },
-    };
+    let b = Builder::new(config)?;
+    let typology = Arc::new(b.typology()?);
     let m = &config.elevation.mapterhorn;
     let budget = b.budgets.for_url(&m.url, None, m.concurrency);
     let descriptor = b.descriptor(
@@ -260,7 +318,7 @@ pub fn orchestrator(
         LayeredTerrainReader::new(dtm, dsm, mapterhorn, Arc::clone(&coverage), mode, wiring.pixel_convention);
     let budget = &config.budget;
     Ok(Orchestrator::new(
-        Sources { terrain: Arc::new(terrain), coverage, catalog },
+        Sources { typology, terrain: Arc::new(terrain), coverage, catalog },
         Rules::default(),
         API_VERSION,
         RetryAfterPolicy {

@@ -1,6 +1,5 @@
-//! DTO v1 (doc 02 §3–§4) : entrée, et réponse 200 de l'incrément 1 (élévation, résumé partiel,
-//! provenance du terrain). Segments et répartitions typologiques arrivent à l'incrément 3 : ce
-//! seront des ajouts au contrat, pas des ruptures.
+//! DTO v1 (doc 02 §3–§4) : entrée, et réponse 200 (élévation, segments typés, résumé, qualité,
+//! provenance du terrain). Chaque incrément ajoute des champs au contrat, sans rupture.
 //!
 //! Les `///` de ce module sont recopiés dans le contrat OpenAPI : ils sont en anglais ; les notes
 //! en français sont en `//`.
@@ -8,7 +7,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ord_core::assemble::{RouteReport, Status};
+use ord_core::assemble::{ReportSegment, RouteReport, Status};
+use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
 use ord_core::elevation::{EleMethod, PointOrigin};
 use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
@@ -128,6 +128,9 @@ pub struct RouteDetailsResponseV1 {
     /// Elevation profile (section `elevation`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub points: Option<Vec<OutputPointV1>>,
+    /// Contiguous homogeneous stretches covering the whole route (section `typology`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<Vec<SegmentV1>>,
     /// Route aggregates (section `summary`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<SummaryV1>,
@@ -230,6 +233,233 @@ pub struct SummaryV1 {
     pub ele_max_m: Option<f64>,
     /// Length per terrain origin, in metres (keys: `terrain_origin` values).
     pub terrain_m: BTreeMap<String, f64>,
+    /// Length per `structure` value, in metres; zero values are omitted.
+    pub by_structure_m: BTreeMap<String, f64>,
+    /// Length per `surface.class` value, in metres; zero values are omitted.
+    pub by_surface_class_m: BTreeMap<String, f64>,
+    /// Length per `surface.source` value, in metres; zero values are omitted.
+    pub by_surface_source_m: BTreeMap<String, f64>,
+    /// Length per `way_kind` value, in metres; zero values are omitted.
+    pub by_way_kind_m: BTreeMap<String, f64>,
+    /// Length not matched on the street network, in metres.
+    pub unknown_m: f64,
+}
+
+/// Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StructureV1 {
+    Ground,
+    Bridge,
+    Tunnel,
+    Ford,
+    Unknown,
+}
+
+/// Origin of a structure: OSM tags, heuristic detection, or both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StructureSourceV1 {
+    Osm,
+    Heuristic,
+    OsmHeuristic,
+}
+
+/// Surface class, frozen in v1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceClassV1 {
+    Paved,
+    Unpaved,
+    Unknown,
+}
+
+/// How the surface class was obtained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceSourceV1 {
+    Tagged,
+    InferredTracktype,
+    InferredHighway,
+    None,
+}
+
+/// Kind of way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WayKindV1 {
+    MajorRoad,
+    MinorRoad,
+    Track,
+    Path,
+    Cycleway,
+    Footway,
+    Steps,
+    Unknown,
+}
+
+impl From<StructureClass> for StructureV1 {
+    fn from(v: StructureClass) -> Self {
+        match v {
+            StructureClass::Ground => Self::Ground,
+            StructureClass::Bridge => Self::Bridge,
+            StructureClass::Tunnel => Self::Tunnel,
+            StructureClass::Ford => Self::Ford,
+            StructureClass::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<StructureSource> for StructureSourceV1 {
+    fn from(v: StructureSource) -> Self {
+        match v {
+            StructureSource::Osm => Self::Osm,
+            StructureSource::Heuristic => Self::Heuristic,
+            StructureSource::OsmHeuristic => Self::OsmHeuristic,
+        }
+    }
+}
+
+impl From<SurfaceClass> for SurfaceClassV1 {
+    fn from(v: SurfaceClass) -> Self {
+        match v {
+            SurfaceClass::Paved => Self::Paved,
+            SurfaceClass::Unpaved => Self::Unpaved,
+            SurfaceClass::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<SurfaceSource> for SurfaceSourceV1 {
+    fn from(v: SurfaceSource) -> Self {
+        match v {
+            SurfaceSource::Tagged => Self::Tagged,
+            SurfaceSource::InferredTracktype => Self::InferredTracktype,
+            SurfaceSource::InferredHighway => Self::InferredHighway,
+            SurfaceSource::None => Self::None,
+        }
+    }
+}
+
+impl From<WayKind> for WayKindV1 {
+    fn from(v: WayKind) -> Self {
+        match v {
+            WayKind::MajorRoad => Self::MajorRoad,
+            WayKind::MinorRoad => Self::MinorRoad,
+            WayKind::Track => Self::Track,
+            WayKind::Path => Self::Path,
+            WayKind::Cycleway => Self::Cycleway,
+            WayKind::Footway => Self::Footway,
+            WayKind::Steps => Self::Steps,
+            WayKind::Unknown => Self::Unknown,
+        }
+    }
+}
+
+/// Surface of a segment.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SurfaceV1 {
+    pub class: SurfaceClassV1,
+    pub source: SurfaceSourceV1,
+}
+
+/// A contiguous homogeneous stretch of the route.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SegmentV1 {
+    pub from_m: f64,
+    pub to_m: f64,
+    /// Client index of the last input point at or before `from_m`.
+    pub from_index: u32,
+    /// Client index of the first input point at or after `to_m`.
+    pub to_index: u32,
+    pub structure: StructureV1,
+    /// Only on a bridge or a tunnel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure_source: Option<StructureSourceV1>,
+    pub surface: SurfaceV1,
+    pub way_kind: WayKindV1,
+    /// `false` on a stretch not matched on the street network.
+    pub matched: bool,
+    /// Dominant elevation method on the stretch.
+    pub ele_method: EleMethodV1,
+    /// Elevation at `from_m`; `null` when missing.
+    #[schema(required = true)]
+    pub ele_start: Option<f64>,
+    /// Elevation at `to_m`; `null` when missing.
+    #[schema(required = true)]
+    pub ele_end: Option<f64>,
+    /// Mean grade, in percent; `null` when an end has no elevation.
+    #[schema(required = true)]
+    pub grade_pct: Option<f64>,
+    /// Raw source attributes, only with `debug`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub osm: Option<BTreeMap<String, String>>,
+}
+
+// Attributs neutres de la source, pour `debug` (jamais de coordonnée).
+fn osm_attributes(a: &ord_domain::street::WayAttrs) -> BTreeMap<String, String> {
+    use ord_domain::street::{PavedGroup, StructureTag, SurfaceTag};
+    let mut m = BTreeMap::new();
+    m.insert("kind".to_owned(), a.highway.to_string());
+    match &a.surface {
+        SurfaceTag::Grouped(PavedGroup::Paved) => {
+            m.insert("surface".into(), "paved".into());
+        }
+        SurfaceTag::Grouped(PavedGroup::Unpaved) => {
+            m.insert("surface".into(), "unpaved".into());
+        }
+        SurfaceTag::Raw(v) => {
+            m.insert("surface".into(), v.to_string());
+        }
+        SurfaceTag::Absent => {}
+    }
+    if let Some(t) = a.tracktype {
+        m.insert("tracktype".into(), format!("grade{}", t as u8 + 1));
+    }
+    for (k, v) in [("bicycle", &a.bicycle), ("service", &a.service)] {
+        if let Some(v) = v {
+            m.insert(k.into(), v.to_string());
+        }
+    }
+    let structure = match a.structure {
+        StructureTag::None => None,
+        StructureTag::Bridge => Some("bridge"),
+        StructureTag::Tunnel => Some("tunnel"),
+        StructureTag::Covered => Some("covered"),
+        StructureTag::BuildingPassage => Some("building_passage"),
+        StructureTag::Ford => Some("ford"),
+    };
+    if let Some(s) = structure {
+        m.insert(s.into(), "true".into());
+    }
+    if a.link {
+        m.insert("link".into(), "true".into());
+    }
+    m
+}
+
+fn segment_dto(s: &ReportSegment) -> SegmentV1 {
+    let t = &s.typed;
+    SegmentV1 {
+        from_m: t.from_m,
+        to_m: t.to_m,
+        from_index: t.from_index,
+        to_index: t.to_index,
+        structure: t.structure.into(),
+        structure_source: t.structure_source.map(Into::into),
+        surface: SurfaceV1 { class: t.surface_class.into(), source: t.surface_source.into() },
+        way_kind: t.way_kind.into(),
+        matched: t.matched,
+        ele_method: s.ele_method.into(),
+        ele_start: s.ele_start,
+        ele_end: s.ele_end,
+        grade_pct: s.grade_pct,
+        osm: s.osm.as_ref().map(osm_attributes),
+    }
+}
+
+fn keyed<K: Copy>(m: &BTreeMap<K, f64>, name: impl Fn(K) -> &'static str) -> BTreeMap<String, f64> {
+    m.iter().map(|(k, v)| (name(*k).to_owned(), *v)).collect()
 }
 
 /// Effective parameters of the elevation gain.
@@ -256,6 +486,10 @@ pub struct AdaptedRangeV1 {
 /// Factual provenance and warnings.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct QualityV1 {
+    /// Share of the length matched on the street network, in [0, 1].
+    pub matched_ratio: f64,
+    /// Share of the length whose surface is inferred (tracktype or way kind), in [0, 1].
+    pub inferred_surface_ratio: f64,
     /// Share of the length with an elevation, in [0, 1].
     pub elevation_coverage: f64,
     /// Terrain provenance by range.
@@ -325,6 +559,7 @@ pub fn to_dto(
             })
             .collect()
     });
+    let segments = sections.typology.then(|| report.segments.iter().map(segment_dto).collect());
     let s = &report.summary;
     let summary = sections.summary.then(|| SummaryV1 {
         length_m: s.length_m,
@@ -351,6 +586,11 @@ pub fn to_dto(
         ele_min_m: s.ele_min_m,
         ele_max_m: s.ele_max_m,
         terrain_m: s.terrain_m.iter().map(|(k, v)| (origin_key(*k), *v)).collect(),
+        by_structure_m: keyed(&s.by_structure_m, StructureClass::as_str),
+        by_surface_class_m: keyed(&s.by_surface_class_m, SurfaceClass::as_str),
+        by_surface_source_m: keyed(&s.by_surface_source_m, SurfaceSource::as_str),
+        by_way_kind_m: keyed(&s.by_way_kind_m, WayKind::as_str),
+        unknown_m: s.unknown_m,
     });
     RouteDetailsResponseV1 {
         meta: MetaV1 {
@@ -365,8 +605,11 @@ pub fn to_dto(
             Status::Partial => StatusV1::Partial,
         },
         points,
+        segments,
         summary,
         quality: QualityV1 {
+            matched_ratio: report.quality.matched_ratio,
+            inferred_surface_ratio: report.quality.inferred_surface_ratio,
             elevation_coverage: report.quality.elevation_coverage,
             terrain: report
                 .quality

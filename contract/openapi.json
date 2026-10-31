@@ -314,7 +314,8 @@
           "primary_zone",
           "data",
           "elevation_sources",
-          "elevation_rules"
+          "elevation_rules",
+          "typology_rules"
         ],
         "properties": {
           "api_version": {
@@ -352,6 +353,10 @@
           },
           "rules_version": {
             "type": "string"
+          },
+          "typology_rules": {
+            "$ref": "#/components/schemas/TypologyRulesV1",
+            "description": "Typology rules that shape the output."
           }
         }
       },
@@ -1196,6 +1201,8 @@
         "type": "object",
         "description": "Factual provenance and warnings.",
         "required": [
+          "matched_ratio",
+          "inferred_surface_ratio",
           "elevation_coverage",
           "terrain",
           "warnings"
@@ -1205,6 +1212,16 @@
             "type": "number",
             "format": "double",
             "description": "Share of the length with an elevation, in [0, 1]."
+          },
+          "inferred_surface_ratio": {
+            "type": "number",
+            "format": "double",
+            "description": "Share of the length whose surface is inferred (tracktype or way kind), in [0, 1]."
+          },
+          "matched_ratio": {
+            "type": "number",
+            "format": "double",
+            "description": "Share of the length matched on the street network, in [0, 1]."
           },
           "terrain": {
             "type": "array",
@@ -1333,6 +1350,16 @@
           "quality": {
             "$ref": "#/components/schemas/QualityV1"
           },
+          "segments": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SegmentV1"
+            },
+            "description": "Contiguous homogeneous stretches covering the whole route (section `typology`)."
+          },
           "status": {
             "$ref": "#/components/schemas/StatusV1"
           },
@@ -1405,6 +1432,111 @@
           "summary"
         ]
       },
+      "SegmentV1": {
+        "type": "object",
+        "description": "A contiguous homogeneous stretch of the route.",
+        "required": [
+          "from_m",
+          "to_m",
+          "from_index",
+          "to_index",
+          "structure",
+          "surface",
+          "way_kind",
+          "matched",
+          "ele_method",
+          "ele_start",
+          "ele_end",
+          "grade_pct"
+        ],
+        "properties": {
+          "ele_end": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Elevation at `to_m`; `null` when missing."
+          },
+          "ele_method": {
+            "$ref": "#/components/schemas/EleMethodV1",
+            "description": "Dominant elevation method on the stretch."
+          },
+          "ele_start": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Elevation at `from_m`; `null` when missing."
+          },
+          "from_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Client index of the last input point at or before `from_m`.",
+            "minimum": 0
+          },
+          "from_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "grade_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Mean grade, in percent; `null` when an end has no elevation."
+          },
+          "matched": {
+            "type": "boolean",
+            "description": "`false` on a stretch not matched on the street network."
+          },
+          "osm": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Raw source attributes, only with `debug`.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "structure": {
+            "$ref": "#/components/schemas/StructureV1"
+          },
+          "structure_source": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StructureSourceV1",
+                "description": "Only on a bridge or a tunnel."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "surface": {
+            "$ref": "#/components/schemas/SurfaceV1"
+          },
+          "to_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Client index of the first input point at or after `to_m`.",
+            "minimum": 0
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "way_kind": {
+            "$ref": "#/components/schemas/WayKindV1"
+          }
+        }
+      },
       "SourceId": {
         "type": "string",
         "enum": [
@@ -1431,6 +1563,26 @@
           "partial"
         ]
       },
+      "StructureSourceV1": {
+        "type": "string",
+        "description": "Origin of a structure: OSM tags, heuristic detection, or both.",
+        "enum": [
+          "osm",
+          "heuristic",
+          "osm_heuristic"
+        ]
+      },
+      "StructureV1": {
+        "type": "string",
+        "description": "Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch.",
+        "enum": [
+          "ground",
+          "bridge",
+          "tunnel",
+          "ford",
+          "unknown"
+        ]
+      },
       "SummaryV1": {
         "type": "object",
         "description": "Route aggregates, computed on the internal 5 m profile.",
@@ -1439,9 +1591,58 @@
           "gain_m",
           "loss_m",
           "gain_params",
-          "terrain_m"
+          "terrain_m",
+          "by_structure_m",
+          "by_surface_class_m",
+          "by_surface_source_m",
+          "by_way_kind_m",
+          "unknown_m"
         ],
         "properties": {
+          "by_structure_m": {
+            "type": "object",
+            "description": "Length per `structure` value, in metres; zero values are omitted.",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "by_surface_class_m": {
+            "type": "object",
+            "description": "Length per `surface.class` value, in metres; zero values are omitted.",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "by_surface_source_m": {
+            "type": "object",
+            "description": "Length per `surface.source` value, in metres; zero values are omitted.",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "by_way_kind_m": {
+            "type": "object",
+            "description": "Length per `way_kind` value, in metres; zero values are omitted.",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "ele_max_m": {
             "type": [
               "number",
@@ -1481,6 +1682,46 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "unknown_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length not matched on the street network, in metres."
+          }
+        }
+      },
+      "SurfaceClassV1": {
+        "type": "string",
+        "description": "Surface class, frozen in v1.",
+        "enum": [
+          "paved",
+          "unpaved",
+          "unknown"
+        ]
+      },
+      "SurfaceSourceV1": {
+        "type": "string",
+        "description": "How the surface class was obtained.",
+        "enum": [
+          "tagged",
+          "inferred_tracktype",
+          "inferred_highway",
+          "none"
+        ]
+      },
+      "SurfaceV1": {
+        "type": "object",
+        "description": "Surface of a segment.",
+        "required": [
+          "class",
+          "source"
+        ],
+        "properties": {
+          "class": {
+            "$ref": "#/components/schemas/SurfaceClassV1"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SurfaceSourceV1"
           }
         }
       },
@@ -1523,6 +1764,85 @@
           "to_m": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "TypologyRulesV1": {
+        "type": "object",
+        "description": "Map matching and segmentation rules of `rules_version`.",
+        "required": [
+          "schema",
+          "zoom",
+          "search_radius_m",
+          "max_candidates",
+          "sigma_z_m",
+          "beta_m",
+          "step_m",
+          "jump_cost",
+          "max_jump_m",
+          "footway_cost",
+          "min_chain_m",
+          "min_segment_m"
+        ],
+        "properties": {
+          "beta_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Scale of the transition cost, in metres."
+          },
+          "footway_cost": {
+            "type": "number",
+            "format": "double",
+            "description": "Extra emission cost of a footway, steps or pedestrian street."
+          },
+          "jump_cost": {
+            "type": "number",
+            "format": "double",
+            "description": "Cost of a straight jump between two streets the network does not join."
+          },
+          "max_candidates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_jump_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Longest straight jump, in metres."
+          },
+          "min_chain_m": {
+            "type": "number",
+            "format": "double",
+            "description": "A matched chain shorter than this is dropped as unmatched, in metres."
+          },
+          "min_segment_m": {
+            "type": "number",
+            "format": "double",
+            "description": "A matched ground stretch shorter than this is merged into its longest neighbour, in metres."
+          },
+          "schema": {
+            "type": "string",
+            "description": "Street tile schema read."
+          },
+          "search_radius_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Candidate search radius, in metres."
+          },
+          "sigma_z_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Standard deviation of the distance between an observation and its street, in metres."
+          },
+          "step_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Spacing of the observations along the route, in metres."
+          },
+          "zoom": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Zoom of the street tiles.",
+            "minimum": 0
           }
         }
       },
@@ -1574,6 +1894,20 @@
             "format": "double"
           }
         }
+      },
+      "WayKindV1": {
+        "type": "string",
+        "description": "Kind of way.",
+        "enum": [
+          "major_road",
+          "minor_road",
+          "track",
+          "path",
+          "cycleway",
+          "footway",
+          "steps",
+          "unknown"
+        ]
       }
     }
   },

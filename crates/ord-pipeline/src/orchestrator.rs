@@ -1,12 +1,13 @@
-//! Orchestrateur séquentiel (T01 §5.1, étapes 2, 3, 4b, 5, 6, 8, 9).
+//! Orchestrateur (T01 §5.1, étapes 2, 3, 4a ∥ 4b, 5, 6, 7, 8, 9).
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use ord_core::assemble::{assemble, RouteReport};
+use ord_core::assemble::{assemble, RouteReport, TypologyPart};
 use ord_core::coverage::zone_ranges;
 use ord_core::elevation::{fuse, sample_output};
 use ord_core::prepare::prepare;
+use ord_core::typology::build_segments;
 use ord_core::{Rules, RULES_VERSION};
 use ord_domain::budget::Budget;
 use ord_domain::catalog::{DataCatalog, Versions};
@@ -17,12 +18,13 @@ use ord_domain::request::ValidatedRequest;
 
 use crate::decision::decide_outcome;
 use crate::elevation::sample_raw;
+use crate::typology::TypologyChain;
 use crate::{Outcome, PipelineError};
 
-/// Implémentations des ports, assemblées par `ord-server` (T01 §2.1). Incrément 2 : terrain,
-/// référentiel de couverture et catalogue ; `streets` arrive à l'incrément 3.
+/// Implémentations des ports, assemblées par `ord-server` (T01 §2.1).
 #[derive(Clone)]
 pub struct Sources {
+    pub typology: Arc<dyn TypologyChain>,
     pub terrain: Arc<dyn TerrainReader>,
     pub coverage: Arc<dyn CoverageRef>,
     pub catalog: Arc<dyn DataCatalog>,
@@ -104,20 +106,29 @@ impl Orchestrator {
         let route = Arc::new(route);
 
         check()?;
-        // 4b. MNT aux stations.
-        let raw = sample_raw(&route, self.sources.terrain.as_ref(), ctx).await?;
+        // 4a ∥ 4b. Typologie et MNT aux stations : `join!`, pas `try_join!` (la réponse partielle a
+        // besoin des deux branches, T01 §5.2).
+        let (typo, raw) = tokio::join!(
+            self.sources.typology.run(Arc::clone(&route), ctx),
+            sample_raw(&route, self.sources.terrain.as_ref(), ctx)
+        );
+        let (typo, raw) = (typo?, raw?);
 
-        // 5. Décision (typologie absente jusqu'à l'incrément 3 : jamais en panne). Un repli
-        // Mapterhorn absorbé est une donnée (`terrain_fallback`), pas une panne.
+        // 5. Décision. Un repli Mapterhorn absorbé est une donnée (`terrain_fallback`), pas une panne.
         let elevation = if raw.terrain.iter().any(|t| t.missing == Some(Missing::Failed)) {
             SourceOutcome::Failed { retry_after: Some(self.retry_after(ctx)) }
         } else {
             SourceOutcome::Ok(())
         };
-        if let Outcome::Reject(e) = decide_outcome(&SourceOutcome::Ok(()), &elevation, options.accept_partial)
-        {
-            return Err(e);
-        }
+        let typology = if typo.coverage.unavailable.is_empty() {
+            SourceOutcome::Ok(())
+        } else {
+            SourceOutcome::Failed { retry_after: Some(self.retry_after(ctx)) }
+        };
+        let typology_failed = match decide_outcome(&typology, &elevation, options.accept_partial) {
+            Outcome::Reject(e) => return Err(e),
+            Outcome::Proceed { typology_failed, .. } => typology_failed,
+        };
 
         let versions = Versions {
             api_version: self.api_version,
@@ -127,12 +138,19 @@ impl Orchestrator {
         let attribution = self.sources.catalog.attributions();
 
         check()?;
-        // 6, 8, 9 : une seule tâche bloquante.
+        // 6 à 9 : une seule tâche bloquante.
         let rules = Arc::clone(&self.rules);
         tokio::task::spawn_blocking(move || {
             let profile = fuse(&route, &raw, &options, &rules)?;
+            let segments = build_segments(&typo.runs, &typo.classes, &route, rules.typology.min_segment_m);
             let points = sample_output(&route, &profile, &options.sampling);
-            Ok(assemble(&route, &cov, profile, points, versions, attribution))
+            let part = TypologyPart {
+                output: &typo,
+                segments: &segments,
+                failed: typology_failed,
+                debug: options.debug,
+            };
+            Ok(assemble(&route, &cov, part, profile, points, versions, attribution))
         })
         .await
         .map_err(join_error)?
@@ -222,9 +240,34 @@ mod tests {
         }
     }
 
+    /// Typologie sans aucune rue : tout le parcours est non apparié.
+    struct NoStreets;
+
+    #[async_trait::async_trait]
+    impl TypologyChain for NoStreets {
+        async fn run(
+            &self,
+            route: Arc<ord_domain::route::PreparedRoute>,
+            _: &RequestCtx,
+        ) -> Result<ord_core::typology::TypologyOutput, ord_core::typology::TypologyError> {
+            let classes: Arc<[ord_core::typology::EdgeClass]> = Vec::new().into();
+            Ok(ord_core::typology::TypologyOutput {
+                runs: vec![ord_core::typology::TypedRun {
+                    from_m: 0.0,
+                    to_m: route.length_m,
+                    matched: ord_core::typology::RunMatch::Unmatched,
+                }],
+                coverage: Default::default(),
+                classes,
+                stats: Default::default(),
+            })
+        }
+    }
+
     fn orchestrator(missing: Option<Missing>) -> Orchestrator {
         Orchestrator::new(
             Sources {
+                typology: Arc::new(NoStreets),
                 terrain: Arc::new(Flat(missing)),
                 coverage: Arc::new(HalfZone),
                 catalog: Arc::new(NoCatalog),
@@ -271,6 +314,9 @@ mod tests {
         let report = orchestrator(None).run(request(false), &ctx()).await.unwrap();
         assert_eq!(report.status, ord_core::assemble::Status::Complete);
         assert_eq!(report.summary.ele_max_m, Some(42.0));
+        assert_eq!(report.segments.len(), 1);
+        assert!(!report.segments[0].typed.matched);
+        assert_eq!(report.quality.matched_ratio, 0.0);
         let outside: Vec<_> = report
             .warnings
             .iter()
