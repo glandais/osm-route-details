@@ -1,0 +1,190 @@
+//! Chaîne typologie, partie pure (T03) : couloir, graphe par niveaux, HMM, tronçons typés,
+//! segments homogènes. Les ouvrages (`Structure`, passages, extension `Step::Need`) arrivent à
+//! l'incrément 4.
+
+pub mod corridor;
+pub mod graph;
+pub mod matcher;
+pub mod runs;
+pub mod segments;
+
+use std::ops::Range;
+use std::sync::Arc;
+
+use ord_domain::budget::Budget;
+use ord_domain::geo::Grid;
+use ord_domain::route::PreparedRoute;
+use ord_domain::street::{SchemaCapabilities, StreetTile};
+use ord_domain::tiles::TileKey;
+use rustc_hash::FxHashMap;
+
+use crate::rules::TypologyRules;
+pub use corridor::{corridor_tiles, Corridor};
+pub use graph::{ClassId, EdgeClass, LineId, StreetGraph};
+pub use segments::{build_segments, TypedSegment};
+
+/// Élément d'ouvrage : une ligne de tuile recollée aux bords.
+pub type ElementId = LineId;
+
+/// Ce que l'appariement dit d'un tronçon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunMatch {
+    Matched {
+        class: ClassId,
+        element: Option<ElementId>,
+    },
+    Unmatched,
+    /// Pas de donnée : tuile absente de l'emprise, ou en panne (`failed`).
+    NoData {
+        failed: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TypedRun {
+    pub from_m: f64,
+    pub to_m: f64,
+    pub matched: RunMatch,
+}
+
+/// Plages sans tuile : hors emprise (`missing`) ou en panne (`unavailable`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TypologyCoverage {
+    pub missing: Vec<Range<f64>>,
+    pub unavailable: Vec<Range<f64>>,
+}
+
+/// Compteurs (journaux, banc) ; jamais de coordonnée.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TypologyStats {
+    pub tiles: usize,
+    pub segments: usize,
+    pub classes: usize,
+    pub observations: usize,
+    pub matched_observations: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypologyOutput {
+    pub runs: Vec<TypedRun>,
+    pub coverage: TypologyCoverage,
+    pub classes: Arc<[EdgeClass]>,
+    pub stats: TypologyStats,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum TypologyError {
+    #[error("typology budget exceeded")]
+    Timeout,
+    #[error("typology cancelled")]
+    Cancelled,
+    #[error("typology internal error: {0}")]
+    Internal(String),
+}
+
+/// Issue de lecture d'une tuile du couloir, vue par le calcul.
+#[derive(Clone, Debug)]
+pub enum TileState {
+    Data(Arc<StreetTile>),
+    Empty,
+    Absent,
+    Failed,
+}
+
+/// Observations du HMM : chaque point d'entrée, plus une station tous les `step_m` au moins.
+fn observations(
+    route: &PreparedRoute,
+    grid: Grid,
+    states: &FxHashMap<TileKey, &TileState>,
+    rules: &TypologyRules,
+) -> Vec<matcher::Obs> {
+    let step = rules.matcher.step_m;
+    let mut out = Vec::with_capacity(route.samples.len() / 2 + 2);
+    let mut last = f64::NEG_INFINITY;
+    let n = route.samples.len();
+    for (i, s) in route.samples.iter().enumerate() {
+        if s.input_index.is_none() && s.d_m - last < step - 1e-6 && i + 1 != n {
+            continue;
+        }
+        last = s.d_m;
+        let p = grid.to_units(s.at);
+        let r = rules.matcher.search_radius_m / grid.metres_per_unit(s.at.lat);
+        let mut no_data = None;
+        for dx in [-r, r] {
+            for dy in [-r, r] {
+                match states.get(&grid.tile_of([p[0] + dx, p[1] + dy])) {
+                    Some(TileState::Failed) => no_data = Some(true),
+                    Some(TileState::Absent) | None => {
+                        no_data.get_or_insert(false);
+                    }
+                    Some(TileState::Data(_) | TileState::Empty) => {}
+                }
+            }
+        }
+        out.push(matcher::Obs { p, at: s.at, d_m: s.d_m, no_data });
+    }
+    out
+}
+
+fn ranges(runs: &[TypedRun], want: impl Fn(&RunMatch) -> bool) -> Vec<Range<f64>> {
+    let mut out: Vec<Range<f64>> = Vec::new();
+    for r in runs.iter().filter(|r| want(&r.matched)) {
+        match out.last_mut() {
+            Some(last) if (last.end - r.from_m).abs() < 1e-9 => last.end = r.to_m,
+            _ => out.push(r.from_m..r.to_m),
+        }
+    }
+    out
+}
+
+/// Calcul complet sur les tuiles lues du couloir (`tiles` triées par clé).
+pub fn compute(
+    route: &PreparedRoute,
+    grid: Grid,
+    tiles: &[(TileKey, TileState)],
+    caps: &SchemaCapabilities,
+    rules: &TypologyRules,
+    budget: &dyn Budget,
+) -> Result<TypologyOutput, TypologyError> {
+    let states: FxHashMap<TileKey, &TileState> = tiles.iter().map(|(k, s)| (*k, s)).collect();
+    let data: Vec<Arc<StreetTile>> = tiles
+        .iter()
+        .filter_map(|(_, s)| match s {
+            TileState::Data(t) => Some(Arc::clone(t)),
+            _ => None,
+        })
+        .collect();
+    let inputs: Vec<([f64; 2], f64)> = route
+        .input_pos
+        .iter()
+        .filter_map(|&i| route.samples.get(i as usize))
+        .map(|s| (grid.to_units(s.at), s.at.lat))
+        .collect();
+    let corridor = Corridor::new(grid, &inputs, rules.corridor_radius_m());
+    let graph = StreetGraph::build(grid, &data, &corridor, caps);
+    if budget.expired() {
+        return Err(TypologyError::Timeout);
+    }
+    let obs = observations(route, grid, &states, rules);
+    let path = matcher::match_obs(&graph, obs, &rules.matcher, budget)?;
+    let runs = runs::project_runs(&graph, &path, route.length_m);
+    let coverage = TypologyCoverage {
+        missing: ranges(&runs, |m| *m == RunMatch::NoData { failed: false }),
+        unavailable: ranges(&runs, |m| *m == RunMatch::NoData { failed: true }),
+    };
+    let stats = TypologyStats {
+        tiles: tiles.len(),
+        segments: graph.segs.len(),
+        classes: graph.classes.len(),
+        observations: path.obs.len(),
+        matched_observations: path
+            .state
+            .iter()
+            .filter(|s| matches!(s, matcher::ObsState::Matched { .. }))
+            .count(),
+    };
+    Ok(TypologyOutput { runs, coverage, classes: graph.classes.into(), stats })
+}
+
+#[cfg(test)]
+mod tests;
