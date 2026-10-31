@@ -38,7 +38,7 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         cas: Vec<String>,
         /// Groupes de traces personnelles.
-        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france")]
+        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france,osm_surface")]
         groupes: Vec<String>,
         /// Parcours vcyclist des tests de cohérence avec la vérité `T`.
         #[arg(long, value_delimiter = ',', default_value = "test1,test2,test3,test4")]
@@ -60,7 +60,7 @@ enum Command {
         offline: bool,
         #[arg(long, value_delimiter = ',')]
         cas: Vec<String>,
-        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france")]
+        #[arg(long, value_delimiter = ',', default_value = "dplus,plaine,ouvrage,hors_france,osm_surface")]
         groupes: Vec<String>,
         /// Fichier de sortie (défaut : bench/reports/<date>-<rules_version>/results.json, T05 §5.2).
         #[arg(long)]

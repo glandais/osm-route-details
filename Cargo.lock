@@ -1281,6 +1281,7 @@ dependencies = [
  "ord-core",
  "ord-data",
  "ord-domain",
+ "ord-pipeline",
  "ord-server",
  "roxmltree",
  "serde",

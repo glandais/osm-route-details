@@ -3,6 +3,8 @@
 //! `criteria.yaml`), E2 rapporté (bornes indicatives), E2b jugé par groupe (médiane de
 //! |ln(D+ service / D+ baro)| non dégradée face au service appelé avec
 //! `structure_correction: false`, le « MNT brut » de T05 §3.1), `hors_france` rapporté.
+//! Incrément 3 : R1, R2 et M1 sur les parcours d'osm-surface (`os-*`), R3 et M1 sur les traces
+//! perso recalées (contre `trace_attributes` de Stadia), typologie à chaud sur `os-*`.
 //!
 //! Ordre imposé : empreintes vérifiées, puis cas `tenue_a_l_ecart` exclus, **avant** toute lecture
 //! de tuile. Aucune coordonnée n'est écrite : identifiants `perso-NN`, distances curvilignes.
@@ -22,6 +24,7 @@ use crate::hash::{cache_fingerprint, sha256_bytes};
 use crate::manifest::{Manifest, Serie, Trace};
 use crate::metrics::{dplus, dplus_with, e1, interpolate, median, passage_windows};
 use crate::service::{Pt, Service, Variant};
+use crate::typology::{agreement, metrics_json, ours_of, read_stadia_surface, Class, Ref};
 use crate::{gpx, BenchPaths, BenchRules};
 
 /// Sélection des cas : la série tenue à l'écart est exclue ici, avant toute lecture.
@@ -238,7 +241,7 @@ pub fn load_perso(paths: &BenchPaths, trace: &Trace, rules: &BenchRules) -> Resu
 fn distance_options(structure_correction: bool, step: f64) -> Value {
     json!({
         "sampling": {"mode": "distance", "step_m": step},
-        "sections": ["elevation", "summary"],
+        "sections": ["elevation", "typology", "summary"],
         "structure_correction": structure_correction
     })
 }
@@ -312,6 +315,25 @@ async fn recolle(
     Ok((p, tau, responses))
 }
 
+/// Interpolation linéaire en un point (`xs` croissants), bornée aux extrémités.
+pub fn interp_one(xs: &[f64], ys: &[f64], x: f64) -> f64 {
+    if xs.is_empty() {
+        return x;
+    }
+    let i = xs.partition_point(|v| *v <= x);
+    if i == 0 {
+        return ys[0];
+    }
+    if i >= xs.len() {
+        return ys[ys.len() - 1];
+    }
+    let (x0, x1) = (xs[i - 1], xs[i]);
+    if x1 <= x0 {
+        return ys[i];
+    }
+    ys[i - 1] + (x - x0) / (x1 - x0) * (ys[i] - ys[i - 1])
+}
+
 /// Distance du service de chaque point envoyé, tronçons recollés (raccord retiré).
 fn request_distances(case: &PersoCase) -> Vec<f64> {
     let mut out = Vec::new();
@@ -328,6 +350,7 @@ fn request_distances(case: &PersoCase) -> Vec<f64> {
 pub async fn measure_case(
     service: &Service,
     case: &PersoCase,
+    surface_csv: Option<String>,
     refs: &BTreeMap<String, Vec<LatLon>>,
     rules: &BenchRules,
     rules_core: &Rules,
@@ -401,6 +424,23 @@ pub async fn measure_case(
             Value::Array(responses.iter().map(f).collect())
         }
     };
+    // R3 et M1 : segments du service contre `<id>.surface.csv` (Stadia), en abscisse recalée.
+    let mut offsets = Vec::new();
+    let mut acc = 0.0;
+    for x in &responses {
+        offsets.push(acc);
+        acc += x["summary"]["length_m"].as_f64().unwrap_or(0.0);
+    }
+    let to_ref = |x: f64| interp_one(&d_srv, &case.s_ref, x);
+    let ours = ours_of(&responses, &offsets, &to_ref);
+    let stadia = surface_csv.map(|text| read_stadia_surface(&text)).unwrap_or_default();
+    let typo = if stadia.is_empty() {
+        let a =
+            agreement(&ours, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
+        json!({"M1.non_apparie": round(a.unmatched, 4), "M1.unknown": round(a.unknown, 4), "R3": "reference_absente"})
+    } else {
+        metrics_json(&agreement(&ours, &stadia), "R3")
+    };
     let step = rules.grid_step_m;
     let masked_m = masked.iter().filter(|m| **m).count() as f64 * step;
     let compared = bar.iter().filter(|x| !x.is_nan()).count();
@@ -419,6 +459,7 @@ pub async fn measure_case(
             "E2.dplus_mnt_brut_m": round(dplus_raw, 1),
             "E2.ratio_mnt_brut": round(dplus_raw / dplus_baro, 4)
         },
+        "typologie": typo,
         "diagnostics": {
             "E1.offset_baro_moins_service_m": round(m1.offset_m, 2),
             "E1.max_abs_m": round(m1.max_abs_m, 2),
@@ -634,6 +675,85 @@ fn judge(cases: &[Value]) -> (Value, Value) {
     (json!({"E1": agg_e1, "E2": agg_e2, "E2b": agg_e2b}), verdicts)
 }
 
+/// Verdicts R1, R2 (`os-*`), R3 (traces perso) et M1 (les deux), par parcours (`criteria.yaml`).
+fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
+    use crate::typology::{M1_UNKNOWN_MAX, M1_UNMATCHED_MAX, R_CLASS_MIN, R_PAVED_MIN};
+    let m = |c: &Value, k: &str| c["typologie"][k].as_f64().unwrap_or(f64::NAN);
+    let mut fails_r12 = Vec::new();
+    let mut fails_r3 = Vec::new();
+    let mut fails_m1 = Vec::new();
+    let mut per_group: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    let mut r3_judged = 0;
+    for c in os_cases {
+        let ok = m(c, "R1.accord_classe") >= R_CLASS_MIN
+            && m(c, "R1.accord_classe_hors_inconnu") >= R_CLASS_MIN
+            && m(c, "R1.accord_revetu_non_revetu") >= R_PAVED_MIN;
+        if !ok {
+            fails_r12.push(c["id"].clone());
+        }
+        per_group.entry("osm_surface".into()).or_default().push(c);
+    }
+    for c in perso {
+        per_group.entry(c["groupe"].as_str().unwrap_or("").to_owned()).or_default().push(c);
+        if c["typologie"]["R3"].is_string() {
+            continue;
+        }
+        r3_judged += 1;
+        let ok = m(c, "R3.accord_classe") >= R_CLASS_MIN
+            && m(c, "R3.accord_classe_hors_inconnu") >= R_CLASS_MIN
+            && m(c, "R3.accord_revetu_non_revetu") >= R_PAVED_MIN;
+        if !ok {
+            fails_r3.push(c["id"].clone());
+        }
+    }
+    for c in os_cases.iter().chain(perso) {
+        if !(m(c, "M1.non_apparie") <= M1_UNMATCHED_MAX && m(c, "M1.unknown") <= M1_UNKNOWN_MAX) {
+            fails_m1.push(c["id"].clone());
+        }
+    }
+    let mut agg = serde_json::Map::new();
+    for (g, list) in &per_group {
+        let mut a = serde_json::Map::new();
+        for k in [
+            "R1.accord_classe",
+            "R1.accord_classe_hors_inconnu",
+            "R1.accord_revetu_non_revetu",
+            "R3.accord_classe",
+            "R3.accord_classe_hors_inconnu",
+            "R3.accord_revetu_non_revetu",
+            "M1.non_apparie",
+            "M1.unknown",
+        ] {
+            let v: Vec<f64> = list.iter().map(|c| m(c, k)).filter(|x| !x.is_nan()).collect();
+            if v.is_empty() {
+                continue;
+            }
+            a.insert(format!("{k}.mediane"), json!(round(median(&v), 4)));
+            a.insert(format!("{k}.min"), json!(round(v.iter().copied().fold(f64::INFINITY, f64::min), 4)));
+            a.insert(
+                format!("{k}.max"),
+                json!(round(v.iter().copied().fold(f64::NEG_INFINITY, f64::max), 4)),
+            );
+        }
+        a.insert("cas".into(), json!(list.len()));
+        agg.insert(g.clone(), Value::Object(a));
+    }
+    let verdict = |judged: usize, fails: usize| match (judged, fails) {
+        (0, _) => "skipped",
+        (_, 0) => "pass",
+        _ => "fail",
+    };
+    let verdicts = json!({
+        "R1_R2": verdict(os_cases.len(), fails_r12.len()),
+        "R1_R2_echecs": fails_r12,
+        "R3": verdict(r3_judged, fails_r3.len()),
+        "R3_echecs": fails_r3,
+        "M1": verdict(os_cases.len() + perso.len(), fails_m1.len()),
+        "M1_echecs": fails_m1,
+    });
+    (Value::Object(agg), verdicts)
+}
+
 /// `run --offline` : campagne de calibration ; renvoie le contenu de `results.json`.
 pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyhow::Result<Value> {
     let report = check(paths)?;
@@ -665,7 +785,11 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             }
         };
         for case in loaded {
-            match measure_case(&service, &case, &refs, &rules, &rules_core).await {
+            let csv = std::fs::read_to_string(
+                paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
+            )
+            .ok();
+            match measure_case(&service, &case, csv, &refs, &rules, &rules_core).await {
                 Ok((c, dv)) => {
                     eprintln!("{} : mesuré", case.id);
                     cases.push(c);
@@ -677,7 +801,41 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             }
         }
     }
+    // Parcours d'osm-surface : R1, R2, M1 et typologie à chaud.
+    let os_wanted = |id: &str| {
+        (ids.is_empty() && groupes.iter().any(|g| g == "osm_surface")) || ids.iter().any(|i| i == id)
+    };
+    let mut os_cases = Vec::new();
+    let mut warm = Vec::new();
+    for entry in manifest.osm_surface.iter().filter(|e| os_wanted(&e.id) && e.serie == Serie::Calibration) {
+        let route = crate::osm_surface::load(&paths.bench, entry)?;
+        match crate::osm_surface::measure(&service, &route).await {
+            Ok(c) => {
+                eprintln!("{} : mesuré", route.id);
+                os_cases.push(c);
+                let (ms, stats) = crate::osm_surface::typology_warm_ms(&paths.cache, &route, 5).await?;
+                warm.push(json!({"id": route.id, "typologie_a_chaud_ms": round(ms, 1), "stats": stats}));
+            }
+            Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
+        }
+    }
     let (agregats, mut verdicts) = judge(&cases);
+    let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
+    for (k, v) in typo_verdicts.as_object().into_iter().flatten() {
+        verdicts[k] = v.clone();
+    }
+    let warm_total: f64 = warm.iter().filter_map(|w| w["typologie_a_chaud_ms"].as_f64()).sum();
+    let warm_km: f64 = warm.iter().filter_map(|w| w["stats"]["km"].as_f64()).sum();
+    let mut agregats = agregats;
+    agregats["typologie"] = typo_agregats;
+    agregats["typologie_a_chaud"] = json!({
+        "parcours": warm,
+        "total_ms": round(warm_total, 1),
+        "total_km": round(warm_km, 1),
+        "seuil_ms": 160.0,
+        "profil": if cfg!(debug_assertions) { "debug" } else { "release" }
+    });
+    cases.extend(os_cases);
     verdicts["Q1"] = json!(if report.q1.pass() { "pass" } else { "fail" });
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
@@ -688,7 +846,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "date": today_utc(),
             "type": "calibration",
             "increment": "MVP",
-            "increment_plan": 2,
+            "increment_plan": 3,
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -704,7 +862,10 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "groupes": groupes,
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
             "notes": [
-                "E1 : toutes les stations hors fenêtres masquées (pas encore de typologie : les ouvrages ne sont pas exclus)",
+                "E1 : toutes les stations hors fenêtres masquées (ouvrages non exclus de E1 avant l'incrément 4)",
+                "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
+                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
+                "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain",
                 "E2b : non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
             ]
@@ -754,6 +915,15 @@ pub async fn fill_cache(
                 filled.push(case.id.clone());
             }
         }
+    }
+    for entry in manifest.osm_surface.iter().filter(|e| {
+        e.serie == Serie::Calibration
+            && ((ids.is_empty() && groupes.iter().any(|g| g == "osm_surface")) || ids.contains(&e.id))
+    }) {
+        let route = crate::osm_surface::load(&paths.bench, entry)?;
+        service.route_details(&route.points, crate::osm_surface::options()).await?;
+        eprintln!("{} : tuiles en cache", route.id);
+        filled.push(route.id.clone());
     }
     for route in coherence_routes {
         crate::coherence::measure(&paths.cache, &paths.bench, route, false, true, false).await?;

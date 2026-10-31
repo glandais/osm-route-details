@@ -11,6 +11,7 @@ license.workspace = true
 ord-core.workspace = true
 ord-data.workspace = true
 ord-domain.workspace = true
+ord-pipeline.workspace = true
 ord-server = { path = "../../crates/ord-server" }
 
 anyhow.workspace = true

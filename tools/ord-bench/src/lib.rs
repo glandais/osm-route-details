@@ -2,7 +2,8 @@
 //! métriques. Il ne recalcule aucune référence : il lit celles de `bench/`.
 //!
 //! `check` (empreintes du manifest, cohérence `criteria.yaml` ↔ README, Q1), `fill-cache` (cache
-//! de banc local), `run --offline` (incrément 2 : E1 jugé, E2 indicatif, E2b jugé), `latency`
+//! de banc local), `run --offline` (incrément 2 : E1 jugé, E2 indicatif, E2b jugé ; incrément 3 :
+//! R1, R2, R3, M1, typologie à chaud), `latency`
 //! (L1 à froid, live) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
@@ -14,8 +15,10 @@ pub mod gpx;
 pub mod hash;
 pub mod manifest;
 pub mod metrics;
+pub mod osm_surface;
 pub mod privacy;
 pub mod service;
+pub mod typology;
 
 use std::path::{Path, PathBuf};
 
@@ -66,8 +69,8 @@ impl BenchPaths {
 
 /// Révision de l'outil de mesure à `rules_version` égale : suffixe du dossier de rapport
 /// (`<date>-<rules_version>-<révision>`), remis à `None` à la prochaine montée des règles.
-/// `bench1` : tronçons recollés, segments `.sN`, E2b `non_discriminant`, diagnostics E1.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// `None` depuis `rules_version` 2026.10.3 (incrément 3 : typologie, R1–R3, M1).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

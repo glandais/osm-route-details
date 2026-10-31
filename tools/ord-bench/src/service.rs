@@ -59,6 +59,8 @@ pub fn bench_config(cache_dir: &Path, offline: bool, variant: Variant) -> Config
     config.cache.dir = cache_dir.to_path_buf();
     config.cache.offline = offline;
     config.elevation.ign.enabled = variant.ign;
+    // VersaTiles public : peu de requêtes à la fois, jamais de rafale (exploration 06).
+    config.typology.concurrency = 2;
     config
 }
 
