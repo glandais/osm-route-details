@@ -213,6 +213,13 @@ async fn breakpoints_on_vcyclist_routes() {
             max_gap,
             100.0 * deviation,
         );
+        // Exemple de points insérés (sans position).
+        for p in points.iter().filter(|p| p["origin"] == "inserted").take(6) {
+            println!(
+                "  inséré à {} m (index {}) : {} ; ele {} ({})",
+                p["d_m"], p["index"], p["reasons"], p["ele"], p["ele_method"]
+            );
+        }
         let mut fail = |ok: bool, what: &str| {
             if !ok {
                 failures.push(format!("{route} : {what}"));
