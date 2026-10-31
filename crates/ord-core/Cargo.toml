@@ -9,6 +9,8 @@ license.workspace = true
 
 [dependencies]
 ord-domain.workspace = true
+rstar.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 

@@ -8,7 +8,9 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+flate2.workspace = true
 image-webp.workspace = true
+prost.workspace = true
 ord-domain.workspace = true
 
 [lints]
