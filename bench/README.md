@@ -290,6 +290,16 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    VersaTiles (≤ 15 m). Sur `perso-18`, 0,8 km reste hors de toute voie : la sortie y passe hors du
    réseau cartographié, ce qui est un vrai non apparié. Ancienne version gardée dans
    `private/recales.v1/`.
+   **Allers-retours** (corrigé le 2026-10-31, depuis le cache, sans nouvel appel). Sur un aller-retour,
+   l'aller et le retour se superposent ; deux étapes prenaient le point le plus proche et sautaient
+   sur le retour : (a) le raccord entre deux tronçons de requête, qui a retiré de `perso-23` un
+   aller-retour de 1,8 km entre deux traversées de Pirmil ; (b) le transport du baro, qui empilait des
+   points sur une seule abscisse ou en écartait. Les deux retiennent désormais le **premier** point ou
+   segment à moins de (plus proche + 15 m, resp. 10 m), au minimum local, jamais en arrière de la
+   dernière abscisse retenue. Résultat : seule la géométrie de `perso-23` change (+ 2,1 km) ; le baro
+   transporté gagne 1 714 points (161 335 → 163 049), aucun n'est perdu, et les sauts d'abscisse de
+   plus de 300 m sans contrepartie à l'origine passent de 47 à 24. Version précédente gardée dans
+   `private/recales.v2/`.
 2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
    16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
    aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie

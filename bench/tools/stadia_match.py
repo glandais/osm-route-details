@@ -44,6 +44,8 @@ UA = "osm-route-details-bench/0.1 (usage personnel)"
 STEP_M = 25.0
 CHUNK_PTS = 2000
 OVERLAP_PTS = 40
+RACCORD_TOL_M = 15.0
+PROJ_TOL_M = 10.0  # transport du baro : premier segment à moins de (plus proche + 10 m)  # raccord des tronçons : premier point à moins de (plus proche + 15 m)
 MAX_KM = 200.0
 MAX_PTS = 16000
 GAP_M = 2000.0
@@ -137,9 +139,11 @@ def call(key, shape):
             raise SystemExit(f"Stadia HTTP {e.code} : {e.read()[:200]!r}")
 
 
-def project_forward(poly, cum, p, start):
-    """Projection de p sur poly à partir du segment start (recherche bornée vers l'avant)."""
-    best = (math.inf, start, 0.0)
+def project_forward(poly, cum, p, start, min_s=-math.inf):
+    """Projection de p sur poly à partir du segment start (recherche bornée vers l'avant). On retient le
+    PREMIER segment à moins de (plus proche + PROJ_TOL_M) : sur un aller-retour, l'aller et le retour
+    se superposent, et le plus proche peut être sur le retour."""
+    cand = []
     c = math.cos(math.radians(p[0]))
     for i in range(start, min(len(poly) - 1, start + 400)):
         a, b = poly[i], poly[i + 1]
@@ -148,10 +152,15 @@ def project_forward(poly, cum, p, start):
         dx, dy = bx - ax, by - ay
         L = dx * dx + dy * dy
         t = 0.0 if L == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L))
-        d = math.hypot(ax + t * dx, ay + t * dy)
-        if d < best[0]:
-            best = (d, i, t)
-    _, i, t = best
+        if cum[i] + t * (cum[i + 1] - cum[i]) >= min_s:  # jamais en arrière de la dernière abscisse retenue
+            cand.append((math.hypot(ax + t * dx, ay + t * dy), i, t))
+    if not cand:
+        return None, start
+    tol = min(x[0] for x in cand) + PROJ_TOL_M / 111320.0
+    k = next(k for k, x in enumerate(cand) if x[0] <= tol)
+    while k + 1 < len(cand) and cand[k + 1][0] <= cand[k][0]:
+        k += 1  # minimum local sur ce passage
+    _, i, t = cand[k]
     return cum[i] + t * (cum[i + 1] - cum[i]), i
 
 
@@ -301,10 +310,15 @@ def process(key, raw_pts, tid, outdir):
             time.sleep(0.5)
         shape, imap, gaps, filled = fill_jumps(decode6(d["shape"]), d, chunk)
         n_jumps += len(gaps)
-        # raccord : on reprend après le point recalé le plus proche de la fin du tronçon précédent
+        # raccord : on reprend au PREMIER point recalé (dans l'ordre de la géométrie) proche de la fin du
+        # tronçon précédent, et non au plus proche : sur un aller-retour, le plus proche peut être sur le
+        # retour, et tout l'aller-retour serait sauté.
         first = 0
         if poly and k > 0:
-            first = min(range(len(shape)), key=lambda i: hav(shape[i], poly[-1]))
+            dist = [hav(p, poly[-1]) for p in shape]
+            first = next(i for i, x in enumerate(dist) if x <= min(dist) + RACCORD_TOL_M)
+            while first + 1 < len(dist) and dist[first + 1] <= dist[first]:
+                first += 1  # minimum local sur ce passage : pas de recul de quelques mètres
         dup = 1 if poly and shape[first] == poly[-1] else 0
         start_i = first + dup
         base = len(poly)
@@ -339,9 +353,10 @@ def process(key, raw_pts, tid, outdir):
         i = 0
         last_s = -math.inf
         for s0, z, mp, dd in baro_rows:
-            s, i = project_forward(poly, cum, mp, max(0, i - 5))
-            if s < last_s - 20:
+            s, j = project_forward(poly, cum, mp, max(0, i - 5), last_s - 20)
+            if s is None:
                 continue  # projection ambiguë (lacet, boucle) : point écarté plutôt qu'un recul
+            i = j
             last_s = max(last_s, s)
             f.write(f"{s:.1f},{z:.2f},{s0:.1f},{dd}\n")
     with open(os.path.join(outdir, f"{tid}.surface.csv"), "w") as f:
