@@ -341,6 +341,16 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
 2. Envoyer chaque parcours au service (`sampling.mode = distance`, pas 5 m, et le mode par défaut
    `input_with_breakpoints`), à froid (cache vidé) puis à chaud.
 3. Rééchantillonner service et référence sur la même grille curviligne de 5 m.
+   **Lecture du « MNT LiDAR » des règles** (précision, 2026-10-31, pas une règle nouvelle) : les termes
+   de référence lus sur le MNT sont toujours ceux du mode `distance` au pas de 5 m, quel que soit le
+   mode du service mesuré. C'est-à-dire : la sortie du service avec `structure_correction: false` dans
+   ce mode, simple échantillonnage du MNT à sources égales. Sont concernés : le test de niveau
+   (§2.1), le décalage d'approche E3 (§4 bis.3), les bandes de portail E4 (§4 bis.2), le MNT d'E5 et
+   les décisions de passage qui en découlent. En `input_with_breakpoints`, la sortie sans correction est
+   interpolée entre les points : ce n'est plus le MNT, et la référence d'un passage dépendrait du mode
+   testé. La référence et les passages comptés sont donc identiques dans les deux modes ; seule la
+   sortie du service mesurée change. Exception : E2b compare le service corrigé et non corrigé **dans
+   le même mode**, à sources égales.
 4. **Référence baro** : retirer un décalage. Pour l'altitude, décalage global = médiane(baro − sortie
    du service) sur les stations `ground` ; pour un pont (E3), décalage local pris sur les approches de
    50 à 300 m (§4 bis.3), à défaut de 1 à 3 km de part et d'autre.
