@@ -1,8 +1,19 @@
 //! Orchestrateur : admission, budget, chaînes typologie et élévation, décision (T01 §3, §5).
 //!
-//! Incrément 0 : seules les erreurs de pipeline existent ; l'orchestrateur arrive à l'incrément 1.
+//! Incrément 1 : pipeline séquentiel, élévation seule (pas de typologie ni de zonage) :
+//! préparation → lecture du MNT → décision → fusion, points de sortie et assemblage.
+//! L'admission (file bornée, 503 `overloaded`) arrive à l'incrément 6.
+
+pub mod decision;
+pub mod elevation;
+mod orchestrator;
 
 use std::time::Duration;
+
+use ord_core::elevation::ElevationError;
+
+pub use decision::decide_outcome;
+pub use orchestrator::{Orchestrator, RetryAfterPolicy, Sources};
 
 /// Côté de données en panne (`details.source` du 503 `data_unavailable`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +64,17 @@ impl std::fmt::Display for PipelineError {
 
 impl std::error::Error for PipelineError {}
 
-/// Décision du mode de réponse (T01 §5.3) ; `decide_outcome` arrive à l'incrément 6.
+impl From<ElevationError> for PipelineError {
+    fn from(e: ElevationError) -> Self {
+        match e {
+            ElevationError::Timeout => Self::Timeout,
+            ElevationError::Cancelled => Self::Cancelled,
+            ElevationError::Internal(cause) => Self::Internal(cause),
+        }
+    }
+}
+
+/// Décision du mode de réponse (T01 §5.3) : rejet ou poursuite.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
     Proceed { typology_failed: bool, elevation_failed: bool },
