@@ -172,7 +172,7 @@ pub const M1_UNMATCHED_MAX: f64 = 0.01;
 pub const M1_UNKNOWN_MAX: f64 = 0.02;
 
 fn r4(x: f64) -> f64 {
-    (x * 10_000.0).round() / 10_000.0
+    (x * 10_000.0).round() / 10_000.0 + 0.0
 }
 
 /// Métriques d'un cas, au format de `results.json`.
