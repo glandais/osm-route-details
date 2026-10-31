@@ -27,9 +27,9 @@ fn gpx(lat0: f64, n: usize) -> String {
 }
 
 fn baro(s_max: f64) -> String {
-    let mut out = String::from("s_recale_m,baro_m,s_origine_m,distance_au_trace_m\n");
+    let mut out = String::from("s_recale_m,baro_m,s_origine_m,distance_au_trace_m,insere\n");
     for k in 0..=((s_max / 50.0) as usize) {
-        out.push_str(&format!("{},{},0,1\n", k as f64 * 50.0, k as f64));
+        out.push_str(&format!("{},{},0,1,0\n", k as f64 * 50.0, k as f64));
     }
     out
 }

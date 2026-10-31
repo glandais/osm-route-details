@@ -16,6 +16,7 @@ pub mod diagnose;
 pub mod golden;
 pub mod gpx;
 pub mod hash;
+pub mod inserted;
 pub mod manifest;
 pub mod metrics;
 pub mod osm_surface;
@@ -102,6 +103,9 @@ pub struct BenchRules {
     pub request_resample_m: f64,
     /// Au-delà, deux points baro consécutifs ne sont pas interpolés (trou de référence).
     pub baro_gap_max_m: f64,
+    /// Point inséré (`insere = 1`) : baro gardé à cette distance au plus d'une ligne de la couche
+    /// `streets` (tuile et 8 voisines, cache de la campagne ; bench §2.1, étape 3).
+    pub inserted_street_max_m: f64,
     /// Passage d'un ouvrage : trace à moins de cette distance de ses points de référence.
     pub passage_tol_m: f64,
     /// Demi-largeur de la fenêtre masquée autour d'un ouvrage d'une autre série.
@@ -119,6 +123,7 @@ impl Default for BenchRules {
             grid_step_m: 5.0,
             request_resample_m: 10.0,
             baro_gap_max_m: 100.0,
+            inserted_street_max_m: 30.0,
             passage_tol_m: 40.0,
             mask_half_m: 500.0,
             detrend_window_m: 5_000.0,

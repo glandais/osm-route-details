@@ -93,6 +93,9 @@ pub struct PersoCase {
     pub s_ref: Vec<f64>,
     pub baro_s: Vec<f64>,
     pub baro_z: Vec<f64>,
+    /// Point d'origine inséré à la place d'un saut (`insere = 1`), aligné sur `baro_s` ; son
+    /// baro n'est gardé qu'après `inserted::apply` (README §2.1, étape 3).
+    pub baro_inserted: Vec<bool>,
     pub masks: Vec<String>,
     /// Extrait d'une trace tenue à l'écart : points de la trace jusqu'à 3 km de la fenêtre
     /// (abscisse de l'extrait, position, baro transporté), pour le seul repli 1–3 km du décalage
@@ -158,10 +161,21 @@ fn read_geometry(path: &std::path::Path) -> Result<Vec<Pt>, String> {
     Ok(v)
 }
 
-/// Baro transporté (`s_recale_m`, `baro_m`, …, `distance_au_trace_m`), trié par abscisse.
-fn read_baro(path: &std::path::Path, rules: &BenchRules) -> Result<(Vec<f64>, Vec<f64>), String> {
+/// Baro transporté (`s_recale_m`, `baro_m`, …, `distance_au_trace_m`, `insere`), trié par
+/// abscisse : abscisses, altitudes, point inséré.
+type Baro = (Vec<f64>, Vec<f64>, Vec<bool>);
+
+fn read_baro(path: &std::path::Path, rules: &BenchRules) -> Result<Baro, String> {
     let text = std::fs::read_to_string(path).map_err(|_| "baro.csv absent".to_owned())?;
-    let mut rows: Vec<(f64, f64)> = Vec::new();
+    parse_baro(&text, rules)
+}
+
+fn parse_baro(text: &str, rules: &BenchRules) -> Result<Baro, String> {
+    let header: Vec<&str> = text.lines().next().unwrap_or_default().split(',').map(str::trim).collect();
+    if header.get(4) != Some(&"insere") {
+        return Err("baro.csv sans colonne insere (recalage antérieur à 53225a8)".into());
+    }
+    let mut rows: Vec<(f64, f64, bool)> = Vec::new();
     for line in text.lines().skip(1) {
         let f: Vec<&str> = line.split(',').collect();
         let (Some(s), Some(z)) =
@@ -173,10 +187,21 @@ fn read_baro(path: &std::path::Path, rules: &BenchRules) -> Result<(Vec<f64>, Ve
         if dist.is_some_and(|d| d > rules.match_max_m) {
             continue;
         }
-        rows.push((s, z));
+        let inserted = match f.get(4).map(|x| x.trim()) {
+            Some("0") => false,
+            Some("1") => true,
+            _ => return Err("baro.csv : colonne insere illisible".into()),
+        };
+        rows.push((s, z, inserted));
     }
     rows.sort_by(|a, b| a.0.total_cmp(&b.0));
-    Ok(rows.into_iter().unzip())
+    let mut out: Baro = (Vec::new(), Vec::new(), Vec::new());
+    for (s, z, i) in rows {
+        out.0.push(s);
+        out.1.push(z);
+        out.2.push(i);
+    }
+    Ok(out)
 }
 
 /// Un cas : géométrie en un ou plusieurs tronçons, baro unique sur l'abscisse recollée.
@@ -199,7 +224,7 @@ fn build_case(
         offset += total;
         parts.push(request);
     }
-    let (baro_s, baro_z) = read_baro(baro, rules)?;
+    let (baro_s, baro_z, baro_inserted) = read_baro(baro, rules)?;
     Ok(PersoCase {
         id,
         groupe: trace.groupe.clone(),
@@ -208,6 +233,7 @@ fn build_case(
         s_ref,
         baro_s,
         baro_z,
+        baro_inserted,
         masks: trace.passages_masques.clone(),
         ring: Vec::new(),
     })
@@ -437,6 +463,55 @@ pub fn held_out_extracts(
         return Vec::new();
     }
     let ll: Vec<LatLon> = pts.iter().map(|q| LatLon::new(q.lat, q.lon)).collect();
+    let mut out = Vec::new();
+    for (k, w) in held_out_windows(case, refs, rules).into_iter().enumerate() {
+        let (lo, hi) = (w.start - HELD_OUT_MARGIN_M, w.end + HELD_OUT_MARGIN_M);
+        let idx: Vec<usize> =
+            (0..pts.len()).filter(|&i| case.s_ref[i] >= lo && case.s_ref[i] <= hi).collect();
+        let (Some(&first), Some(&last)) = (idx.first(), idx.last()) else { continue };
+        if last <= first {
+            continue;
+        }
+        let s0 = case.s_ref[first];
+        let keep: Vec<usize> =
+            (0..case.baro_s.len()).filter(|&i| (lo..=hi).contains(&case.baro_s[i])).collect();
+        let baro_s = keep.iter().map(|&i| case.baro_s[i] - s0).collect();
+        let baro_z = keep.iter().map(|&i| case.baro_z[i]).collect();
+        let baro_inserted = keep.iter().map(|&i| case.baro_inserted[i]).collect();
+        let extract = PersoCase {
+            id: format!("{}#extrait{k}", case.id),
+            groupe: case.groupe.clone(),
+            serie: case.serie,
+            parts: vec![pts[first..=last].to_vec()],
+            s_ref: case.s_ref[first..=last].iter().map(|x| x - s0).collect(),
+            baro_s,
+            baro_z,
+            baro_inserted,
+            // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
+            masks: Vec::new(),
+            ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
+        };
+        out.push((extract, (w.start - s0)..(w.end - s0)));
+    }
+    out
+}
+
+/// Fenêtres évaluées d'un cas d'une trace tenue à l'écart (abscisses du cas) : ± 500 m autour de
+/// chaque passage d'un ouvrage de calibration (`passages_masques`), fusionnées.
+pub fn held_out_windows(
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<std::ops::Range<f64>> {
+    let ll: Vec<LatLon> = case
+        .parts
+        .iter()
+        .enumerate()
+        .flat_map(|(k, part)| part.iter().skip(usize::from(k > 0)).map(|q| LatLon::new(q.lat, q.lon)))
+        .collect();
+    if ll.len() != case.s_ref.len() {
+        return Vec::new();
+    }
     let mut windows: Vec<std::ops::Range<f64>> = case
         .masks
         .iter()
@@ -451,38 +526,18 @@ pub fn held_out_extracts(
             _ => merged.push(w),
         }
     }
-    let mut out = Vec::new();
-    for (k, w) in merged.into_iter().enumerate() {
-        let (lo, hi) = (w.start - HELD_OUT_MARGIN_M, w.end + HELD_OUT_MARGIN_M);
-        let idx: Vec<usize> =
-            (0..pts.len()).filter(|&i| case.s_ref[i] >= lo && case.s_ref[i] <= hi).collect();
-        let (Some(&first), Some(&last)) = (idx.first(), idx.last()) else { continue };
-        if last <= first {
-            continue;
-        }
-        let s0 = case.s_ref[first];
-        let (baro_s, baro_z): (Vec<f64>, Vec<f64>) = case
-            .baro_s
-            .iter()
-            .zip(&case.baro_z)
-            .filter(|(x, _)| **x >= lo && **x <= hi)
-            .map(|(x, z)| (x - s0, *z))
-            .unzip();
-        let extract = PersoCase {
-            id: format!("{}#extrait{k}", case.id),
-            groupe: case.groupe.clone(),
-            serie: case.serie,
-            parts: vec![pts[first..=last].to_vec()],
-            s_ref: case.s_ref[first..=last].iter().map(|x| x - s0).collect(),
-            baro_s,
-            baro_z,
-            // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
-            masks: Vec::new(),
-            ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
-        };
-        out.push((extract, (w.start - s0)..(w.end - s0)));
-    }
-    out
+    merged
+}
+
+/// Plages d'un cas tenu à l'écart où son baro est lu : fenêtres ± 3 km (repli du décalage
+/// local), plus l'écart d'interpolation maximal. La règle des points insérés n'y regarde que là.
+pub fn held_out_baro_ranges(
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<std::ops::Range<f64>> {
+    let reach = HELD_OUT_RING_M + rules.baro_gap_max_m;
+    held_out_windows(case, refs, rules).into_iter().map(|w| (w.start - reach)..(w.end + reach)).collect()
 }
 
 /// Points de la trace dans `range` (abscisse de la trace), en abscisse de l'extrait (`s0`), avec
@@ -1065,6 +1120,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let mut cases = Vec::new();
     let mut skipped = Vec::new();
     let mut data_versions = Value::Null;
+    let mut inserted_report: Vec<Value> = Vec::new();
     for t in &selection.cases {
         if !paths.private_present() {
             skipped.push(json!({"id": t.id, "raison": "bench/private/ absent"}));
@@ -1077,7 +1133,17 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 continue;
             }
         };
-        for case in loaded {
+        for mut case in loaded {
+            // Baro des points insérés (README §2.1, étape 3) : tuiles de la campagne.
+            match crate::inserted::apply(&mut case, &paths.cache, None, &rules).await? {
+                Ok(o) => {
+                    inserted_report.push(json!({"id": case.id, "inseres": o.inserted, "retires": o.removed}))
+                }
+                Err(reason) => {
+                    skipped.push(json!({"id": case.id, "raison": reason}));
+                    continue;
+                }
+            }
             let csv = std::fs::read_to_string(
                 paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
             )
@@ -1108,7 +1174,16 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
             continue;
         };
-        for case in loaded {
+        for mut case in loaded {
+            // Points insérés : seulement là où le baro de l'extrait est lu ; bilan non rapporté.
+            let ranges = held_out_baro_ranges(&case, &refs, &rules);
+            if let Err(reason) =
+                crate::inserted::apply(&mut case, &paths.cache, Some(&ranges), &rules).await?
+            {
+                skipped
+                    .push(json!({"id": case.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
+                continue;
+            }
             match measure_held_out(&service, t, &case, &refs, &ouvrages, &rules, &rules_core, &paths.cache)
                 .await
             {
@@ -1198,7 +1273,9 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "groupes": groupes,
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
             "extraits_tenus_a_l_ecart": held_out_measured,
+            "baro_points_inseres": inserted_report,
             "notes": [
+                "Baro des points insérés (README §2.1, étape 3 ; criteria.yaml preparation.baro_points_inseres) : point insere = 1 gardé seulement si sa position sur la géométrie recalée est à ≤ 30 m d'une ligne de la couche streets (toutes classes, tuile z14 et 8 voisines, cache de la campagne) ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté ; baro_points_inseres = bilan par cas de calibration ; traces tenues à l'écart : règle appliquée sur les seules plages lues des extraits, bilan non rapporté",
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
                 "E3 : baro corrigé localement sur les traces perso, décalage = médiane (baro − MNT LiDAR, profil du service sans correction d'ouvrage) sur les approches de 50 à 300 m de chaque côté du pont, hors autres ouvrages (service ou tuiles) et fenêtres masquées ; moins de 20 stations d'un côté : repli sur la médiane baro − service au sol entre 1 et 3 km du milieu (decalage_repli_1_3km) ; côtés différant de plus de 2 m : reference_incertaine, rapportée, non comptée (README §4 bis.3) ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
                 "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM ; ou sur un pont ou un tunnel des tuiles de la campagne, station à moins de 10 m à l'intérieur de sa ligne) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule ; pente implicite entre portails retenus (pente_implicite_portails) au-delà de 25 % : référence indisponible, rapportée, non comptée (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
@@ -1256,6 +1333,7 @@ pub async fn fill_cache(
         for t in &selection.cases {
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
+                crate::inserted::fill(&case, &paths.cache, None).await?;
                 for part in &case.parts {
                     for sc in [true, false] {
                         service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;
@@ -1277,6 +1355,8 @@ pub async fn fill_cache(
         {
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
+                crate::inserted::fill(&case, &paths.cache, Some(&held_out_baro_ranges(&case, &refs, &rules)))
+                    .await?;
                 for (extract, _) in held_out_extracts(&case, &refs, &rules) {
                     for part in &extract.parts {
                         for sc in [true, false] {
@@ -1439,6 +1519,7 @@ mod tests {
             parts: vec![pts],
             baro_s: s_ref.clone(),
             baro_z: vec![10.0; s_ref.len()],
+            baro_inserted: vec![false; s_ref.len()],
             s_ref,
             masks: vec!["pont".into()],
             ring: Vec::new(),
@@ -1466,6 +1547,32 @@ mod tests {
         // Sans ouvrage de calibration franchi : aucun extrait.
         let none = PersoCase { masks: Vec::new(), ..case };
         assert!(held_out_extracts(&none, &refs, &rules).is_empty());
+    }
+
+    #[test]
+    fn baro_csv_reads_the_inserted_column() {
+        let rules = BenchRules::default();
+        let text = "s_recale_m,baro_m,s_origine_m,distance_au_trace_m,insere\n\
+                    50.0,101.0,50.0,3.0,0\n0.0,100.0,0.0,2.0,0\n25.0,100.5,25.0,0.0,1\n75.0,102.0,75.0,31.0,0\n";
+        let (s, z, ins) = parse_baro(text, &rules).unwrap();
+        assert_eq!(s, vec![0.0, 25.0, 50.0], "trié, apparié à plus de 30 m écarté");
+        assert_eq!(z, vec![100.0, 100.5, 101.0]);
+        assert_eq!(ins, vec![false, true, false]);
+        let old = "s_recale_m,baro_m,s_origine_m,distance_au_trace_m\n0.0,100.0,0.0,2.0\n";
+        assert!(parse_baro(old, &rules).is_err(), "recalage sans colonne insere refusé");
+        let bad = "s_recale_m,baro_m,s_origine_m,distance_au_trace_m,insere\n0.0,100.0,0.0,2.0,x\n";
+        assert!(parse_baro(bad, &rules).is_err());
+    }
+
+    #[test]
+    fn held_out_baro_ranges_cover_the_ring_only() {
+        let (case, refs) = straight_case();
+        let rules = BenchRules::default();
+        let w = held_out_windows(&case, &refs, &rules);
+        let r = held_out_baro_ranges(&case, &refs, &rules);
+        assert_eq!((w.len(), r.len()), (1, 1));
+        assert!((w[0].start - r[0].start - 3_100.0).abs() < 1e-9);
+        assert!((r[0].end - w[0].end - 3_100.0).abs() < 1e-9);
     }
 
     #[test]
