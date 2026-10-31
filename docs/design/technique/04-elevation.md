@@ -381,7 +381,7 @@ l'une des deux est `none`.
 | Raison | Source | Classe |
 |---|---|---|
 | `structure_start` / `structure_end` | Bornes de chaque ouvrage (`StructureOutcome`, sans les marges), coupées au parcours. Deux ponts contigus gardent leur borne commune. | A (fait) |
-| `elevation_gap_start` / `_end` | Bornes de `MissingRange` après comblement | A |
+| `elevation_gap_start` / `_end` | Bornes de `MissingRange` après comblement, portées par la dernière (première) station lue qui les encadre, pour que le point ait une altitude (incrément 5) | A |
 | `terrain_source_change` | Bornes des `TerrainRange` (changement d'`origin`) et des plages GLO-30 retenues (§5.4) | A |
 | `surface_change` | Frontière où `surface.class` change entre deux segments | B |
 | `local_max` / `local_min` | Points de retournement confirmés par l'accumulateur de D+ (§5.4), recalés sur l'argmax ou l'argmin de `ele` non lissé à ±`smoothing` du preset | C, poids = amplitude de la jambe |
@@ -396,7 +396,8 @@ de densité près.
 consécutifs (points d'entrée, événements A et B, extrema), tolérance `grade_tolerance_m = 2 m` [cal].
 Un sommet n'est retenu que si les deux pièces font au moins `grade_min_run_m = 50 m` [cal] et que leur
 pente diffère d'au moins `grade_min_delta_pct = 2 points` [cal]. Vaut aussi **dans un ouvrage
-corrigé** (tablier bombé). Récursion dans l'ordre des indices : déterministe.
+corrigé** (tablier bombé). Récursion dans l'ordre des indices : déterministe. Un sommet de
+corde qui ne remplit pas ces conditions arrête la recherche sur sa plage (incrément 5).
 
 ### 6.2 Déduplication et densité
 
@@ -406,7 +407,9 @@ corrigé** (tablier bombé). Récursion dans l'ordre des indices : déterministe
 2. **Rattachement** : à moins de `snap_m = 5 m` [cal] d'un point d'entrée (le plus proche, le
    précédent en cas d'égalité), l'événement lui donne ses raisons sans créer de point ; le point
    d'entrée n'est jamais déplacé (doc 01 §5.6).
-3. **Espacement** : un événement C à moins de `min_spacing_m = 20 m` [cal] d'un point retenu (entrée,
+3. **Espacement** : un événement C à moins de `min_spacing_m = 5 m` [cal ; 20 m au départ, ramené à
+   5 m sur `test1..4` à l'incrément 5, un sommet remplacé par un point d'entrée voisin faussant le D+
+   des points] d'un point retenu (entrée,
    A ou B) est abandonné. A n'est jamais abandonné ; B seulement par la fusion.
 4. **Plafond** : au plus `max_inserted_per_km = 20` points insérés par km [cal] sur toute fenêtre
    glissante d'un km, et au plus 16 000 points insérés au total (borne d'entrée, doc 02 §7). Au-delà,
