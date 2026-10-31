@@ -160,7 +160,8 @@ pub fn build_deck(
     // sonde prolonge le tablier sans rupture (pente sous `max_ramp_grade`) ; la surface lue
     // continue au-delà du way, c'est un ouvrage qui se prolonge sans tag (accès nord du pont de
     // Saint-Nazaire), pas une superstructure : le tablier est gardé.
-    for (probe, k) in [(probes[0], u), (probes[1], v)] {
+    let mut held = [false, false];
+    for (side, (probe, k)) in [(probes[0], u), (probes[1], v)].into_iter().enumerate() {
         if let Some(p) = probe {
             let run = (c[k] - p.c).abs();
             let z = deck[k - u];
@@ -170,6 +171,9 @@ pub fn build_deck(
             if steep && !continues {
                 return DeckOutcome::Fallback(DeckFailure::RampTooSteep);
             }
+            // L'ouvrage continue : tablier tenu plat jusqu'à l'extrémité du way, la rampe ne
+            // commence qu'au-delà (comme à la jonction d'un tunnel).
+            held[side] = steep;
         }
     }
     let below = (u..=v).filter(|&k| deck[k - u] < mnt[k] - r.mnt_above_mns_tolerance_m).count();
@@ -178,7 +182,16 @@ pub fn build_deck(
     }
     let mut z = vec![f64::NAN; n];
     z[u..=v].copy_from_slice(&deck);
-    DeckOutcome::Deck { z, first: u, last: v }
+    let (mut first, mut last) = (u, v);
+    if held[0] {
+        z[..u].fill(deck[0]);
+        first = 0;
+    }
+    if held[1] {
+        z[v + 1..].fill(deck[deck.len() - 1]);
+        last = n - 1;
+    }
+    DeckOutcome::Deck { z, first, last }
 }
 
 #[cfg(test)]
@@ -268,7 +281,12 @@ mod tests {
         let mns: Vec<f64> = mns.iter().map(|z| z + 25.0).collect();
         let probes =
             [Some(Probe { c: -10.0, z: 29.0, mns: 30.0 }), Some(Probe { c: 210.0, z: 0.0, mns: 34.0 })];
-        assert!(matches!(build_deck(&c, &mnt, &mns, probes, &rules()), DeckOutcome::Deck { .. }));
+        match build_deck(&c, &mnt, &mns, probes, &rules()) {
+            DeckOutcome::Deck { first, last, .. } => {
+                assert_eq!((first, last), (0, 40), "tenu plat jusqu'au bout")
+            }
+            other => panic!("{other:?}"),
+        }
         let probes =
             [Some(Probe { c: -10.0, z: 29.0, mns: 30.0 }), Some(Probe { c: 210.0, z: 0.0, mns: 0.2 })];
         assert_eq!(

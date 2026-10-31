@@ -143,6 +143,9 @@ pub enum PassageDoubt {
     JumpInside,
     FarFromAxis,
     ChainBreak,
+    /// Le parcours avance sans avancer le long de l'axe : il croise l'ouvrage (passage dessous
+    /// apparié par un saut sur un pont qui l'enjambe) au lieu de le suivre.
+    AcrossAxis,
 }
 
 /// Un passage du parcours sur un ouvrage.
@@ -886,7 +889,20 @@ pub fn resolve(
         let seg_pos: FxHashMap<u32, usize> = b.segs.iter().enumerate().map(|(i, &s)| (s, i)).collect();
         let mut chainage: Vec<(f64, f64)> = Vec::new();
         for &(d, pos, seg) in &located {
-            let Some(i) = seg.and_then(|seg| seg_pos.get(&seg).copied()) else {
+            // Un échantillon localisé sur un autre ouvrage (portail partagé, tube voisin) est
+            // projeté sur l'axe s'il en est assez proche ; sinon, coupure de chaîne.
+            let i = match seg.and_then(|seg| seg_pos.get(&seg).copied()) {
+                Some(i) => Some(i),
+                None => (0..b.segs.len())
+                    .map(|i| {
+                        let (a, c) = (sg.nodes[b.nodes[i] as usize], sg.nodes[b.nodes[i + 1] as usize]);
+                        (i, project_on_segment(pos, a, c).dist2)
+                    })
+                    .min_by(|x, y| x.1.total_cmp(&y.1))
+                    .filter(|x| x.1 <= tol * tol)
+                    .map(|x| x.0),
+            };
+            let Some(i) = i else {
                 if !doubts.contains(&PassageDoubt::ChainBreak) {
                     doubts.push(PassageDoubt::ChainBreak);
                 }
@@ -899,6 +915,10 @@ pub fn resolve(
         }
         chainage.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
         chainage.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9);
+        let progress: f64 = chainage.windows(2).map(|w| (w[1].1 - w[0].1).abs()).sum();
+        if chainage.len() >= 2 && progress < rules.min_axis_progress * (to - from) {
+            doubts.push(PassageDoubt::AcrossAxis);
+        }
         if b.structure.ends.iter().any(|e| matches!(e.kind, EndKind::Unresolved(_))) {
             doubts.push(PassageDoubt::EndUnresolved);
         }

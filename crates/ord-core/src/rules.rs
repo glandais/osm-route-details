@@ -106,6 +106,9 @@ pub struct StructureRules {
     pub max_end_jump_m: f64,
     /// Un passage atteint une extrémité à moins de cette distance d'axe.
     pub end_reached_m: f64,
+    /// Avancée minimale le long de l'axe, en part de la longueur du passage sur le parcours :
+    /// en deçà, le parcours croise l'ouvrage au lieu de le suivre (doute) [à calibrer].
+    pub min_axis_progress: f64,
 }
 
 impl Default for StructureRules {
@@ -120,6 +123,7 @@ impl Default for StructureRules {
             far_from_axis_m: 15.0,
             max_end_jump_m: 20.0,
             end_reached_m: 15.0,
+            min_axis_progress: 0.5,
         }
     }
 }
@@ -294,6 +298,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.4", "ec416ccecef82f15".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.4", "577afa749f5f34ec".to_owned()));
     }
 }
