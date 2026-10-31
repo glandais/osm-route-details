@@ -367,7 +367,7 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
 |----|----------|------------|-----------|
 | **E1** | Erreur d'altitude hors ouvrage | RMSE et P95 de (service − baro), après décalage et retrait de tendance, sur les stations `ground` | traces `dplus`, `plaine` |
 | **E2** | D+ comparé au baro (indicatif) | ratio D+ service (preset `dem`) / D+ baro (hystérésis 2 m, fenêtre 15 m : preset `barometric`), par trace | traces `dplus`, `plaine`, `ouvrage` |
-| **E2b** | Les corrections ne dégradent pas le D+ | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ service avec `structure_correction: false` / D+ baro)\| ; mêmes sources, géométrie recalée, preset `dem` et masques | idem |
+| **E2b** | Les corrections ne dégradent pas le D+ | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ service avec `structure_correction: false` / D+ baro)\| ; mêmes sources, géométrie recalée, preset `dem` **des trois côtés (baro compris, §4 bis.5)** et masques | idem |
 | **E3** | Erreur d'altitude sur tablier | Par passage : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier ; par pont : **médiane sur les passages** de l'une et de l'autre (§4 bis) | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel **OSM**, entre ses propres portails : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel. Altitude de portail = médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche (§4 bis) | `ouvrages.yaml`, vcyclist `N` (par tunnel OSM) |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
@@ -392,7 +392,7 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 |----|-----------|---------------|
 | E1 | RMSE ≤ 1,5 m en plaine, ≤ 3,0 m en relief ; P95 ≤ 4 m / 8 m | Baro vs MNT au pas de 50 m : bruit médian 0,6 m (plaine), 1,1 m (relief), p95 médian 1,6 / 3,5 m ; vcyclist Strava vs MNT 0,75–0,85 m / 2,31 m |
 | E2 | **Indicatif** (suivi en non-régression) : par trace dans [0,90 ; 1,20] ; médiane du groupe dans [0,95 ; 1,12] | MNT brut / baro mesuré : 0,96–1,21 (médianes 1,00 plaine, 1,07 relief) ; vcyclist +12 % ; critère vcyclist [0,8 ; 1,2] resserré car notre référence est un baromètre |
-| E2b | **Bloquant** : pour chaque groupe, médiane \|ln(D+ service / D+ baro)\| ≤ même médiane pour le service appelé avec `structure_correction: false` | Mesure l'apport des corrections d'ouvrage à sources égales (LiDAR HD, repli Mapterhorn). Le RGE ALTI, ≈ 7 m d'erreur en montagne, rendrait le critère presque toujours vrai (décision de l'utilisateur, 2026-10-30) |
+| E2b | **Bloquant** : pour chaque groupe, médiane \|ln(D+ service / D+ baro)\| ≤ même médiane pour le service appelé avec `structure_correction: false`, D+ baro en preset `dem` (§4 bis.5) | Mesure l'apport des corrections d'ouvrage à sources égales (LiDAR HD, repli Mapterhorn). Le RGE ALTI, ≈ 7 m d'erreur en montagne, rendrait le critère presque toujours vrai (décision de l'utilisateur, 2026-10-30) |
 | E3 | France, pont tagué : \|erreur au milieu\| ≤ 2 m et max ≤ 3 m (ponts < 300 m), ≤ 5 m (grands ponts) ; ≥ 90 % des ponts du corpus passent | vcyclist : ≤ 2 m Nantes, ≤ 5 m Saint-Nazaire, 18/21 = 86 % ; baro − MNS mesuré ≤ 1 m sur Saint-Nazaire, Pirmil, Mauves |
 | E3 hors France | Mesuré et rapporté, pas de seuil (pont interpolé, `interpolated_structure`) | 22–40 m d'erreur attendus sur grands ponts bombés (doc 01 §9) |
 | E4 | \|erreur max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel ; ≥ 6/7 des tunnels tagués | Critère Grands Goulets de vcyclist ; 6/7 hors échantillon ; Strava : +190 m d'erreur, +112 m de D+ fictif aux Grands Goulets |
@@ -502,6 +502,23 @@ entre portails (point 2).
    porte la note `limite_donnees`. Cas connu : la galerie pare-avalanche de l'Arly
    (`tunnel=avalanche_protector`), que le schéma Shortbread de VersaTiles rend en voie ordinaire sans
    `tunnel` ; elle reste dans E4 et S1 avec `limite_donnees: shortbread sans avalanche_protector`.
+5. **E2b à traitement égal** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle mesure).
+   Le D+ baro d'E2b est calculé avec le preset `dem` (hystérésis 3 m, lissage 30 m), le même que pour
+   le service et sa référence sans correction ; E2, indicatif, reste en `barometric` (2 m, 15 m),
+   vue produit. Motif : E2b mesure l'apport des corrections à sources **et à traitement** égaux. Avec
+   le baro en `barometric`, la seule différence de preset donnait au baro 2,6 à 5,0 % de D+ de plus en
+   plaine ; les faux D+ des creux sous les tabliers compensaient ce biais, et retirer ces creux
+   faisait échouer une correction physiquement juste. Médianes |ln(D+ / D+ baro)|, service / sans
+   correction, calibration 2026.10.9-bench1 (27 traces, D+ recalculé à < 1 % du rapport) :
+   | groupe | baro `barometric` | baro `dem` |
+   |---|---|---|
+   | dplus (14) | 0,0325 / 0,0514 | 0,0474 / 0,0645 |
+   | ouvrage (8) | 0,0272 / 0,0404 | 0,0570 / 0,0713 |
+   | plaine (5) | 0,0374 / 0,0240 (échec) | 0,0120 / 0,0367 |
+   Les trois groupes passent à traitement égal. Les marges de dplus et d'ouvrage se resserrent
+   (rapport service / sans correction 0,63 → 0,73 et 0,67 → 0,80) : le service y est déjà au-dessus
+   du baro, et le preset `dem` abaisse le D+ baro. Le critère reste discriminant partout. En plaine,
+   chaque correction insérée seule retire du D+ (62 corrections, −109 m), sauf trois (+0,8 à +3,2 m).
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
