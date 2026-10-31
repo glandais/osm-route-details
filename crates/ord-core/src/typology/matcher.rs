@@ -235,7 +235,33 @@ pub fn candidates(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Vec<Cand> {
     out
 }
 
+/// Projection d'une observation sur la route fermée au vélo la plus proche (état « hors graphe »).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Closed {
+    pos: [f64; 2],
+    dist_m: f64,
+}
+
+fn closed_candidate(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Option<Closed> {
+    let mpu = g.grid.metres_per_unit(o.at.lat);
+    let r = params.search_radius_m / mpu;
+    g.closed
+        .locate_within_distance(o.p, r * r)
+        .map(|l| {
+            let pr = project_on_segment(o.p, l.from, l.to);
+            Closed { pos: pr.point, dist_m: dist_units(o.p, pr.point) * mpu }
+        })
+        .filter(|c| c.dist_m <= params.search_radius_m)
+        .min_by(|a, b| a.dist_m.total_cmp(&b.dist_m).then(a.pos[0].total_cmp(&b.pos[0])))
+}
+
 /// Apparie les observations sur le graphe ; le budget est lu toutes les 1 000 observations.
+///
+/// Outre ses candidats du graphe, une observation a un état « hors graphe » : sa projection sur la
+/// route motorisée fermée au vélo la plus proche (T03 §5.3). Le parcours qui suit une autoroute, un
+/// trunk ou un pont `bicycle=no` y reste au lieu d'accrocher les rues voisines (en dessous, au-dessus ou à côté,
+/// à 20–40 m) ; passer du graphe à cet état coûte `closed_way_cost`. Une observation dans cet état
+/// est non appariée et coupe la chaîne.
 pub fn match_obs(
     g: &StreetGraph,
     obs: Vec<Obs>,
@@ -244,12 +270,21 @@ pub fn match_obs(
 ) -> Result<MatchedPath, TypologyError> {
     let n = obs.len();
     let mut cands: Vec<Vec<Cand>> = Vec::with_capacity(n);
+    let mut closed: Vec<Option<Closed>> = Vec::with_capacity(n);
     for (t, o) in obs.iter().enumerate() {
         if t % 1000 == 0 && budget.expired() {
             return Err(TypologyError::Timeout);
         }
-        cands.push(if o.no_data.is_some() || g.is_empty() { Vec::new() } else { candidates(g, o, params) });
+        if o.no_data.is_some() || g.is_empty() {
+            cands.push(Vec::new());
+            closed.push(None);
+        } else {
+            cands.push(candidates(g, o, params));
+            closed.push(closed_candidate(g, o, params));
+        }
     }
+    // États de `t` : candidats du graphe, puis l'état hors graphe (indice `cands[t].len()`).
+    let states = |t: usize| cands[t].len() + usize::from(closed[t].is_some());
     let mut dij = Dijkstra::new(g.nodes.len());
     let emission = |c: &Cand| {
         let side = if g.class_of(c.seg).classified.footway_like { params.footway_cost } else { 0.0 };
@@ -265,13 +300,14 @@ pub fn match_obs(
             return Err(TypologyError::Timeout);
         }
         let cur = &cands[t];
-        if cur.is_empty() {
+        let k = states(t);
+        if k == 0 {
             back.push(Vec::new());
             prev_cost.clear();
             continue;
         }
-        let mut cost = vec![f64::INFINITY; cur.len()];
-        let mut bp = vec![u16::MAX; cur.len()];
+        let mut cost = vec![f64::INFINITY; k];
+        let mut bp = vec![u16::MAX; k];
         if t > 0 && !prev_cost.is_empty() {
             let gc = haversine_m(obs[t - 1].at, obs[t].at);
             let limit = 2.0 * gc + 60.0;
@@ -285,26 +321,57 @@ pub fn match_obs(
                 }
             }
             let mpu = g.grid.metres_per_unit(obs[t].at.lat);
-            for (i, ci) in cands[t - 1].iter().enumerate() {
+            let prev = &cands[t - 1];
+            // Vers l'état hors graphe, ou depuis lui : en ligne droite.
+            let straight = |from: [f64; 2], to: [f64; 2]| dist_units(from, to) * mpu;
+            let relax = |cost: &mut [f64], bp: &mut [u16], j: usize, i: usize, c: f64| {
+                if c < cost[j] {
+                    cost[j] = c;
+                    bp[j] = i as u16;
+                }
+            };
+            for (i, ci) in prev.iter().enumerate() {
                 if !prev_cost[i].is_finite() {
                     continue;
                 }
-                dij.run_from(g, ci, &targets, limit);
+                if !cur.is_empty() {
+                    dij.run_from(g, ci, &targets, limit);
+                }
                 for (j, cj) in cur.iter().enumerate() {
                     let tr = match dij.route_to(g, ci, cj) {
                         Some((route, _)) if route <= limit => (route - gc).abs() / params.beta,
                         _ => {
-                            let straight = dist_units(ci.pos, cj.pos) * mpu;
+                            let straight = straight(ci.pos, cj.pos);
                             if straight > params.max_jump_m {
                                 continue;
                             }
                             params.jump_cost + (straight - gc).abs() / params.beta
                         }
                     };
-                    let c = prev_cost[i] + tr;
-                    if c < cost[j] {
-                        cost[j] = c;
-                        bp[j] = i as u16;
+                    relax(&mut cost, &mut bp, j, i, prev_cost[i] + tr);
+                }
+                if let Some(cc) = closed[t] {
+                    let d = straight(ci.pos, cc.pos);
+                    if d <= params.max_jump_m {
+                        let tr = params.closed_way_cost + (d - gc).abs() / params.beta;
+                        relax(&mut cost, &mut bp, cur.len(), i, prev_cost[i] + tr);
+                    }
+                }
+            }
+            if let Some(pc) = closed[t - 1] {
+                let i = prev.len();
+                if prev_cost.get(i).is_some_and(|c| c.is_finite()) {
+                    for (j, cj) in cur.iter().enumerate() {
+                        let d = straight(pc.pos, cj.pos);
+                        if d <= params.max_jump_m {
+                            let tr = params.closed_way_cost + (d - gc).abs() / params.beta;
+                            relax(&mut cost, &mut bp, j, i, prev_cost[i] + tr);
+                        }
+                    }
+                    if let Some(cc) = closed[t] {
+                        // La voie fermée est suivie : pas de réseau, la droite entre projections.
+                        let tr = (straight(pc.pos, cc.pos) - gc).abs() / params.beta;
+                        relax(&mut cost, &mut bp, cur.len(), i, prev_cost[i] + tr);
                     }
                 }
             }
@@ -316,6 +383,9 @@ pub fn match_obs(
         for (j, c) in cur.iter().enumerate() {
             cost[j] += emission(c);
         }
+        if let Some(cc) = closed[t] {
+            cost[cur.len()] += 0.5 * (cc.dist_m / params.sigma_z).powi(2);
+        }
         let min = cost.iter().copied().fold(f64::INFINITY, f64::min);
         cost.iter_mut().for_each(|c| *c -= min);
         last_costs[t] = cost.clone();
@@ -323,24 +393,23 @@ pub fn match_obs(
         back.push(bp);
     }
 
-    // Retour arrière de chaque chaîne depuis sa fin.
+    // Retour arrière de chaque chaîne depuis sa fin ; l'état hors graphe n'est pas apparié et
+    // coupe la chaîne : chaque morceau apparié devient une chaîne.
     let mut chosen: Vec<Option<usize>> = vec![None; n];
-    let mut chain_of: Vec<u32> = vec![u32::MAX; n];
-    let mut chains: Vec<(usize, usize)> = Vec::new();
+    let mut visited = vec![false; n];
     let mut t = n;
     while t > 0 {
         t -= 1;
-        if cands[t].is_empty() || chosen[t].is_some() {
+        if states(t) == 0 || visited[t] {
             continue;
         }
         let costs = &last_costs[t];
         let mut j =
             (0..costs.len()).min_by(|&a, &b| costs[a].total_cmp(&costs[b]).then(a.cmp(&b))).unwrap_or(0);
         let mut k = t;
-        let id = chains.len() as u32;
         loop {
-            chosen[k] = Some(j);
-            chain_of[k] = id;
+            visited[k] = true;
+            chosen[k] = (j < cands[k].len()).then_some(j);
             let b = back[k][j];
             if b == u16::MAX || k == 0 {
                 break;
@@ -348,8 +417,22 @@ pub fn match_obs(
             j = b as usize;
             k -= 1;
         }
-        chains.push((k, t));
         t = k;
+    }
+    let mut chain_of: Vec<u32> = vec![u32::MAX; n];
+    let mut chains: Vec<(usize, usize)> = Vec::new();
+    for t in 0..n {
+        let Some(j) = chosen[t] else { continue };
+        let linked = t > 0 && chosen[t - 1].is_some_and(|i| back[t][j] == i as u16);
+        if linked {
+            chain_of[t] = chain_of[t - 1];
+            if let Some(last) = chains.last_mut() {
+                last.1 = t;
+            }
+        } else {
+            chain_of[t] = chains.len() as u32;
+            chains.push((t, t));
+        }
     }
     // Chaînes trop courtes rejetées (sauf si elles couvrent tout le parcours).
     let total = obs.last().map_or(0.0, |o| o.d_m) - obs.first().map_or(0.0, |o| o.d_m);

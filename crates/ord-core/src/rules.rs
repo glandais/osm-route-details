@@ -16,7 +16,8 @@ use serde::Serialize;
 // 2026.10.4 : ouvrages OSM (graphe des ouvrages, extension, tablier MNS, interpolation, tunnels,
 // comblement des trous courts).
 // 2026.10.5 : ouvrage apparié à contre-cap rejeté (passages supérieurs croisés).
-pub const RULES_VERSION: &str = "2026.10.5";
+// 2026.10.6 : état « hors graphe » des routes motorisées fermées au vélo dans le HMM.
+pub const RULES_VERSION: &str = "2026.10.6";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -40,6 +41,9 @@ pub struct MatchParams {
     pub step_m: f64,
     /// Coût d'un saut en ligne droite entre deux rues que le réseau ne relie pas.
     pub jump_cost: f64,
+    /// Coût d'un passage entre le graphe vélo et l'état « hors graphe » d'une voie fermée au vélo
+    /// (autoroute, trunk, `bicycle=no`…), dans un sens ou dans l'autre [à calibrer].
+    pub closed_way_cost: f64,
     pub max_jump_m: f64,
     /// Malus d'émission d'un trottoir, d'un escalier ou d'une rue piétonne.
     pub footway_cost: f64,
@@ -61,6 +65,7 @@ impl Default for MatchParams {
             beta: 3.0,
             step_m: 10.0,
             jump_cost: 12.0,
+            closed_way_cost: 12.0,
             max_jump_m: 60.0,
             footway_cost: 0.75,
             min_chain_m: 50.0,
@@ -306,6 +311,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.5", "8ba3909e957c1727".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.6", "d533724602494282".to_owned()));
     }
 }

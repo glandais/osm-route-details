@@ -5,6 +5,10 @@
 //! (T03 §12.3) : la clé de nœud inclut le niveau (sol, pont, tunnel) ; le recollage aux bords de
 //! tuile reste au même niveau ; un pont ou un tunnel ne se relie à un autre niveau que par une
 //! vraie fin de ligne (la culée), jamais par un sommet intérieur.
+//!
+//! Les routes motorisées fermées au vélo (autoroute, trunk, `bicycle=no`…) n'entrent pas au
+//! graphe ; leurs segments du couloir sont gardés à part (`closed`), sans topologie : le HMM y voit un état « hors
+//! graphe » (T03 §5.3).
 
 use std::sync::Arc;
 
@@ -15,7 +19,7 @@ use rstar::RTree;
 use rustc_hash::FxHashMap;
 
 use super::corridor::Corridor;
-use crate::classification::tables::bicycle_routable;
+use crate::classification::tables::{bicycle_closed, bicycle_routable};
 use crate::classification::{classify, Classified, Level};
 
 pub type NodeId = u32;
@@ -47,6 +51,8 @@ pub struct GraphSeg {
 }
 
 pub type SegIndex = RTree<GeomWithData<Line<[f64; 2]>, SegId>>;
+/// Segments des routes fermées au vélo, sans topologie.
+pub type ClosedIndex = RTree<Line<[f64; 2]>>;
 
 pub struct StreetGraph {
     pub grid: Grid,
@@ -56,6 +62,8 @@ pub struct StreetGraph {
     adj_start: Vec<u32>,
     adj: Vec<(SegId, NodeId)>,
     pub index: SegIndex,
+    /// Routes motorisées fermées au vélo du couloir (T03 §5.3).
+    pub closed: ClosedIndex,
 }
 
 impl std::fmt::Debug for StreetGraph {
@@ -64,6 +72,7 @@ impl std::fmt::Debug for StreetGraph {
             .field("nodes", &self.nodes.len())
             .field("segs", &self.segs.len())
             .field("classes", &self.classes.len())
+            .field("closed", &self.closed.size())
             .finish_non_exhaustive()
     }
 }
@@ -111,6 +120,7 @@ impl StreetGraph {
         let mut cut_ends: Vec<(NodeId, LineId)> = Vec::new();
         let mut raw: Vec<RawSeg> = Vec::new();
         let mut line_count: LineId = 0;
+        let mut closed: Vec<Line<[f64; 2]>> = Vec::new();
 
         for tile in tiles {
             let tile_classes: Vec<Option<ClassId>> = tile
@@ -138,6 +148,14 @@ impl StreetGraph {
                 .collect();
             for line in &tile.lines {
                 let Some(class) = tile_classes.get(line.attr as usize).copied().flatten() else {
+                    if tile.attrs.get(line.attr as usize).is_some_and(bicycle_closed) {
+                        closed.extend(
+                            line.points
+                                .windows(2)
+                                .filter(|w| w[0] != w[1] && corridor.touches(w[0], w[1]))
+                                .map(|w| Line::new(w[0], w[1])),
+                        );
+                    }
                     continue;
                 };
                 let line_id = line_count;
@@ -221,7 +239,7 @@ impl StreetGraph {
                 })
                 .collect(),
         );
-        Self { grid, nodes, segs, classes, adj_start, adj, index }
+        Self { grid, nodes, segs, classes, adj_start, adj, index, closed: RTree::bulk_load(closed) }
     }
 
     pub fn neighbours(&self, node: NodeId) -> &[(SegId, NodeId)] {

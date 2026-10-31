@@ -388,3 +388,67 @@ fn a_crossing_overpass_is_never_followed() {
     let (segs, _) = run(net(), &[(-300.0, 0.0), (300.0, 0.0)], None);
     assert!(segs.iter().all(|s| s.structure != StructureClass::Bridge && !s.matched), "{segs:?}");
 }
+
+/// Pont fermé au vélo (trunk `bicycle=no`) d'ouest en est sur y = 0, prolongé au sol par ses
+/// rampes, également fermées.
+fn closed_bridge() -> Net {
+    let closed = |a: WayAttrs| WayAttrs { bicycle: Some(Arc::from("no")), ..a };
+    Net::new()
+        .add(closed(with_surface("trunk", PavedGroup::Paved)), &[(-600.0, 0.0), (-400.0, 0.0)])
+        .add(closed(bridge("trunk")), &[(-400.0, 0.0), (400.0, 0.0)])
+        .add(closed(with_surface("trunk", PavedGroup::Paved)), &[(400.0, 0.0), (600.0, 0.0)])
+}
+
+#[test]
+fn a_closed_bridge_does_not_snap_to_the_streets_below() {
+    // Sous le tablier, une rue parallèle à 25 m et une rue qui le croise, reliées : le parcours
+    // qui suit le pont fermé reste hors graphe, il n'accroche pas les rues du dessous.
+    let net = || {
+        closed_bridge()
+            .add(
+                with_surface("residential", PavedGroup::Paved),
+                &[(-300.0, 25.0), (0.0, 25.0), (300.0, 25.0)],
+            )
+            .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -200.0), (0.0, 25.0)])
+    };
+    let (segs, out) = run(net(), &[(-550.0, 0.0), (550.0, 0.0)], None);
+    assert!(segs.iter().all(|s| !s.matched), "{segs:?}");
+    assert!(out.passages.is_empty(), "{:?}", out.passages);
+}
+
+#[test]
+fn a_closed_road_does_not_follow_a_parallel_overpass() {
+    // Autoroute en tranchée sur y = 0 ; une piste cyclable la longe à 15 m, sur un pont de 200 m
+    // entre deux rampes au sol : le parcours de l'autoroute ne crée ni pont ni appariement.
+    let net = Net::new()
+        .add(with_surface("motorway", PavedGroup::Paved), &[(-600.0, 0.0), (600.0, 0.0)])
+        .add(with_surface("cycleway", PavedGroup::Paved), &[(-400.0, 15.0), (-100.0, 15.0)])
+        .add(bridge("cycleway"), &[(-100.0, 15.0), (100.0, 15.0)])
+        .add(with_surface("cycleway", PavedGroup::Paved), &[(100.0, 15.0), (400.0, 15.0)]);
+    let (segs, out) = run(net, &[(-550.0, 0.0), (550.0, 0.0)], None);
+    assert!(out.passages.is_empty(), "{:?}", out.passages);
+    assert!(segs.iter().all(|s| s.structure != StructureClass::Bridge && !s.matched), "{segs:?}");
+}
+
+#[test]
+fn a_cycleway_beside_a_motorway_stays_matched() {
+    // Piste sur y = 0, autoroute à 12 m au sud ; la trace bruitée (± 4 m, centrée 3 m au sud de
+    // la piste) reste sur la piste : l'état hors graphe coûte un passage dans chaque sens.
+    let net = Net::new()
+        .add(with_surface("cycleway", PavedGroup::Paved), &[(-500.0, 0.0), (500.0, 0.0)])
+        .add(with_surface("motorway", PavedGroup::Paved), &[(-500.0, -12.0), (500.0, -12.0)]);
+    let trace: Vec<(f64, f64)> =
+        (0..=40).map(|k| (-400.0 + 20.0 * k as f64, if k % 2 == 0 { 1.0 } else { -7.0 })).collect();
+    let (segs, _) = run(net, &trace, None);
+    assert!(segs.iter().all(|s| s.matched && s.way_kind == WayKind::Cycleway), "{segs:?}");
+}
+
+#[test]
+fn passing_under_a_closed_bridge_stays_matched() {
+    // La rue au sol passe sous le pont fermé : appariée de bout en bout, sans ouvrage.
+    let net =
+        closed_bridge().add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)]);
+    let (segs, out) = run(net, &[(0.0, -300.0), (0.0, 300.0)], None);
+    assert!(segs.iter().all(|s| s.matched && s.structure == StructureClass::Ground), "{segs:?}");
+    assert!(out.passages.is_empty());
+}

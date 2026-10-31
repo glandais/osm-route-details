@@ -118,6 +118,14 @@ pub fn bicycle_routable(a: &WayAttrs) -> bool {
     }
 }
 
+/// Route motorisée (`way_kind` route principale ou secondaire) connue des tuiles mais fermée au vélo
+/// (autoroute, trunk, route `bicycle=no`…) : hors du graphe, elle reste un état « hors graphe » du
+/// HMM (T03 §5.3). Les rails n'en sont pas, ni les voies non motorisées fermées au vélo (rue
+/// piétonne, sentier `bicycle=no`), que le cycliste emprunte à côté d'une voie du graphe.
+pub fn bicycle_closed(a: &WayAttrs) -> bool {
+    !a.rail && matches!(way_kind(&a.highway), WayKind::MajorRoad | WayKind::MinorRoad) && !bicycle_routable(a)
+}
+
 /// Revêtement : tag regroupé, puis `tracktype`, puis `kind`, sinon inconnu.
 pub fn surface(a: &WayAttrs) -> (SurfaceClass, SurfaceSource) {
     match &a.surface {

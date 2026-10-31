@@ -197,6 +197,8 @@ garde `d_m` et l'indice d'entrée précédent : les résultats sont directement 
 | `footway_cost` | 0,75 | [os] | Malus d'émission footway, steps, pedestrian (trottoir vs chaussée) |
 | Borne Dijkstra | `2·gc + 60 m`, relâchement ≤ 1,5× | [os] `matcher.rs:214-250, 396` | Recherche réseau entre deux observations |
 | `min_chain_m` | 50 m | [cal] | Chaîne plus courte rejetée en non appariée (croisements parasites d'une trace trop espacée) |
+| `closed_way_cost` | 12 | [cal] | Passage entre le graphe vélo et l'état « hors graphe » d'une voie fermée au vélo (étape 6 ci-dessous), dans un sens ou dans l'autre |
+| `heading_window_m`, `max_structure_heading_deg` | 20 m, 60° | [cal] | Ouvrage apparié à contre-cap rejeté (étape 7) |
 
 Surchargeables par configuration (comme `MATCH_*`) ; valeurs effectives dans `rules_version` et
 `/v1/capabilities`.
@@ -218,6 +220,25 @@ Surchargeables par configuration (comme `MATCH_*`) ; valeurs effectives dans `ru
 5. ▲ Les chaînes de moins de `min_chain_m` sont rejetées (osm-surface prolongeait un point isolé sur
    son segment, `os:src/trace.rs:541-550` ; c'est ce qui fabrique des appariements parasites quand
    des points d'entrée espacés coupent des rues en ligne droite).
+6. ▲ **État hors graphe des routes fermées au vélo** (2026.10.6). Les routes motorisées
+   (`way_kind` `major_road` ou `minor_road`) que la règle d'accès exclut du graphe (étape 1 du
+   §4.2 : motorway, trunk, route `bicycle=no`…) restent connues des tuiles. Les rails n'en sont pas,
+   ni les voies non motorisées fermées au vélo (rue piétonne, sentier `bicycle=no`) : le cycliste
+   les emprunte réellement, et la voie du graphe voisine reste la meilleure approximation (sur le
+   banc, les inclure dégradait M1 au-delà de son seuil sur `os-np655`). Leurs segments du couloir forment un index à part, sans topologie.
+   Chaque observation a, en plus de ses candidats, un état « hors graphe » : sa projection sur la
+   voie fermée la plus proche, à ≤ `search_radius_m`, avec la même émission. Transitions : de cet
+   état à lui-même `|droite − gc| / β` (la voie est suivie, sans routage) ; entre lui et un candidat
+   du graphe, `closed_way_cost + |droite − gc| / β` si la droite ≤ `max_jump_m`. Une observation dans
+   cet état est non appariée et coupe la chaîne. Motif : sans cet état, le Viterbi normalisé n'a pas
+   d'alternative à « la rue la plus proche » ; un parcours sur un pont, un tunnel ou une autoroute
+   fermés au vélo accrochait les rues à 20–40 m (dessous, dessus ou à côté) en les enchaînant par
+   des sauts, et fabriquait des ouvrages (passages supérieurs parallèles d'une autoroute en
+   tranchée). Le coût du passage (deux par excursion) garde sur la piste une trace bruitée qui longe
+   une autoroute.
+7. Ouvrage apparié à contre-cap (2026.10.5) : une observation appariée sur un pont ou un tunnel dont
+   le cap s'écarte de plus de `max_structure_heading_deg` de celui du parcours (sur
+   ± `heading_window_m`) est non appariée, ainsi que les morceaux restants trop courts.
 
 **Pas de pénalité de demi-tour** (`route_to`, `os:src/matcher.rs:262-282`) : aller-retour, boucle,
 demi-tour sur un pont sont des parcours ordinaires.
@@ -493,7 +514,9 @@ pub enum TypologyError { Timeout, Cancelled, Internal(String) }
    remesurer sur les traces personnelles avant la V1.
 2. **Voies interdites au vélo hors graphe** (motorway, trunk en France, pedestrian, busway) : un
    parcours planifié qui les emprunte devient `unknown`, et un pont de trunk n'est pas corrigé.
-   Comportement mesuré gardé ; un malus d'émission au lieu de l'exclusion est à évaluer.
+   Depuis 2026.10.6, sur une route motorisée fermée au vélo, l'état hors graphe (§5.3, étape 6) le
+   dit explicitement au lieu d'apparier les rues voisines. Une rue piétonne ou un sentier
+   `bicycle=no` restent appariés à la voie voisine du graphe, comme avant.
 3. **Trois écarts à osm-surface jamais mesurés** (clé de nœud par niveau, recollage au même niveau,
    jonction inter-niveaux par les fins de ligne) : nécessaires aux niveaux déconnectés, mais les 3
    parcours d'osm-surface doivent être rejoués en non-régression.
