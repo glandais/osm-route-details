@@ -1,4 +1,7 @@
 //! Catalogue des sources configurées : attributions et versions déclarées (T02 §9).
+//!
+//! La version de Mapterhorn (`tilejson.json`, T02 §9) n'est pas encore lue en ligne : elle vient de
+//! la configuration (`elevation.mapterhorn.version`), sans valeur par défaut.
 
 use ord_domain::catalog::{Attribution, DataCatalog, DataVersion, DataVersions, Readiness, SourceRole};
 use ord_domain::ctx::DataLog;
@@ -98,8 +101,19 @@ impl DataCatalog for StaticCatalog {
         out
     }
 
-    fn data_versions(&self, _log: &DataLog) -> DataVersions {
-        DataVersions { typology: Some(self.typology_source()), elevation: self.elevation_sources() }
+    /// Sources **utilisées** par la requête, lues dans son journal (T01 §9).
+    fn data_versions(&self, log: &DataLog) -> DataVersions {
+        let used = |ids: &[SourceId]| ids.iter().any(|id| log.oldest_read.contains_key(id));
+        let typology = used(&[SourceId::Streets]).then(|| self.typology_source());
+        let elevation = self
+            .elevation_sources()
+            .into_iter()
+            .filter(|v| match v.source {
+                "ign-lidar-hd" => used(&[SourceId::IgnDtm, SourceId::IgnDsm]),
+                _ => used(&[SourceId::Mapterhorn]),
+            })
+            .collect();
+        DataVersions { typology, elevation }
     }
 
     fn readiness(&self) -> Readiness {
@@ -130,5 +144,16 @@ mod tests {
         let without = StaticCatalog::new(sources(false));
         assert_eq!(without.elevation_sources()[0].role, SourceRole::Primary);
         assert!(!without.attributions().iter().any(|a| a.source == SourceId::IgnDtm));
+    }
+
+    #[test]
+    fn data_versions_list_used_sources_only() {
+        let catalog = StaticCatalog::new(sources(true));
+        let mut log = DataLog::default();
+        assert_eq!(catalog.data_versions(&log), DataVersions::default());
+        log.oldest_read.insert(SourceId::Mapterhorn, std::time::UNIX_EPOCH);
+        let v = catalog.data_versions(&log);
+        assert!(v.typology.is_none());
+        assert_eq!(v.elevation.iter().map(|e| e.source).collect::<Vec<_>>(), ["mapterhorn"]);
     }
 }
