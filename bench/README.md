@@ -340,6 +340,18 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | L2 | p95 ≤ 500 ms pour 100 km à chaud | osm-surface : 55–77 ms pour la typologie ; marge pour l'élévation et l'assemblage |
 | Q1 | 4/4 négatifs non `fiable` | Contrôle du banc |
 
+**Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
+gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
+mêmes trois valeurs : revêtu = `paved_smooth`, `paved`, `paved_rough` ; non revêtu = toute surface
+pire que `paved_rough` (`compacted` compris), comme osm-surface (T03 §5). Conséquences :
+- R1 « classe » compte 3 classes. Il n'est pas comparable aux 86–94 % d'osm-surface sur 5 classes, et
+  son seuil de 85 % ne discrimine plus guère : R1 ne diffère de R2 que par les mètres inconnus. Les
+  gardes effectives sont R2, R3 (revêtu / non revêtu ≥ 97 %) et M1. Un R1 sur la classe détaillée
+  attendra `SurfaceDetail` (V2).
+- La part `unknown` de M1 est mesurée sur `surface.class`. Une portion appariée reçoit toujours une
+  classe (repli sur `highway`, T03 §5) : `unknown` ≈ non apparié, et le seuil de 1 % sur le non
+  apparié est le plus serré des deux.
+
 Sur la série tenue à l'écart, un incrément est accepté si tous les seuils passent. Un échec isolé sur
 un cas tenu à l'écart est consigné et analysé, mais ne se corrige pas sur ce cas (sinon il devient
 calibration).
