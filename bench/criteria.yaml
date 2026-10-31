@@ -12,6 +12,10 @@
 # tronçon à l'air libre < 120 m entre deux tunnels OSM ; contrôle hors_graphe_velo satisfait aussi par
 # un appariement à une voie du graphe vélo distincte de l'ouvrage. Seuils inchangés ; avant toute
 # nouvelle mesure.
+# Complété une troisième fois le 2026-10-31 (décision de l'utilisateur, README §4 bis) : décalage local
+# E3 sur les approches 50–300 m, référence incertaine si les deux côtés diffèrent de plus de 2 m ;
+# bande de portail invalide sur un pont ou un tunnel des tuiles. Seuils inchangés ; avant toute
+# nouvelle mesure.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -46,6 +50,10 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Bande de portail sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM invalide ; remplacement existant (première bande valide plus loin, même côté, 1 km, sinon référence indisponible)"
   - id: controle_hors_graphe_parallele   # 2026-10-31
     decision: "Contrôle hors_graphe_velo satisfait si la portion est non appariée ou appariée à une voie du graphe vélo distincte de celle de l'ouvrage"
+  - id: e3_decalage_approches   # 2026-10-31
+    decision: "Décalage local E3 = médiane (baro − MNT LiDAR) sur les approches 50–300 m de chaque côté, hors autres ouvrages et fenêtres masquées ; ≥ 20 stations par côté sinon repli 1–3 km mentionné ; côtés différant de plus de 2 m = référence incertaine, rapportée, non comptée"
+  - id: bande_sur_ouvrage_des_tuiles   # 2026-10-31
+    decision: "Bande de portail E4 invalide si elle chevauche un pont ou un tunnel des tuiles de la campagne (bridge=true / tunnel=true), du corpus ou non ; remplacement existant"
   - id: limite_donnees_comptee   # 2026-10-31
     decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
 
@@ -122,6 +130,14 @@ criteres:
     terrain: france
     agregation: par_pont
     agregation_passages: mediane   # écart au milieu et écart max : médianes sur les passages du pont
+    decalage_local:   # README §4 bis.3
+      calcul: "médiane (baro − MNT LiDAR)"
+      approches_m: [50, 300]   # de chaque côté du pont
+      exclut: [autres_ouvrages, fenetres_masquees]
+      stations_min_par_cote: 20
+      repli: {fenetre_km: [1, 3], mention: decalage_repli_1_3km}
+      incertaine_si_ecart_entre_cotes_m_sup: 2.0
+      incertaine: {rapporte: true, compte: false}
     perimetre: graphe_velo
     seuils:
       - {strate: pont_court, longueur_m_max: 300, milieu_abs_m_max: 2.0, max_abs_m_max: 3.0}
@@ -147,7 +163,8 @@ criteres:
     reference: {droite_entre_portails: true, altitude_portail: "médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche"}
     sensibilite: {portail_m: [5, 10, 20, 30], marque: reference_ambigue_si_le_verdict_bascule}
     bande_invalide:   # README §4 bis.2
-      si: [chevauche_autre_ouvrage, stations_hors_ouvrage_moins_de_3, balcon_entre_tunnels_osm]   # autre ouvrage : tunnel, galerie, balcon S3
+      si: [chevauche_autre_ouvrage, stations_hors_ouvrage_moins_de_3, balcon_entre_tunnels_osm]   # autre ouvrage : tunnel, galerie, balcon S3, pont ou tunnel des tuiles
+      ouvrage_des_tuiles: {source: campagne.data_versions, attributs: [bridge, tunnel], corpus_ou_non: true}
       balcon_entre_tunnels_osm: {troncon_air_libre_m_max: 120}   # bande sur un tronçon à l'air libre < 120 m entre deux tunnels OSM
       remplacement: premiere_bande_valide_plus_loin_dans_la_serie_meme_cote
       distance_max_m: 1000

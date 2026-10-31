@@ -301,7 +301,8 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
    `input_with_breakpoints`), à froid (cache vidé) puis à chaud.
 3. Rééchantillonner service et référence sur la même grille curviligne de 5 m.
 4. **Référence baro** : retirer un décalage. Pour l'altitude, décalage global = médiane(baro − sortie
-   du service) sur les stations `ground` ; pour un ouvrage, décalage local (1 à 3 km de part et d'autre).
+   du service) sur les stations `ground` ; pour un pont (E3), décalage local pris sur les approches de
+   50 à 300 m (§4 bis.3), à défaut de 1 à 3 km de part et d'autre.
    La dérive lente (> 5 km) est retirée par médiane glissante avant le calcul des résidus d'altitude ;
    jamais avant le D+.
 5. Calculer les métriques (§3), comparer aux seuils (§4), consigner le rapport (commit, versions,
@@ -368,6 +369,10 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
 (décision de l'utilisateur, 2026-10-31, commit dédié, avant toute nouvelle mesure) après la campagne
 2026.10.6-bench2 en calibration : bande sur un balcon court entre deux tunnels (point 2), contrôle
 `hors_graphe_velo` quand la trace longe l'ouvrage sur une voie cyclable parallèle (point 1).
+Complété une troisième fois (décision de l'utilisateur, 2026-10-31, commit dédié, avant toute nouvelle
+mesure) après l'analyse des échecs E3/E4 de la campagne 2026.10.7 en calibration : décalage local
+E3 pris sur les approches et référence « incertaine » (point 3), bande de portail sur un pont ou un
+tunnel des tuiles (point 2).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -404,7 +409,9 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
      portail en falaise ; la bande reste distincte de la sonde ponctuelle du service à 10 m, ce qui
      évite une référence circulaire.
    - **Bande de portail invalide** : la bande 10–30 m d'un portail est invalide si elle chevauche un
-     autre ouvrage (tunnel, galerie, balcon S3), si elle compte moins de 3 stations hors ouvrage, ou
+     autre ouvrage (tunnel, galerie, balcon S3, ou tout pont ou tunnel des tuiles de la campagne,
+     `bridge=true` / `tunnel=true`, qu'il soit ou non du corpus : sous un pont voisin du portail, le
+     MNT lit le fond de vallée), si elle compte moins de 3 stations hors ouvrage, ou
      si elle est située sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM (balcon
      non tagué : sur ces routes en falaise, le MNT lit la paroi, pas la chaussée ; les tronçons entre
      tunnels d'une même série du corpus mesurent 15 à 116 m).
@@ -422,6 +429,16 @@ des tags du périmètre vélo (point 1), bandes de portail invalides dans une s�
    passages passent pénalisait les ponts les mieux documentés. La référence reste le baro corrigé
    localement, y compris à Audibert (5 passages concordants, 2,4–4,5 m sous le MNS du tablier) et à
    Anne-de-Bretagne.
+   - **Décalage local d'un passage** = médiane de (baro − MNT LiDAR) sur les **approches de 50 à
+     300 m** de chaque côté du pont, hors stations d'un autre ouvrage et des fenêtres masquées. Le
+     décalage pris à 1–3 km ne vaut pas toujours au pont : le baro s'y décale localement (dérive,
+     retard), alors que le tablier est raccord avec la route. Le calcul ne fait intervenir que le
+     baro et le MNT, jamais le service : pas de référence circulaire.
+   - Au moins 20 stations par côté ; sinon, repli sur le décalage à 1–3 km, avec la mention
+     `decalage_repli_1_3km`.
+   - Si les décalages des deux côtés diffèrent de plus de 2 m (la tolérance E3), la référence du
+     passage est « incertaine » : rapportée, non comptée. Un saut de baro entre les deux approches
+     est ainsi écarté sans détecteur séparé.
 4. **Limite des données, comptée.** Un ouvrage que la source choisie ne décrit pas comme tel reste
    compté : l'échec appartient au service tel qu'il est construit, et le rapport doit le montrer. Il
    porte la note `limite_donnees`. Cas connu : la galerie pare-avalanche de l'Arly
