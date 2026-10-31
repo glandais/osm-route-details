@@ -1,6 +1,6 @@
 [package]
 name = "ord-adapters"
-description = "Codecs purs de tuiles : streets, BIL, Terrarium (incréments 1 et suivants)"
+description = "Codecs purs de tuiles : Terrarium (incrément 1), BIL et streets aux incréments suivants"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+image-webp.workspace = true
 ord-domain.workspace = true
 
 [lints]
