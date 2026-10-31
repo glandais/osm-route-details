@@ -1,0 +1,48 @@
+[package]
+name = "ord-server"
+description = "Binaire osm-route-details : HTTP, DTO v1, configuration, observabilité, OpenAPI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "osm-route-details"
+path = "src/main.rs"
+
+[dependencies]
+ord-adapters.workspace = true
+ord-core.workspace = true
+ord-data.workspace = true
+ord-domain = { workspace = true, features = ["openapi"] }
+ord-pipeline.workspace = true
+
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+figment.workspace = true
+http-body-util.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+serde.workspace = true
+serde_ignored.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+ord-testkit.workspace = true
+ord-domain.workspace = true
+figment = { workspace = true, features = ["test"] }
+flate2 = "1"
+http-body-util.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,282 @@
+//! Routeur public et routeur interne (T01 §4.1).
+
+use std::sync::Arc;
+
+use axum::body::{Body, Bytes};
+use axum::extract::{FromRef, Request, State};
+use axum::http::{header, HeaderName, HeaderValue, Method, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post, MethodRouter};
+use axum::{Json, Router};
+use metrics_exporter_prometheus::PrometheusHandle;
+use ord_data::catalog::{ConfiguredSources, StaticCatalog};
+use ord_domain::budget::RequestId;
+use ord_domain::catalog::{DataCatalog, Readiness};
+use ord_pipeline::PipelineError;
+use serde::Serialize;
+use tower::ServiceBuilder;
+use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::compression::CompressionLayer;
+use tower_http::decompression::RequestDecompressionLayer;
+use tower_http::map_request_body::MapRequestBodyLayer;
+use tower_http::trace::TraceLayer;
+use utoipa::ToSchema;
+
+use crate::capabilities::{AttributionDoc, Capabilities};
+use crate::config::{Config, LimitsConfig};
+use crate::dto::RouteDetailsRequestV1;
+use crate::problem::{problem_for_status, with_request_id, Problem, ProblemBody};
+use crate::strict_json::{MaxBodyBytes, StrictJson};
+use crate::validate::validate;
+
+pub const X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+const MAX_REQUEST_ID_LEN: usize = 128;
+
+/// État partagé, en lecture seule.
+#[derive(Clone)]
+pub struct AppState {
+    inner: Arc<Inner>,
+}
+
+struct Inner {
+    limits: LimitsConfig,
+    catalog: Arc<dyn DataCatalog>,
+    capabilities: Bytes,
+    attribution: Bytes,
+}
+
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppState").field("limits", &self.inner.limits).finish_non_exhaustive()
+    }
+}
+
+impl AppState {
+    /// Construit l'état et précalcule les documents servis tels quels.
+    pub fn new(config: &Config) -> Self {
+        let catalog = StaticCatalog::new(ConfiguredSources {
+            ign_enabled: config.elevation.ign.enabled,
+            ign_zoom: config.elevation.ign.zoom,
+            mapterhorn_zoom: config.elevation.mapterhorn.zoom,
+            mapterhorn_version: config.elevation.mapterhorn.version.clone(),
+            streets_zoom: config.typology.zoom,
+        });
+        let capabilities = Capabilities::build(config, &catalog);
+        let attribution = AttributionDoc::build(&catalog);
+        Self {
+            inner: Arc::new(Inner {
+                limits: config.limits.clone(),
+                capabilities: to_json_bytes(&capabilities),
+                attribution: to_json_bytes(&attribution),
+                catalog: Arc::new(catalog),
+            }),
+        }
+    }
+}
+
+fn to_json_bytes<T: Serialize>(value: &T) -> Bytes {
+    Bytes::from(serde_json::to_vec(value).unwrap_or_default())
+}
+
+impl FromRef<AppState> for MaxBodyBytes {
+    fn from_ref(state: &AppState) -> Self {
+        MaxBodyBytes(state.inner.limits.max_body_bytes)
+    }
+}
+
+/// Routes publiques ; le contrat OpenAPI en décrit exactement l'ensemble (test `contract`).
+pub fn public_routes() -> Vec<(&'static str, Method, MethodRouter<AppState>)> {
+    vec![
+        ("/v1/route-details", Method::POST, post(route_details)),
+        ("/v1/capabilities", Method::GET, get(capabilities)),
+        ("/v1/attribution", Method::GET, get(attribution)),
+        ("/health/live", Method::GET, get(health_live)),
+        ("/health/ready", Method::GET, get(health_ready)),
+    ]
+}
+
+/// Routeur du port public, couches comprises.
+pub fn router(state: AppState) -> Router {
+    let mut router = Router::new();
+    for (path, _, method_router) in public_routes() {
+        router = router.route(path, method_router);
+    }
+    router
+        .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
+        // Le corps est borné par `StrictJson`, après décompression.
+        .layer(axum::extract::DefaultBodyLimit::disable())
+        .layer(
+            ServiceBuilder::new()
+                .layer(RequestDecompressionLayer::new())
+                .layer(MapRequestBodyLayer::new(Body::new)),
+        )
+        .layer(middleware::from_fn(problem_fallback))
+        .layer(CompressionLayer::new())
+        .layer(CatchPanicLayer::custom(|_panic: Box<dyn std::any::Any + Send>| {
+            tracing::error!("handler panicked");
+            Problem::internal().into_response()
+        }))
+        .layer(TraceLayer::new_for_http().make_span_with(|req: &Request| {
+            let id = req.headers().get(X_REQUEST_ID).and_then(|v| v.to_str().ok()).unwrap_or("");
+            tracing::info_span!("request", request_id = id, method = %req.method(), path = req.uri().path())
+        }))
+        .layer(middleware::from_fn(crate::observability::record_http_metrics))
+        .layer(middleware::from_fn(request_id))
+        .with_state(state)
+}
+
+/// Routeur du port interne, hors contrat public : `/metrics` et `/openapi.json`.
+pub fn internal_router(metrics: Option<PrometheusHandle>) -> Router {
+    let contract = Bytes::from(crate::openapi::render_contract());
+    let mut router = Router::new().route(
+        "/openapi.json",
+        get(move || async move { ([(header::CONTENT_TYPE, "application/json")], contract) }),
+    );
+    if let Some(handle) = metrics {
+        router = router.route("/metrics", get(move || async move { handle.render() }));
+    }
+    router.fallback(not_found)
+}
+
+/// `X-Request-Id` repris s'il est présent et court, sinon UUID v7 ; renvoyé dans la réponse.
+async fn request_id(mut req: Request, next: Next) -> Response {
+    let id = req
+        .headers()
+        .get(X_REQUEST_ID)
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty() && s.len() <= MAX_REQUEST_ID_LEN && s.bytes().all(|b| b.is_ascii_graphic()))
+        .map_or_else(|| uuid::Uuid::now_v7().to_string(), str::to_owned);
+    let header_value = HeaderValue::from_str(&id).ok();
+    if let Some(v) = &header_value {
+        req.headers_mut().insert(X_REQUEST_ID, v.clone());
+    }
+    req.extensions_mut().insert(RequestId(id.clone()));
+    let mut response = with_request_id(id, next.run(req)).await;
+    if let Some(v) = header_value {
+        response.headers_mut().insert(X_REQUEST_ID, v);
+    }
+    response
+}
+
+/// Met au format RFC 9457 les erreurs produites par les couches (décompression…) ou le routage.
+async fn problem_fallback(req: Request, next: Next) -> Response {
+    let response = next.run(req).await;
+    let status = response.status();
+    let plain = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_none_or(|ct| ct.starts_with("text/plain"));
+    if !(status.is_client_error() || status.is_server_error()) || !plain {
+        return response;
+    }
+    let mut problem = problem_for_status(status).into_response();
+    if let Some(allow) = response.headers().get(header::ALLOW) {
+        problem.headers_mut().insert(header::ALLOW, allow.clone());
+    }
+    problem
+}
+
+async fn not_found() -> Problem {
+    Problem::not_found()
+}
+
+async fn method_not_allowed() -> Problem {
+    Problem::method_not_allowed()
+}
+
+/// Calcul des détails d'un parcours.
+///
+/// Incrément 0 : la requête est validée, puis le service répond 500 `internal` (pas de pipeline).
+#[utoipa::path(
+    post,
+    path = "/v1/route-details",
+    operation_id = "postRouteDetails",
+    tag = "route",
+    request_body(content = RouteDetailsRequestV1, content_type = "application/json"),
+    responses(
+        (status = 400, description = "Invalid input (format, unknown keys, bounds)", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 413, description = "Route too large (`details.limit`)", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 415, description = "Content-Type is not application/json", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 422, description = "No data from any source on the route", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 500, description = "Unexpected error", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 503, description = "Data unavailable or overloaded (`Retry-After`)", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 504, description = "Request budget exceeded", body = ProblemBody, content_type = "application/problem+json"),
+    )
+)]
+async fn route_details(
+    State(state): State<AppState>,
+    StrictJson(dto): StrictJson<RouteDetailsRequestV1>,
+) -> Result<Response, Problem> {
+    let request = validate(dto, &state.inner.limits)?;
+    tracing::info!(input_points = request.input_len, "route request validated");
+    Err(PipelineError::Internal("pipeline not implemented yet (increment 0)".into()).into())
+}
+
+/// Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.
+#[utoipa::path(
+    get,
+    path = "/v1/capabilities",
+    operation_id = "getCapabilities",
+    tag = "service",
+    responses((status = 200, description = "Service capabilities", body = Capabilities))
+)]
+async fn capabilities(State(state): State<AppState>) -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/json")], state.inner.capabilities.clone())
+}
+
+/// Attributions complètes des sources configurées.
+#[utoipa::path(
+    get,
+    path = "/v1/attribution",
+    operation_id = "getAttribution",
+    tag = "service",
+    responses((status = 200, description = "Attributions of the configured sources", body = AttributionDoc))
+)]
+async fn attribution(State(state): State<AppState>) -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/json")], state.inner.attribution.clone())
+}
+
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct HealthStatus {
+    pub status: &'static str,
+}
+
+/// Le processus répond.
+#[utoipa::path(
+    get,
+    path = "/health/live",
+    operation_id = "getHealthLive",
+    tag = "health",
+    responses((status = 200, description = "Process is up", body = HealthStatus))
+)]
+async fn health_live() -> Json<HealthStatus> {
+    Json(HealthStatus { status: "ok" })
+}
+
+/// Les données configurées sont lisibles.
+#[utoipa::path(
+    get,
+    path = "/health/ready",
+    operation_id = "getHealthReady",
+    tag = "health",
+    responses(
+        (status = 200, description = "Ready", body = Readiness),
+        (status = 503, description = "Configured data not readable", body = Readiness),
+    )
+)]
+async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<Readiness>) {
+    let readiness = state.inner.catalog.readiness();
+    let status = if readiness.ready { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
+    (status, Json(readiness))
+}
+
+/// Chemins des handlers pour la dérive OpenAPI.
+pub(crate) mod paths {
+    pub(crate) use super::{
+        __path_attribution, __path_capabilities, __path_health_live, __path_health_ready,
+        __path_route_details,
+    };
+}

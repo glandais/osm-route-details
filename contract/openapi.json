@@ -1,0 +1,1096 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "osm-route-details",
+    "description": "Elevation and typology (structure, surface) along a route.",
+    "version": "1.0"
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Le processus répond.",
+        "operationId": "getHealthLive",
+        "responses": {
+          "200": {
+            "description": "Process is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Les données configurées sont lisibles.",
+        "operationId": "getHealthReady",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Configured data not readable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/attribution": {
+      "get": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Attributions complètes des sources configurées.",
+        "operationId": "getAttribution",
+        "responses": {
+          "200": {
+            "description": "Attributions of the configured sources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributionDoc"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Bornes, défauts, valeurs d'enum, capacités des données et sources d'élévation.",
+        "operationId": "getCapabilities",
+        "responses": {
+          "200": {
+            "description": "Service capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/route-details": {
+      "post": {
+        "tags": [
+          "route"
+        ],
+        "summary": "Calcul des détails d'un parcours.",
+        "description": "Incrément 0 : la requête est validée, puis le service répond 500 `internal` (pas de pipeline).",
+        "operationId": "postRouteDetails",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteDetailsRequestV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Invalid input (format, unknown keys, bounds)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Route too large (`details.limit`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "No data from any source on the route",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data unavailable or overloaded (`Retry-After`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Request budget exceeded",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Attribution": {
+        "type": "object",
+        "description": "Mention d'une source configurée.",
+        "required": [
+          "source",
+          "short",
+          "licence"
+        ],
+        "properties": {
+          "licence": {
+            "type": "string"
+          },
+          "short": {
+            "type": "string",
+            "description": "Mention courte à relayer."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceId"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AttributionDoc": {
+        "type": "object",
+        "description": "Corps de `/v1/attribution`.",
+        "required": [
+          "text",
+          "sources"
+        ],
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attribution"
+            }
+          },
+          "text": {
+            "type": "string",
+            "description": "Mention courte à relayer, toutes sources configurées."
+          }
+        }
+      },
+      "Capabilities": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "rules_version",
+          "limits",
+          "defaults",
+          "option_bounds",
+          "enums",
+          "primary_zone",
+          "data",
+          "elevation_sources"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DataFeatures"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/OptionDefaults",
+            "description": "Valeurs appliquées quand une option est absente."
+          },
+          "elevation_sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataVersion"
+            },
+            "description": "Sources d'élévation configurées, dans l'ordre de priorité."
+          },
+          "enums": {
+            "$ref": "#/components/schemas/EnumCatalog"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "option_bounds": {
+            "$ref": "#/components/schemas/OptionBounds"
+          },
+          "primary_zone": {
+            "type": "string"
+          },
+          "rules_version": {
+            "type": "string"
+          }
+        }
+      },
+      "DataFeatures": {
+        "type": "object",
+        "description": "Capacités des données actives.",
+        "required": [
+          "ford_detectable",
+          "surface_detail",
+          "bridge_dsm",
+          "heuristics"
+        ],
+        "properties": {
+          "bridge_dsm": {
+            "type": "boolean"
+          },
+          "ford_detectable": {
+            "type": "boolean"
+          },
+          "heuristics": {
+            "type": "boolean"
+          },
+          "surface_detail": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DataVersion": {
+        "type": "object",
+        "description": "Version d'une source de données.",
+        "required": [
+          "source",
+          "role",
+          "indicative"
+        ],
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "indicative": {
+            "type": "boolean",
+            "description": "Source lue en ligne : version seulement indicative (doc 01 §8.3)."
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/SourceRole"
+          },
+          "source": {
+            "type": "string"
+          },
+          "zoom": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ElevationDefaults": {
+        "type": "object",
+        "required": [
+          "smoothing_m",
+          "gain_preset"
+        ],
+        "properties": {
+          "gain_preset": {
+            "$ref": "#/components/schemas/GainPreset"
+          },
+          "smoothing_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ElevationOptionsV1": {
+        "type": "object",
+        "properties": {
+          "gain_preset": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GainPreset",
+                "description": "Défaut : `dem`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "smoothing_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "0 (désactivé) ou dans les bornes publiées, en mètres."
+          }
+        }
+      },
+      "EnumCatalog": {
+        "type": "object",
+        "description": "Toutes les valeurs publiques des enums du contrat.",
+        "required": [
+          "sections",
+          "sampling_modes",
+          "gain_presets",
+          "status",
+          "structure",
+          "structure_source",
+          "surface_class",
+          "surface_source",
+          "way_kind",
+          "ele_method",
+          "terrain_origin",
+          "point_origin",
+          "breakpoint_reasons",
+          "structure_method",
+          "structure_correction_status",
+          "warning_codes",
+          "problem_codes"
+        ],
+        "properties": {
+          "breakpoint_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ele_method": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gain_presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GainPreset"
+            }
+          },
+          "point_origin": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problem_codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemCode"
+            }
+          },
+          "sampling_modes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SamplingModeV1"
+            }
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionV1"
+            }
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "structure": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "structure_correction_status": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "structure_method": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "structure_source": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "surface_class": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "surface_source": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "terrain_origin": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TerrainOrigin"
+            }
+          },
+          "warning_codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WarningCode"
+            }
+          },
+          "way_kind": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "description": "Erreur sur un champ de l'entrée : un pointeur JSON, jamais la valeur.",
+        "required": [
+          "pointer",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "pointer": {
+            "type": "string",
+            "description": "Pointeur JSON (RFC 6901) vers le champ fautif."
+          }
+        }
+      },
+      "GainPreset": {
+        "type": "string",
+        "description": "Preset de D+ (valeurs : T04 §5.4).",
+        "enum": [
+          "raw",
+          "dem",
+          "barometric",
+          "gps"
+        ]
+      },
+      "HealthStatus": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LimitKind": {
+        "type": "string",
+        "description": "Borne d'entrée dépassée (413).",
+        "enum": [
+          "points",
+          "length_m",
+          "body_bytes"
+        ]
+      },
+      "Limits": {
+        "type": "object",
+        "description": "Bornes d'entrée (doc 02 §7) ; au-delà, 413.",
+        "required": [
+          "max_points",
+          "max_length_m",
+          "max_body_bytes",
+          "station_step_m",
+          "densified_max"
+        ],
+        "properties": {
+          "densified_max": {
+            "type": "integer",
+            "description": "Taille densifiée maximale qui découle des bornes ; ce n'est pas une borne.",
+            "minimum": 0
+          },
+          "max_body_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_length_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "max_points": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "station_step_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "NumberBounds": {
+        "type": "object",
+        "required": [
+          "min",
+          "max",
+          "default"
+        ],
+        "properties": {
+          "default": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          },
+          "min": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "OptionBounds": {
+        "type": "object",
+        "required": [
+          "step_m",
+          "smoothing_m"
+        ],
+        "properties": {
+          "smoothing_m": {
+            "$ref": "#/components/schemas/NumberBounds",
+            "description": "`0` désactive le lissage ; sinon dans [min ; max]."
+          },
+          "step_m": {
+            "$ref": "#/components/schemas/NumberBounds"
+          }
+        }
+      },
+      "OptionDefaults": {
+        "type": "object",
+        "required": [
+          "sections",
+          "sampling",
+          "elevation",
+          "structure_correction",
+          "accept_partial",
+          "debug"
+        ],
+        "properties": {
+          "accept_partial": {
+            "type": "boolean"
+          },
+          "debug": {
+            "type": "boolean"
+          },
+          "elevation": {
+            "$ref": "#/components/schemas/ElevationDefaults"
+          },
+          "sampling": {
+            "$ref": "#/components/schemas/SamplingDefaults"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionV1"
+            }
+          },
+          "structure_correction": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OptionsV1": {
+        "type": "object",
+        "properties": {
+          "accept_partial": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Défaut : `false`."
+          },
+          "debug": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Réservé à un usage interne ; refusé si le déploiement ne l'autorise pas."
+          },
+          "elevation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ElevationOptionsV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sampling": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SamplingV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sections": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SectionV1"
+            },
+            "description": "Parties de la réponse ; défaut : toutes."
+          },
+          "structure_correction": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Défaut : `true`."
+          }
+        }
+      },
+      "PointV1": {
+        "type": "object",
+        "description": "Point d'entrée ; une altitude éventuelle (`ele` ou `alt`) est tolérée et ignorée.",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "alt": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Ignorée."
+          },
+          "ele": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Ignorée."
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "maximum": 85.05112878,
+            "minimum": -85.05112878
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "maximum": 180,
+            "minimum": -180
+          }
+        }
+      },
+      "ProblemBody": {
+        "type": "object",
+        "description": "Corps `application/problem+json` (RFC 9457, doc 02 §5.1).",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ProblemCode"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "details": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProblemDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Identifiant de la requête (`X-Request-Id`)."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "`urn:osm-route-details:problem:<code>`."
+          }
+        }
+      },
+      "ProblemCode": {
+        "type": "string",
+        "description": "Code machine stable, suffixe du `type` (doc 02 §5.2).",
+        "enum": [
+          "invalid_input",
+          "route_too_large",
+          "out_of_coverage",
+          "data_unavailable",
+          "overloaded",
+          "timeout",
+          "internal",
+          "not_found",
+          "method_not_allowed",
+          "unsupported_media_type"
+        ]
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          },
+          "limit": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LimitKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProblemSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unknown_keys": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Pointeurs JSON de toutes les clés inconnues."
+          }
+        }
+      },
+      "ProblemSource": {
+        "type": "string",
+        "description": "Côté en panne d'un 503 `data_unavailable`.",
+        "enum": [
+          "typology",
+          "elevation",
+          "both"
+        ]
+      },
+      "Readiness": {
+        "type": "object",
+        "description": "État observé des données locales, pour `/health/ready` ; jamais d'URL.",
+        "required": [
+          "ready",
+          "checks"
+        ],
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadinessCheck"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ReadinessCheck": {
+        "type": "object",
+        "required": [
+          "name",
+          "ok"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RouteDetailsRequestV1": {
+        "type": "object",
+        "description": "Corps de `POST /v1/route-details` : exactement un de `points` ou `polyline`.",
+        "properties": {
+          "options": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OptionsV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "points": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PointV1"
+            },
+            "description": "Points du parcours, dans le sens de parcours."
+          },
+          "polyline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Polyline encodée (algorithme Google), à la précision `polyline_precision`."
+          },
+          "polyline_precision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Précision de `polyline` (5 ou 6), obligatoire avec elle.",
+            "maximum": 6,
+            "minimum": 5
+          }
+        }
+      },
+      "SamplingDefaults": {
+        "type": "object",
+        "required": [
+          "mode",
+          "step_m"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/SamplingModeV1"
+          },
+          "step_m": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "SamplingModeV1": {
+        "type": "string",
+        "enum": [
+          "input_with_breakpoints",
+          "input",
+          "distance"
+        ]
+      },
+      "SamplingV1": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SamplingModeV1",
+                "description": "Défaut : `input_with_breakpoints`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "step_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Pas du profil en mode `distance`, en mètres (bornes : `/v1/capabilities`)."
+          }
+        }
+      },
+      "SectionV1": {
+        "type": "string",
+        "enum": [
+          "elevation",
+          "typology",
+          "summary"
+        ]
+      },
+      "SourceId": {
+        "type": "string",
+        "enum": [
+          "streets",
+          "ign_dtm",
+          "ign_dsm",
+          "mapterhorn",
+          "mapterhorn_coverage"
+        ]
+      },
+      "SourceRole": {
+        "type": "string",
+        "enum": [
+          "primary",
+          "fallback",
+          "coverage"
+        ]
+      },
+      "TerrainOrigin": {
+        "type": "string",
+        "description": "Origine du terrain lu (doc 02 §4.5).",
+        "enum": [
+          "ign_lidar_hd",
+          "mapterhorn_measured",
+          "mapterhorn",
+          "none"
+        ]
+      },
+      "WarningCode": {
+        "type": "string",
+        "enum": [
+          "unmatched_range",
+          "structure_uncorrected",
+          "structure_slope_implausible",
+          "elevation_gap_filled",
+          "elevation_missing",
+          "typology_missing",
+          "terrain_fallback",
+          "dsm_unavailable",
+          "dsm_source",
+          "outside_primary_zone",
+          "typology_unavailable",
+          "elevation_unavailable",
+          "structure_untagged"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "route",
+      "description": "Elevation and typology along a route"
+    },
+    {
+      "name": "service",
+      "description": "Capabilities and attribution"
+    },
+    {
+      "name": "health",
+      "description": "Liveness and readiness probes"
+    }
+  ]
+}
