@@ -214,7 +214,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     let max = worst.map_or(f64::NAN, |i| err(i).abs());
                     item.insert("ecart_milieu_m".into(), r2(mid));
                     item.insert("ecart_max_d_m".into(), worst.map_or(Value::Null, |i| r2(p.d[i])));
-                    item.insert("emprise_d_m".into(), json!([r2(p.d[i0]), r2(p.d[i1])]));
+                    item.insert(format!("{pre}emprise_d_m"), json!([r2(p.d[i0]), r2(p.d[i1])]));
                     item.insert("ecart_max_m".into(), r2(max));
                     item.insert("decalage_local_m".into(), r2(offset));
                     if o.kind == Kind::Untagged {
