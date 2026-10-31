@@ -123,12 +123,72 @@ pub async fn diagnose_structures(
         .filter(|o| o.to_m >= from && o.from_m <= to)
         .map(|o| json!({"kind": o.kind.as_str(), "from_m": r2(o.from_m), "to_m": r2(o.to_m), "method": o.method.as_str()}))
         .collect();
+    let segs = ord_core::typology::build_segments(
+        &typo.runs,
+        &typo.classes,
+        &profile.verdicts,
+        &route,
+        rules.typology.min_segment_m,
+    );
+    let segments: Vec<Value> = segs
+        .iter()
+        .filter(|x| x.to_m >= from && x.from_m <= to)
+        .map(|x| {
+            let kind =
+                x.class.and_then(|c| typo.classes.get(c as usize)).map(|c| c.attrs.highway.to_string());
+            json!([r2(x.from_m), r2(x.to_m), x.structure.as_str(), kind, x.matched])
+        })
+        .collect();
+    // Exploration : MNS en travers de l'axe (± 8 m tous les 1 m) aux stations d'axe sur le
+    // parcours, avec ORD_DIAG_TRAVERS=1.
+    let mut travers: Vec<Value> = Vec::new();
+    if std::env::var_os("ORD_DIAG_TRAVERS").is_some() {
+        for g in &s.plan.groups {
+            for (k, a) in g.axis.iter().enumerate() {
+                let AxisPoint::Route(i) = a.at else { continue };
+                let d = route.samples[i].d_m;
+                if d < from || d > to || k % 2 != 0 {
+                    continue;
+                }
+                let j = (i + 1).min(route.samples.len() - 1);
+                let h = if j > i { i } else { i - 1 };
+                let (p, q) = (route.samples[h].at, route.samples[j.max(h + 1)].at);
+                let (dn, de) = (
+                    (q.lat - p.lat).to_radians() * 6_371_008.8,
+                    (q.lon - p.lon).to_radians() * 6_371_008.8 * p.lat.to_radians().cos(),
+                );
+                let norm = (dn * dn + de * de).sqrt().max(1e-9);
+                let (nx, ny) = (-dn / norm, de / norm); // perpendiculaire (est, nord)
+                let c = route.samples[i].at;
+                let pts: Vec<LatLon> = (-8..=8)
+                    .map(|o| {
+                        let o = f64::from(o);
+                        LatLon::new(
+                            c.lat + (o * ny / 6_371_008.8).to_degrees(),
+                            c.lon + (o * nx / (6_371_008.8 * c.lat.to_radians().cos())).to_degrees(),
+                        )
+                    })
+                    .collect();
+                let v: Vec<Value> = sources
+                    .terrain
+                    .sample_dsm(&pts, &ctx)
+                    .await
+                    .into_iter()
+                    .map(|x| match x {
+                        DsmSample::Value(v) => r2(f64::from(v)),
+                        _ => Value::Null,
+                    })
+                    .collect();
+                travers.push(json!({"d": r2(d), "sortie": r2(profile.ele[i]), "mns": v}));
+            }
+        }
+    }
     let corrected = profile
         .method
         .iter()
         .filter(|m| matches!(m, EleMethod::DsmDeck | EleMethod::InterpolatedStructure))
         .count();
-    let out = json!({"id": id, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
+    let out = json!({"id": id, "travers": travers, "segments": segments, "issues": outcomes, "groupes": groups, "stations_corrigees": corrected});
     crate::privacy::assert_report_clean(&out, &crate::privacy::private_names(paths))?;
     Ok(out)
 }

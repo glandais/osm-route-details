@@ -258,6 +258,8 @@ struct Profile {
     on_structure: Vec<bool>,
     corrected: Vec<bool>,
     ign: Vec<bool>,
+    matched: Vec<bool>,
+    unmatched_warn: Vec<bool>,
 }
 
 fn profile(r: &Value) -> anyhow::Result<Profile> {
@@ -271,6 +273,14 @@ fn profile(r: &Value) -> anyhow::Result<Profile> {
             .collect()
     };
     let segs = ranges("segments", &|s| matches!(s["structure"].as_str(), Some("bridge" | "tunnel")));
+    let matched = ranges("segments", &|s| s["matched"].as_bool().unwrap_or(true));
+    let warns: Vec<(f64, f64)> = r["quality"]["warnings"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|w| w["code"] == "unmatched_range")
+        .filter_map(|w| Some((w["from_m"].as_f64()?, w["to_m"].as_f64()?)))
+        .collect();
     let terrain: Vec<(f64, f64, bool)> = r["quality"]["terrain"]
         .as_array()
         .into_iter()
@@ -295,6 +305,8 @@ fn profile(r: &Value) -> anyhow::Result<Profile> {
         p.on_structure.push(at(&segs, d));
         p.corrected.push(matches!(x["ele_method"].as_str(), Some("dsm_deck" | "interpolated_structure")));
         p.ign.push(at(&terrain, d));
+        p.matched.push(at(&matched, d));
+        p.unmatched_warn.push(warns.iter().any(|w| d >= w.0 - 1e-6 && d <= w.1 + 1e-6));
     }
     Ok(p)
 }
@@ -343,6 +355,8 @@ async fn recolle(
         p.on_structure.extend(q.on_structure.iter().skip(skip));
         p.corrected.extend(q.corrected.iter().skip(skip));
         p.ign.extend(q.ign.iter().skip(skip));
+        p.matched.extend(q.matched.iter().skip(skip));
+        p.unmatched_warn.extend(q.unmatched_warn.iter().skip(skip));
         tau.extend(t.iter().skip(skip));
         offset += q.d.last().copied().unwrap_or(0.0);
         responses.push(r);
@@ -546,6 +560,8 @@ pub async fn measure_case(
         baro: &baro_unmasked,
         on_structure: &p.on_structure,
         ign: &p.ign,
+        matched: &p.matched,
+        unmatched_warn: &p.unmatched_warn,
     };
     let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
@@ -889,21 +905,11 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     // Ouvrages : parcours `test1..4` de vcyclist et témoins (calibration).
     let structures_wanted = ids.is_empty();
     if structures_wanted {
-        for route in ["test1", "test2", "test3", "test4"] {
-            match crate::ouvrages::vc_route_items(&service, &paths.bench, route).await {
-                Ok(its) => items.extend(its),
-                Err(e) => skipped.push(json!({"id": format!("vc-{route}"), "raison": e.to_string()})),
-            }
-        }
-        for (dir, id, role) in crate::ouvrages::controls(&paths.bench)? {
-            match crate::ouvrages::control_items(&service, &paths.bench, &dir, &id, &role).await {
-                Ok(its) => {
-                    eprintln!("{id} : mesuré");
-                    items.extend(its);
-                }
-                Err(e) => skipped.push(json!({"id": id, "raison": e.to_string()})),
-            }
-        }
+        let tiles =
+            crate::ouvrages::Tiles::load(&paths.cache, &crate::ouvrages::vc_points(&paths.bench)?).await?;
+        items.extend(
+            crate::ouvrages::vc_items(&service, &paths.bench, &tiles, &ouvrages, &mut skipped).await?,
+        );
     }
     let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
     let (agregats, mut verdicts) = judge(&cases);
@@ -938,6 +944,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "type": "calibration",
             "increment": "MVP",
             "increment_plan": 4,
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -954,8 +961,10 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
             "notes": [
                 "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
-                "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; un pont passe si tous ses passages passent",
-                "E4 : droite entre les MNT bruts (structure_correction=false) juste hors des portails (perso, témoins tt*/th*) ; vérité N de vcyclist (test4) ; D+ fictif = D+ dem du service − D+ dem de la droite sur la plage",
+                "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
+                "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
+                "Périmètre vélo (README §4 bis.1) : ouvrages dont la voie est exclue du graphe vélo par la règle de tags du service (tags d'ouvrages-geom.json, sinon tuiles VersaTiles du cache) sortis de S1/E3/E4/E5, rapportés en hors_graphe_velo ; négatifs à trace hors graphe gardés en S2/E5",
+                "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
                 "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart non envoyées : leurs passages d'ouvrages de calibration ne sont pas mesurés",
@@ -1048,7 +1057,7 @@ pub async fn fill_cache(
         for (dir, id, _) in crate::ouvrages::controls(&paths.bench)? {
             let pts = crate::ouvrages::control_points(&paths.bench, &dir, &id)?;
             for sc in [true, false] {
-                crate::ouvrages::query_points(&service, &pts, sc).await?;
+                let _ = crate::ouvrages::query_points(&service, &pts, sc).await?;
             }
             eprintln!("{id} : tuiles en cache");
             filled.push(id);
