@@ -140,6 +140,7 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
         for e in &manifest.hors_git {
             verify(&mut report, &paths.resolve(&e.fichier), &e.sha256, &e.id);
         }
+        report.failures.extend(missing_recalage(&paths.private.join("recales"), &manifest));
     } else {
         report.skipped.push(format!("{} traces personnelles : bench/private/ absent", manifest.traces.len()));
         for e in &manifest.hors_git {
@@ -174,9 +175,73 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
     Ok(report)
 }
 
+/// Garde-fou : chaque trace attendue par `recales/journal.csv` (première colonne, `<id>` ou
+/// `<id>.sN`) a au moins une géométrie recalée (`<id>.gpx`, `<id>.sN.gpx` ou `<id>.partN.gpx`).
+/// Une trace sans géométrie ferait sauter le cas en silence pendant la campagne. Les messages ne
+/// portent que l'identifiant.
+pub fn missing_recalage(recales: &Path, manifest: &Manifest) -> Vec<String> {
+    let journal = recales.join("journal.csv");
+    let Ok(text) = std::fs::read_to_string(&journal) else {
+        return vec!["recales/journal.csv absent : traces recalées attendues inconnues".into()];
+    };
+    let mut expected: BTreeSet<String> = BTreeSet::new();
+    for line in text.lines() {
+        let Some(first) = line.split(',').next().map(str::trim) else { continue };
+        if first.is_empty() || first.contains(' ') || first == "id" {
+            continue;
+        }
+        let base = match first.rsplit_once(".s") {
+            Some((b, n)) if n.chars().all(|c| c.is_ascii_digit()) && !n.is_empty() => b,
+            _ => first,
+        };
+        expected.insert(base.to_owned());
+    }
+    let has_numbered = |id: &str, infix: &str| recales.join(format!("{id}.{infix}1.gpx")).is_file();
+    let mut out = Vec::new();
+    for id in expected {
+        if !manifest.traces.iter().any(|t| t.id == id) {
+            out.push(format!("{id} : dans recales/journal.csv mais absente du manifest"));
+            continue;
+        }
+        if !(recales.join(format!("{id}.gpx")).is_file()
+            || has_numbered(&id, "s")
+            || has_numbered(&id, "part"))
+        {
+            out.push(format!("{id} : aucune géométrie recalée (ni .gpx, ni .sN, ni .partN)"));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_recalage_fails_on_synthetic_data() {
+        let manifest = Manifest::load(&crate::BenchPaths::repo_bench()).expect("manifest");
+        let ids: Vec<&str> =
+            manifest.traces.iter().filter(|t| t.groupe != "negatif").map(|t| t.id.as_str()).take(4).collect();
+        assert_eq!(ids.len(), 4);
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        assert_eq!(missing_recalage(r, &manifest).len(), 1, "journal absent : échec");
+        let journal = format!(
+            "{a},1,2\n{b}.s1,1,2\n{b}.s2,1,2\n{c},1\n{d},1\nperso-inconnue,1\n",
+            a = ids[0],
+            b = ids[1],
+            c = ids[2],
+            d = ids[3]
+        );
+        std::fs::write(r.join("journal.csv"), journal).unwrap();
+        std::fs::write(r.join(format!("{}.gpx", ids[0])), "").unwrap();
+        std::fs::write(r.join(format!("{}.s1.gpx", ids[1])), "").unwrap();
+        std::fs::write(r.join(format!("{}.part1.gpx", ids[2])), "").unwrap();
+        let failures = missing_recalage(r, &manifest);
+        assert_eq!(failures.len(), 2, "{failures:?}");
+        assert!(failures.iter().any(|f| f.starts_with(ids[3]) && f.contains("aucune géométrie")));
+        assert!(failures.iter().any(|f| f.starts_with("perso-inconnue")));
+    }
 
     #[test]
     fn readme_ids_are_read_from_both_tables() {
