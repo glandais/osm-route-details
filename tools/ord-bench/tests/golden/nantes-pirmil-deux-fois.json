@@ -1,0 +1,759 @@
+{
+  "attribution": {
+    "text": "© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · © IGN — LiDAR HD · Mapterhorn and its sources",
+    "url": "/v1/attribution"
+  },
+  "meta": {
+    "api_version": "1.0",
+    "data_versions": {
+      "elevation": [
+        {
+          "date": "2026-10-31",
+          "indicative": true,
+          "products": [
+            "mnt",
+            "mns"
+          ],
+          "role": "primary",
+          "source": "ign-lidar-hd",
+          "zoom": 15
+        }
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
+    },
+    "duration_ms": null,
+    "request_id": null,
+    "rules_version": "2026.10.4"
+  },
+  "points": [
+    {
+      "d_m": 0.0,
+      "ele": 9.19,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200467,
+      "lon": -1.544267
+    },
+    {
+      "d_m": 10.0,
+      "ele": 9.36,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200385,
+      "lon": -1.544211
+    },
+    {
+      "d_m": 20.0,
+      "ele": 9.56,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200304,
+      "lon": -1.544155
+    },
+    {
+      "d_m": 30.0,
+      "ele": 9.67,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200222,
+      "lon": -1.544099
+    },
+    {
+      "d_m": 40.0,
+      "ele": 9.87,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200141,
+      "lon": -1.544043
+    },
+    {
+      "d_m": 50.0,
+      "ele": 10.02,
+      "ele_method": "dem",
+      "index": 0,
+      "lat": 47.200059,
+      "lon": -1.543987
+    },
+    {
+      "d_m": 60.0,
+      "ele": 10.3,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199978,
+      "lon": -1.543931
+    },
+    {
+      "d_m": 70.0,
+      "ele": 10.49,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199897,
+      "lon": -1.543875
+    },
+    {
+      "d_m": 80.0,
+      "ele": 10.67,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199815,
+      "lon": -1.543819
+    },
+    {
+      "d_m": 90.0,
+      "ele": 10.91,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199734,
+      "lon": -1.543763
+    },
+    {
+      "d_m": 100.0,
+      "ele": 11.18,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199652,
+      "lon": -1.543707
+    },
+    {
+      "d_m": 110.0,
+      "ele": 11.46,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199571,
+      "lon": -1.543651
+    },
+    {
+      "d_m": 120.0,
+      "ele": 11.71,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199489,
+      "lon": -1.543595
+    },
+    {
+      "d_m": 130.0,
+      "ele": 11.93,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199408,
+      "lon": -1.543539
+    },
+    {
+      "d_m": 140.0,
+      "ele": 12.15,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199326,
+      "lon": -1.543483
+    },
+    {
+      "d_m": 150.0,
+      "ele": 12.29,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199245,
+      "lon": -1.543427
+    },
+    {
+      "d_m": 160.0,
+      "ele": 12.35,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199163,
+      "lon": -1.543371
+    },
+    {
+      "d_m": 170.0,
+      "ele": 12.35,
+      "ele_method": "dsm_deck",
+      "index": 1,
+      "lat": 47.199082,
+      "lon": -1.543315
+    },
+    {
+      "d_m": 180.0,
+      "ele": 12.34,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.199,
+      "lon": -1.543259
+    },
+    {
+      "d_m": 190.0,
+      "ele": 12.27,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198919,
+      "lon": -1.543203
+    },
+    {
+      "d_m": 200.0,
+      "ele": 12.13,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198837,
+      "lon": -1.543147
+    },
+    {
+      "d_m": 210.0,
+      "ele": 11.95,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198756,
+      "lon": -1.543091
+    },
+    {
+      "d_m": 220.0,
+      "ele": 11.74,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198674,
+      "lon": -1.543035
+    },
+    {
+      "d_m": 230.0,
+      "ele": 11.58,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198593,
+      "lon": -1.542979
+    },
+    {
+      "d_m": 240.0,
+      "ele": 11.26,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198511,
+      "lon": -1.542923
+    },
+    {
+      "d_m": 250.0,
+      "ele": 10.96,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.19843,
+      "lon": -1.542867
+    },
+    {
+      "d_m": 260.0,
+      "ele": 10.71,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198348,
+      "lon": -1.542811
+    },
+    {
+      "d_m": 270.0,
+      "ele": 10.47,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198267,
+      "lon": -1.542755
+    },
+    {
+      "d_m": 280.0,
+      "ele": 10.36,
+      "ele_method": "dsm_deck",
+      "index": 2,
+      "lat": 47.198185,
+      "lon": -1.542699
+    },
+    {
+      "d_m": 290.0,
+      "ele": 10.01,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.198104,
+      "lon": -1.542643
+    },
+    {
+      "d_m": 300.0,
+      "ele": 9.77,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.198022,
+      "lon": -1.542587
+    },
+    {
+      "d_m": 310.0,
+      "ele": 9.56,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.197941,
+      "lon": -1.542531
+    },
+    {
+      "d_m": 320.0,
+      "ele": 9.3,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.197859,
+      "lon": -1.542475
+    },
+    {
+      "d_m": 330.0,
+      "ele": 8.97,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.197778,
+      "lon": -1.542419
+    },
+    {
+      "d_m": 340.0,
+      "ele": 8.57,
+      "ele_method": "dem",
+      "index": 3,
+      "lat": 47.197696,
+      "lon": -1.542363
+    },
+    {
+      "d_m": 350.0,
+      "ele": 8.82,
+      "ele_method": "dem",
+      "index": 4,
+      "lat": 47.197745,
+      "lon": -1.542397
+    },
+    {
+      "d_m": 360.0,
+      "ele": 9.12,
+      "ele_method": "dem",
+      "index": 4,
+      "lat": 47.197827,
+      "lon": -1.542453
+    },
+    {
+      "d_m": 370.0,
+      "ele": 9.43,
+      "ele_method": "dem",
+      "index": 4,
+      "lat": 47.197908,
+      "lon": -1.542509
+    },
+    {
+      "d_m": 380.0,
+      "ele": 9.64,
+      "ele_method": "dem",
+      "index": 4,
+      "lat": 47.19799,
+      "lon": -1.542565
+    },
+    {
+      "d_m": 390.0,
+      "ele": 9.86,
+      "ele_method": "dem",
+      "index": 4,
+      "lat": 47.198071,
+      "lon": -1.542621
+    },
+    {
+      "d_m": 400.0,
+      "ele": 10.22,
+      "ele_method": "dsm_deck",
+      "index": 4,
+      "lat": 47.198153,
+      "lon": -1.542677
+    },
+    {
+      "d_m": 410.0,
+      "ele": 10.42,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198234,
+      "lon": -1.542733
+    },
+    {
+      "d_m": 420.0,
+      "ele": 10.64,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198316,
+      "lon": -1.542789
+    },
+    {
+      "d_m": 430.0,
+      "ele": 10.9,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198397,
+      "lon": -1.542845
+    },
+    {
+      "d_m": 440.0,
+      "ele": 11.15,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198479,
+      "lon": -1.542901
+    },
+    {
+      "d_m": 450.0,
+      "ele": 11.4,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.19856,
+      "lon": -1.542957
+    },
+    {
+      "d_m": 460.0,
+      "ele": 11.62,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198642,
+      "lon": -1.543013
+    },
+    {
+      "d_m": 470.0,
+      "ele": 11.83,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198723,
+      "lon": -1.543069
+    },
+    {
+      "d_m": 480.0,
+      "ele": 12.03,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198805,
+      "lon": -1.543125
+    },
+    {
+      "d_m": 490.0,
+      "ele": 12.21,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198886,
+      "lon": -1.543181
+    },
+    {
+      "d_m": 500.0,
+      "ele": 12.31,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.198968,
+      "lon": -1.543237
+    },
+    {
+      "d_m": 510.0,
+      "ele": 12.35,
+      "ele_method": "dsm_deck",
+      "index": 5,
+      "lat": 47.199049,
+      "lon": -1.543293
+    },
+    {
+      "d_m": 520.0,
+      "ele": 12.35,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199131,
+      "lon": -1.543349
+    },
+    {
+      "d_m": 530.0,
+      "ele": 12.31,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199212,
+      "lon": -1.543405
+    },
+    {
+      "d_m": 540.0,
+      "ele": 12.23,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199294,
+      "lon": -1.543461
+    },
+    {
+      "d_m": 550.0,
+      "ele": 12.06,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199375,
+      "lon": -1.543517
+    },
+    {
+      "d_m": 560.0,
+      "ele": 11.84,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199457,
+      "lon": -1.543573
+    },
+    {
+      "d_m": 570.0,
+      "ele": 11.61,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199538,
+      "lon": -1.543629
+    },
+    {
+      "d_m": 580.0,
+      "ele": 11.34,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.19962,
+      "lon": -1.543685
+    },
+    {
+      "d_m": 590.0,
+      "ele": 11.04,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199701,
+      "lon": -1.543741
+    },
+    {
+      "d_m": 600.0,
+      "ele": 10.76,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199783,
+      "lon": -1.543797
+    },
+    {
+      "d_m": 610.0,
+      "ele": 10.53,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199864,
+      "lon": -1.543853
+    },
+    {
+      "d_m": 620.0,
+      "ele": 10.41,
+      "ele_method": "dsm_deck",
+      "index": 6,
+      "lat": 47.199946,
+      "lon": -1.543909
+    },
+    {
+      "d_m": 630.0,
+      "ele": 10.13,
+      "ele_method": "dsm_deck",
+      "index": 7,
+      "lat": 47.200027,
+      "lon": -1.543965
+    },
+    {
+      "d_m": 640.0,
+      "ele": 9.96,
+      "ele_method": "dem",
+      "index": 7,
+      "lat": 47.200108,
+      "lon": -1.544021
+    },
+    {
+      "d_m": 650.0,
+      "ele": 9.79,
+      "ele_method": "dem",
+      "index": 7,
+      "lat": 47.20019,
+      "lon": -1.544077
+    },
+    {
+      "d_m": 660.0,
+      "ele": 9.65,
+      "ele_method": "dem",
+      "index": 7,
+      "lat": 47.200271,
+      "lon": -1.544133
+    },
+    {
+      "d_m": 670.0,
+      "ele": 9.44,
+      "ele_method": "dem",
+      "index": 7,
+      "lat": 47.200353,
+      "lon": -1.544189
+    },
+    {
+      "d_m": 680.0,
+      "ele": 9.3,
+      "ele_method": "dem",
+      "index": 7,
+      "lat": 47.200434,
+      "lon": -1.544245
+    },
+    {
+      "d_m": 683.99,
+      "ele": 9.19,
+      "ele_method": "dem",
+      "index": 8,
+      "lat": 47.200467,
+      "lon": -1.544267
+    }
+  ],
+  "quality": {
+    "elevation_coverage": 1.0,
+    "inferred_surface_ratio": 0.0,
+    "matched_ratio": 1.0,
+    "structure_correction": {
+      "bridges": "applied",
+      "counts": {
+        "dsm_deck": 2
+      },
+      "counts_by_source": {
+        "osm": 2
+      },
+      "tunnels": "none_found"
+    },
+    "terrain": [
+      {
+        "fallback_after_error": false,
+        "from_m": 0.0,
+        "measured": true,
+        "origin": "ign_lidar_hd",
+        "to_m": 683.99
+      }
+    ],
+    "warnings": []
+  },
+  "segments": [
+    {
+      "ele_end": 10.3,
+      "ele_method": "dem",
+      "ele_start": 9.19,
+      "from_index": 0,
+      "from_m": 0.0,
+      "grade_pct": 1.84,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 2,
+      "to_m": 60.04,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 10.29,
+      "ele_method": "dsm_deck",
+      "ele_start": 10.3,
+      "from_index": 1,
+      "from_m": 60.04,
+      "grade_pct": -0.0,
+      "matched": true,
+      "structure": "bridge",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 3,
+      "to_m": 281.93,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 10.29,
+      "ele_method": "dem",
+      "ele_start": 10.29,
+      "from_index": 2,
+      "from_m": 281.93,
+      "grade_pct": -0.0,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 6,
+      "to_m": 402.06,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 10.3,
+      "ele_method": "dsm_deck",
+      "ele_start": 10.29,
+      "from_index": 5,
+      "from_m": 402.06,
+      "grade_pct": 0.0,
+      "matched": true,
+      "structure": "bridge",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 7,
+      "to_m": 623.95,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 9.19,
+      "ele_method": "dem",
+      "ele_start": 10.3,
+      "from_index": 6,
+      "from_m": 623.95,
+      "grade_pct": -1.84,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 8,
+      "to_m": 683.99,
+      "way_kind": "major_road"
+    }
+  ],
+  "status": "complete",
+  "summary": {
+    "by_structure_m": {
+      "bridge": 443.79,
+      "ground": 240.2
+    },
+    "by_surface_class_m": {
+      "paved": 683.99
+    },
+    "by_surface_source_m": {
+      "tagged": 683.99
+    },
+    "by_way_kind_m": {
+      "major_road": 683.99
+    },
+    "ele_max_m": 12.35,
+    "ele_min_m": 8.54,
+    "gain_m": 6.4,
+    "gain_params": {
+      "adapted": [],
+      "partial": false,
+      "preset": "dem",
+      "smoothing_m": 30.0,
+      "threshold_m": 3.0
+    },
+    "length_m": 683.99,
+    "loss_m": 3.46,
+    "structures": [
+      {
+        "from_m": 60.04,
+        "kind": "bridge",
+        "length_m": 221.89,
+        "method": "dsm_deck",
+        "structure_source": "osm",
+        "to_m": 281.93
+      },
+      {
+        "from_m": 402.06,
+        "kind": "bridge",
+        "length_m": 221.89,
+        "method": "dsm_deck",
+        "structure_source": "osm",
+        "to_m": 623.95
+      }
+    ],
+    "terrain_m": {
+      "ign_lidar_hd": 683.99
+    },
+    "unknown_m": 0.0
+  }
+}

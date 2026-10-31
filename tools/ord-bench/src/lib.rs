@@ -3,8 +3,10 @@
 //!
 //! `check` (empreintes du manifest, cohérence `criteria.yaml` ↔ README, Q1), `fill-cache` (cache
 //! de banc local), `run --offline` (incrément 2 : E1 jugé, E2 indicatif, E2b jugé ; incrément 3 :
-//! R1, R2, R3, M1, typologie à chaud), `latency`
-//! (L1 à froid, live), `diagnose` (causes des plages M1 et R dans les tuiles du cache) ; scénarios golden sur des ouvrages de calibration.
+//! R1, R2, R3, M1, typologie à chaud ; incrément 4 : E3, E4, E5, S1, S2, S3, E1 hors ouvrage),
+//! `latency`
+//! (L1 à froid, live), `diagnose` (causes des plages M1 et R dans les tuiles du cache),
+//! `diagnose-structures` (groupes d'ouvrages rejoués étape par étape) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
 pub mod campaign;
@@ -17,8 +19,10 @@ pub mod hash;
 pub mod manifest;
 pub mod metrics;
 pub mod osm_surface;
+pub mod ouvrages;
 pub mod privacy;
 pub mod service;
+pub mod structures_diag;
 pub mod typology;
 
 use std::path::{Path, PathBuf};
@@ -70,9 +74,8 @@ impl BenchPaths {
 
 /// Révision de l'outil de mesure à `rules_version` égale : suffixe du dossier de rapport
 /// (`<date>-<rules_version>-<révision>`), remis à `None` à la prochaine montée des règles.
-/// `bench1` (règles 2026.10.3) : diagnostics curvilignes de M1 (plages non appariées) et de R3
-/// (désaccords revêtu / non revêtu), commande `diagnose`.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// Remise à `None` avec les règles 2026.10.4 (incrément 4 : métriques d'ouvrage).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

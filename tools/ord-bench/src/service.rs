@@ -29,6 +29,7 @@ impl std::fmt::Debug for Pt {
 #[derive(Clone)]
 pub struct Service {
     app: axum::Router,
+    state: AppState,
 }
 
 impl std::fmt::Debug for Service {
@@ -70,13 +71,18 @@ impl Service {
     pub async fn start(cache_dir: &Path, offline: bool, variant: Variant) -> anyhow::Result<Self> {
         let config = bench_config(cache_dir, offline, variant);
         let state = AppState::bootstrap(&config, Wiring { pixel_convention: variant.convention }).await?;
-        Ok(Self { app: router(state) })
+        Ok(Self { app: router(state.clone()), state })
     }
 
     /// Service en processus sur une configuration donnée (diagnostics : `debug` permis).
     pub async fn start_with(config: &Config) -> anyhow::Result<Self> {
         let state = AppState::bootstrap(config, Wiring { pixel_convention: PixelConvention::Center }).await?;
-        Ok(Self { app: router(state) })
+        Ok(Self { app: router(state.clone()), state })
+    }
+
+    /// État du service (diagnostics : sources et règles de l'orchestrateur).
+    pub fn state(&self) -> &AppState {
+        &self.state
     }
 
     /// `POST /v1/route-details` ; une réponse non 200 est une erreur qui porte le `code` du

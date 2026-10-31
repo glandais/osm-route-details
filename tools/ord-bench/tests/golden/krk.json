@@ -25,37 +25,55 @@
           "source": "mapterhorn-coverage",
           "zoom": 12
         }
-      ]
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.10.2"
+    "rules_version": "2026.10.4"
   },
   "points": [
     {
       "d_m": 0.0,
-      "ele": 52.77,
-      "ele_method": "dem",
+      "ele": 64.62,
+      "ele_method": "interpolated_structure",
       "index": 0,
       "origin": "input"
     },
     {
       "d_m": 719.07,
-      "ele": 0.0,
-      "ele_method": "dem",
+      "ele": 62.15,
+      "ele_method": "interpolated_structure",
       "index": 1,
       "origin": "input"
     },
     {
       "d_m": 1437.81,
-      "ele": 52.54,
-      "ele_method": "dem",
+      "ele": 53.48,
+      "ele_method": "interpolated_structure",
       "index": 2,
       "origin": "input"
     }
   ],
   "quality": {
     "elevation_coverage": 1.0,
+    "inferred_surface_ratio": 0.0,
+    "matched_ratio": 1.0,
+    "structure_correction": {
+      "bridges": "applied",
+      "counts": {
+        "interpolated_structure": 2
+      },
+      "counts_by_source": {
+        "osm": 2
+      },
+      "tunnels": "none_found"
+    },
     "terrain": [
       {
         "fallback_after_error": false,
@@ -80,11 +98,96 @@
       }
     ]
   },
+  "segments": [
+    {
+      "ele_end": 61.39,
+      "ele_method": "interpolated_structure",
+      "ele_start": 64.62,
+      "from_index": 0,
+      "from_m": 0.0,
+      "grade_pct": -0.71,
+      "matched": true,
+      "structure": "bridge",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 1,
+      "to_m": 455.75,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 64.04,
+      "ele_method": "dem",
+      "ele_start": 61.39,
+      "from_index": 0,
+      "from_m": 455.75,
+      "grade_pct": 2.51,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 1,
+      "to_m": 561.41,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 53.48,
+      "ele_method": "interpolated_structure",
+      "ele_start": 64.04,
+      "from_index": 0,
+      "from_m": 561.41,
+      "grade_pct": -1.21,
+      "matched": true,
+      "structure": "bridge",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 2,
+      "to_m": 1437.8,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 53.48,
+      "ele_method": "interpolated_structure",
+      "ele_start": 53.48,
+      "from_index": 1,
+      "from_m": 1437.8,
+      "grade_pct": -1.19,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 2,
+      "to_m": 1437.81,
+      "way_kind": "major_road"
+    }
+  ],
   "status": "complete",
   "summary": {
+    "by_structure_m": {
+      "bridge": 1332.15,
+      "ground": 105.67
+    },
+    "by_surface_class_m": {
+      "paved": 1437.81
+    },
+    "by_surface_source_m": {
+      "tagged": 1437.81
+    },
+    "by_way_kind_m": {
+      "major_road": 1437.81
+    },
     "ele_max_m": 69.05,
-    "ele_min_m": 0.0,
-    "gain_m": 119.45,
+    "ele_min_m": 53.48,
+    "gain_m": 2.82,
     "gain_params": {
       "adapted": [
         {
@@ -100,9 +203,28 @@
       "threshold_m": 3.0
     },
     "length_m": 1437.81,
-    "loss_m": 115.88,
+    "loss_m": 13.78,
+    "structures": [
+      {
+        "from_m": 0.0,
+        "kind": "bridge",
+        "length_m": 455.75,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 455.75
+      },
+      {
+        "from_m": 561.41,
+        "kind": "bridge",
+        "length_m": 876.39,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 1437.8
+      }
+    ],
     "terrain_m": {
       "mapterhorn": 1437.81
-    }
+    },
+    "unknown_m": 0.0
   }
 }

@@ -50,3 +50,60 @@ async fn golden_outside_france_and_glo30() {
         println!("{id} : conforme au snapshot");
     }
 }
+
+/// Golden d'ouvrage (T05 §2.6, incrément 4) : trace qui commence sur le tablier, pont parcouru
+/// deux fois, demi-tour sur un pont, sur des ouvrages de calibration.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_structures() {
+    use ord_bench::golden::{response_with, structure_options, structure_scenario, STRUCTURE_SCENARIOS};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let update = std::env::var_os("ORD_GOLDEN_UPDATE").is_some();
+    for id in STRUCTURE_SCENARIOS {
+        let s = structure_scenario(&paths, &manifest, id).expect("scénario");
+        let r = response_with(&service, &s, structure_options()).await.expect("réponse");
+        let entries = r["summary"]["structures"].as_array().expect("structures");
+        assert!(!entries.is_empty(), "{id} : aucun ouvrage");
+        assert!(
+            entries.iter().all(|e| e["kind"] == "bridge" && e["method"] == "dsm_deck"),
+            "{id} : {entries:?}"
+        );
+        assert_eq!(r["quality"]["structure_correction"]["bridges"], "applied", "{id}");
+        let deck: Vec<(f64, f64)> = r["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["ele_method"] == "dsm_deck")
+            .map(|p| (p["d_m"].as_f64().unwrap(), p["ele"].as_f64().unwrap()))
+            .collect();
+        assert!(!deck.is_empty(), "{id}");
+        if id == "nantes-pirmil-deux-fois" {
+            // Inv. 8 : même altitude aux deux passages, à distances symétriques.
+            assert_eq!(entries.len(), 2, "{entries:?}");
+            let l = r["summary"]["length_m"].as_f64().unwrap();
+            let at =
+                |d: f64| deck.iter().min_by(|a, b| (a.0 - d).abs().total_cmp(&(b.0 - d).abs())).unwrap().1;
+            let (f, t) = (entries[0]["from_m"].as_f64().unwrap(), entries[0]["to_m"].as_f64().unwrap());
+            let mid = 0.5 * (f + t);
+            assert!((at(mid) - at(l - mid)).abs() < 0.5, "{} vs {}", at(mid), at(l - mid));
+        }
+        if id == "test1-depart-sur-tablier" {
+            assert_eq!(r["points"][0]["ele_method"], "dsm_deck", "premier point sur le tablier");
+        }
+        let path = snapshot_path(id);
+        if update || !path.exists() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+            println!("{id} : snapshot écrit");
+            continue;
+        }
+        let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let mut out = Vec::new();
+        diff("", &expected, &r, &mut out);
+        assert!(out.is_empty(), "{id} : {out:#?}");
+        println!("{id} : conforme au snapshot");
+    }
+}

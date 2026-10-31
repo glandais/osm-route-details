@@ -248,20 +248,53 @@ fn distance_options(structure_correction: bool, step: f64) -> Value {
     })
 }
 
-/// Profil `distance` d'une réponse : distances, positions, altitudes (`NaN` = absente).
+/// Profil `distance` d'une réponse : distances, positions, altitudes (`NaN` = absente), station
+/// sur un ouvrage (segment pont ou tunnel, ou altitude corrigée d'ouvrage) et terrain IGN.
+#[derive(Default)]
 struct Profile {
     d: Vec<f64>,
     pts: Vec<LatLon>,
     ele: Vec<f64>,
+    on_structure: Vec<bool>,
+    corrected: Vec<bool>,
+    ign: Vec<bool>,
 }
 
 fn profile(r: &Value) -> anyhow::Result<Profile> {
     let points = r["points"].as_array().context("points")?;
-    let mut p = Profile { d: Vec::new(), pts: Vec::new(), ele: Vec::new() };
+    let ranges = |key: &str, f: &dyn Fn(&Value) -> bool| -> Vec<(f64, f64, bool)> {
+        r[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|s| (s["from_m"].as_f64().unwrap_or(0.0), s["to_m"].as_f64().unwrap_or(0.0), f(s)))
+            .collect()
+    };
+    let segs = ranges("segments", &|s| matches!(s["structure"].as_str(), Some("bridge" | "tunnel")));
+    let terrain: Vec<(f64, f64, bool)> = r["quality"]["terrain"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|s| {
+            (
+                s["from_m"].as_f64().unwrap_or(0.0),
+                s["to_m"].as_f64().unwrap_or(0.0),
+                s["origin"] == "ign_lidar_hd",
+            )
+        })
+        .collect();
+    let at = |v: &[(f64, f64, bool)], d: f64| {
+        v.iter().find(|s| d >= s.0 && d < s.1).or(v.last()).is_some_and(|s| s.2)
+    };
+    let mut p = Profile::default();
     for x in points {
-        p.d.push(x["d_m"].as_f64().context("d_m")?);
+        let d = x["d_m"].as_f64().context("d_m")?;
+        p.d.push(d);
         p.pts.push(LatLon::new(x["lat"].as_f64().unwrap_or(f64::NAN), x["lon"].as_f64().unwrap_or(f64::NAN)));
         p.ele.push(x["ele"].as_f64().unwrap_or(f64::NAN));
+        p.on_structure.push(at(&segs, d));
+        p.corrected.push(matches!(x["ele_method"].as_str(), Some("dsm_deck" | "interpolated_structure")));
+        p.ign.push(at(&terrain, d));
     }
     Ok(p)
 }
@@ -295,7 +328,7 @@ async fn recolle(
     rules: &BenchRules,
     preset_threshold: f64,
 ) -> anyhow::Result<(Profile, Vec<f64>, Vec<Value>)> {
-    let mut p = Profile { d: Vec::new(), pts: Vec::new(), ele: Vec::new() };
+    let mut p = Profile::default();
     let (mut tau, mut responses) = (Vec::new(), Vec::new());
     let mut offset = 0.0;
     for (k, part) in case.parts.iter().enumerate() {
@@ -307,6 +340,9 @@ async fn recolle(
         p.d.extend(q.d.iter().skip(skip).map(|x| x + offset));
         p.pts.extend(q.pts.iter().skip(skip));
         p.ele.extend(q.ele.iter().skip(skip));
+        p.on_structure.extend(q.on_structure.iter().skip(skip));
+        p.corrected.extend(q.corrected.iter().skip(skip));
+        p.ign.extend(q.ign.iter().skip(skip));
         tau.extend(t.iter().skip(skip));
         offset += q.d.last().copied().unwrap_or(0.0);
         responses.push(r);
@@ -354,9 +390,10 @@ pub async fn measure_case(
     case: &PersoCase,
     surface_csv: Option<String>,
     refs: &BTreeMap<String, Vec<LatLon>>,
+    ouvrages: &[crate::ouvrages::Ouvrage],
     rules: &BenchRules,
     rules_core: &Rules,
-) -> anyhow::Result<(Value, Value)> {
+) -> anyhow::Result<(Value, Value, Vec<Value>)> {
     let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
     let (p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
     let (p_raw, tau_raw, _) = recolle(service, case, false, rules, dem.threshold_m).await?;
@@ -398,7 +435,13 @@ pub async fn measure_case(
     let svc_raw: Vec<f64> = (0..n).map(|i| keep(&p_raw.ele, i)).collect();
     let bar: Vec<f64> = (0..n).map(|i| keep(&baro, i)).collect();
 
-    let m1 = e1(&p.d, &svc, &bar, rules.detrend_window_m, rules.detrend_step_m);
+    // E1 hors ouvrage (stations `ground`) : ni segment pont ou tunnel, ni altitude d'ouvrage
+    // (tablier, interpolation, rampes jusqu'aux sondes).
+    let off_structure = |v: &[f64]| -> Vec<f64> {
+        (0..n).map(|i| if p.on_structure[i] || p.corrected[i] { f64::NAN } else { v[i] }).collect()
+    };
+    let m1 =
+        e1(&p.d, &off_structure(&svc), &off_structure(&bar), rules.detrend_window_m, rules.detrend_step_m);
     let g = &rules_core.elevation.gain;
     // D+ sur le profil recollé, jamais somme des D+ des tronçons.
     let (dplus_svc, dplus_raw, dplus_baro) = (
@@ -493,7 +536,19 @@ pub async fn measure_case(
             "typologie": typo_diag
         }
     });
-    Ok((case_json, r["meta"]["data_versions"].clone()))
+    // Ouvrages du corpus franchis : fenêtres masquées exclues (série de l'ouvrage différente).
+    let baro_unmasked: Vec<f64> = (0..n).map(|i| if masked[i] { f64::NAN } else { baro[i] }).collect();
+    let cp = crate::ouvrages::CaseProfile {
+        d: &p.d,
+        pts: &p.pts,
+        svc: &p.ele,
+        raw: &p_raw.ele,
+        baro: &baro_unmasked,
+        on_structure: &p.on_structure,
+        ign: &p.ign,
+    };
+    let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
+    Ok((case_json, r["meta"]["data_versions"].clone(), items))
 }
 
 /// Fixture hors git du manifest, empreinte vérifiée ; `None` (cas sauté) sans `bench/private/`.
@@ -777,7 +832,9 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let refs = ouvrage_refs(paths)?;
+    let ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest.ouvrages_tenus)?;
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
+    let mut items: Vec<Value> = Vec::new();
     let mut cases = Vec::new();
     let mut skipped = Vec::new();
     let mut data_versions = Value::Null;
@@ -798,10 +855,11 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
                 paths.private.join("recales").join(format!("{}.surface.csv", case.id)),
             )
             .ok();
-            match measure_case(&service, &case, csv, &refs, &rules, &rules_core).await {
-                Ok((c, dv)) => {
+            match measure_case(&service, &case, csv, &refs, &ouvrages, &rules, &rules_core).await {
+                Ok((c, dv, its)) => {
                     eprintln!("{} : mesuré", case.id);
                     cases.push(c);
+                    items.extend(its);
                     if data_versions.is_null() {
                         data_versions = dv;
                     }
@@ -828,6 +886,26 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
         }
     }
+    // Ouvrages : parcours `test1..4` de vcyclist et témoins (calibration).
+    let structures_wanted = ids.is_empty();
+    if structures_wanted {
+        for route in ["test1", "test2", "test3", "test4"] {
+            match crate::ouvrages::vc_route_items(&service, &paths.bench, route).await {
+                Ok(its) => items.extend(its),
+                Err(e) => skipped.push(json!({"id": format!("vc-{route}"), "raison": e.to_string()})),
+            }
+        }
+        for (dir, id, role) in crate::ouvrages::controls(&paths.bench)? {
+            match crate::ouvrages::control_items(&service, &paths.bench, &dir, &id, &role).await {
+                Ok(its) => {
+                    eprintln!("{id} : mesuré");
+                    items.extend(its);
+                }
+                Err(e) => skipped.push(json!({"id": id, "raison": e.to_string()})),
+            }
+        }
+    }
+    let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
     let (agregats, mut verdicts) = judge(&cases);
     let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
     for (k, v) in typo_verdicts.as_object().into_iter().flatten() {
@@ -844,6 +922,10 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
         "seuil_ms": 160.0,
         "profil": if cfg!(debug_assertions) { "debug" } else { "release" }
     });
+    agregats["ouvrages"] = ouvrages_agg;
+    for (k, v) in ouvrages_verdicts.as_object().into_iter().flatten() {
+        verdicts[k] = v.clone();
+    }
     cases.extend(os_cases);
     verdicts["Q1"] = json!(if report.q1.pass() { "pass" } else { "fail" });
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
@@ -855,7 +937,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "date": today_utc(),
             "type": "calibration",
             "increment": "MVP",
-            "increment_plan": 3,
+            "increment_plan": 4,
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -871,7 +953,12 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "groupes": groupes,
             "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
             "notes": [
-                "E1 : toutes les stations hors fenêtres masquées (ouvrages non exclus de E1 avant l'incrément 4)",
+                "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
+                "E3 : baro corrigé localement (médiane baro − service au sol entre 1 et 3 km du milieu) sur les traces perso ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; un pont passe si tous ses passages passent",
+                "E4 : droite entre les MNT bruts (structure_correction=false) juste hors des portails (perso, témoins tt*/th*) ; vérité N de vcyclist (test4) ; D+ fictif = D+ dem du service − D+ dem de la droite sur la plage",
+                "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
+                "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
+                "Traces perso tenues à l'écart non envoyées : leurs passages d'ouvrages de calibration ne sont pas mesurés",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain",
@@ -880,6 +967,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             ]
         },
         "cas": cases,
+        "ouvrages": crate::ouvrages::public(&items),
         "cas_sautes": skipped,
         "agregats": agregats,
         "verdicts": verdicts,
@@ -955,6 +1043,21 @@ pub async fn fill_cache(
             }
             None => eprintln!("{id} : sauté (bench/private/ absent)"),
         }
+    }
+    if ids.is_empty() {
+        for (dir, id, _) in crate::ouvrages::controls(&paths.bench)? {
+            let pts = crate::ouvrages::control_points(&paths.bench, &dir, &id)?;
+            for sc in [true, false] {
+                crate::ouvrages::query_points(&service, &pts, sc).await?;
+            }
+            eprintln!("{id} : tuiles en cache");
+            filled.push(id);
+        }
+    }
+    for id in crate::golden::STRUCTURE_SCENARIOS {
+        let scenario = crate::golden::structure_scenario(paths, &manifest, id)?;
+        crate::golden::response_with(&service, &scenario, crate::golden::structure_options()).await?;
+        filled.push(format!("golden-{id}"));
     }
     for id in goldens {
         let scenario = crate::golden::scenario(paths, &manifest, id)?;

@@ -76,6 +76,11 @@ impl AppState {
         Self::with_startup(config, wiring, startup)
     }
 
+    /// Orchestrateur du service (diagnostics du banc).
+    pub fn orchestrator(&self) -> &Orchestrator {
+        &self.inner.orchestrator
+    }
+
     pub fn with_startup(config: &Config, wiring: Wiring, startup: Startup) -> Result<Self, StartupError> {
         let catalog = Arc::new(StaticCatalog::new(crate::wiring::configured_sources(config, &startup)));
         let capabilities = Capabilities::build(config, &catalog);

@@ -25,11 +25,17 @@
           "source": "mapterhorn-coverage",
           "zoom": 12
         }
-      ]
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.10.2"
+    "rules_version": "2026.10.4"
   },
   "points": [
     {
@@ -56,6 +62,18 @@
   ],
   "quality": {
     "elevation_coverage": 1.0,
+    "inferred_surface_ratio": 1.0,
+    "matched_ratio": 1.0,
+    "structure_correction": {
+      "bridges": "partial",
+      "counts": {
+        "uncorrected": 1
+      },
+      "counts_by_source": {
+        "osm": 1
+      },
+      "tunnels": "none_found"
+    },
     "terrain": [
       {
         "fallback_after_error": false,
@@ -67,6 +85,12 @@
     ],
     "warnings": [
       {
+        "code": "structure_uncorrected",
+        "from_m": 0.0,
+        "message": "structure left uncorrected",
+        "to_m": 173.14
+      },
+      {
         "code": "outside_primary_zone",
         "from_m": 0.0,
         "message": "outside France, Mapterhorn only",
@@ -74,8 +98,40 @@
       }
     ]
   },
+  "segments": [
+    {
+      "ele_end": 64.51,
+      "ele_method": "dem",
+      "ele_start": 60.26,
+      "from_index": 0,
+      "from_m": 0.0,
+      "grade_pct": 2.46,
+      "matched": true,
+      "structure": "bridge",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "inferred_highway"
+      },
+      "to_index": 2,
+      "to_m": 173.14,
+      "way_kind": "cycleway"
+    }
+  ],
   "status": "complete",
   "summary": {
+    "by_structure_m": {
+      "bridge": 173.14
+    },
+    "by_surface_class_m": {
+      "paved": 173.14
+    },
+    "by_surface_source_m": {
+      "inferred_highway": 173.14
+    },
+    "by_way_kind_m": {
+      "cycleway": 173.14
+    },
     "ele_max_m": 64.51,
     "ele_min_m": 60.05,
     "gain_m": 3.72,
@@ -88,8 +144,19 @@
     },
     "length_m": 173.14,
     "loss_m": 0.0,
+    "structures": [
+      {
+        "from_m": 0.0,
+        "kind": "bridge",
+        "length_m": 173.14,
+        "method": "none",
+        "structure_source": "osm",
+        "to_m": 173.14
+      }
+    ],
     "terrain_m": {
       "mapterhorn": 173.14
-    }
+    },
+    "unknown_m": 0.0
   }
 }

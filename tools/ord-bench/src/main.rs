@@ -1,4 +1,5 @@
-//! `ord-bench` : `check`, `fill-cache`, `run --offline`, `latency` (L1 à froid) (T05 §5.1). Les
+//! `ord-bench` : `check`, `fill-cache`, `run --offline`, `diagnose`, `diagnose-structures`,
+//! `latency` (L1 à froid) (T05 §5.1). Les
 //! autres sous-commandes (`judge`, `compare`, `dsm-placement`) arrivent avec les incréments
 //! suivants.
 
@@ -70,6 +71,15 @@ enum Command {
     Diagnose {
         #[arg(long, value_delimiter = ',', required = true)]
         cas: Vec<String>,
+    },
+    /// Groupes d'ouvrages d'un cas (MNT, MNS, sortie par station d'axe), hors ligne.
+    DiagnoseStructures {
+        #[arg(long)]
+        cas: String,
+        #[arg(long, default_value_t = 0.0)]
+        de: f64,
+        #[arg(long, default_value_t = f64::INFINITY)]
+        a: f64,
     },
     /// L1 : latence à froid (live, caches disque et mémoire neufs à chaque essai).
     Latency {
@@ -153,6 +163,11 @@ async fn main_inner() -> anyhow::Result<bool> {
                 let d = ord_bench::diagnose::diagnose_case(&paths, id).await?;
                 println!("{}", serde_json::to_string_pretty(&d)?);
             }
+            Ok(true)
+        }
+        Command::DiagnoseStructures { cas, de, a } => {
+            let d = ord_bench::structures_diag::diagnose_structures(&paths, &cas, de, a).await?;
+            println!("{}", serde_json::to_string_pretty(&d)?);
             Ok(true)
         }
         Command::Latency { cas, essais } => {
