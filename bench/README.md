@@ -402,7 +402,7 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | S3 | Pas de seuil au MVP (limite documentée, `structure: ground`) ; V1 : détecté | doc 01 §5.5 |
 | R1 | ≥ 85 % par parcours (classe), ≥ 85 % hors inconnu | osm-surface 86,0–93,5 % ; ne pas régresser sous le pire cas |
 | R2 | ≥ 97 % par parcours | osm-surface 98,1–99,3 % |
-| R3 | Comme R1 et R2 (classe ≥ 85 %, revêtu / non revêtu ≥ 97 %) par trace perso recalée, contre Stadia `trace_attributes` | Même nature de référence que R1/R2 (Stadia/Valhalla), sur 4 600 km de régions variées |
+| R3 | Comme R1 et R2 (classe ≥ 85 %, revêtu / non revêtu ≥ 97 %) par trace perso recalée, contre Stadia `trace_attributes` ; rapporté, non bloquant (§4 bis.7) | Même nature de référence que R1/R2 (Stadia/Valhalla), sur 4 600 km de régions variées |
 | M1 | Non apparié ≤ 1 % de la longueur ; `unknown` ≤ 2 % | osm-surface : 0–8 points non appariés, inconnu 0–1,3 % |
 | L1 | p95 ≤ 20 s pour 100 km en France à froid ; ≤ 5 s hors France | vcyclist : 130 km IGN à froid 19 s / 264 tuiles, Mapterhorn 3 s / 16 tuiles |
 | L2 | p95 ≤ 500 ms pour 100 km à chaud | osm-surface : 55–77 ms pour la typologie ; marge pour l'élévation et l'assemblage |
@@ -426,7 +426,7 @@ E3 pris sur les approches et référence « incertaine » (point 3), bande de po
 tunnel des tuiles (point 2) ; puis, après vérification sur la calibration, plausibilité de la pente
 entre portails (point 2).
 Modifié le 2026-11-01 (décision de l'utilisateur, commits dédiés, avant le gel du MVP et avant toute
-nouvelle mesure) : limite des données hors décompte (point 4), plages hors réseau de M1 (point 6).
+nouvelle mesure) : limite des données hors décompte (point 4), plages hors réseau de M1 (point 6), R3 non bloquant (point 7).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -543,6 +543,12 @@ nouvelle mesure) : limite des données hors décompte (point 4), plages hors ré
    existe ; une sortie réellement hors du réseau cartographié ne peut pas être appariée, quel que
    soit le service. Le test ne lit que les tuiles et la trace, jamais la réponse du service. Cas
    déclencheur : `perso-18`.
+7. **R3 rapporté, non bloquant** (décision de l'utilisateur, 2026-11-01, avant le gel du MVP). R3
+   reste mesuré avec les mêmes seuils (classe ≥ 85 %, revêtu / non revêtu ≥ 97 %), mais un échec
+   est rapporté sans refuser l'incrément. Motif : R3 compare deux dérivés d'OSM de dates
+   différentes, les tuiles du service et le graphe de Stadia Maps ; un retaguage OSM entre ces deux
+   dates n'est pas un défaut du service. R1 et R2, sur osm-surface, restent bloquants ; R1 garde son
+   seuil de 85 %. Cas déclencheur : `perso-17`.
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
@@ -550,7 +556,7 @@ mêmes trois valeurs : revêtu = `paved_smooth`, `paved`, `paved_rough` ; non re
 pire que `paved_rough` (`compacted` compris), comme osm-surface (T03 §5). Conséquences :
 - R1 « classe » compte 3 classes. Il n'est pas comparable aux 86–94 % d'osm-surface sur 5 classes, et
   son seuil de 85 % ne discrimine plus guère : R1 ne diffère de R2 que par les mètres inconnus. Les
-  gardes effectives sont R2, R3 (revêtu / non revêtu ≥ 97 %) et M1. Un R1 sur la classe détaillée
+  gardes effectives sont R2 et M1 ; R3 (revêtu / non revêtu ≥ 97 %) est rapporté (point 7). Un R1 sur la classe détaillée
   attendra `SurfaceDetail` (V2).
 - La part `unknown` de M1 est mesurée sur `surface.class`. Une portion appariée reçoit toujours une
   classe (repli sur `highway`, T03 §5) : `unknown` ≈ non apparié, et le seuil de 1 % sur le non

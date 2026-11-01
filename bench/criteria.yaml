@@ -23,7 +23,8 @@
 # Modifié le 2026-11-01 (décision de l'utilisateur, README §4 bis.4, avant le gel du MVP) : un
 # ouvrage que le schéma de la source ne type pas comme tel sort d'E4/E3 et de S1, rapporté à part
 # (limite_donnees). Seuils inchangés ; avant toute nouvelle mesure. Puis M1 : plages d'une trace
-# recalée sans voie streets à 30 m sorties de M1, rapportées à part (README §4 bis.6).
+# recalée sans voie streets à 30 m sorties de M1, rapportées à part (README §4 bis.6). Puis R3
+# rapporté, non bloquant, seuils inchangés (README §4 bis.7).
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -74,6 +75,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Un ouvrage du corpus que la source du service ne type pas comme tunnel ou pont à cause de son schéma sort d'E4 (E3 pour un pont) et de S1 ; rapporté à part comme limite des données du MVP, à la manière de S3, sans seuil"
   - id: m1_hors_reseau   # 2026-11-01
     decision: "M1 sur les traces recalées : une plage sans aucune voie de la couche streets à moins de 30 m (tuiles de la campagne qui juge la trace, tuile + 8 voisines) sort de M1 et est rapportée à part (hors_reseau)"
+  - id: r3_non_bloquant   # 2026-11-01
+    decision: "R3 rapporté, non bloquant, seuils inchangés : accord entre deux dérivés d'OSM de dates différentes, un décalage de version n'est pas un défaut du service ; R1 (85 %) et R2 restent bloquants"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -280,7 +283,7 @@ criteres:
     seuils:
       - {accord_classe_min: 0.85, accord_revetu_non_revetu_min: 0.97}
     passe_si: tous
-    bloquant: true
+    bloquant: false   # README §4 bis.7, 2026-11-01 : rapporté, seuils inchangés
 
   - id: M1
     metrique: "Appariement : part non appariée et part unknown, en longueur"
