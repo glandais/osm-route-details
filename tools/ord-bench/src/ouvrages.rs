@@ -1170,9 +1170,13 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         tiles: p.tiles,
                         at: o.pts[1],
                         im,
+                        ends: [im, im],
                     };
-                    let bump = e5_bump(p.d, p.raw, im);
-                    match e5_item(&o.id, case, e5_reference(&input), p.svc[im], p.raw[im], bump) {
+                    let bump = e5_bump(p.d, p.raw, im, [im, im]);
+                    let svc = p.svc[im];
+                    let ecart = |z: f64| (svc - z).abs();
+                    let ecart_mnt = Some((svc - p.raw[im]).abs());
+                    match e5_item(&o.id, case, e5_reference(&input), &ecart, ecart_mnt, bump) {
                         Ok(fields) => item.extend(fields),
                         Err(v) => {
                             out.push(v);
@@ -1188,17 +1192,23 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
 }
 
 /// Champs d'un passage E5 compté (`Ok`), ou item rapporté non compté (`Err`) : retiré
-/// (`e5_trace_sur_ouvrage`) ou référence indisponible (`e5_reference_indisponible`).
+/// (`e5_trace_sur_ouvrage`), référence indisponible (`e5_reference_indisponible`) ou incertaine
+/// (`e5_reference_incertaine`, écart indicatif). `ecart` : écart du service à une altitude de
+/// référence ; `ecart_mnt` : écart au MNT, rapporté.
 fn e5_item(
     id: &str,
     case: &str,
     reference: E5Reference,
-    svc: f64,
-    mnt: f64,
+    ecart: &dyn Fn(f64) -> f64,
+    ecart_mnt: Option<f64>,
     bump: Option<f64>,
 ) -> Result<serde_json::Map<String, Value>, Value> {
     let bump_v = bump.map_or(Value::Null, r2);
-    let (z, name, offset) = match reference {
+    let sides_json = |m: &mut serde_json::Map<String, Value>, sides: &BaroSides| {
+        m.insert("decalages_cotes_m".into(), json!(sides.offset_m.map(|o| o.map_or(Value::Null, r2))));
+        m.insert("points_baro_cotes".into(), json!(sides.points));
+    };
+    let (z, name, offset, sides, tol) = match reference {
         E5Reference::Retire { distance_m, angle_deg } => {
             return Err(json!({"ouvrage": id, "cas": case, "metrique": "e5_trace_sur_ouvrage",
                 "distance_ouvrage_m": r2(distance_m), "angle_deg": r2(angle_deg)}));
@@ -1207,20 +1217,48 @@ fn e5_item(
             return Err(json!({"ouvrage": id, "cas": case, "metrique": "e5_reference_indisponible",
                 "raison": raison, "bosse_mnt_m": bump_v}));
         }
-        E5Reference::Baro { z, offset_m } => (z, "baro_corrige_local", Some(offset_m)),
-        E5Reference::Mnt { z } => (z, "mnt", None),
+        E5Reference::Incertaine { reference, raison, z, offset_m, sides } => {
+            let tol = if reference == "mnt" { E5_TOL_MNT_M } else { E5_TOL_BARO_M };
+            let e = z.is_finite().then(|| ecart(z));
+            let mut m = serde_json::Map::new();
+            m.insert("ouvrage".into(), json!(id));
+            m.insert("cas".into(), json!(case));
+            m.insert("metrique".into(), json!("e5_reference_incertaine"));
+            m.insert("reference".into(), json!(reference));
+            m.insert("raison".into(), json!(raison));
+            m.insert("bosse_mnt_m".into(), bump_v);
+            if let Some(o) = offset_m {
+                m.insert("decalage_local_m".into(), r2(o));
+            }
+            if let Some(s) = &sides {
+                sides_json(&mut m, s);
+            }
+            m.insert("ecart_croisement_m".into(), e.map_or(Value::Null, r2));
+            m.insert("ecart_mnt_m".into(), ecart_mnt.map_or(Value::Null, r2));
+            m.insert("seuil_m".into(), json!(tol));
+            m.insert("pass_indicatif".into(), e.map_or(Value::Null, |e| json!(e <= tol)));
+            return Err(Value::Object(m));
+        }
+        E5Reference::Baro { z, offset_m, sides } => {
+            (z, "baro_corrige_local", Some(offset_m), Some(sides), E5_TOL_BARO_M)
+        }
+        E5Reference::Mnt { z } => (z, "mnt", None, None, E5_TOL_MNT_M),
     };
-    let e = (svc - z).abs();
+    let e = ecart(z);
     let mut m = serde_json::Map::new();
     m.insert("metrique".into(), json!("E5"));
     m.insert("reference".into(), json!(name));
     m.insert("ecart_croisement_m".into(), r2(e));
-    m.insert("ecart_mnt_m".into(), r2((svc - mnt).abs()));
+    m.insert("ecart_mnt_m".into(), ecart_mnt.map_or(Value::Null, r2));
     m.insert("bosse_mnt_m".into(), bump_v);
     if let Some(o) = offset {
         m.insert("decalage_local_m".into(), r2(o));
     }
-    m.insert("pass".into(), json!(e <= 1.0));
+    if let Some(s) = &sides {
+        sides_json(&mut m, s);
+    }
+    m.insert("seuil_m".into(), json!(tol));
+    m.insert("pass".into(), json!(e <= tol));
     Ok(m)
 }
 
@@ -1872,20 +1910,48 @@ const E5_NODATA_M: f64 = 10.0;
 /// « Le MNT lit le tablier » : MNT au croisement − moyenne des médianes des approches 20–50 m.
 const E5_APPROACH_M: (f64, f64) = (20.0, 50.0);
 const E5_DECK_BUMP_M: f64 = 2.0;
+/// Bosse MNT de 1,0 à 2,0 m : référence MNT incertaine (README §4 ter.7, e477dd4).
+const E5_UNCERTAIN_BUMP_M: f64 = 1.0;
+/// Tolérances d'E5 par référence (criteria `E5.seuils`, f1bfda3) : MNT 1 m, baro corrigé 2 m.
+pub const E5_TOL_MNT_M: f64 = 1.0;
+pub const E5_TOL_BARO_M: f64 = 2.0;
+/// Baro incertain (f1bfda3, e9430ac) : décalages des deux côtés (200–1 500 m chacun) à plus de
+/// 2 m l'un de l'autre, ou un côté à moins de 3 points de baro.
+const E5_SIDE_OFFSETS_MAX_M: f64 = 2.0;
+const E5_SIDE_POINTS_MIN: usize = 3;
 /// Demi-fenêtre de la direction de la trace au croisement (test « trace sur un ouvrage »).
 const E5_DIRECTION_HALF_M: f64 = 10.0;
+
+/// Décalages baro − MNT de chaque côté du croisement (200–1 500 m), avant puis après, et nombre de
+/// stations de la grille où baro et MNT existent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BaroSides {
+    pub offset_m: [Option<f64>; 2],
+    pub points: [usize; 2],
+}
 
 /// Ce que dit la règle de référence d'E5 pour un croisement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum E5Reference {
     /// Trace sur un ouvrage des tuiles au croisement (`e5_trace_sur_ouvrage`) : distance, angle.
     Retire { distance_m: f64, angle_deg: f64 },
-    /// Baro corrigé localement au croisement : altitude et décalage.
-    Baro { z: f64, offset_m: f64 },
+    /// Baro corrigé localement au croisement : altitude, décalage (médiane des deux côtés réunis)
+    /// et décalages par côté.
+    Baro { z: f64, offset_m: f64, sides: BaroSides },
     /// MNT LiDAR au croisement.
     Mnt { z: f64 },
     /// `e5_reference_indisponible`, avec sa raison.
     Indisponible { raison: &'static str },
+    /// `e5_reference_incertaine` (rapportée, non comptée) : référence en cause (`baro_corrige_local`
+    /// ou `mnt`), raison, altitude qu'elle donnerait (indicative, `NaN` sans décalage) et, pour le
+    /// baro, décalage et côtés.
+    Incertaine {
+        reference: &'static str,
+        raison: &'static str,
+        z: f64,
+        offset_m: Option<f64>,
+        sides: Option<BaroSides>,
+    },
 }
 
 /// Profil lu par la règle de référence d'E5, sur la grille du cas.
@@ -1904,21 +1970,24 @@ pub struct E5Input<'a> {
     /// Point de croisement et station la plus proche.
     pub at: LatLon,
     pub im: usize,
+    /// Stations d'où partent les approches 20–50 m de la bosse : `[im, im]` au point de croisement,
+    /// bouts de la plage pour les plages `O` des témoins vcyclist (README §4 ter.7, e9430ac).
+    pub ends: [usize; 2],
 }
 
 /// Bosse du MNT au croisement : MNT(croisement) − moyenne des médianes du MNT entre 20 et 50 m
-/// de part et d'autre, le long de la trace (qui suit la voie du dessous). `None` : MNT absent au
-/// croisement ou côté sans station.
-pub fn e5_bump(d: &[f64], raw: &[f64], im: usize) -> Option<f64> {
-    let side = |dir: f64| -> Option<f64> {
+/// avant `ends[0]` et après `ends[1]`, le long de la trace (qui suit la voie du dessous). `None` :
+/// MNT absent au croisement ou côté sans station.
+pub fn e5_bump(d: &[f64], raw: &[f64], im: usize, ends: [usize; 2]) -> Option<f64> {
+    let side = |from: usize, dir: f64| -> Option<f64> {
         let v: Vec<f64> = (0..d.len())
-            .filter(|&k| (E5_APPROACH_M.0..=E5_APPROACH_M.1).contains(&(dir * (d[k] - d[im]))))
+            .filter(|&k| (E5_APPROACH_M.0..=E5_APPROACH_M.1).contains(&(dir * (d[k] - d[from]))))
             .map(|k| raw[k])
             .filter(|z| z.is_finite())
             .collect();
         (!v.is_empty()).then(|| median(&v))
     };
-    let (a, b) = (side(-1.0)?, side(1.0)?);
+    let (a, b) = (side(ends[0], -1.0)?, side(ends[1], 1.0)?);
     raw[im].is_finite().then(|| raw[im] - 0.5 * (a + b))
 }
 
@@ -1939,14 +2008,35 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
         }
     }
     if let Some(baro) = x.baro.filter(|b| b[im].is_finite()) {
-        let ring: Vec<f64> = (0..d.len())
-            .filter(|&k| (E5_BARO_RING_M.0..=E5_BARO_RING_M.1).contains(&(d[k] - d[im]).abs()))
-            .map(|k| baro[k] - x.raw[k])
-            .filter(|v| v.is_finite())
-            .collect();
-        if !ring.is_empty() {
-            let offset_m = median(&ring);
-            return E5Reference::Baro { z: baro[im] - offset_m, offset_m };
+        // Décalage par côté (200–1 500 m chacun) ; décalage retenu = médiane des deux réunis.
+        let side = |dir: f64| -> Vec<f64> {
+            (0..d.len())
+                .filter(|&k| (E5_BARO_RING_M.0..=E5_BARO_RING_M.1).contains(&(dir * (d[k] - d[im]))))
+                .map(|k| baro[k] - x.raw[k])
+                .filter(|v| v.is_finite())
+                .collect()
+        };
+        let (before, after) = (side(-1.0), side(1.0));
+        let med = |v: &[f64]| (!v.is_empty()).then(|| median(v));
+        let sides = BaroSides { offset_m: [med(&before), med(&after)], points: [before.len(), after.len()] };
+        let ring: Vec<f64> = before.iter().chain(&after).copied().collect();
+        let offset_m = med(&ring);
+        let z = offset_m.map_or(f64::NAN, |o| baro[im] - o);
+        let uncertain = |raison| E5Reference::Incertaine {
+            reference: "baro_corrige_local",
+            raison,
+            z,
+            offset_m,
+            sides: Some(sides),
+        };
+        if sides.points.iter().any(|&n| n < E5_SIDE_POINTS_MIN) {
+            return uncertain("points_baro_insuffisants");
+        }
+        if let ([Some(a), Some(b)], Some(offset_m)) = (sides.offset_m, offset_m) {
+            if (a - b).abs() > E5_SIDE_OFFSETS_MAX_M {
+                return uncertain("decalages_des_cotes");
+            }
+            return E5Reference::Baro { z, offset_m, sides };
         }
     }
     let nodata = (0..d.len())
@@ -1955,8 +2045,15 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
     if nodata {
         return E5Reference::Indisponible { raison: "mnt_sans_donnee" };
     }
-    match e5_bump(d, x.raw, im) {
+    match e5_bump(d, x.raw, im, x.ends) {
         Some(b) if b > E5_DECK_BUMP_M => E5Reference::Indisponible { raison: "mnt_lit_le_tablier" },
+        Some(b) if b >= E5_UNCERTAIN_BUMP_M => E5Reference::Incertaine {
+            reference: "mnt",
+            raison: "bosse_mnt",
+            z: x.raw[im],
+            offset_m: None,
+            sides: None,
+        },
         Some(_) => E5Reference::Mnt { z: x.raw[im] },
         None => E5Reference::Indisponible { raison: "approche_sans_mnt" },
     }
@@ -2312,8 +2409,9 @@ pub async fn vc_items(
                 }
             } else if kind == "O" && negative {
                 // La trace du négatif reste dans E5 même hors graphe (§4 bis.1). Référence au
-                // croisement (README §4 ter.7) lue à la station du milieu de la plage `O` ; témoin
-                // sans baro : MNT, ou retiré / indisponible. Écart : max sur la plage.
+                // croisement (README §4 ter.7) lue à la station du milieu de la plage `O`, approches
+                // de la bosse depuis les bouts de la plage (e9430ac) ; témoin sans baro : MNT, ou
+                // retiré / indisponible / incertain. Écart : max sur la plage.
                 let im = (i0 + i1) / 2;
                 let pts: Vec<LatLon> = (0..r.s.pts.len()).map(|i| ll(r, i)).collect();
                 let input = E5Input {
@@ -2325,20 +2423,22 @@ pub async fn vc_items(
                     tiles: Some(tiles),
                     at: pts[im],
                     im,
+                    ends: [i0, i1],
                 };
-                let bump = e5_bump(&r.d, &r.raw.ele, im);
-                match e5_reference(&input) {
-                    reference @ (E5Reference::Retire { .. } | E5Reference::Indisponible { .. }) => {
-                        if let Err(v) = e5_item(&id, &r.id, reference, f64::NAN, f64::NAN, bump) {
-                            out.push(v);
-                        }
+                let bump = e5_bump(&r.d, &r.raw.ele, im, [i0, i1]);
+                // Référence MNT : écart max sur la plage, contre le MNT de chaque station.
+                let range_max =
+                    (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
+                let ecart = |_z: f64| range_max;
+                match e5_item(&id, &r.id, e5_reference(&input), &ecart, Some(range_max), bump) {
+                    Ok(fields) => {
+                        let mut item = serde_json::Map::new();
+                        item.insert("ouvrage".into(), json!(id));
+                        item.insert("cas".into(), json!(r.id));
+                        item.extend(fields);
+                        out.push(Value::Object(item));
                     }
-                    _ => {
-                        let e =
-                            (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
-                        out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "E5", "reference": "mnt",
-                            "ecart_croisement_m": r2(e), "bosse_mnt_m": bump.map_or(Value::Null, r2), "pass": e <= 1.0}));
-                    }
+                    Err(v) => out.push(v),
                 }
             }
         }
@@ -2581,7 +2681,10 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
             "passages_dessus": by("E5_passage_dessus").into_iter().map(strip_private).collect::<Vec<_>>(),
             // README §4 ter.7 : rapportés, non comptés.
             "trace_sur_ouvrage": by("e5_trace_sur_ouvrage").into_iter().map(strip_private).collect::<Vec<_>>(),
-            "references_indisponibles": by("e5_reference_indisponible").into_iter().map(strip_private).collect::<Vec<_>>()},
+            "references_indisponibles": by("e5_reference_indisponible").into_iter().map(strip_private).collect::<Vec<_>>(),
+            // README §4 ter.7 (f1bfda3, e477dd4, e9430ac) : rapportées, non comptées, écart indicatif.
+            "references_incertaines": by("e5_reference_incertaine").into_iter().map(strip_private).collect::<Vec<_>>(),
+            "seuils_m": {"mnt": E5_TOL_MNT_M, "baro_corrige_local": E5_TOL_BARO_M}},
         "S1": {"emprise_m": r2(s1_ref), "type_m": r2(s1_typed), "rappel": r4(s1), "seuil": 0.95},
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
         "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
@@ -3046,7 +3149,8 @@ mod tests {
                 structure_segs: &[],
                 raw_gps: None,
                 tiles: Some(&tiles),
-                baro_fiable: true,
+                // Sans baro fiable : référence MNT (le baro n'a pas ici de stations à 200–1 500 m).
+                baro_fiable: false,
             };
             perso_items("c", &p, std::slice::from_ref(&o), 40.0)
         };
@@ -3538,7 +3642,7 @@ mod e5_tests {
         baro: Option<&'a [f64]>,
         tiles: Option<&'a Tiles>,
     ) -> E5Input<'a> {
-        E5Input { d, pts, raw, ign: None, baro, tiles, at: pts[40], im: 40 }
+        E5Input { d, pts, raw, ign: None, baro, tiles, at: pts[40], im: 40, ends: [40, 40] }
     }
 
     /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.
@@ -3551,15 +3655,29 @@ mod e5_tests {
         let mid = LatLon::new(47.2, -1.5);
         let (d, pts) = line(mid, false);
         let bump = dtm(&d, 4.0);
-        assert!((e5_bump(&d, &bump, 40).unwrap() - 4.0).abs() < 1e-9);
+        assert!((e5_bump(&d, &bump, 40, [40, 40]).unwrap() - 4.0).abs() < 1e-9);
         assert_eq!(
             e5_reference(&input(&d, &pts, &bump, None, None)),
             E5Reference::Indisponible { raison: "mnt_lit_le_tablier" }
         );
-        // Bosse de 1,9 m : référence MNT. Cuvette : référence MNT (les passages dessous creusent).
-        for h in [1.9, -3.0] {
+        // Bosse de 0,9 m : référence MNT. Cuvette : référence MNT (les passages dessous creusent).
+        for h in [0.9, -3.0] {
             let z = dtm(&d, h);
             assert_eq!(e5_reference(&input(&d, &pts, &z, None, None)), E5Reference::Mnt { z: 100.0 + h });
+        }
+        // Bosse de 1,0 à 2,0 m : référence MNT incertaine (e477dd4).
+        for h in [1.0, 1.9, 2.0] {
+            let z = dtm(&d, h);
+            assert_eq!(
+                e5_reference(&input(&d, &pts, &z, None, None)),
+                E5Reference::Incertaine {
+                    reference: "mnt",
+                    raison: "bosse_mnt",
+                    z: 100.0 + h,
+                    offset_m: None,
+                    sides: None
+                }
+            );
         }
         // MNT sans donnée à ≤ 10 m.
         let mut hole = dtm(&d, 0.0);
@@ -3590,8 +3708,11 @@ mod e5_tests {
             tiles: None,
             at: pts[400],
             im: 400,
+            ends: [400, 400],
         };
-        assert_eq!(e5_reference(&x), E5Reference::Baro { z: 100.0, offset_m: 3.0 });
+        // 261 stations de 200 à 1 500 m de chaque côté.
+        let sides = BaroSides { offset_m: [Some(3.0), Some(3.0)], points: [261, 261] };
+        assert_eq!(e5_reference(&x), E5Reference::Baro { z: 100.0, offset_m: 3.0, sides });
         // Baro absent au croisement (pas brut de plus de 100 m) : MNT, ici indisponible.
         let mut gap = baro.clone();
         gap[400] = f64::NAN;
@@ -3616,5 +3737,107 @@ mod e5_tests {
         // Trace nord-sud, sous le pont : croisement à 90°, compté.
         let (d, across) = line(mid, false);
         assert_eq!(e5_reference(&input(&d, &across, &z, None, Some(&tiles))), E5Reference::Mnt { z: 100.0 });
+    }
+
+    /// Trace de 4 km, croisement au milieu (station 400), MNT plat à 100 m, baro donné.
+    fn long_line() -> (Vec<f64>, Vec<LatLon>, Vec<f64>) {
+        let mid = LatLon::new(47.2, -1.5);
+        let m_lat = 111_320.0;
+        let d: Vec<f64> = (0..=800).map(|k| k as f64 * 5.0).collect();
+        let pts = d.iter().map(|&x| LatLon::new(mid.lat + (x - 2_000.0) / m_lat, mid.lon)).collect();
+        let raw = vec![100.0; d.len()];
+        (d, pts, raw)
+    }
+
+    /// f1bfda3 : décalages des deux côtés à plus de 2 m l'un de l'autre, référence incertaine ;
+    /// à 2 m au plus, référence baro, tolérance 2 m.
+    #[test]
+    fn a_baro_whose_sides_disagree_is_uncertain() {
+        let (d, pts, raw) = long_line();
+        let run = |after: f64| {
+            let baro: Vec<f64> = d.iter().map(|&x| if x > 2_000.0 { 100.0 + after } else { 103.0 }).collect();
+            let x = E5Input {
+                d: &d,
+                pts: &pts,
+                raw: &raw,
+                ign: None,
+                baro: Some(&baro),
+                tiles: None,
+                at: pts[400],
+                im: 400,
+                ends: [400, 400],
+            };
+            e5_reference(&x)
+        };
+        assert!(
+            matches!(run(5.5), E5Reference::Incertaine { reference: "baro_corrige_local", raison: "decalages_des_cotes", sides: Some(s), .. }
+                if s.offset_m == [Some(3.0), Some(5.5)]),
+            "{:?}",
+            run(5.5)
+        );
+        assert!(matches!(run(4.9), E5Reference::Baro { .. }), "{:?}", run(4.9));
+        // Écart compté contre 2 m avec cette référence.
+        let ecart = |z: f64| (102.5 - z).abs();
+        let Ok(m) = e5_item(
+            "o",
+            "c",
+            E5Reference::Baro {
+                z: 100.6,
+                offset_m: 3.0,
+                sides: BaroSides { offset_m: [Some(3.0); 2], points: [9; 2] },
+            },
+            &ecart,
+            None,
+            None,
+        ) else {
+            panic!("compté")
+        };
+        assert_eq!(m["pass"], true);
+        assert_eq!(m["seuil_m"], 2.0);
+        let Err(v) = e5_item("o", "c", run(5.5), &ecart, None, None) else { panic!("non compté") };
+        assert_eq!(v["metrique"], "e5_reference_incertaine", "{v}");
+    }
+
+    /// e9430ac : un côté à moins de 3 points de baro entre 200 et 1 500 m, référence incertaine.
+    #[test]
+    fn a_baro_on_one_side_only_is_uncertain() {
+        let (d, pts, raw) = long_line();
+        // Baro de 50 m avant le croisement jusqu'au bout ; avant, 2 points seulement à 205–210 m.
+        let baro: Vec<f64> = d
+            .iter()
+            .map(|&x| if x >= 1_950.0 || x == 1_790.0 || x == 1_795.0 { 103.0 } else { f64::NAN })
+            .collect();
+        let x = E5Input {
+            d: &d,
+            pts: &pts,
+            raw: &raw,
+            ign: None,
+            baro: Some(&baro),
+            tiles: None,
+            at: pts[400],
+            im: 400,
+            ends: [400, 400],
+        };
+        let r = e5_reference(&x);
+        assert!(
+            matches!(r, E5Reference::Incertaine { raison: "points_baro_insuffisants", sides: Some(s), .. } if s.points[0] == 2),
+            "{r:?}"
+        );
+    }
+
+    /// e9430ac : plage `O` de 80 m, approches de la bosse depuis ses bouts ; mesurées depuis le
+    /// milieu, elles tomberaient sous le tablier lu par le MNT.
+    #[test]
+    fn the_approaches_of_an_o_range_start_from_its_ends() {
+        let mid = LatLon::new(47.2, -1.5);
+        let (d, pts) = line(mid, false);
+        // Tablier lu par le MNT sur toute la plage (± 40 m), + 6 m.
+        let z: Vec<f64> = d.iter().map(|&x| if (x - 200.0).abs() <= 40.0 { 106.0 } else { 100.0 }).collect();
+        let (i0, i1) = (32, 48);
+        assert!((e5_bump(&d, &z, 40, [i0, i1]).unwrap() - 6.0).abs() < 1e-9);
+        let x = E5Input { ends: [i0, i1], ..input(&d, &pts, &z, None, None) };
+        assert_eq!(e5_reference(&x), E5Reference::Indisponible { raison: "mnt_lit_le_tablier" });
+        // Depuis le milieu, la médiane des approches lit en partie le tablier.
+        assert!(e5_bump(&d, &z, 40, [40, 40]).unwrap() < 6.0);
     }
 }

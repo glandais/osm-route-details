@@ -96,6 +96,18 @@ fn setup() -> (tempfile::TempDir, BenchPaths, Vec<std::path::PathBuf>) {
             f1 = pt(10.025),
         ),
     );
+    // Ouvrages réels sur la voie des témoins (manifest `temoins_v1_tags`, 6ed1da7).
+    write(
+        &private.join("v1/temoins-v1-tags.json"),
+        &format!(
+            r#"{{"perso-40-s0":{{"serie":"calibration","longueur_temoin_m":500,"plages":[{{"tag":"bridge","debut":{a},"fin":{b},"longueur_m":20}}]}},
+               "perso-40-s1":{{"serie":"tenue_a_l_ecart","longueur_temoin_m":500,"plages":[{{"tag":"bridge","debut":{c},"fin":{e},"longueur_m":20}}]}}}}"#,
+            a = pt(10.002),
+            b = pt(10.0022),
+            c = pt(10.021),
+            e = pt(10.0212),
+        ),
+    );
     write(
         &private.join("v1/series-v1.csv"),
         "id,type,groupe,serie,passages_masques\n\
@@ -123,6 +135,7 @@ perso:
 perso_v1:
   ouvrages_v1: {{fichier: private/v1/ouvrages-v1.json, sha256: {o}}}
   temoins_v1: {{fichier: private/v1/temoins-v1.json, sha256: {t}}}
+  temoins_v1_tags: {{fichier: private/v1/temoins-v1-tags.json, sha256: {tt}}}
   series_v1: {{fichier: private/v1/series-v1.csv, sha256: {s}}}
   planifies:
     - {{id: pl-cal, role: E4, fichier: private/v1/planifies/pl-cal.gpx, sha256: {pc}}}
@@ -134,6 +147,7 @@ perso_v1:
 "#,
         o = v1("v1/ouvrages-v1.json"),
         t = v1("v1/temoins-v1.json"),
+        tt = v1("v1/temoins-v1-tags.json"),
         s = v1("v1/series-v1.csv"),
         pc = v1("v1/planifies/pl-cal.gpx"),
         ph = v1("v1/planifies/pl-held.gpx"),
@@ -174,6 +188,9 @@ fn calibration_check_and_selection_never_open_held_out_files() {
     assert_eq!(v1.planned.cases.iter().map(|c| c.0.id.as_str()).collect::<Vec<_>>(), ["pl-cal"]);
     assert_eq!(v1.planned.excluded, ["pl-held"]);
     assert_eq!(v1.temoins.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["perso-40-s0"]);
+    // Empreinte lue au manifest ; entrée de l'autre série retirée à la lecture.
+    assert_eq!(v1.temoins[0].real.len(), 1);
+    assert_eq!(v1.temoins[0].length_m, Some(500.0));
     let ouvrages = ord_bench::ouvrages::series_ouvrages(&paths, &manifest, Serie::Calibration).unwrap();
     assert_eq!(ouvrages.iter().map(|o| o.id.as_str()).collect::<Vec<_>>(), ["nv-1"]);
     // Le jugement, lui, vérifie aussi les fichiers tenus à l'écart (illisibles ici : échec).
@@ -224,4 +241,18 @@ async fn calibration_run_computes_no_held_out_case() {
     for id in ["perso-90", "pl-held", "nv-2", "nv-3", "perso-40-s1"] {
         assert!(!text.contains(id), "{id} présent dans le rapport de calibration");
     }
+}
+
+/// `temoins_v1_tags` : l'empreinte du manifest fait foi (6ed1da7) ; fichier modifié, refusé.
+#[test]
+fn temoins_tags_fingerprint_comes_from_the_manifest() {
+    let (_root, paths, held) = setup();
+    let tags = paths.private.join("v1/temoins-v1-tags.json");
+    let text = std::fs::read_to_string(&tags).unwrap();
+    std::fs::write(&tags, text.replace("500", "501")).unwrap();
+    let report = ord_bench::check::check(&paths).unwrap();
+    assert!(report.failures.iter().any(|f| f.contains("temoins_v1_tags")), "{:?}", report.failures);
+    let manifest = Manifest::load(&paths.bench).unwrap();
+    assert!(ord_bench::campaign::v1_ctx(&paths, &manifest, &[], Serie::Calibration).is_err());
+    unlock(&held);
 }

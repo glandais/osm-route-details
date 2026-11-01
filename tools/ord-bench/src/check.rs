@@ -168,6 +168,9 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
             {
                 verify(&mut report, &paths.resolve(fichier), sum, label);
             }
+            if let Some((fichier, sum)) = &v1.temoins_tags {
+                verify(&mut report, &paths.resolve(fichier), sum, "temoins_v1_tags");
+            }
             let rows = crate::v1::series_rows(paths, v1).unwrap_or_default();
             for p in &v1.planifies {
                 let opened = match crate::v1::planned_serie(&rows, &p.id) {

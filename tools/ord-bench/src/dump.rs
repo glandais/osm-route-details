@@ -1,6 +1,7 @@
 //! `dump-profils` : vidage local et privé des profils de traces perso de calibration (analyse
 //! d'E2b), sur la grille de 5 m de la campagne en mode `distance`. Un CSV par cas dans
-//! `bench/private/profils/` (hors git), jamais dans `bench/reports/`. Aucune coordonnée.
+//! `bench/private/profils/` (hors git) ou le dossier `--sortie`, jamais dans `bench/reports/`.
+//! Aucune coordonnée.
 //!
 //! Colonnes : `s_m` (abscisse du service), `baro_e2_m` (référence E2 telle que la campagne la
 //! calcule : baro transporté, points insérés retirés selon la règle, fenêtres masquées et
@@ -85,8 +86,13 @@ pub fn to_csv(p: &CaseProfiles) -> String {
     out
 }
 
-/// `dump-profils` : écrit un CSV par cas ; renvoie `(chemin, lignes de données)`.
-pub async fn dump_profiles(paths: &BenchPaths, ids: &[String]) -> anyhow::Result<Vec<(PathBuf, usize)>> {
+/// `dump-profils` : écrit un CSV par cas dans `out` (défaut : `bench/private/profils/`) ; renvoie
+/// `(chemin, lignes de données)`.
+pub async fn dump_profiles(
+    paths: &BenchPaths,
+    ids: &[String],
+    out: Option<&std::path::Path>,
+) -> anyhow::Result<Vec<(PathBuf, usize)>> {
     let report = check(paths)?;
     ensure_check(&report)?;
     if !paths.private_present() {
@@ -99,7 +105,7 @@ pub async fn dump_profiles(paths: &BenchPaths, ids: &[String]) -> anyhow::Result
     let refs = ouvrage_refs(paths)?;
     let ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest)?;
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
-    let dir = paths.private.join("profils");
+    let dir = out.map_or_else(|| paths.private.join("profils"), std::path::Path::to_path_buf);
     std::fs::create_dir_all(&dir).with_context(|| format!("création de {}", dir.display()))?;
     let mut written = Vec::new();
     for t in traces {

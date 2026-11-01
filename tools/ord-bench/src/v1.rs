@@ -154,20 +154,18 @@ pub struct RealRange {
 /// Plages d'ouvrages réels d'un témoin et sa longueur.
 type TemoinTags = (Vec<RealRange>, Option<f64>);
 
-/// Ouvrages réels des témoins V1 (README §4 ter.6, 57e9d95) : hors git, empreinte figée ici (le
-/// fichier n'est pas au manifest).
-pub const TEMOINS_TAGS: (&str, &str) =
-    ("private/v1/temoins-v1-tags.json", "0bc3c1c04a594874f0f5382cef9d16f83f9c42ec0d6a9afdb1fe28de3db9b014");
-
-/// Plages d'ouvrages réels des témoins de la série `target` ; les entrées de l'autre série sont
-/// retirées à la lecture, avant tout calcul.
-fn real_ranges(paths: &BenchPaths, target: Serie) -> anyhow::Result<BTreeMap<String, TemoinTags>> {
-    // Fichier absent (banc sans la sortie de `temoins_v1_tags.py`) : aucune plage ; présent, son
-    // empreinte est vérifiée.
-    if !paths.resolve(TEMOINS_TAGS.0).exists() {
+/// Plages d'ouvrages réels des témoins de la série `target` (`perso_v1.temoins_v1_tags` du
+/// manifest, 6ed1da7, empreinte vérifiée) ; les entrées de l'autre série sont retirées à la
+/// lecture, avant tout calcul. Entrée absente du manifest : aucune plage.
+fn real_ranges(
+    paths: &BenchPaths,
+    v1: &PersoV1,
+    target: Serie,
+) -> anyhow::Result<BTreeMap<String, TemoinTags>> {
+    let Some(entry) = &v1.temoins_tags else {
         return Ok(BTreeMap::new());
-    }
-    let text = read_verified(paths, &(TEMOINS_TAGS.0.to_owned(), TEMOINS_TAGS.1.to_owned()))?;
+    };
+    let text = read_verified(paths, entry)?;
     let v: Value = serde_json::from_str(&text).context("temoins-v1-tags.json")?;
     let mut out = BTreeMap::new();
     for (id, t) in v.as_object().into_iter().flatten() {
@@ -198,7 +196,7 @@ fn point(v: &Value) -> Option<LatLon> {
 /// Témoins V1 de la série `target` ; les autres sont retirés à la lecture de l'index.
 pub fn temoins(paths: &BenchPaths, v1: &PersoV1, target: Serie) -> anyhow::Result<Vec<TemoinV1>> {
     let v: Value = serde_json::from_str(&read_verified(paths, &v1.temoins)?).context("temoins-v1.json")?;
-    let mut real = real_ranges(paths, target)?;
+    let mut real = real_ranges(paths, v1, target)?;
     Ok(v.as_array()
         .into_iter()
         .flatten()

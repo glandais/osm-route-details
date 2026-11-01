@@ -98,6 +98,9 @@ pub struct Planned {
 pub struct PersoV1 {
     pub ouvrages: (String, String),
     pub temoins: (String, String),
+    /// Ouvrages réels sur la voie des témoins (`temoins_v1_tags`, README §4 ter.6, 6ed1da7) ;
+    /// `None` : entrée absente du manifest, aucune plage.
+    pub temoins_tags: Option<(String, String)>,
     pub series: (String, String),
     pub planifies: Vec<Planned>,
     pub traces: BTreeSet<String>,
@@ -239,6 +242,7 @@ impl Manifest {
                 Some(PersoV1 {
                     ouvrages: pair("ouvrages_v1")?,
                     temoins: pair("temoins_v1")?,
+                    temoins_tags: p.get("temoins_v1_tags").map(|_| pair("temoins_v1_tags")).transpose()?,
                     series: pair("series_v1")?,
                     planifies,
                     traces: ids,

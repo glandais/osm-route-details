@@ -131,8 +131,12 @@ impl BenchPaths {
 /// plages `covered` mesurées contre le MNT (cc59b18), couverture rapportée par critère. Remise à
 /// `None` avec les règles 2026.11.6 (pont au-dessus de la trace) ; révision du banc à la même
 /// campagne : référence d'E5 au croisement (800d4e0), E1 plaine incertaine (4423741), ouvrages
-/// réels des témoins V1 (57e9d95).
-pub const BENCH_REVISION: Option<&str> = None;
+/// réels des témoins V1 (57e9d95). `bench1` (règles 2026.11.6 inchangées, README §4 ter.7 après
+/// la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac ; manifest 6ed1da7) : E5 au baro
+/// corrigé toléré à 2 m, baro incertain (côtés à plus de 2 m, ou côté à moins de 3 points), bosse
+/// MNT de 1 à 2 m incertaine, approches des plages `O` depuis leurs bouts ; empreinte des ouvrages
+/// réels des témoins V1 lue au manifest (`temoins_v1_tags`).
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

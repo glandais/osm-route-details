@@ -111,10 +111,14 @@ enum Command {
         a: f64,
     },
     /// Vidage local et privé des profils de traces perso de calibration (grille de 5 m, mode
-    /// `distance`) dans `bench/private/profils/` ; une trace tenue à l'écart est refusée.
+    /// `distance`) dans `bench/private/profils/` (ou `--sortie`, dossier local hors dépôt) ; une
+    /// trace tenue à l'écart est refusée.
     DumpProfils {
         #[arg(long, value_delimiter = ',', required = true)]
         cas: Vec<String>,
+        /// Dossier de sortie (défaut : `bench/private/profils/`).
+        #[arg(long)]
+        sortie: Option<PathBuf>,
     },
     /// L1 (`--profile cold`) : latence à froid (live, caches disque et mémoire neufs à chaque
     /// essai). L2 (`--profile warm`) : même requête rejouée, cache de banc, hors ligne.
@@ -247,9 +251,9 @@ async fn main_inner() -> anyhow::Result<bool> {
             println!("{}", serde_json::to_string_pretty(&d)?);
             Ok(true)
         }
-        Command::DumpProfils { cas } => {
+        Command::DumpProfils { cas, sortie } => {
             // Contenu jamais affiché : chemin et nombre de lignes seulement.
-            for (path, rows) in ord_bench::dump::dump_profiles(&paths, &cas).await? {
+            for (path, rows) in ord_bench::dump::dump_profiles(&paths, &cas, sortie.as_deref()).await? {
                 println!("{} : {rows} lignes", path.display());
             }
             Ok(true)
