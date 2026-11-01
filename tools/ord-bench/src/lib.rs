@@ -25,6 +25,7 @@ pub mod metrics;
 pub mod osm_surface;
 pub mod ouvrages;
 pub mod privacy;
+pub mod report_check;
 pub mod service;
 pub mod structures_diag;
 pub mod typology;

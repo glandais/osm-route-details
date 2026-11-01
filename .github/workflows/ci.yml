@@ -1,10 +1,14 @@
-# CI (T05 §6). Les jobs `bench-report` et `docker` arrivent avec les incréments 1 et 6.
+# CI (T05 §6). Aucun job ne touche le réseau en test ni au banc : pas de cache de banc, pas de
+# bench/private/ (cas perso `skipped`), toutes les URL de test vers 127.0.0.1. Ni `judge` ni
+# `fill-cache` ne tournent en CI.
 name: ci
 
 on:
   push:
     branches: [develop]
   pull_request:
+  # `bench-offline` seulement, sur un runner local qui a le cache de banc et bench/private/.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -81,3 +85,46 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
+
+  # Contrôle du results.json commité (T05 §4, §6) : empreintes courantes des règles, du manifest,
+  # des critères et des BenchRules ; cache.lock et baseline.json s'ils existent.
+  bench-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: bench/private absent, cache de banc vide
+        run: test ! -e bench/private
+      - run: cargo run --locked -p ord-bench -- --cache-dir "$RUNNER_TEMP/aucun-cache" bench-report
+
+  # Image construite et sonde de vie, sans rien pousser ; le conteneur tourne sans réseau.
+  docker:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.ref != 'refs/heads/develop' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t osm-route-details:ci .
+      - name: /health/live sur le conteneur
+        run: |
+          docker run -d --name ord --network none \
+            -e ORD_CACHE__OFFLINE=true -e ORD_ELEVATION__MAPTERHORN__VERSION=ci \
+            osm-route-details:ci
+          for i in $(seq 1 30); do
+            if docker exec ord /usr/local/bin/osm-route-details healthcheck; then exit 0; fi
+            sleep 1
+          done
+          docker logs ord
+          exit 1
+
+  # Campagne de calibration hors ligne (T05 §6) : jamais sur un runner GitHub (ni cache de banc, ni
+  # traces privées). À la main : `scripts/bench-offline.sh`, ou ce job, déclenché à la main sur un
+  # runner local étiqueté `ord-bench` qui a ~/.cache/osm-route-details/bench et bench/private/.
+  bench-offline:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, ord-bench]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - run: scripts/bench-offline.sh

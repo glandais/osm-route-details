@@ -500,6 +500,18 @@ touche le cœur ; le `results.json` produit est commité dans `bench/reports/` e
 `bench-report`. Sans cache, les tests golden sont ignorés (et non verts). La CI ne peut pas vérifier
 les empreintes des traces privées : elle fait confiance au `results.json` (`private_present`).
 
+Mise en œuvre (incrément 6) : `ord-bench bench-report` retient le dernier `results.json` de
+calibration de `bench/reports/` dont `rules_fingerprint`, `manifest_sha256`, `criteria_sha256` et
+`bench_rules_sha256` sont les empreintes courantes (échec s'il n'y en a aucun) ; `bench/cache.lock`
+et `bench/baseline.json` sont vérifiés s'ils existent, sinon le rapport dit que le contrôle est sauté
+(ni l'un ni l'autre n'est commité à ce jour : `fill-cache` écrit `cache.lock` dans le cache).
+`ord-bench compare` donne les bascules de verdict par identifiant et par mode, et refuse de comparer
+deux campagnes aux empreintes de banc différentes ; la tolérance par métrique (§4) n'est pas encore
+appliquée. `bench-offline` est `scripts/bench-offline.sh`, aussi déclarable dans `ci.yml` sur un
+runner local (`workflow_dispatch`, étiquette `ord-bench`), jamais sur un runner GitHub. Le job
+`docker` construit l'image et sonde `/health/live` par `docker exec … healthcheck`, conteneur sans
+réseau.
+
 `live.yml`, planifié chaque semaine et à la demande, **non bloquant** : `cargo test --features
 live-tests`, `ord-bench latency --profile cold` sur `sample.gpx`, rapport en artefact. Ni `judge` ni
 les cas perso ne tournent en CI.

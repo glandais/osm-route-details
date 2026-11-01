@@ -86,6 +86,12 @@ enum Command {
         #[arg(long, default_value = "MVP")]
         increment: String,
     },
+    /// Différence de verdicts entre deux campagnes (`results.json`) ; invalide si leurs
+    /// empreintes de banc diffèrent. Échoue sur une bascule `pass` → `fail` ou `skipped`.
+    Compare { avant: PathBuf, apres: PathBuf },
+    /// Job CI `bench-report` (T05 §6), sans cache ni réseau : un `results.json` de calibration
+    /// commité porte les empreintes courantes ; `cache.lock` et `baseline.json` s'ils existent.
+    BenchReport,
     /// Causes des plages non appariées et des désaccords de revêtement d'un cas (tuiles du cache).
     Diagnose {
         #[arg(long, value_delimiter = ',', required = true)]
@@ -199,6 +205,22 @@ async fn main_inner() -> anyhow::Result<bool> {
             println!("{}", serde_json::to_string_pretty(&gel)?);
             eprintln!("à commiter tel quel dans {}", ord_bench::judge::gel_rel_path(&increment));
             Ok(true)
+        }
+        Command::Compare { avant, apres } => {
+            let read = |p: &PathBuf| -> anyhow::Result<serde_json::Value> {
+                Ok(serde_json::from_str(
+                    &std::fs::read_to_string(p).with_context(|| p.display().to_string())?,
+                )?)
+            };
+            let c = ord_bench::report_check::compare(&read(&avant)?, &read(&apres)?);
+            println!("{}", serde_json::to_string_pretty(&c)?);
+            Ok(c["comparable"] == true && c["degradations"].as_array().is_some_and(Vec::is_empty))
+        }
+        Command::BenchReport => {
+            let current = ord_bench::report_check::current_prints(&paths)?;
+            let (report, ok) = ord_bench::report_check::bench_report(&paths.bench, &current)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            Ok(ok)
         }
         Command::Diagnose { cas } => {
             for id in &cas {
