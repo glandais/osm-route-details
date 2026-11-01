@@ -118,6 +118,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5, référence baro corrigé localement : tolérance 2 m (comme E3) ; incertaine, rapportée, non comptée, si les décalages baro − MNT des deux côtés (200–1 500 m) diffèrent de plus de 2 m ; MNT : 1 m inchangé ; tous exigé"
   - id: e5_mnt_bosse_incertaine   # 2026-11-01, après la calibration 2026.11.6
     decision: "E5, référence MNT : bosse (MNT au croisement − moyenne des médianes des approches 20–50 m) entre 1,0 et 2,0 m = référence incertaine, rapportée, non comptée ; > 2,0 m indisponible, inchangé"
+  - id: e5_plages_o_et_cote_unique   # 2026-11-01, après la calibration 2026.11.6
+    decision: "E5 : plages O des témoins vcyclist, approches 20–50 m mesurées depuis les bouts de la plage ; référence baro incertaine, rapportée, non comptée, si un côté compte moins de 3 points de baro entre 200 et 1 500 m"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -331,11 +333,12 @@ criteres:
     reference:   # README §4 ter.7, décision de l'utilisateur, 2026-11-01 ; jamais le service
       retire_si: {trace_sur_ouvrage: {couche: streets, attributs: [bridge, tunnel], distance_m_max: 10, angle_deg_max: 20}, marque: e5_trace_sur_ouvrage}
       baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100,
-                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500]}, marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
+                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3}, marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
       sinon_mnt:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]
         marque: e5_reference_indisponible
         incertaine_si: {mnt_bosse_m: [1.0, 2.0], marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
+        plages_o_vcyclist: {croisement: milieu_de_la_plage, ecart: max_sur_la_plage, approches_depuis: bouts_de_la_plage}   # 2026-11-01
     seuils:
       - {abs_m_max: 1.0, reference: mnt}
       - {abs_m_max: 2.0, reference: baro_corrige_local}   # comme E3 ; 2026-11-01, après 2026.11.6

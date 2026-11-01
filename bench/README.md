@@ -786,10 +786,13 @@ inchangés.
      100 m (`baro_gap_max_m`). Tolérance **2 m** avec cette référence, comme E3 (décision de
      l'utilisateur, 2026-11-01, après la calibration 2026.11.6) ; référence **incertaine**
      (rapportée `e5_reference_incertaine`, non comptée) si les deux décalages, médiane baro − MNT
-     de 200 à 1 500 m de chaque côté pris à part, diffèrent de plus de **2 m**. Effet sur la
+     de 200 à 1 500 m de chaque côté pris à part, diffèrent de plus de **2 m**, ou si l'un des côtés
+     compte moins de **3 points** de baro entre 200 et 1 500 m (comparaison impossible ; décision de
+     l'utilisateur, 2026-11-01). Effet sur la
      calibration 2026.11.6, sans le service (MNT du cache ; 153 des 174 passages au baro mesurables
      ainsi, les 21 autres sur des traces en plusieurs parties ou sans pas brut au croisement) :
-     14 passages incertains, dont 6 sans baro sur l'un des côtés ; des 17 échecs au baro, 2 deviennent
+     14 passages incertains, dont 6 sans baro sur l'un des côtés (`nv-272..275` sur `perso-71`,
+     `nv-362` et `nv-511` sur `perso-81`) ; des 17 échecs au baro, 2 deviennent
      incertains (`nv-328`, `nv-432`), 12 passent à 2 m, 3 restent (`nv-268`, `nv-269`, `nv-352`,
      écart de 2,1 à 2,9 m, côtés à 0,4 m au plus l'un de l'autre) ;
    - **sinon référence = MNT LiDAR**, **indisponible** (rapporté `e5_reference_indisponible`, non
@@ -814,9 +817,11 @@ inchangés.
    - une approche (20–50 m d'un côté) sans aucune station de MNT : bosse non mesurable, référence
      indisponible ;
    - plages `O` des témoins vcyclist (sans point de croisement, sans baro) : croisement au milieu de
-     la plage, référence MNT, écart retenu = écart max sur la plage. Les approches 20–50 m du milieu
-     tombent en partie dans la plage quand elle dépasse 40 m (25 à 80 m sur ces témoins) : point
-     ouvert, à trancher par l'utilisateur.
+     la plage, référence MNT, écart retenu = écart max sur la plage. Les approches de la bosse
+     (20–50 m) se mesurent depuis les **bouts** de la plage, pas depuis son milieu (décision de
+     l'utilisateur, 2026-11-01) : mesurées depuis le milieu, elles tombaient en partie sous la plage
+     dès qu'elle dépasse 40 m (25 à 80 m sur ces témoins) ; la bosse reste MNT au milieu − moyenne
+     des médianes des deux approches.
    Le « trou comblé » du MNT (gap_filled du service) n'est pas lisible dans la donnée : le MNT
    LiDAR HD de l'IGN est déjà interpolé sous les tabliers (aucun no-data sur 218 croisements de
    calibration) ; c'est la bosse qui le trahit. Vérification sur la calibration 2026.11.5-bench1
