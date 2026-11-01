@@ -210,6 +210,48 @@ pub fn decode_line_layer(
     Ok(out)
 }
 
+const GEOM_POLYGON: i32 = 3;
+
+/// Anneaux des polygones de la couche `layer` de la tuile `key` (une entrée par entité, ses
+/// anneaux extérieurs et intérieurs), en unités globales de `grid`, non découpés (tampon de tuile
+/// compris). Sert au banc (couche `bridges`, emprise des ponts) ; le service ne la lit pas.
+pub fn decode_polygon_layer(
+    bytes: &[u8],
+    layer: &str,
+    key: TileKey,
+    grid: Grid,
+) -> Result<Vec<Vec<Vec<[f64; 2]>>>, DecodeError> {
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let bytes = inflate(bytes)?;
+    let raw = RawTile::decode(&bytes[..]).map_err(invalid)?;
+    let mut out = Vec::new();
+    for layer_bytes in &raw.layers {
+        if LayerName::decode(&layer_bytes[..]).map_err(invalid)?.name != layer {
+            continue;
+        }
+        let l = RawLayer::decode(&layer_bytes[..]).map_err(invalid)?;
+        let scale = f64::from(grid.extent) / f64::from(l.extent.unwrap_or(4096).max(1));
+        let [x0, y0] = grid.tile_origin(key);
+        for f in l.features.iter().filter(|f| f.geom_type == Some(GEOM_POLYGON)) {
+            let rings: Vec<Vec<[f64; 2]>> = decode_lines(&f.geometry)
+                .into_iter()
+                .filter(|r| r.len() >= 3)
+                .map(|r| {
+                    r.iter()
+                        .map(|&(px, py)| [x0 + f64::from(px) * scale, y0 + f64::from(py) * scale])
+                        .collect()
+                })
+                .collect();
+            if !rings.is_empty() {
+                out.push(rings);
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn zigzag(v: u32) -> i32 {
     ((v >> 1) as i32) ^ -((v & 1) as i32)
 }
@@ -468,5 +510,43 @@ mod tests {
         assert_eq!(decode_line_layer(&gz.finish().unwrap(), "streets", key, grid).unwrap(), decoded);
         assert!(decode_line_layer(&[], "streets", key, grid).unwrap().is_empty());
         assert!(decode_line_layer(b"<html>", "streets", key, grid).is_err());
+    }
+
+    #[test]
+    fn polygon_layer_decodes_its_rings() {
+        let grid = crate::streets::Shortbread::GRID;
+        let key = TileKey { z: 14, x: 8000, y: 5600 };
+        // Carré de 100 × 100 pixels fermé.
+        let geometry = vec![
+            (1 << 3) | 1,
+            zigzag_encode(10),
+            zigzag_encode(10),
+            (3 << 3) | 2,
+            zigzag_encode(100),
+            zigzag_encode(0),
+            zigzag_encode(0),
+            zigzag_encode(100),
+            zigzag_encode(-100),
+            zigzag_encode(0),
+            7 | (1 << 3),
+        ];
+        let l = RawLayer {
+            version: 2,
+            name: "bridges".into(),
+            features: vec![RawFeature {
+                id: None,
+                tags: Vec::new(),
+                geom_type: Some(GEOM_POLYGON),
+                geometry,
+            }],
+            keys: Vec::new(),
+            values: Vec::new(),
+            extent: Some(4096),
+        };
+        let bytes = RawTile { layers: vec![l.encode_to_vec()] }.encode_to_vec();
+        let p = decode_polygon_layer(&bytes, "bridges", key, grid).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0][0].len(), 5, "anneau fermé");
+        assert!(decode_line_layer(&bytes, "bridges", key, grid).unwrap().is_empty());
     }
 }

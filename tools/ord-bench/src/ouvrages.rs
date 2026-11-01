@@ -834,7 +834,9 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             let mut attribution: Option<Attribution> = None;
             if matches!(o.kind, Kind::Bridge | Kind::Tunnel) {
                 if let (Some(raw_gps), Some(tiles)) = (p.raw_gps, p.tiles) {
-                    attribution = o.voie.as_deref().and_then(|v| tiles.attribution(&raw_gps(sa, sb), v));
+                    let bridge = (o.kind == Kind::Bridge).then_some(&o.pts);
+                    attribution =
+                        o.voie.as_deref().and_then(|v| tiles.attribution(&raw_gps(sa, sb), v, bridge));
                     if let Some(a) = attribution.filter(|a| !a.attributed()) {
                         out.push(json!({"ouvrage": o.id, "cas": case, "metrique": "passage_sur_ouvrage_parallele",
                             "mediane_voie_ouvrage_m": r2(a.own_m), "mediane_autre_ouvrage_m": a.other_m.map_or(Value::Null, r2),
@@ -849,7 +851,8 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             if let Some(a) = attribution {
                 item.insert(
                     "attribution_mediane_m".into(),
-                    json!({"voie_ouvrage": r2(a.own_m), "autre_ouvrage": a.other_m.map_or(Value::Null, r2), "points_bruts": a.points}),
+                    json!({"voie_ouvrage": r2(a.own_m), "autre_ouvrage": a.other_m.map_or(Value::Null, r2), "points_bruts": a.points,
+                        "voies_du_meme_pont": a.same_bridge_ways}),
                 );
             }
             // Passage en hauteur sur un pont (README §2.1, `passage_pont.niveau`) : baro et MNT
@@ -1142,6 +1145,8 @@ pub struct Attribution {
     pub own_m: f64,
     pub other_m: Option<f64>,
     pub points: usize,
+    /// Voies du même pont réunies à la voie de l'ouvrage (« un tablier, un ouvrage »).
+    pub same_bridge_ways: usize,
 }
 
 impl Attribution {
@@ -1154,6 +1159,9 @@ impl Attribution {
 /// Tuiles VersaTiles du cache (hors ligne), pour la règle de tags des spans vcyclist.
 pub struct Tiles {
     tiles: BTreeMap<TileKey, Option<Arc<StreetTile>>>,
+    /// Polygones de la couche `bridges` (`man_made=bridge`) des mêmes tuiles, lus dans le cache
+    /// brut (README §4 ter.2, « un tablier, un ouvrage ») : une entrée par entité, ses anneaux.
+    bridges: BTreeMap<TileKey, Vec<Vec<Vec<[f64; 2]>>>>,
 }
 
 impl std::fmt::Debug for Tiles {
@@ -1184,12 +1192,33 @@ impl Tiles {
             .into_iter()
             .collect();
         let outcomes = chain.store().get_many(&keys, &ctx).await;
+        // Couche `bridges` lue dans le corps brut des mêmes tuiles du cache (le service ne la décode
+        // pas) ; tuile illisible ou absente : aucun polygone.
+        let disk = ord_data::disk::DiskStore::new(cache, &ord_server::wiring::streets_namespace(&config));
+        let bridges = keys
+            .iter()
+            .map(|&k| {
+                let polys = disk
+                    .read(k)
+                    .and_then(|e| {
+                        ord_adapters::streets::mvt::decode_polygon_layer(
+                            &e.body,
+                            "bridges",
+                            k,
+                            Shortbread::GRID,
+                        )
+                        .ok()
+                    })
+                    .unwrap_or_default();
+                (k, polys)
+            })
+            .collect();
         let tiles = keys
             .into_iter()
             .zip(outcomes)
             .map(|(k, o)| (k, if let TileOutcome::Data { tile, .. } = o { Some(tile) } else { None }))
             .collect();
-        Ok(Self { tiles })
+        Ok(Self { tiles, bridges })
     }
 
     /// Périmètre vélo d'un ouvrage du corpus de milieu `mid` et de stations `stations` (§4 bis.1) :
@@ -1272,7 +1301,12 @@ impl Tiles {
     /// tuiles de la campagne. Même lecture que le périmètre : tuile de chaque point, distance à
     /// l'élément (lignes d'attributs identiques). `None` : aucun point brut, ou voie de l'ouvrage
     /// absente des tuiles de ces points.
-    pub fn attribution(&self, raw: &[LatLon], voie: &str) -> Option<Attribution> {
+    pub fn attribution(
+        &self,
+        raw: &[LatLon],
+        voie: &str,
+        bridge: Option<&[LatLon; 3]>,
+    ) -> Option<Attribution> {
         if raw.is_empty() {
             return None;
         }
@@ -1304,17 +1338,130 @@ impl Tiles {
                 e[s] = e[s].min(d);
             }
         }
-        let own = median(dist.get(voie)?);
+        dist.get(voie)?;
+        // Un tablier, un ouvrage (README §4 ter.2, ponts seulement) : les voies du même pont que la
+        // voie de l'ouvrage en font partie, la médiane de l'ouvrage est la plus petite des leurs.
+        let same: BTreeSet<String> = match bridge {
+            Some(pts) => dist
+                .keys()
+                .filter(|k| k.as_str() != voie && self.same_bridge(voie, k, pts))
+                .cloned()
+                .collect(),
+            None => BTreeSet::new(),
+        };
+        let own = dist
+            .iter()
+            .filter(|(k, _)| k.as_str() == voie || same.contains(*k))
+            .map(|(_, d)| median(d))
+            .fold(f64::INFINITY, f64::min);
         if !own.is_finite() {
             return None;
         }
         let other = dist
             .iter()
-            .filter(|(k, _)| k.as_str() != voie)
+            .filter(|(k, _)| k.as_str() != voie && !same.contains(*k))
             .map(|(_, d)| median(d))
             .filter(|m| m.is_finite())
             .fold(None, |acc: Option<f64>, m| Some(acc.map_or(m, |a| a.min(m))));
-        Some(Attribution { own_m: own, other_m: other, points: raw.len() })
+        Some(Attribution { own_m: own, other_m: other, points: raw.len(), same_bridge_ways: same.len() })
+    }
+
+    /// Lignes d'un élément (clé d'attributs) dans les tuiles du voisinage de `u`.
+    fn element_lines(&self, key: &str, u: [f64; 2]) -> Vec<&[[f64; 2]]> {
+        let grid = Shortbread::GRID;
+        let k = grid.tile_of(u);
+        let mut out = Vec::new();
+        for dx in -1i64..=1 {
+            for dy in -1i64..=1 {
+                let tk = TileKey { z: k.z, x: (k.x as i64 + dx) as u32, y: (k.y as i64 + dy) as u32 };
+                let Some(Some(t)) = self.tiles.get(&tk) else { continue };
+                out.extend(
+                    t.lines
+                        .iter()
+                        .filter(|l| format!("{:?}", t.attrs[l.attr as usize]) == key)
+                        .map(|l| &l.points[..]),
+                );
+            }
+        }
+        out
+    }
+
+    /// Point le plus proche de `u` sur les lignes d'un élément, et sa distance (unités).
+    fn nearest_on(&self, key: &str, u: [f64; 2]) -> Option<([f64; 2], f64)> {
+        self.element_lines(key, u)
+            .into_iter()
+            .flat_map(|l| l.windows(2).map(|w| project_on_segment(u, w[0], w[1]).point).collect::<Vec<_>>())
+            .map(|q| (q, dist_units(u, q)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+    }
+
+    /// Polygone `bridges` (groupe de morceaux réunis) qui contient `u`.
+    fn bridge_polygon(&self, u: [f64; 2]) -> Option<usize> {
+        let grid = Shortbread::GRID;
+        let k = grid.tile_of(u);
+        // Morceaux du voisinage ; deux morceaux qui se recouvrent (tampon de tuile) sont un même
+        // polygone coupé aux bords de tuile.
+        let mut pieces: Vec<&Vec<Vec<[f64; 2]>>> = Vec::new();
+        for dx in -1i64..=1 {
+            for dy in -1i64..=1 {
+                let tk = TileKey { z: k.z, x: (k.x as i64 + dx) as u32, y: (k.y as i64 + dy) as u32 };
+                pieces.extend(self.bridges.get(&tk).into_iter().flatten());
+            }
+        }
+        let inside = |rings: &Vec<Vec<[f64; 2]>>, p: [f64; 2]| {
+            rings.iter().filter(|r| point_in_ring(r, p)).count() % 2 == 1
+        };
+        let mut group: Vec<usize> = (0..pieces.len()).collect();
+        fn find(g: &mut [usize], mut x: usize) -> usize {
+            while g[x] != x {
+                g[x] = g[g[x]];
+                x = g[x];
+            }
+            x
+        }
+        for i in 0..pieces.len() {
+            for j in i + 1..pieces.len() {
+                let touch = pieces[i].iter().flatten().any(|&p| inside(pieces[j], p))
+                    || pieces[j].iter().flatten().any(|&p| inside(pieces[i], p));
+                if touch {
+                    let (a, b) = (find(&mut group, i), find(&mut group, j));
+                    group[a.max(b)] = a.min(b);
+                }
+            }
+        }
+        let hit = (0..pieces.len()).find(|&i| inside(pieces[i], u))?;
+        Some(find(&mut group, hit))
+    }
+
+    /// Deux voies `bridge` d'un même pont (README §4 ter.2) : (a) leurs points les plus proches du
+    /// milieu de l'ouvrage dans un même polygone `bridges` ; deux polygones différents, deux ponts ;
+    /// (b) sinon, si l'une au moins n'est dans aucun polygone, la concurrente à 10 m au plus de la
+    /// voie de l'ouvrage sur 21 points de A à B, extrémités comprises.
+    fn same_bridge(&self, voie: &str, other: &str, pts: &[LatLon; 3]) -> bool {
+        let grid = Shortbread::GRID;
+        let mid = grid.to_units(pts[1]);
+        let mpu = grid.metres_per_unit(pts[1].lat);
+        let (Some((qa, _)), Some((qb, _))) = (self.nearest_on(voie, mid), self.nearest_on(other, mid)) else {
+            return false;
+        };
+        if let (Some(a), Some(b)) = (self.bridge_polygon(qa), self.bridge_polygon(qb)) {
+            return a == b;
+        }
+        // Emprise : polyligne A – milieu – B du corpus, 21 points à pas égal.
+        let poly: Vec<[f64; 2]> = pts.iter().map(|p| grid.to_units(*p)).collect();
+        let lens = [dist_units(poly[0], poly[1]), dist_units(poly[1], poly[2])];
+        let total = lens[0] + lens[1];
+        (0..=20).all(|k| {
+            let x = total * k as f64 / 20.0;
+            let (p0, p1, t) = if x <= lens[0] {
+                (poly[0], poly[1], if lens[0] > 0.0 { x / lens[0] } else { 0.0 })
+            } else {
+                (poly[1], poly[2], if lens[1] > 0.0 { (x - lens[0]) / lens[1] } else { 0.0 })
+            };
+            let q = [p0[0] + t * (p1[0] - p0[0]), p0[1] + t * (p1[1] - p0[1])];
+            let Some((on_voie, _)) = self.nearest_on(voie, q) else { return false };
+            self.nearest_on(other, on_voie).is_some_and(|(_, d)| d * mpu <= 10.0)
+        })
     }
 
     /// Stations sur un pont ou un tunnel des tuiles de la campagne (`bridge` / `tunnel`, du corpus ou
@@ -1380,6 +1527,21 @@ impl Tiles {
     }
 }
 
+/// Point dans un anneau (règle pair-impair).
+fn point_in_ring(ring: &[[f64; 2]], p: [f64; 2]) -> bool {
+    let mut inside = false;
+    let n = ring.len();
+    let mut j = n.saturating_sub(1);
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[j]);
+        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0] {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
 /// Distance latérale maximale d'une station à une ligne de pont ou de tunnel des tuiles pour
 /// qu'elle soit « sur » cet ouvrage (bandes de portail, §4 bis.2).
 const TILE_STRUCTURE_TOL_M: f64 = 10.0;
@@ -1438,6 +1600,7 @@ fn tunnel_groups(route: &Route, ways: &[Vec<LatLon>]) -> Option<Vec<(usize, usiz
 pub async fn vc_items(
     service: &Service,
     bench: &Path,
+    cache: &Path,
     tiles: &Tiles,
     ouvrages: &[Ouvrage],
     skipped: &mut Vec<Value>,
@@ -1719,6 +1882,18 @@ pub async fn vc_items(
             }
         }
         if negative {
+            // S2 hors graphe vélo (README §4 ter.5) : plages où la trace suit une route motorisée
+            // fermée au vélo (règle de M1 resserrée, tuiles seulement) exclues de S2.
+            let st: Vec<(f64, LatLon)> = (0..n).map(|i| (r.d[i], ll(r, i))).collect();
+            let step = if n > 1 { r.d[n - 1] / (n - 1) as f64 } else { 5.0 };
+            let closed = match crate::off_network::closed_on(&st, cache, step, false).await? {
+                Ok((ranges, _)) => ranges,
+                Err(reason) => {
+                    skipped.push(json!({"id": r.id, "raison": format!("S2 : {reason}")}));
+                    continue;
+                }
+            };
+            let off = |i: usize| closed.iter().any(|c| c.contains(&r.d[i]));
             // S2 : longueur typée pont ou tunnel hors des plages `X`/`x` (ouvrage propre exclu).
             let (mut fp_m, mut fictifs) = (0.0, 0usize);
             let mut run: Option<(usize, usize)> = None;
@@ -1730,8 +1905,12 @@ pub async fn vc_items(
                     }
                 }
             };
+            let mut total = 0.0;
             for i in 0..n {
-                if r.svc.on[i] {
+                if i > 0 && !off(i) {
+                    total += r.d[i] - r.d[i - 1];
+                }
+                if r.svc.on[i] && !off(i) {
                     if !matches!(r.s.kind[i].as_str(), "X" | "x") && i > 0 {
                         fp_m += r.d[i] - r.d[i - 1];
                     }
@@ -1741,8 +1920,9 @@ pub async fn vc_items(
                 }
             }
             flush(run, &mut fictifs);
-            out.push(json!({"cas": r.id, "metrique": "S2", "longueur_m": r2(r.d[n - 1]),
-                "faux_positif_m": r2(fp_m), "ouvrages_fictifs": fictifs}));
+            out.push(json!({"cas": r.id, "metrique": "S2", "longueur_m": r2(total),
+                "faux_positif_m": r2(fp_m), "ouvrages_fictifs": fictifs,
+                "hors_graphe_velo_m": r2(crate::off_network::length(&closed))}));
         }
     }
     Ok(out)
@@ -2023,7 +2203,7 @@ mod tests {
                     cut: [false, false],
                 });
             }
-            Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]) }
+            Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]), bridges: BTreeMap::new() }
         };
         // Stations du corpus le long de l'axe (y = 0).
         let stations: Vec<LatLon> = (-8..=8).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1]])).collect();
@@ -2089,7 +2269,7 @@ mod tests {
                 cut: [false, false],
             });
         }
-        (Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]) }, u)
+        (Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]), bridges: BTreeMap::new() }, u)
     }
 
     type WayAttrsT = ord_domain::street::WayAttrs;
@@ -2130,14 +2310,53 @@ mod tests {
         // GPS brut sur la passerelle : passage sur un ouvrage parallèle.
         let on_footbridge: Vec<LatLon> =
             (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 19.0])).collect();
-        let a = tiles.attribution(&on_footbridge, &voie).unwrap();
+        let a = tiles.attribution(&on_footbridge, &voie, None).unwrap();
         assert!(!a.attributed(), "{a:?}");
         // GPS brut sur le pont routier : attribué.
         let on_road: Vec<LatLon> =
             (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 2.0])).collect();
-        assert!(tiles.attribution(&on_road, &voie).unwrap().attributed());
+        assert!(tiles.attribution(&on_road, &voie, None).unwrap().attributed());
         // Aucun point brut : non tranché.
-        assert!(tiles.attribution(&[], &voie).is_none());
+        assert!(tiles.attribution(&[], &voie, None).is_none());
+    }
+
+    #[test]
+    fn ways_of_one_deck_are_one_structure() {
+        // Pont routier sur l'axe, trottoir du même tablier à 20 unités (≈ 8 m) : sans polygone, la
+        // voie reste à moins de 10 m sur toute l'emprise (b) : même pont, le passage est attribué.
+        let grid = Shortbread::GRID;
+        let mid = LatLon::new(47.2, -1.5);
+        let lines = || {
+            vec![
+                (way_attrs("primary", StructureTag::Bridge), 0.0),
+                (way_attrs("footway", StructureTag::Bridge), 20.0),
+            ]
+        };
+        let (mut tiles, u) = tiles_of(lines(), mid);
+        let pts =
+            [grid.to_latlon([u[0] - 40.0, u[1]]), grid.to_latlon(u), grid.to_latlon([u[0] + 40.0, u[1]])];
+        let voie = format!("{:?}", way_attrs("primary", StructureTag::Bridge));
+        let on_sidewalk: Vec<LatLon> =
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 19.0])).collect();
+        let a = tiles.attribution(&on_sidewalk, &voie, Some(&pts)).unwrap();
+        assert!(a.attributed() && a.same_bridge_ways == 1, "{a:?}");
+        // Deux polygones `bridges` distincts (a) : deux ponts, passage sur l'ouvrage parallèle.
+        let square = |y0: f64, y1: f64| {
+            vec![vec![
+                [u[0] - 60.0, u[1] + y0],
+                [u[0] + 60.0, u[1] + y0],
+                [u[0] + 60.0, u[1] + y1],
+                [u[0] - 60.0, u[1] + y1],
+                [u[0] - 60.0, u[1] + y0],
+            ]]
+        };
+        let key = grid.tile_of(u);
+        tiles.bridges.insert(key, vec![square(-5.0, 5.0), square(15.0, 25.0)]);
+        let a = tiles.attribution(&on_sidewalk, &voie, Some(&pts)).unwrap();
+        assert!(!a.attributed(), "{a:?}");
+        // Un même polygone pour les deux voies (a) : un seul pont.
+        tiles.bridges.insert(key, vec![square(-5.0, 25.0)]);
+        assert!(tiles.attribution(&on_sidewalk, &voie, Some(&pts)).unwrap().attributed());
     }
 
     #[test]
@@ -2147,7 +2366,7 @@ mod tests {
         let (tiles, u) = tiles_of(
             vec![
                 (way_attrs("primary", StructureTag::Bridge), 0.0),
-                (way_attrs("footway", StructureTag::Bridge), 20.0),
+                (way_attrs("footway", StructureTag::Bridge), 40.0),
             ],
             mid,
         );
@@ -2180,7 +2399,7 @@ mod tests {
         let flat = vec![0.0; n];
         let flags = vec![false; n];
         let footbridge = |_: f64, _: f64| -> Vec<LatLon> {
-            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 19.0])).collect()
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 39.0])).collect()
         };
         let segs = [(d[12], d[28])];
         let p = CaseProfile {
