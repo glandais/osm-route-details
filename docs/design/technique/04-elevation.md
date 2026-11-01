@@ -244,9 +244,11 @@ de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (b
     longe le pont ou est dessus (même borne que le banc, README §4 ter.7, choisie séparément) ;
     l'emprise du tablier sur la trace vaut `deck_half_width_m / sin(angle)`, de 15 m à 90° à
     ≈ 44 m à 20° ;
-  - `end_clearance_m = 2,5 m` : un croisement plus proche d'une extrémité réelle de la ligne du pont
-    est sa culée (la trace rejoint le pont ou le frôle, nœud partagé) ; moitié d'une ouverture
-    minimale de 5 m sous tablier, et demi-pas des stations ; une extrémité posée sur une autre
+  - `end_clearance_m = 1 m` : un croisement plus proche d'une extrémité réelle de la ligne du pont
+    est sa culée (la trace rejoint le pont ou le frôle, nœud partagé) ; moitié de la plus petite
+    ouverture sous tablier d'une voie cyclable (≈ 2 m de piste), car le way d'un petit pont peut
+    n'être pas plus long que l'ouverture qu'il franchit (première valeur, 2,5 m pour une ouverture
+    supposée de 5 m, corrigée : elle écartait un passage de piste dont les ways du pont s'arrêtent à 1,8 m de la trace) ; une extrémité posée sur une autre
     ligne de pont (way découpé au-dessus de la voie) n'est pas une culée (T03 §6.4) ;
   - sonde : `abutment_probe_min_m = 10 m` au-delà de l'emprise, comme les culées (§3.1) : la
     droite va de l'approche au sol amont à l'approche aval, soit 25 m de part et d'autre à 90°,

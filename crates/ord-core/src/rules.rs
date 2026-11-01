@@ -313,8 +313,9 @@ pub struct OverpassRules {
     /// `deck_half_width_m / sin(angle)`, ≈ 44 m à 20°.
     pub min_angle_deg: f64,
     /// Un croisement plus proche d'une extrémité réelle de la ligne du pont est sa culée : la trace
-    /// y rejoint le pont ou le frôle, elle ne passe pas dessous (moitié d'une ouverture minimale de
-    /// 5 m sous tablier, et demi-pas des stations).
+    /// y rejoint le pont ou le frôle, elle ne passe pas dessous. Moitié de la plus petite ouverture
+    /// sous tablier d'une voie cyclable (≈ 2 m de piste ; le way du pont peut n'être pas plus long
+    /// que l'ouverture).
     pub end_clearance_m: f64,
     /// Bosse minimale au-dessus de la droite entre approches pour corriger : rugosité du MNT LiDAR
     /// sur une chaussée (≈ 1 m, comme l'approche lisse du détecteur de couverture, T04 §4.2 bis).
@@ -323,7 +324,7 @@ pub struct OverpassRules {
 
 impl Default for OverpassRules {
     fn default() -> Self {
-        Self { deck_half_width_m: 15.0, min_angle_deg: 20.0, end_clearance_m: 2.5, min_bump_m: 1.0 }
+        Self { deck_half_width_m: 15.0, min_angle_deg: 20.0, end_clearance_m: 1.0, min_bump_m: 1.0 }
     }
 }
 
@@ -446,6 +447,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.6", "acba367349144f08".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.6", "eb5c8f44fe84934a".to_owned()));
     }
 }
