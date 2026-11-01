@@ -749,6 +749,10 @@ inchangés.
      emprunte (galerie, tunnel, pont, viaduc) ; un ouvrage que le témoin longe ou passe dessous
      (`under-viaduct-approach`, `quay-under-bridges`) n'en fait pas l'objet. `dam-crest-road`
      (`tn10`) nomme un barrage, pas un pont : `tn10` reste ;
+   - *rapportée en `limite_donnees`* : avec son erreur d'altitude mesurée contre sa référence,
+     comme au §4 bis.4, sans seuil ; pour une plage `covered=yes` (voie couverte, au niveau du sol),
+     la référence est le MNT aux stations de la plage ; une galerie (`tunnel=avalanche_protector`)
+     est mesurée comme un tunnel ;
    - *plus de la moitié* : ouvrage par ouvrage, sans additionner les ouvrages d'un même témoin.
      Sans effet sur les témoins actuels : la somme ne dépasse pas non plus la moitié (au plus 46 %
      pour `tn10`, 14 % pour `tn12`, sorti par sa catégorie).

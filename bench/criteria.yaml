@@ -353,6 +353,7 @@ criteres:
       plage_retiree: {de: A, a: B, marge_m: 35}   # comme la marge x de vcyclist
       exclue_de: [ouvrages_fictifs, longueur_typee, longueur_totale]
       rapporte_en: {absent_du_schema_de_la_source: limite_donnees, sinon: ouvrage}
+      erreur_altitude: {covered: contre_mnt_aux_stations, avalanche_protector: comme_tunnel, seuils: []}
       voie_du_temoin: {fichiers: stations, colonne: way, plages: [X, O]}   # pas spans.csv
       temoin_sort_si: [ouvrage_objet_du_temoin, {part_longueur_min: 0.5, compte: par_ouvrage}]
       objet_du_temoin: "catégorie vcyclist nommant la nature d'un ouvrage emprunté (galerie, tunnel, pont, viaduc)"
