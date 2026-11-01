@@ -112,6 +112,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Tirage : chaque strate remplie jusqu'à son minimum majoré de 25 % (arrondi supérieur, chaque composante), sinon la strate entière ; tiers si plus ; seuil de jugement = minimum inchangé"
   - id: source_valhalla_fossgis   # 2026-11-01
     decision: "Recalage et références de revêtement (R3, R1/R2 des parcours planifiés) par le Valhalla public de la FOSSGIS, 1 req/s, en séquence ; toutes les traces recalées par cette source (perso-01..39 comprises) ; données du serveur 2026-11-01T13:01Z"
+  - id: e5_reference   # 2026-11-01, après la calibration 2026.11.5-bench1
+    decision: "E5 : passage retiré si la trace est elle-même sur un ouvrage des tuiles (≤ 10 m, < 20°) ; référence = baro corrigé localement sur les traces perso fiables ; sinon MNT, indisponible s'il est sans donnée ou lit le tablier (bosse > 2 m vs approches 20–50 m)"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -320,6 +322,12 @@ criteres:
     cas: {manifest: [ouvrages, perso], types: [passage_sous_pont]}
     agregation: par_croisement
     perimetre: graphe_velo   # l'ouvrage du dessus peut être hors graphe ; c'est le passage dessous qui doit l'être
+    reference:   # README §4 ter.7, décision de l'utilisateur, 2026-11-01 ; jamais le service
+      retire_si: {trace_sur_ouvrage: {couche: streets, attributs: [bridge, tunnel], distance_m_max: 10, angle_deg_max: 20}, marque: e5_trace_sur_ouvrage}
+      baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100}
+      sinon_mnt:
+        indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]
+        marque: e5_reference_indisponible
     seuils:
       - {abs_m_max: 1.0}
     passe_si: tous

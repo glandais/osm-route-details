@@ -768,6 +768,34 @@ inchangés.
    - *plus de la moitié* : ouvrage par ouvrage, sans additionner les ouvrages d'un même témoin.
      Sans effet sur les témoins actuels : la somme ne dépasse pas non plus la moitié (au plus 46 %
      pour `tn10`, 14 % pour `tn12`, sorti par sa catégorie).
+7. **Référence d'E5 au croisement** (décision de l'utilisateur, 2026-11-01, après la calibration
+   2026.11.5-bench1 : E5 221/240). Pour chaque passage sous un pont, dans cet ordre, sans lire le
+   service :
+   - **retiré** (rapporté `e5_trace_sur_ouvrage`, non compté) si la trace est elle-même sur un
+     ouvrage au croisement : une voie `bridge` ou `tunnel` de la couche `streets` des tuiles de la
+     campagne passe à 10 m au plus du croisement en faisant moins de 20° avec la trace (le pont du
+     dessus la croise à 20° au moins par construction) ;
+   - **référence = baro corrigé localement** (décalage = médiane baro − MNT de 200 à 1 500 m de part
+     et d'autre, comme au §2.1) au croisement, interpolé sur la grille de 5 m, si la trace est une
+     trace perso fiable dont le baro existe des deux côtés du croisement sans pas brut de plus de
+     100 m (`baro_gap_max_m`) ;
+   - **sinon référence = MNT LiDAR**, **indisponible** (rapporté `e5_reference_indisponible`, non
+     compté) si le MNT est sans donnée à 10 m au plus du croisement, ou s'il lit le tablier :
+     MNT au croisement − moyenne des médianes du MNT entre 20 et 50 m de part et d'autre, le long de
+     la voie du dessous, > **2,0 m** (deux fois la tolérance d'E5 ; un gabarit sous tablier fait au
+     moins 4,5 m). Une cuvette (écart négatif) reste une référence : les passages dessous creusent.
+   Le « trou comblé » du MNT (gap_filled du service) n'est pas lisible dans la donnée : le MNT
+   LiDAR HD de l'IGN est déjà interpolé sous les tabliers (aucun no-data sur 218 croisements de
+   calibration) ; c'est la bosse qui le trahit. Vérification sur la calibration 2026.11.5-bench1
+   (218 croisements des traces perso, MNT du cache, seuils fixés avant lecture des cas) :
+   34 retirés (dont 12 des 19 échecs) ; 17 au MNT qui lit le tablier (dont 6 échecs : la bosse,
+   de 2,5 à 8,6 m, explique l'écart du service) ; aux croisements à bosse, le baro corrigé suit les
+   approches à 1 m près, ce qui confirme que le MNT lit le tablier. Effet attendu avec la référence
+   baro : les 6 échecs à bosse passent si le service suit le sol ; à l'inverse, 11 croisements
+   aujourd'hui réussis à écart nul (service = MNT qui lit le tablier, bosse de 2,5 à 11 m) échoueront :
+   le service y lit aussi le tablier. Échec restant au MNT seul : `nv-416` (bosse 1,7 m, sous le
+   seuil). Série tenue à l'écart (MNT par l'API IGN, tuiles V1, sans le service) : 105 croisements,
+   78 gardent une référence (tous au baro), au-dessus du minimum (8) et de la cible (10).
 
 ---
 
