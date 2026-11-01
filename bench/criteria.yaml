@@ -110,6 +110,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Témoin S2 planifié : nature déclarée retenue si OSM la confirme sur ≥ 50 % de la longueur comptée, sinon nature confirmée par ses tags, sinon retiré"
   - id: marge_du_tirage   # 2026-11-01, V1
     decision: "Tirage : chaque strate remplie jusqu'à son minimum majoré de 25 % (arrondi supérieur, chaque composante), sinon la strate entière ; tiers si plus ; seuil de jugement = minimum inchangé"
+  - id: source_valhalla_fossgis   # 2026-11-01
+    decision: "Recalage et références de revêtement (R3, R1/R2 des parcours planifiés) par le Valhalla public de la FOSSGIS, 1 req/s, en séquence ; toutes les traces recalées par cette source (perso-01..39 comprises) ; données du serveur 2026-11-01T13:01Z"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -203,10 +205,10 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
         seuil_de_jugement: minimum   # couverture.minimums, inchangé
     controle_couverture: {lit: [corpus, tuiles, mnt], jamais: service, ecrit_dans: manifest}
     minimum_non_atteint: collecter_d_autres_cas   # jamais changer le sel
-  reference_R1_R2: {source: "Stadia Maps trace_attributes", donnees_perso: false, meme_semaine_que: campagne.data_versions, stockage: hors_git_regenerable}
+  reference_R1_R2: {source: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de), 1 req/s", donnees_serveur: "2026-11-01T13:01Z", donnees_perso: false, meme_semaine_que: campagne.data_versions, stockage: hors_git_regenerable}   # décision de l'utilisateur, 2026-11-01 (était Stadia Maps)
 
 preparation:
-  recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}
+  recalage: {outil: tools/stadia_match.py, service: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de)", debit_max: "1 req/s, en séquence", donnees_serveur: "2026-11-01T13:01Z", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx", toutes_les_traces: true}   # décision de l'utilisateur, 2026-11-01 (Stadia Maps jusqu'au MVP)
   decoupage: {max_km: 200, max_points: 16000, cas: [perso-06]}
   baro_points_inseres:   # README §2.1, étape 3
     colonne: insere   # <id>.baro.csv, 1 = point d'origine inséré par fill_jumps
@@ -392,7 +394,7 @@ criteres:
   - id: R3
     metrique: "Accord du revêtement vs Stadia Maps trace_attributes (edge.surface), en longueur, même table de classes que R1"
     cas: {manifest: perso, groupes: [dplus, plaine, ouvrage, hors_france]}
-    reference: {source: "Stadia Maps trace_attributes", fichiers: "private/recales/<id>.surface.csv (hors git)"}
+    reference: {source: "Valhalla FOSSGIS trace_attributes (Stadia Maps jusqu'au MVP)", fichiers: "private/recales/<id>.surface.csv (hors git)"}
     agregation: par_trace
     seuils:
       - {accord_classe_min: 0.85, accord_revetu_non_revetu_min: 0.97}

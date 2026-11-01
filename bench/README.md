@@ -309,6 +309,15 @@ porte l'erreur latérale du GPS. Protocole (décision de l'utilisateur, 2026-10-
    donnait un baro interpolé, ce que la règle du banc interdit au-delà de 100 m
    (`baro_gap_max_m`). Ces points servent encore au recalage, mais ne portent plus de baro : 176 points
    retirés sur 12 traces, géométrie inchangée. Version précédente dans `private/recales.v3/`.
+   **Source** (décision de l'utilisateur, 2026-11-01) : à partir de V1, le recalage et la
+   référence de revêtement (R3, et R1/R2 des parcours planifiés) passent par le **Valhalla public
+   de la FOSSGIS** (`https://valhalla1.openstreetmap.de/trace_attributes`, même moteur, même
+   requête), à **1 requête par seconde** au plus, en séquence, User-Agent identifiable
+   (`tools/stadia_match.py`, variable `VALHALLA_URL`). Données du serveur : tuiles Valhalla du
+   2026-11-01 13:01 UTC (`/status`, `tileset_last_modified`), appels du 2026-11-01. **Toutes les
+   traces du banc sont recalées par cette même source**, `perso-01..39` comprises (recalées par
+   Stadia en 2026-10, réponses gardées dans `private/recales.stadia/`, non relues) : les rapports
+   de calibration postérieurs ne sont pas comparables aux précédents sur M1, R3 et E1.
 2. **Service** : la géométrie recalée est l'entrée. Les bornes d'entrée de l'API (200 km,
    16 000 points) s'appliquent : au-delà, l'outil la découpe en tronçons ≤ 200 km (`<id>.partN.gpx`,
    aujourd'hui `perso-06`, 205 km) ; les sorties des tronçons sont recousues par abscisse. La sortie
@@ -711,6 +720,9 @@ inchangés.
    - **R1 / R2** : référence Stadia Maps `trace_attributes` des parcours planifiés (aucune donnée
      perso), demandée la même semaine que la date des tuiles de la campagne, pour limiter l'écart
      de version qui a rendu R3 non bloquant. Réponses hors git, régénérables (conditions de Stadia).
+     **Source** (décision de l'utilisateur, 2026-11-01) : Valhalla FOSSGIS (§2.1), 1 requête par
+     seconde ; données du serveur du 2026-11-01, comme les tuiles V1. Réponses hors git,
+     régénérables.
 5. **S2 hors graphe vélo** (décision de l'utilisateur, 2026-11-01, après la première calibration
    V1, règles 2026.11.2). Les portions d'un témoin négatif où la trace suit une voie fermée au vélo
    ne comptent pas dans S2 (ni ouvrage fictif, ni longueur typée, ni longueur totale) : ce sont les

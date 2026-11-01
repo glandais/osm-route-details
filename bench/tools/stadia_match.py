@@ -29,7 +29,10 @@ la réponse comme référence de revêtement (R3).
      ici (README §2.1) ;
    - <id>.surface.csv : s_debut_m, s_fin_m, surface, road_class, use, way_id (référence R3).
 La clé est lue dans STADIAMAPS_KEY, ou dans le premier .env trouvé en remontant ; elle n'est jamais
-écrite ni affichée.
+écrite ni affichée. Avec VALHALLA_URL (ex. https://valhalla1.openstreetmap.de/trace_attributes, serveur
+public de la FOSSGIS), les appels vont à ce Valhalla sans clé, à MIN_INTERVAL_S secondes d'écart au
+moins (1 requête par seconde, consigne de l'utilisateur du 2026-11-01) ; la source est écrite dans
+chaque réponse brute (clé `_source`).
 
 Usage : stadia_match.py trace.gpx id dossier_sortie
 """
@@ -62,7 +65,14 @@ ATTRS = ["edge.surface", "edge.road_class", "edge.use", "edge.length", "edge.way
          "matched.edge_index", "matched.distance_from_trace_point", "shape"]
 
 
+VALHALLA_URL = os.environ.get("VALHALLA_URL")
+MIN_INTERVAL_S = 1.0
+_last_call = [0.0]
+
+
 def api_key():
+    if VALHALLA_URL:
+        return None
     k = os.environ.get("STADIAMAPS_KEY")
     if k:
         return k
@@ -135,17 +145,24 @@ def resample(pts, step):
 def call(key, shape):
     body = {"shape": [{"lat": p[1], "lon": p[2]} for p in shape], "costing": "bicycle",
             "shape_match": "map_snap", "filters": {"attributes": ATTRS, "action": "include"}}
+    url = VALHALLA_URL or f"{API}?api_key={key}"
     for attempt in range(4):
-        req = urllib.request.Request(f"{API}?api_key={key}", data=json.dumps(body).encode(),
+        wait = MIN_INTERVAL_S - (time.monotonic() - _last_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.monotonic()
+        req = urllib.request.Request(url, data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "User-Agent": UA})
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
-                return json.load(r)
+                d = json.load(r)
+                d["_source"] = VALHALLA_URL or API
+                return d
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 504) and attempt < 3:
                 time.sleep(5 * (attempt + 1))
                 continue
-            raise SystemExit(f"Stadia HTTP {e.code} : {e.read()[:200]!r}")
+            raise SystemExit(f"Valhalla HTTP {e.code} : {e.read()[:200]!r}")
 
 
 def project_forward(poly, cum, p, start, min_s=-math.inf):
@@ -316,7 +333,6 @@ def process(key, raw_pts, tid, outdir):
         else:
             d = call(key, chunk)
             json.dump(d, open(raw, "w"))
-            time.sleep(0.5)
         shape, imap, gaps, filled = fill_jumps(decode6(d["shape"]), d, chunk)
         n_jumps += len(gaps)
         # raccord : on reprend au PREMIER point recalé (dans l'ordre de la géométrie) proche de la fin du
