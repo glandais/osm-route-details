@@ -119,7 +119,8 @@ impl BenchPaths {
 /// 2026.11.3, README §4 ter après la calibration 2026.11.2 : ec72f13, 09dcda0, 0b590ff) : M1 hors
 /// graphe vélo resserrée (routes motorisées, plages ≥ 50 m, rails exclus), S2 sans les plages hors
 /// graphe vélo des témoins, attribution « un tablier, un ouvrage » (couche `bridges` des tuiles).
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// Remise à `None` avec les règles 2026.11.4 (galeries couvertes détectées sur le MNT).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

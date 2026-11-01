@@ -1,7 +1,8 @@
-//! Heuristiques V1 dans la fusion (T04 §4) : détecteurs de tablier (LiDAR) et de tunnel (MNT) sur
-//! les stations uniformes du profil **brut**, détections passées à `reconcile` (T03 §7.1), puis
-//! correction des ouvrages `heuristic` (hors de tout ouvrage OSM) : tablier lu dans le MNS par le
-//! constructeur de T04 §3.2 (sinon droite entre sondes), tunnel en droite entre portails.
+//! Heuristiques V1 dans la fusion (T04 §4) : détecteurs de tablier (LiDAR), de tunnel (MNT) et de
+//! galerie couverte (MNT et MNS) sur les stations uniformes du profil **brut**, détections passées
+//! à `reconcile` (T03 §7.1), puis correction des ouvrages `heuristic` (hors de tout ouvrage OSM) :
+//! tablier lu dans le MNS par le constructeur de T04 §3.2 (sinon droite entre sondes), tunnel et
+//! galerie en droite entre portails.
 //!
 //! Choix simples, notés :
 //! - stations uniformes = stations du parcours à `k × station_step_m` (à 1 cm près) ;
@@ -12,6 +13,9 @@
 //! - un tunnel détecté n'est gardé que si toutes les stations de `[portail − 100 m, portail +
 //!   100 m]` sont sur terrain mesuré (`tunnelScope = measured-terrain`), et s'il ne contient aucun
 //!   tablier (pont OSM ou détecté) ;
+//! - une galerie détectée (nature tunnel) n'est gardée que si ses approches sont sur terrain IGN
+//!   LiDAR HD (MNS lu, le détecteur l'exige), si elle ne touche ni tablier (pont OSM ou détecté,
+//!   approches comprises) ni tunnel détecté (le tunnel prime) ;
 //! - sondes d'un ouvrage heuristique : stations du parcours à `abutment_probe_min_m` au-delà de
 //!   chaque extrémité, lues sur le profil déjà corrigé des ouvrages OSM (continuité au raccord d'un
 //!   ouvrage OSM prolongé) ; un ouvrage sans sonde ou sans altitude de sonde, ou un tablier sans
@@ -24,7 +28,7 @@ use ord_domain::report::{Warning, WarningCode};
 use ord_domain::route::PreparedRoute;
 
 use crate::classification::{DetectedStructure, StructureSource, StructureVerdict};
-use crate::elevation::heuristics::{detect_decks, detect_tunnels};
+use crate::elevation::heuristics::{detect_decks, detect_galleries, detect_tunnels};
 use crate::rules::Rules;
 use crate::typology::{StructureKind, TypologyOutput};
 
@@ -122,6 +126,22 @@ pub fn detect(
         let scope =
             |p: usize| (0..d.len()).filter(|&k| (d[k] - d[p]).abs() <= TUNNEL_SCOPE_M).all(|k| meas[k]);
         if !scope(ia) || !scope(ib) || touches_gap(a, b) || deck_spans.iter().any(|s| s.1 > a && s.0 < b) {
+            continue;
+        }
+        out.push(DetectedStructure { id: out.len() as u32, kind: StructureKind::Tunnel, from_m: a, to_m: b });
+    }
+    // Galeries couvertes (T04 §4.2 bis) : nature tunnel, droite entre portails. Écartées si elles ou
+    // leurs approches touchent un tablier (le plateau entre deux ponts est une levée, pas un toit)
+    // ou si elles recouvrent un tunnel détecté.
+    let reach = r.gallery_detector.approach_m;
+    let tunnels: Vec<(f64, f64)> =
+        out.iter().filter(|x| x.kind == StructureKind::Tunnel).map(|x| (x.from_m, x.to_m)).collect();
+    for g in detect_galleries(&mnt, &mns, &r.gallery_detector) {
+        let (a, b) = (d[g.first], d[g.last]);
+        if touches_gap(a, b)
+            || deck_spans.iter().any(|s| s.1 > a - reach && s.0 < b + reach)
+            || tunnels.iter().any(|t| t.1 > a && t.0 < b)
+        {
             continue;
         }
         out.push(DetectedStructure { id: out.len() as u32, kind: StructureKind::Tunnel, from_m: a, to_m: b });

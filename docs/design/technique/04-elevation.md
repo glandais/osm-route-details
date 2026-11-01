@@ -26,7 +26,7 @@ de T01 §5.1).
 | `ord-core::elevation::grid` | Chaîne élévation | Pur : grille de stations |
 | `ord-pipeline::elevation` (`sample_raw`) | Chaîne élévation | **Seul module async** : lecture MNT/MNS par `TerrainReader`, plages de terrain |
 | `ord-core::elevation::fusion::{osm, deck, tunnel, merge, gaps}` | Fusion du profil | Pur |
-| `ord-core::elevation::heuristics::{deck_detector, tunnel_detector}` | Détecteurs heuristiques (V1) | Pur, portage de vcyclist |
+| `ord-core::elevation::heuristics::{deck_detector, tunnel_detector, gallery_detector}` | Détecteurs heuristiques (V1) | Pur ; tablier et tunnel portés de vcyclist, galerie propre au service (§4.2 bis) |
 | `ord-core::elevation::derive::{smooth, gain, grade}` | Fusion du profil (dérivés) | Pur |
 | `ord-core::elevation::breakpoints` | Sélection des points de rupture | Pur |
 | `ord-core::elevation::rules` (`ElevationRules`, dans `Rules`, T01 §9) | — | Paramètres versionnés, sérialisables (`serde`) |
@@ -271,6 +271,60 @@ pub struct CorrectionPatch { pub target: GroupRef, pub from_m: f64, pub to_m: f6
 - Les heuristiques ne tournent que si `structure_correction = true` et là où la typologie a été lue
   (ni panne ni `typology_missing`, doc 01 §6 : « élévation non corrigée »).
 
+### 4.2 bis Détecteur de galerie couverte (règles 2026.11.4)
+
+- **Pourquoi.** Les galeries pare-avalanche ou pare-pierres (`tunnel=avalanche_protector`) sont
+  absentes du schéma Shortbread des tuiles : la typologie les lit comme des routes à l'air libre.
+  Leur toit, couvert de terre et raccordé au versant, est classé « sol » par le LiDAR : le MNT y lit
+  le toit, en plateau de quelques mètres au-dessus de la route, et le MNS l'égale. Ni le détecteur
+  de tablier (MNS ≈ MNT) ni celui de tunnel (15 m de hauteur, flancs de montagne) ne le voient.
+  vcyclist n'a pas de détecteur de galerie (ses galeries restent `X`, exclues) : ce détecteur est
+  propre au service (`ord-core::elevation::heuristics::gallery_detector`), sur les stations
+  uniformes du profil brut, MNT et MNS de l'enveloppe LiDAR (`NaN` hors IGN : pas de galerie hors
+  IGN LiDAR HD).
+- **Forme cherchée** : un portail d'entrée (dernière station de route avant la marche) et un
+  portail de sortie (première après), avec :
+  - approche de chaque portail : 20 m de route lisse (aucune station à plus de 1 m de sa droite),
+    pente ≤ 15 % ;
+  - marche vers l'intérieur : ≥ 3 m au-dessus du prolongement de la route en ≤ 15 m, dont ≥ 2 m
+    sur un seul pas de 5 m ; dans une suite de portails candidats consécutifs, la station la plus
+    proche de la marche ;
+  - droite entre portails : pente ≤ 15 %, à ≤ 6 points de pente de chaque approche ; longueur de
+    15 m à 1 km ; la sortie la plus proche qui convient ;
+  - toit (de la première à la dernière station à 3 m au-dessus de la droite) : hauteur médiane de
+    4 à 12 m, ≥ 80 % de stations à plus de 2 m ; aucune station à plus de 2 m sous la droite ; sur
+    les stations hautes, hors stations de portail, pente propre ≤ 3 m sur la longueur et aucun écart
+    > 3 m à sa droite ;
+  - MNS ≈ MNT sur le toit : médiane de (MNS − MNT) ≤ 2 m.
+- **Origine des bornes** (physique d'une galerie et échantillonnage, pas les cas de calibration) :
+  hauteur ≥ 4 m = gabarit routier (4,30 m au moins, 4,50 à 4,75 m d'ordinaire) plus la dalle, moins
+  le lissage du MNT ; ≤ 12 m = gabarit, dalle (≤ 1,5 m) et coussin de terre amortisseur de quelques
+  mètres, sous les 15 m du détecteur de tunnel ; marche de 3 m = trois quarts de la hauteur
+  minimale (le reste se perd au lissage du front) ; saut de 2 m sur 5 m = 40 % de pente relative,
+  le double de la plus forte pente d'une route ouverte ; fenêtre de 15 m = front vertical lissé
+  par le MNT à 1 m, station à un demi-pas du front, front biais ; pente de route ≤ 15 % et
+  changement ≤ 6 points (raccords verticaux lents : sous une galerie, la route garde sa pente) ;
+  approche lisse à 1 m (MNT LiDAR d'une chaussée) ; 20 % de stations basses tolérées (galerie
+  ouverte côté vallée, trace décalée qui lit la pente dessous) ; pente propre et écart du toit
+  ≤ 3 m (épaisseur variable du coussin ; une bosse arrondie, un versant ou une crête ne sont pas
+  un toit) ; MNS − MNT ≤ 2 m, moitié de la hauteur minimale (garde-corps, arbustes ; un bâtiment,
+  une forêt ou un tablier sur le plateau l'excèdent) ; longueur ≥ 3 pas pour que deux stations
+  lisent le toit, ≤ 1 km pour borner l'appariement.
+- **Garde-fous** (fusion) : une galerie qui touche un pont OSM ou un tablier détecté, approches de
+  20 m comprises (plateau entre deux ponts : une levée), ou qui recouvre un tunnel détecté (le
+  tunnel prime), ou qui touche une plage sans typologie, est écartée. Remblai, rampe, crête,
+  tranchée lue de biais : pas de marche verticale ou toit non parallèle ; bâtiment, forêt :
+  MNS ≫ MNT ; pont emprunté : la route passe sous la droite.
+- **Écriture** : détection de nature tunnel passée à `reconcile` (confirmation d'un tunnel OSM,
+  sinon ouvrage `heuristic`), corrigée en droite entre sondes à `abutment_probe_min_m` au-delà
+  des portails, avertissement `structure_untagged` (§4.3 bis).
+- Mesuré en calibration (prototype puis service, 2026-11-01) : `arly-galerie` (22 m) et `nv-37`
+  (122 m) détectées, `nv-30` (256 m) non (pas de marche nette à la sortie : le toit y redescend
+  sur 25 m) ; la galerie de `tn12-arly-galleries` détectée (témoin sorti de S2, README §4 ter.6) ;
+  aucun autre témoin négatif touché. Sur les traces perso de calibration, d'autres plateaux de
+  25 à 120 m sont détectés hors de tout ouvrage connu ; là où le baro existe, il ne voit pas la
+  marche du MNT (couverture non cartographiée ou passage inférieur lu dans le MNT).
+
 ### 4.3 Fusion OSM ↔ heuristique
 
 Tout est calculé sur le profil **brut**. Les détections sont converties en `DetectedStructure`,
@@ -302,7 +356,8 @@ Invariant 8 : deux détections de passages différents à moins de 20 m partout 
   profil **brut** ; MNS `NaN` hors IGN mesuré sans repli (invariant 10). Détections qui touchent
   une plage `TypologyCoverage` écartées. Tunnel gardé si toutes les stations à ± 100 m de chaque
   portail sont mesurées (`ign_lidar_hd`, `mapterhorn_measured`) et s'il ne contient ni pont OSM ni
-  tablier détecté.
+  tablier détecté. Galerie gardée hors de tout tablier (approches comprises) et de tout tunnel
+  détecté (§4.2 bis, règles 2026.11.4).
 - `reconcile` (T03 §7.1) : confirmation `osm_heuristic` à 50 % ; nature opposée écartée ; parts
   d'une détection hors des passages OSM qu'elle touche gardées au-delà de 40 m
   (`UNTAGGED_MIN_M`), détection sans passage OSM gardée entière : verdicts `heuristic`.
@@ -328,10 +383,12 @@ Invariant 8 : deux détections de passages différents à moins de 20 m partout 
 // StructureSource, DetectedStructure, StructureVerdict, reconcile : T03 §7 (Classification)
 pub struct DeckDetectorOptions { /* champs de vc:G/DeckDetectorOptions.kt:28-148, en mètres */ }
 pub struct TunnelDetectorOptions { /* champs de vc:G/TunnelDetectorOptions.kt:19-93 */ }
+pub struct GalleryDetectorOptions { /* §4.2 bis, bornes physiques documentées champ par champ */ }
 pub fn detect_decks(mnt: &[f64], mns: &[f64], o: &DeckDetectorOptions) -> DeckDetection;
 pub fn detect_tunnels(mnt: &[f64], lat: &[f64], lon: &[f64], measured: &[bool],
     o: &TunnelDetectorOptions) -> Vec<TunnelSpan>;
-// DeckDetection et TunnelSpan (internes) → Vec<DetectedStructure> avant reconcile
+pub fn detect_galleries(mnt: &[f64], mns: &[f64], o: &GalleryDetectorOptions) -> Vec<GallerySpan>;
+// DeckDetection, TunnelSpan et GallerySpan (internes) → Vec<DetectedStructure> avant reconcile
 ```
 
 ## 5. Profil corrigé, méthode par point, dérivés (`fusion`, `derive`)

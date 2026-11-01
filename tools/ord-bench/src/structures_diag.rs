@@ -13,7 +13,7 @@ use ord_domain::ctx::RequestCtx;
 use ord_domain::elevation::DsmSample;
 use ord_domain::request::RequestOptions;
 use ord_domain::LatLon;
-use ord_pipeline::elevation::{sample_raw, sample_structures};
+use ord_pipeline::elevation::{sample_dsm_hull, sample_raw, sample_structures};
 use serde_json::{json, Value};
 
 use crate::service::{Pt, Service, Variant};
@@ -104,6 +104,10 @@ pub async fn diagnose_structures(
     let ctx = RequestCtx::new(RequestId("diag".into()), Deadline::after(std::time::Duration::from_secs(600)));
     let typo = sources.typology.run(Arc::clone(&route), &ctx).await?;
     let mut raw = sample_raw(&route, sources.terrain.as_ref(), &ctx).await?;
+    // MNS de l'enveloppe LiDAR, comme l'orchestrateur quand les heuristiques sont actives.
+    if rules.elevation.heuristics {
+        sample_dsm_hull(&mut raw, &route, sources.terrain.as_ref(), &ctx).await?;
+    }
     sample_structures(&mut raw, &route, &typo, sources.terrain.as_ref(), &ctx, &rules).await?;
     let profile = fuse(&route, &raw, Some(&typo), &RequestOptions::default(), &rules)?;
     let s = raw.structures.as_ref().expect("lectures des ouvrages");
@@ -233,7 +237,8 @@ pub async fn diagnose_structures(
         }
     }
     // Exploration : profil complet (MNT brut, sortie, méthode) des stations du parcours dans
-    // `[de, a]`, avec ORD_DIAG_PROFIL=1 (distances et altitudes seulement).
+    // `[de, a]`, avec ORD_DIAG_PROFIL=1 (distances et altitudes seulement : d, MNT, MNS de
+    // l'enveloppe LiDAR, sortie, méthode).
     let mut profil: Vec<Value> = Vec::new();
     if std::env::var_os("ORD_DIAG_PROFIL").is_some() {
         for (i, x) in route.samples.iter().enumerate() {
@@ -243,6 +248,10 @@ pub async fn diagnose_structures(
             profil.push(json!([
                 r2(x.d_m),
                 r2(raw.terrain[i].ele.map_or(f64::NAN, f64::from)),
+                match raw.dsm.as_ref().and_then(|v| v.get(i)) {
+                    Some(DsmSample::Value(v)) => r2(f64::from(*v)),
+                    _ => Value::Null,
+                },
                 r2(profile.ele[i]),
                 format!("{:?}", profile.method[i])
             ]));

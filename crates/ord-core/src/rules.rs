@@ -27,7 +27,9 @@ use serde::Serialize;
 // 2026.11.2 : heuristiques V1 (MNS sur l'enveloppe LiDAR, détecteurs de tablier et de tunnel,
 // ouvrages `heuristic` corrigés, `structure_untagged`).
 // 2026.11.3 : rampe d'un pont OSM reprise par le tablier détecté qui le prolonge.
-pub const RULES_VERSION: &str = "2026.11.3";
+// 2026.11.4 : détecteur de galeries couvertes (plateau bas du MNT, MNS ≈ MNT), ouvrages
+// `heuristic` de nature tunnel.
+pub const RULES_VERSION: &str = "2026.11.4";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -183,6 +185,8 @@ pub struct ElevationRules {
     pub deck_detector: crate::elevation::heuristics::DeckDetectorOptions,
     /// Détecteur de tunnel (profil MNT, T04 §4.2), `TunnelDetectorOptions.DEFAULT` de vcyclist.
     pub tunnel_detector: crate::elevation::heuristics::TunnelDetectorOptions,
+    /// Détecteur de galeries couvertes (plateau bas du MNT, MNS ≈ MNT, T04 §4.2 bis).
+    pub gallery_detector: crate::elevation::heuristics::GalleryDetectorOptions,
     pub gain: GainRules,
     pub structures: CorrectionRules,
     pub deck: DeckBuilderRules,
@@ -198,8 +202,12 @@ impl ElevationRules {
     pub fn validate(&self) -> Result<(), String> {
         self.deck_detector.validate()?;
         self.tunnel_detector.validate()?;
+        self.gallery_detector.validate()?;
         if (self.deck_detector.step_m - self.station_step_m).abs() > 1e-9 {
             return Err("deck detector step differs from the station step".into());
+        }
+        if (self.gallery_detector.step_m - self.station_step_m).abs() > 1e-9 {
+            return Err("gallery detector step differs from the station step".into());
         }
         Ok(())
     }
@@ -212,6 +220,7 @@ impl Default for ElevationRules {
             heuristics: true,
             deck_detector: Default::default(),
             tunnel_detector: Default::default(),
+            gallery_detector: Default::default(),
             gain: GainRules::default(),
             structures: CorrectionRules::default(),
             deck: DeckBuilderRules::default(),
@@ -396,6 +405,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.3", "dbb75aceaf44f2ea".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.4", "acee8b80a8bff571".to_owned()));
     }
 }

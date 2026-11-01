@@ -260,3 +260,55 @@ async fn golden_heuristic_junction() {
     diff("", &expected, &r, &mut out);
     assert!(out.is_empty(), "{id} : {out:#?}");
 }
+
+/// Galerie pare-avalanche absente du schéma des tuiles (règles 2026.11.4, T04 §4.2 bis) :
+/// `arly-galerie`, témoin `tt08-arly-cliets` de vcyclist (calibration). Le plateau du MNT est
+/// détecté : ouvrage `heuristic` de nature tunnel, `structure_untagged`, droite entre portails.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_gallery() {
+    use ord_bench::golden::{response_with, structure_options, structure_scenario, GALLERY_SCENARIO};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let id = GALLERY_SCENARIO;
+    let s = structure_scenario(&paths, &manifest, id).expect("scénario");
+    let mut r = response_with(&service, &s, structure_options()).await.expect("réponse");
+    for p in r["points"].as_array_mut().into_iter().flatten() {
+        if let Some(m) = p.as_object_mut() {
+            m.remove("lat");
+            m.remove("lon");
+        }
+    }
+    let entries = r["summary"]["structures"].as_array().expect("structures").clone();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    let e = &entries[0];
+    assert_eq!(
+        (e["kind"].as_str(), e["structure_source"].as_str()),
+        (Some("tunnel"), Some("heuristic")),
+        "{e}"
+    );
+    assert_eq!(e["method"], "interpolated_structure");
+    assert!(codes(&r).contains(&"structure_untagged"), "{:?}", codes(&r));
+    // Profil : aucune marche dans la galerie, pente de route (≤ 15 %) d'un point au suivant.
+    let pts: Vec<(f64, f64)> = r["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["d_m"].as_f64().unwrap(), p["ele"].as_f64().unwrap()))
+        .collect();
+    let steepest = pts.windows(2).map(|w| ((w[1].1 - w[0].1) / (w[1].0 - w[0].0)).abs()).fold(0.0, f64::max);
+    assert!(steepest <= 0.15, "{id} : pente de {steepest}");
+    let path = snapshot_path(id);
+    if std::env::var_os("ORD_GOLDEN_UPDATE").is_some() || !path.exists() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+        println!("{id} : snapshot écrit");
+        return;
+    }
+    let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut out = Vec::new();
+    diff("", &expected, &r, &mut out);
+    assert!(out.is_empty(), "{id} : {out:#?}");
+}
