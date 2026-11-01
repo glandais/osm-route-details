@@ -1,0 +1,32 @@
+{
+  "L1": [
+    {
+      "essais": [
+        18.59
+      ],
+      "groupe": "dplus",
+      "id": "perso-05",
+      "longueur_service_m": 140255.91,
+      "p95_s": 18.59,
+      "serie": "calibration",
+      "terrain_m": {
+        "ign_lidar_hd": 140255.91
+      }
+    },
+    {
+      "essais": [
+        21.72
+      ],
+      "groupe": "ouvrage",
+      "id": "perso-21",
+      "longueur_service_m": 143940.99,
+      "p95_s": 21.72,
+      "serie": "calibration",
+      "terrain_m": {
+        "ign_lidar_hd": 143940.99
+      }
+    }
+  ],
+  "date": "2026-11-01",
+  "rules_version": "2026.11.2"
+}
