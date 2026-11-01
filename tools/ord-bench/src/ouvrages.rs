@@ -936,6 +936,12 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     }
                     if o.kind == Kind::Untagged {
                         item.insert("metrique".into(), json!("S3"));
+                        // V1 (README §3, S3) : détecté oui/non = typé pont ou tunnel par le service
+                        // au milieu ; part de l'emprise typée, rapportée.
+                        item.insert("detecte".into(), json!(p.on_structure[im]));
+                        let typed =
+                            (i0..=i1).filter(|&i| p.on_structure[i]).count() as f64 / (i1 - i0 + 1) as f64;
+                        item.insert("part_typee_ouvrage".into(), json!(r4(typed)));
                         item.insert("service_milieu_m".into(), r2(p.svc[im]));
                         item.insert("baro_corrige_milieu_m".into(), r2(p.baro[im] - offset));
                     } else {
@@ -1570,8 +1576,9 @@ pub async fn vc_items(
                 continue;
             }
             let max = s.iter().map(|&i| (r.svc.ele[i] - r.s.z[i]).abs()).fold(f64::NAN, f64::max);
+            let typed = s.iter().filter(|&&i| r.svc.on[i]).count() as f64 / s.len() as f64;
             out.push(json!({"ouvrage": format!("{}#balcon", o.id), "cas": r.id, "metrique": "S3",
-                "reference": "vcyclist_S", "ecart_max_m": r2(max)}));
+                "reference": "vcyclist_S", "ecart_max_m": r2(max), "part_typee_ouvrage": r4(typed)}));
         }
     }
     let is_covered =
@@ -1596,7 +1603,9 @@ pub async fn vc_items(
                         if !s.is_empty() {
                             let max =
                                 s.iter().map(|&i| (r.svc.ele[i] - r.s.z[i]).abs()).fold(f64::NAN, f64::max);
-                            out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "S3", "reference": "vcyclist_S", "ecart_max_m": r2(max)}));
+                            let typed = s.iter().filter(|&&i| r.svc.on[i]).count() as f64 / s.len() as f64;
+                            out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "S3", "reference": "vcyclist_S",
+                                "ecart_max_m": r2(max), "part_typee_ouvrage": r4(typed)}));
                         }
                     }
                     // Tunnels : mesurés par tunnel OSM ci-dessus (série de `structures.csv` découpée).
