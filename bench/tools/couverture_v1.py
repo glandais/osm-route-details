@@ -700,8 +700,9 @@ def cas(B):
             if run:
                 Lr = STEP_M * (run[2] - run[1] + 1)
                 if Lr >= TEMOIN_MIN_M:
+                    ends = [(dec[j][1] / plan.ky, dec[j][0] / plan.kx) for j in (run[1], run[2])]
                     out["temoins"].append({"id": f"{i}-s{k}", "trace": i, "planifie": tr["zone"] == "planifie",
-                                           "nature": run[0], "length_m": Lr})
+                                           "nature": run[0], "length_m": Lr, "debut": ends[0], "fin": ends[1]})
                     k += 1
                 run = None
             if n:
@@ -900,6 +901,15 @@ def tirage(B):
     # S1 sur l'ensemble des ouvrages tenus à l'écart (toutes strates)
     held_ouv = [k for c, s in serie.items() if s == "tenue_a_l_ecart" for k in gid.get(c, []) if k in compte]
     S1 = {"ouvrages": len(held_ouv), "emprise_m": round(sum(compte[k]["L"] for k in held_ouv))}
+    # affectation de chaque élément (ouvrage, croisement : série de son groupe ; témoin, trace, itinéraire) ;
+    # fichier à part, tirage.json inchangé
+    aff = {"ouvrages": {k: serie.get(gname[groupe[k]], "calibration") for k in compte},
+           "croisements": {k: serie.get(gname[groupe[k]], "calibration") for k in xs},
+           "temoins": {t["id"]: serie.get(t["id"], "calibration") for t in tem},
+           "traces": {t["id"]: serie.get(t["id"], "calibration") for t in C["traces"] if t["role"] in ("trace", "Q1")},
+           "groupes_ouvrages": {k: gname[groupe[k]] for k in keys},
+           "groupes_traces": grp}
+    json.dump(aff, open(f"{B}/v1/affectation.json", "w"), sort_keys=True)
     tir = {"sel": SEL, "serie": serie, "groupes_traces": grp}
     json.dump(tir, open(f"{B}/v1/tirage.json", "w"), sort_keys=True)
     sha = hashlib.sha256(open(f"{B}/v1/tirage.json", "rb").read()).hexdigest()
