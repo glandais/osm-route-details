@@ -12,7 +12,10 @@ TTL : 7 jours, comme les tuiles écrites par le service.
 Sortie standard : nombre de tuiles (présentes, téléchargées, vides, en échec), dates de
 téléchargement et ETag distincts (sans coordonnées).
 
-Usage : uv run --with xxhash tools/tuiles_v1.py cache_dir trace.gpx|stream.json ...
+Avec --avant=AAAA-MM-JJ, une tuile du cache téléchargée avant cette date (UTC) est retéléchargée,
+pour donner à toute l'emprise la même date et la même échéance.
+
+Usage : uv run --with xxhash tools/tuiles_v1.py [--avant=AAAA-MM-JJ] cache_dir trace.gpx|stream.json ...
 """
 import gzip
 import json
@@ -70,14 +73,23 @@ def write(path, issue, etag, last_modified, fetched_at, max_age, body):
     os.replace(tmp, path)
 
 
-def main(cache, *paths):
+def fetched_day(path):
+    with open(path, "rb") as f:
+        b = f.read(4096)
+    n = int.from_bytes(b[5:9], "little")
+    return time.strftime("%Y-%m-%d", time.gmtime(json.loads(b[9:9 + n])["fetched_at_s"]))
+
+
+def main(*args):
+    avant = next((a.split("=", 1)[1] for a in args if a.startswith("--avant=")), None)
+    cache, *paths = [a for a in args if not a.startswith("--avant=")]
     root = os.path.join(cache, NAMESPACE, str(Z))
     todo = sorted(tiles(paths))
     stats = {"tuiles": len(todo), "presentes": 0, "telechargees": 0, "vides": 0, "echecs": 0}
     etags, dates = set(), set()
     for x, y in todo:
         path = os.path.join(root, str(x), f"{y}.tile")
-        if os.path.exists(path):
+        if os.path.exists(path) and not (avant and fetched_day(path) < avant):
             stats["presentes"] += 1
             continue
         req = urllib.request.Request(URL.format(z=Z, x=x, y=y), headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
