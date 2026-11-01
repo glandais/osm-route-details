@@ -1128,6 +1128,56 @@ pub fn controls(bench: &Path) -> anyhow::Result<Vec<(String, String, String)>> {
     Ok(out)
 }
 
+/// Note `limite_donnees` d'une galerie `tunnel=avalanche_protector` (§4 bis.4) : la même que celle
+/// des galeries du corpus.
+const GALLERY_NOTE: &str = "shortbread sans avalanche_protector";
+
+/// Marge retirée de part et d'autre d'un ouvrage réel d'un témoin (README §4 ter.6, marge `x`).
+const REAL_STRUCTURE_MARGIN_M: f64 = 35.0;
+
+/// Ouvrages réels tagués sur la voie même d'un témoin négatif (README §4 ter.6), tags de la base
+/// des témoins : plages `X` de `spans.csv` de nature `bridge`, `tunnel` ou `gallery`
+/// (`tunnel=avalanche_protector`), `(nature, i0, i1)`. Les plages `underpass` (voie qui croise
+/// au-dessus ou au-dessous) et `layer` (sans tag d'ouvrage) n'en sont pas.
+fn own_structures(bench: &Path, id: &str) -> anyhow::Result<Vec<(String, usize, usize)>> {
+    let mut out = Vec::new();
+    for dir in ["controls", "tunnels"] {
+        let text =
+            std::fs::read_to_string(bench.join(format!("data/vcyclist/analysis/truth/{dir}/spans.csv")))?;
+        for l in text.lines().skip(1) {
+            let f: Vec<&str> = l.split(',').collect();
+            if f.len() > 7 && f[0] == id && f[1] == "X" && matches!(f[7], "bridge" | "tunnel" | "gallery") {
+                out.push((f[7].to_owned(), f[2].parse()?, f[3].parse()?));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Catégorie d'un témoin (`index.csv`, troisième colonne).
+fn control_category(bench: &Path, id: &str) -> anyhow::Result<String> {
+    for dir in ["controls", "tunnels"] {
+        let text =
+            std::fs::read_to_string(bench.join(format!("data/vcyclist/analysis/truth/{dir}/index.csv")))?;
+        if let Some(f) = text.lines().skip(1).map(|l| l.split(',').collect::<Vec<_>>()).find(|f| f[0] == id) {
+            return Ok(f.get(2).copied().unwrap_or("").to_owned());
+        }
+    }
+    Ok(String::new())
+}
+
+/// L'ouvrage réel de cette nature est l'objet même du témoin (README §4 ter.6) : sa catégorie le
+/// nomme (`avalanche-galleries` pour une galerie, un mot `tunnel` ou `bridge` sinon).
+fn names_object(category: &str, nature: &str) -> bool {
+    let words: Vec<&str> = category.split('-').collect();
+    match nature {
+        "gallery" => words.iter().any(|w| w.starts_with("galler")),
+        "tunnel" => words.contains(&"tunnel"),
+        "bridge" => words.contains(&"bridge"),
+        _ => false,
+    }
+}
+
 fn control_stations(bench: &Path, dir: &str, id: &str) -> anyhow::Result<Stations> {
     read_stations(&bench.join(format!("data/vcyclist/analysis/truth/{dir}/{id}.csv")), 3, None)
 }
@@ -1882,6 +1932,50 @@ pub async fn vc_items(
             }
         }
         if negative {
+            // Ouvrages réels sur la voie même du témoin (README §4 ter.6) : jamais fictifs, plage
+            // A–B ± 35 m retirée de S2 (fictifs, longueur typée, longueur totale) et rapportée ;
+            // galerie : limite des données (§4 bis.4), mesurée comme un tunnel entre ses portails.
+            // Le témoin sort de S2 si l'ouvrage en est l'objet ou en couvre plus de la moitié.
+            let real = own_structures(bench, &r.id)?;
+            let category = control_category(bench, &r.id)?;
+            let length = r.d[n - 1];
+            let object = real.iter().find(|(nature, i0, i1)| {
+                names_object(&category, nature) || r.d[*i1] - r.d[*i0] > 0.5 * length
+            });
+            for (k, (nature, i0, i1)) in real.iter().enumerate() {
+                let (i0, i1) = (*i0, (*i1).min(n - 1));
+                let id = format!("{}#reel{k}", r.id);
+                let gallery = nature == "gallery";
+                if gallery {
+                    let (a, b) = (i0.saturating_sub(1), (i1 + 1).min(n - 1));
+                    let mut item =
+                        tunnel_item(&id, &r.id, &r.d, &r.svc.ele, &r.raw.ele, &r.svc.segs, &inside[ri], a, b);
+                    item["limite_donnees"] = json!(GALLERY_NOTE);
+                    out.push(item);
+                }
+                out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "S2_ouvrage_reel", "nature": nature,
+                    "de_m": r2(r.d[i0]), "a_m": r2(r.d[i1]), "marge_m": REAL_STRUCTURE_MARGIN_M,
+                    "limite_donnees": if gallery { json!(GALLERY_NOTE) } else { Value::Null },
+                    "temoin_sorti": object.is_some()}));
+            }
+            if let Some((nature, i0, i1)) = object {
+                let raison = if names_object(&category, nature) {
+                    format!("ouvrage réel ({nature}) objet du témoin ({category})")
+                } else {
+                    format!(
+                        "ouvrage réel ({nature}) sur {:.0} % du témoin",
+                        100.0 * (r.d[*i1] - r.d[*i0]) / length
+                    )
+                };
+                out.push(json!({"cas": r.id, "metrique": "S2_temoin_sorti", "raison": raison}));
+                continue;
+            }
+            let masked = |i: usize| {
+                real.iter().any(|(_, i0, i1)| {
+                    r.d[i] >= r.d[*i0] - REAL_STRUCTURE_MARGIN_M
+                        && r.d[i] <= r.d[(*i1).min(n - 1)] + REAL_STRUCTURE_MARGIN_M
+                })
+            };
             // S2 hors graphe vélo (README §4 ter.5) : plages où la trace suit une route motorisée
             // fermée au vélo (règle de M1 resserrée, tuiles seulement) exclues de S2.
             let st: Vec<(f64, LatLon)> = (0..n).map(|i| (r.d[i], ll(r, i))).collect();
@@ -1893,7 +1987,7 @@ pub async fn vc_items(
                     continue;
                 }
             };
-            let off = |i: usize| closed.iter().any(|c| c.contains(&r.d[i]));
+            let off = |i: usize| closed.iter().any(|c| c.contains(&r.d[i])) || masked(i);
             // S2 : longueur typée pont ou tunnel hors des plages `X`/`x` (ouvrage propre exclu).
             let (mut fp_m, mut fictifs) = (0.0, 0usize);
             let mut run: Option<(usize, usize)> = None;
@@ -1905,8 +1999,11 @@ pub async fn vc_items(
                     }
                 }
             };
-            let mut total = 0.0;
+            let (mut total, mut real_m) = (0.0, 0.0);
             for i in 0..n {
+                if i > 0 && masked(i) {
+                    real_m += r.d[i] - r.d[i - 1];
+                }
                 if i > 0 && !off(i) {
                     total += r.d[i] - r.d[i - 1];
                 }
@@ -1922,7 +2019,8 @@ pub async fn vc_items(
             flush(run, &mut fictifs);
             out.push(json!({"cas": r.id, "metrique": "S2", "longueur_m": r2(total),
                 "faux_positif_m": r2(fp_m), "ouvrages_fictifs": fictifs,
-                "hors_graphe_velo_m": r2(crate::off_network::length(&closed))}));
+                "hors_graphe_velo_m": r2(crate::off_network::length(&closed)),
+                "ouvrage_reel_masque_m": r2(real_m)}));
         }
     }
     Ok(out)
@@ -2494,6 +2592,23 @@ mod tests {
         let mut b = vec![false; 121];
         block_short_balconies(&d, &tunnels, &mut b);
         assert!(b.iter().all(|x| !x));
+    }
+
+    #[test]
+    fn real_structures_of_a_negative_and_its_object() {
+        // README §4 ter.6 : la galerie de tn12 est l'objet du témoin ; le couronnement de tn10
+        // (pont, 46 %) ne l'est pas ; un passage inférieur n'est pas un ouvrage de la voie.
+        let bench = crate::BenchPaths::repo_bench();
+        let tn12 = own_structures(&bench, "tn12-arly-galleries").unwrap();
+        assert!(tn12.iter().any(|s| s.0 == "gallery"), "{tn12:?}");
+        let cat = control_category(&bench, "tn12-arly-galleries").unwrap();
+        assert!(names_object(&cat, "gallery") && !names_object(&cat, "bridge"));
+        let cat = control_category(&bench, "tn10-roselend").unwrap();
+        assert!(!names_object(&cat, "bridge"));
+        assert!(!names_object("urban-street-covered-carriageway", "tunnel"));
+        assert!(names_object("x-tunnel-y", "tunnel"));
+        let n11 = own_structures(&bench, "n11-morlaix-viaduc").unwrap();
+        assert!(n11.is_empty(), "underpass : {n11:?}");
     }
 
     #[test]
