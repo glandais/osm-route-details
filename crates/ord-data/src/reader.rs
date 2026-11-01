@@ -77,6 +77,7 @@ struct Inner<C: TileCodec> {
     disk: Option<DiskStore>,
     memory: moka::future::Cache<TileKey, Cached<C::Tile>>,
     negative: moka::sync::Cache<TileKey, TileFailure>,
+    negative_ttl: Duration,
     offline: bool,
 }
 
@@ -101,7 +102,7 @@ fn failure(
     status: Option<u16>,
     message: String,
 ) -> TileFailure {
-    TileFailure { source, tile, kind, status, retry_after: None, message }
+    TileFailure { source, tile, kind, status, retry_after: None, negative_until: None, message }
 }
 
 fn fetch_failure(source: SourceId, tile: TileKey, e: &FetchError) -> TileFailure {
@@ -113,7 +114,7 @@ fn fetch_failure(source: SourceId, tile: TileKey, e: &FetchError) -> TileFailure
         FetchError::RateLimited { retry_after } => (FailureKind::RateLimited, Some(429), *retry_after),
         FetchError::Offline => (FailureKind::Offline, None, None),
     };
-    TileFailure { source, tile, kind, status, retry_after, message: e.to_string() }
+    TileFailure { source, tile, kind, status, retry_after, negative_until: None, message: e.to_string() }
 }
 
 impl<C: TileCodec> TileReader<C> {
@@ -127,10 +128,19 @@ impl<C: TileCodec> TileReader<C> {
             .max_capacity(settings.memory_bytes)
             .weigher(|_k: &TileKey, v: &Cached<C::Tile>| v.weight())
             .build();
-        let negative = moka::sync::Cache::builder()
-            .time_to_live(settings.negative_ttl.max(Duration::from_millis(1)))
-            .build();
-        Self { inner: Arc::new(Inner { source, codec, disk, memory, negative, offline: settings.offline }) }
+        let negative_ttl = settings.negative_ttl.max(Duration::from_millis(1));
+        let negative = moka::sync::Cache::builder().time_to_live(negative_ttl).build();
+        Self {
+            inner: Arc::new(Inner {
+                source,
+                codec,
+                disk,
+                memory,
+                negative,
+                negative_ttl,
+                offline: settings.offline,
+            }),
+        }
     }
 
     pub fn source_id(&self) -> SourceId {
@@ -205,7 +215,11 @@ impl<C: TileCodec> TileReader<C> {
                 }
             }
             Err(f) => {
-                let f = (*f).clone();
+                // L'échéance du cache négatif borne le `Retry-After` du 503 (T01 §4.4).
+                let f = TileFailure {
+                    negative_until: Some(Instant::now() + self.inner.negative_ttl),
+                    ..(*f).clone()
+                };
                 self.inner.negative.insert(key, f.clone());
                 ctx.log().record_failure(f.clone());
                 TileOutcome::Failed(f)

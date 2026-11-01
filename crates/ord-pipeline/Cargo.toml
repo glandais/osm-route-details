@@ -12,12 +12,13 @@ ord-core.workspace = true
 ord-domain.workspace = true
 
 async-trait.workspace = true
+metrics.workspace = true
 
-tokio = { workspace = true, features = ["rt", "time"] }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "test-util"] }
 
 [lints]
 workspace = true

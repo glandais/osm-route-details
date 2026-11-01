@@ -147,6 +147,13 @@ panne → 503 / `typology_unavailable` ; cache périmé servi en secours ; parco
 (compteur à 0) ; budget dépassé (serveur qui répond après le budget, temps virtuel) → 504 ; file
 saturée → 503 `overloaded` ; `debug` sans droit → 400.
 
+Mise en œuvre (incrément 6) : `crates/ord-server/tests/api_failures.rs` (pannes des deux côtés,
+`Retry-After`, cache périmé, 400 sans lecture, 504, `overloaded`, client parti), `api_ign.rs` (IGN en
+503, hors contour), `api_route_details.rs` (typologie en panne), `api_validation.rs` (`debug`). Le 504
+y est mesuré en temps réel avec un budget de 1 s : `ScriptedServer` est un vrai serveur TCP local, que
+le temps virtuel de tokio ne pilote pas. Le même cas en temps virtuel (budget de 90 s) et l'annulation
+d'une requête abandonnée sont des tests de l'orchestrateur (`ord-pipeline`).
+
 ### 2.5 Contrat HTTP et OpenAPI
 
 Le contrat OpenAPI est **généré depuis le code** et commité (`contract/openapi.json`, T01 §10), comme dans vcyclist

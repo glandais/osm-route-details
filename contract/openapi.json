@@ -187,7 +187,17 @@
             }
           },
           "503": {
-            "description": "Data unavailable or overloaded (`Retry-After`)",
+            "description": "Data unavailable (`data_unavailable`, `details.source`) or too many requests queued (`overloaded`); always with `Retry-After`",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -197,7 +207,7 @@
             }
           },
           "504": {
-            "description": "Request budget exceeded",
+            "description": "Request budget exceeded (`timeout`), in queue or during computation; never a truncated response",
             "content": {
               "application/problem+json": {
                 "schema": {

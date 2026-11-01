@@ -54,6 +54,12 @@ impl ScriptedResponse {
         self.headers.push((name.to_owned(), value.to_owned()));
         self
     }
+
+    /// Réponse envoyée après ce délai (budget dépassé, requête en vol).
+    pub fn delayed(mut self, delay: Duration) -> Self {
+        self.delay = delay;
+        self
+    }
 }
 
 /// `n` (à partir de 0) est le rang de la requête parmi toutes celles reçues par le serveur.

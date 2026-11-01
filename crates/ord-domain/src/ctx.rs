@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::budget::{Deadline, RequestId};
 use crate::tiles::{SourceId, TileKey};
@@ -62,6 +62,9 @@ pub struct TileFailure {
     pub status: Option<u16>,
     /// `Retry-After` amont (T01 §4.4).
     pub retry_after: Option<Duration>,
+    /// Fin du cache négatif de la tuile (T02 §5.1), posée par le lecteur qui l'y inscrit : seconde
+    /// borne du `Retry-After` d'un 503 (T01 §4.4).
+    pub negative_until: Option<Instant>,
     pub message: String,
 }
 

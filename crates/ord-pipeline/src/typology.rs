@@ -15,6 +15,7 @@ use ord_domain::route::PreparedRoute;
 use ord_domain::street::{SchemaCapabilities, StreetTile};
 use ord_domain::tiles::{TileKey, TileOutcome, TileStore};
 use ord_domain::LatLon;
+use tokio::sync::Semaphore;
 
 #[async_trait::async_trait]
 pub trait TypologyChain: Send + Sync {
@@ -28,6 +29,8 @@ pub struct TileTypology {
     grid: Grid,
     caps: SchemaCapabilities,
     rules: TypologyRules,
+    /// Jetons de calcul partagés avec l'orchestrateur (T01 §3.1) ; sans eux, pas de borne.
+    compute: Option<Arc<Semaphore>>,
 }
 
 impl std::fmt::Debug for TileTypology {
@@ -43,7 +46,35 @@ impl TileTypology {
         caps: SchemaCapabilities,
         rules: TypologyRules,
     ) -> Self {
-        Self { store, grid, caps, rules }
+        Self { store, grid, caps, rules, compute: None }
+    }
+
+    /// Calculs bloquants sous les jetons de calcul du processus.
+    pub fn with_compute_permits(mut self, compute: Arc<Semaphore>) -> Self {
+        self.compute = Some(compute);
+        self
+    }
+
+    /// Tâche bloquante, sous un jeton de calcul déplacé dans la tâche.
+    async fn blocking<R: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> R + Send + 'static,
+    ) -> Result<R, TypologyError> {
+        let permit = match &self.compute {
+            Some(c) => Some(
+                Arc::clone(c)
+                    .acquire_owned()
+                    .await
+                    .map_err(|_| TypologyError::Internal("compute permits closed".into()))?,
+            ),
+            None => None,
+        };
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            f()
+        })
+        .await
+        .map_err(|e| TypologyError::Internal(format!("typology task failed: {e}")))
     }
 
     pub fn store(&self) -> &Arc<dyn TileStore<StreetTile>> {
@@ -91,9 +122,7 @@ impl TypologyChain for TileTypology {
         let shared = Arc::new(tiles.clone());
         let matched = {
             let (route, rules, shared) = (Arc::clone(&route), rules.clone(), Arc::clone(&shared));
-            tokio::task::spawn_blocking(move || match_route(&route, grid, &shared, &caps, &rules, &budget))
-                .await
-                .map_err(|e| TypologyError::Internal(format!("typology task failed: {e}")))??
+            self.blocking(move || match_route(&route, grid, &shared, &caps, &rules, &budget)).await??
         };
         let matched = Arc::new(matched);
         let limits = &self.rules.structures;
@@ -104,9 +133,7 @@ impl TypologyChain for TileTypology {
             let current = Arc::new(std::mem::take(&mut tiles));
             let step = {
                 let current = Arc::clone(&current);
-                tokio::task::spawn_blocking(move || finish(&m, &current, &r, allow))
-                    .await
-                    .map_err(|e| TypologyError::Internal(format!("typology task failed: {e}")))?
+                self.blocking(move || finish(&m, &current, &r, allow)).await?
             };
             tiles = Arc::try_unwrap(current).unwrap_or_else(|a| (*a).clone());
             match step {

@@ -556,6 +556,7 @@ mod tests {
                 kind: FailureKind::Server,
                 status: Some(500),
                 retry_after: None,
+                negative_until: None,
                 message: String::new(),
             }),
         );
@@ -627,6 +628,7 @@ mod tests {
             kind: FailureKind::Server,
             status: Some(503),
             retry_after: None,
+            negative_until: None,
             message: String::new(),
         })
     }

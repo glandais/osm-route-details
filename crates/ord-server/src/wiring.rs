@@ -24,7 +24,7 @@ use ord_domain::elevation::TerrainMode;
 use ord_domain::street::{StreetSchemaAdapter, StreetTile};
 use ord_domain::tiles::{ElevationTile, SourceId, TileStore};
 use ord_pipeline::typology::TileTypology;
-use ord_pipeline::{Orchestrator, RetryAfterPolicy, Sources};
+use ord_pipeline::{Admission, AdmissionLimits, Orchestrator, RetryAfterPolicy, Sources};
 
 use crate::config::{Config, IgnMode, TypologySourceKind};
 use crate::API_VERSION;
@@ -282,7 +282,8 @@ pub fn orchestrator(
     wiring: Wiring,
 ) -> Result<Orchestrator, StartupError> {
     let b = Builder::new(config)?;
-    let typology = Arc::new(b.typology()?);
+    let (admission, compute) = admission(config);
+    let typology = Arc::new(b.typology()?.with_compute_permits(Arc::clone(&compute)));
     let m = &config.elevation.mapterhorn;
     let budget = b.budgets.for_url(&m.url, None, m.concurrency);
     let descriptor = b.descriptor(
@@ -326,5 +327,18 @@ pub fn orchestrator(
             max: Duration::from_secs(budget.retry_after_max_s),
             default: Duration::from_secs(budget.retry_after_default_s),
         },
-    ))
+    )
+    .with_admission(admission)
+    .with_compute_permits(compute))
+}
+
+/// File d'admission et jetons de calcul (T01 §3.1–3.2) ; défauts : un par CPU, file de deux fois
+/// `max_in_flight`.
+pub fn admission(config: &Config) -> (Admission, Arc<tokio::sync::Semaphore>) {
+    let cpus = std::thread::available_parallelism().map_or(1, usize::from);
+    let b = &config.budget;
+    let max_in_flight = b.max_in_flight.unwrap_or(cpus).max(1);
+    let limits = AdmissionLimits { max_in_flight, max_queued: b.max_queued.unwrap_or(2 * max_in_flight) };
+    let compute = b.compute_permits.unwrap_or(cpus).max(1);
+    (Admission::new(limits), Arc::new(tokio::sync::Semaphore::new(compute)))
 }

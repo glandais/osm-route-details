@@ -1,9 +1,10 @@
 //! Décision du mode de réponse (T01 §5.3), fonction pure : elle ne décide que du **rejet** ; le
 //! `status` d'une réponse 200 est fixé par l'assembleur.
 
+use std::ops::Range;
 use std::time::Duration;
 
-use ord_domain::coverage::SourceOutcome;
+use ord_domain::coverage::{CoverageRanges, SourceOutcome};
 
 use crate::{DataSide, Outcome, PipelineError};
 
@@ -30,6 +31,27 @@ pub fn decide_outcome(t: &SourceOutcome<()>, e: &SourceOutcome<()>, accept_parti
         }
         (tf, ef) => Outcome::Proceed { typology_failed: tf.is_some(), elevation_failed: ef.is_some() },
     }
+}
+
+/// 422 `out_of_coverage`, décidé dès le zonage (T01 §5.3) : hors emprise de la typologie **et**
+/// de l'élévation sur tout `[0, L]`. Avec les sources mondiales du MVP (`Extent::World`), les plages
+/// d'emprise sont vides et ce cas ne se présente pas.
+pub fn out_of_coverage(cov: &CoverageRanges, length_m: f64) -> bool {
+    covers(&cov.typology_absent, length_m) && covers(&cov.elevation_absent, length_m)
+}
+
+/// Les plages, triées ou non, couvrent `[0, length]` sans trou.
+fn covers(ranges: &[Range<f64>], length: f64) -> bool {
+    let mut sorted: Vec<&Range<f64>> = ranges.iter().collect();
+    sorted.sort_by(|a, b| a.start.total_cmp(&b.start));
+    let mut reached = 0.0_f64;
+    for r in sorted {
+        if r.start > reached {
+            return false;
+        }
+        reached = reached.max(r.end);
+    }
+    !ranges.is_empty() && reached >= length
 }
 
 #[cfg(test)]
@@ -66,5 +88,18 @@ mod tests {
         assert_eq!(decide_outcome(&failed(7), &OK, false), reject(DataSide::Typology, 7));
         assert_eq!(decide_outcome(&OK, &failed(7), true), proceed(false, true));
         assert_eq!(decide_outcome(&failed(7), &FB, true), proceed(true, false));
+    }
+
+    #[test]
+    fn out_of_coverage_needs_both_sides_absent_everywhere() {
+        let cov = |t: Vec<Range<f64>>, e: Vec<Range<f64>>| CoverageRanges {
+            typology_absent: t,
+            elevation_absent: e,
+            ..CoverageRanges::default()
+        };
+        assert!(out_of_coverage(&cov(vec![0.0..100.0], vec![50.0..100.0, 0.0..50.0]), 100.0));
+        assert!(!out_of_coverage(&cov(vec![0.0..100.0], vec![0.0..40.0, 50.0..100.0]), 100.0), "trou");
+        assert!(!out_of_coverage(&cov(vec![0.0..100.0], vec![]), 100.0), "élévation présente");
+        assert!(!out_of_coverage(&CoverageRanges::default(), 100.0), "sources mondiales");
     }
 }

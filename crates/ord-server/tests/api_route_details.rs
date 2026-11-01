@@ -191,7 +191,9 @@ async fn failed_tiles_give_503_or_a_partial_200() {
     let reply = send(app_with(&config), post_json(&request_body(&pts, None))).await;
     let problem = assert_problem(&reply, StatusCode::SERVICE_UNAVAILABLE, "data_unavailable");
     assert_eq!(problem["details"]["source"], "elevation");
-    assert_eq!(reply.headers["retry-after"], "30");
+    // Sans `Retry-After` amont : échéance restante du cache négatif (60 s, T01 §4.4).
+    let retry: u64 = reply.headers["retry-after"].to_str().unwrap().parse().unwrap();
+    assert!((55..=60).contains(&retry), "{retry}");
 
     let body = request_body(&pts, Some(json!({"accept_partial": true})));
     let r = send(app_with(&config), post_json(&body)).await.json();

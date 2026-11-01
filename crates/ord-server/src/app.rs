@@ -45,6 +45,8 @@ pub struct AppState {
 struct Inner {
     limits: LimitsConfig,
     budget: Duration,
+    /// `Retry-After` du 503 `overloaded` (T01 §3.2).
+    overloaded_retry_after: Duration,
     catalog: Arc<dyn DataCatalog>,
     orchestrator: Orchestrator,
     capabilities: Bytes,
@@ -90,6 +92,7 @@ impl AppState {
             inner: Arc::new(Inner {
                 limits: config.limits.clone(),
                 budget: Duration::from_secs(config.budget.request_budget_s),
+                overloaded_retry_after: Duration::from_secs(config.budget.overloaded_retry_after_s),
                 capabilities: to_json_bytes(&capabilities),
                 attribution_text: attribution.text.clone(),
                 attribution: to_json_bytes(&attribution),
@@ -233,8 +236,9 @@ elevation profile (`points`), the route aggregates (`summary`), the terrain prov
         (status = 415, description = "Content-Type is not application/json", body = ProblemBody, content_type = "application/problem+json"),
         (status = 422, description = "No data from any source on the route", body = ProblemBody, content_type = "application/problem+json"),
         (status = 500, description = "Unexpected error", body = ProblemBody, content_type = "application/problem+json"),
-        (status = 503, description = "Data unavailable or overloaded (`Retry-After`)", body = ProblemBody, content_type = "application/problem+json"),
-        (status = 504, description = "Request budget exceeded", body = ProblemBody, content_type = "application/problem+json"),
+        (status = 503, description = "Data unavailable (`data_unavailable`, `details.source`) or too many requests queued (`overloaded`); always with `Retry-After`", body = ProblemBody, content_type = "application/problem+json",
+            headers(("Retry-After" = u64, description = "Seconds to wait before retrying"))),
+        (status = 504, description = "Request budget exceeded (`timeout`), in queue or during computation; never a truncated response", body = ProblemBody, content_type = "application/problem+json"),
     )
 )]
 async fn route_details(
@@ -247,30 +251,61 @@ async fn route_details(
     let sections = request.options.sections;
     let input_points = request.input_len;
     let ctx = RequestCtx::new(request_id.clone(), Deadline::after(state.inner.budget));
+    // Client parti : ce futur est lâché, l'orchestrateur annule le calcul (T01 §3.3).
     let result = state.inner.orchestrator.run(request, &ctx).await;
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    // Ligne de synthèse, sans coordonnée ni clé de tuile (T01 §8).
+    let result = result.map_err(|e| {
+        let mut p = Problem::from(e.clone());
+        if e == ord_pipeline::PipelineError::Overloaded {
+            p.retry_after = Some(state.inner.overloaded_retry_after);
+        }
+        p
+    });
+    // Ligne de synthèse, sans coordonnée ni clé de tuile (T01 §8) ; 5xx et replis subis en `warn`.
     {
         let log = ctx.log();
         let c = log.counters;
-        tracing::info!(
-            input_points,
-            tiles_memory = c.memory_hits,
-            tiles_disk = c.disk_hits,
-            tiles_fetched = c.fetched,
-            tiles_failed = log.failures.len(),
-            tiles_stale = log.stale_served.len(),
-            status =
-                result.as_ref().map_or("error", |r| if r.status == ord_core::assemble::Status::Complete {
-                    "complete"
-                } else {
-                    "partial"
-                }),
-            duration_ms,
-            "route details"
+        let (status, code) = match &result {
+            Ok(r) if r.status == ord_core::assemble::Status::Complete => ("complete", ""),
+            Ok(_) => ("partial", ""),
+            Err(p) => ("error", p.code.as_str()),
+        };
+        // Avertissements par code (jamais leur plage : des distances seulement, mais inutiles ici).
+        let mut warnings = std::collections::BTreeMap::<ord_domain::report::WarningCode, usize>::new();
+        if let Ok(r) = &result {
+            for w in &r.warnings {
+                *warnings.entry(w.code).or_default() += 1;
+            }
+        }
+        let degraded = result.as_ref().map_or_else(
+            |p| p.code.status().is_server_error(),
+            |r| r.status != ord_core::assemble::Status::Complete || !log.failures.is_empty(),
         );
+        macro_rules! summary {
+            ($level:ident) => {
+                tracing::$level!(
+                    input_points,
+                    tiles_memory = c.memory_hits,
+                    tiles_disk = c.disk_hits,
+                    tiles_fetched = c.fetched,
+                    tiles_not_modified = c.not_modified,
+                    tiles_failed = log.failures.len(),
+                    tiles_stale = log.stale_served.len(),
+                    status,
+                    code,
+                    warnings = ?warnings,
+                    duration_ms,
+                    "route details"
+                )
+            };
+        }
+        if degraded {
+            summary!(warn);
+        } else {
+            summary!(info);
+        }
     }
-    let report = result.map_err(Problem::from)?;
+    let report = result?;
     let body = to_dto(&report, sections, &request_id, duration_ms, &state.inner.attribution_text);
     Ok(Json::<RouteDetailsResponseV1>(body).into_response())
 }

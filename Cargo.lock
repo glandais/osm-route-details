@@ -1341,6 +1341,7 @@ name = "ord-pipeline"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "metrics",
  "ord-core",
  "ord-domain",
  "tokio",

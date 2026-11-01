@@ -398,6 +398,15 @@ impl Config {
         if self.budget.request_budget_s == 0 {
             return invalid("budget.request_budget_s", "must be positive");
         }
+        if self.budget.max_in_flight == Some(0) {
+            return invalid("budget.max_in_flight", "must be positive");
+        }
+        if self.budget.compute_permits == Some(0) {
+            return invalid("budget.compute_permits", "must be positive");
+        }
+        if self.budget.overloaded_retry_after_s == 0 {
+            return invalid("budget.overloaded_retry_after_s", "must be positive");
+        }
         if self.budget.retry_after_min_s > self.budget.retry_after_max_s {
             return invalid("budget.retry_after_min_s", "must not be above retry_after_max_s");
         }

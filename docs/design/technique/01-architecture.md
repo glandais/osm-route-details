@@ -156,6 +156,11 @@ Le découpage reprend les modules d'osm-surface (`OS/src/lib.rs:4-14`) en sépar
   (`OS/src/trace.rs:403-409`) ; le contrat sépare les deux.
 - Validation et bornes (400, 413) passent **avant** l'admission : un refus ne prend aucun jeton
   (`VC/api/.../http/ComputeGate.kt:41-45`).
+- Mise en œuvre (incrément 6) : `ord-pipeline::admission::Admission` (sémaphore de `max_in_flight`
+  jetons, compteur de file), appelée en tête d'`Orchestrator::run` ; le `Retry-After` du 503
+  `overloaded` est posé par le handler. `max_queued = 0` est admis (aucune attente). Les jetons de
+  calcul (`compute_permits`) sont un second sémaphore, partagé entre l'orchestrateur et la chaîne
+  typologie (HMM et ouvrages), le permis étant déplacé dans chaque `spawn_blocking`.
 
 ### 3.3 Budget de temps et annulation
 
@@ -172,7 +177,12 @@ Le découpage reprend les modules d'osm-surface (`OS/src/lib.rs:4-14`) en sépar
   permis jusqu'au bout (`VC/api/.../http/ComputeGate.kt:13-27`).
 - Échéance → `PipelineError::Timeout` → 504 `timeout`, **jamais de réponse tronquée**. Client
   déconnecté : un garde `Drop` déclenche le `CancellationToken`, le calcul s'arrête au prochain
-  contrôle. Le délai de lecture du reverse proxy doit dépasser `request_budget` (90 s), et
+  contrôle. Mise en œuvre (incrément 6) : pas de `tokio-util` ; le garde
+  `ord-pipeline::admission::CancelOnDrop`, pris en tête d'`Orchestrator::run`, appelle
+  `Deadline::cancel()` quand le futur de la requête est lâché (client parti) ; l'échéance atteinte
+  annule aussi le `Deadline`. Les tâches bloquantes lisent ce `Deadline` (`&dyn Budget`) ; les
+  jetons d'admission et de calcul sont rendus. Les chargements de tuiles, partagés entre requêtes
+  (T02 §5), ne sont pas annulés. Le délai de lecture du reverse proxy doit dépasser `request_budget` (90 s), et
   `shutdown_grace_s` vaut le budget (T07 §1). Les délais réseau par tuile (`connect_timeout_s` 4 s,
   `fetch_timeout_s` 8 s) et les relances (T02 §4) ne changent pas : seul le budget global s'allonge.
 
@@ -283,7 +293,11 @@ Un repli absorbé (IGN → Mapterhorn) est un 200 avec avertissement (doc 01 §6
 `max(Retry-After amont le plus grand vu dans le journal d'échecs, échéance restante du cache
 négatif des tuiles en cause)`, borné à `[retry_after_min_s, retry_after_max_s]` (défauts 5 s et
 120 s **[C]**) ; sans indice, `retry_after_default_s` (30 s **[C]**). Le cache négatif dure 60 s
-**[M]** (`VC/elevation/.../TileFailures.kt:88`).
+**[M]** (`VC/elevation/.../TileFailures.kt:88`). Mise en œuvre (incrément 6) : « tuiles en cause » =
+échecs des sources du côté en panne (`streets` pour la typologie, les autres pour l'élévation,
+`both` : le plus grand des deux) ; chaque échec porte la fin de son cache négatif
+(`TileFailure::negative_until`). Toute tuile en échec entrant au cache négatif, le défaut ne sert
+qu'en l'absence d'échec journalisé. L'en-tête est en secondes entières arrondies au-dessus.
 
 ### 4.5 Santé
 

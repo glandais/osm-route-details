@@ -239,7 +239,9 @@ impl IntoResponse for Problem {
         let headers = response.headers_mut();
         headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(PROBLEM_CONTENT_TYPE));
         if let Some(retry_after) = self.retry_after {
-            headers.insert(header::RETRY_AFTER, HeaderValue::from(retry_after.as_secs().max(1)));
+            // Secondes entières, arrondies au-dessus : jamais avant l'échéance annoncée.
+            let secs = retry_after.as_millis().div_ceil(1000).max(1);
+            headers.insert(header::RETRY_AFTER, HeaderValue::from(u64::try_from(secs).unwrap_or(u64::MAX)));
         }
         response.extensions_mut().insert(self.code);
         response
@@ -258,7 +260,12 @@ impl From<PipelineError> for Problem {
             PipelineError::OutOfCoverage => Self::new(ProblemCode::OutOfCoverage, err.to_string()),
             PipelineError::Timeout => Self::new(ProblemCode::Timeout, err.to_string()),
             PipelineError::Overloaded => Self::new(ProblemCode::Overloaded, err.to_string()),
-            PipelineError::Cancelled | PipelineError::Internal(_) => {
+            PipelineError::Cancelled => {
+                // Client parti : la réponse n'est lue par personne.
+                tracing::info!("request cancelled");
+                Self::internal()
+            }
+            PipelineError::Internal(_) => {
                 // La cause va au log, jamais au client.
                 tracing::error!(error = %err, "internal error");
                 Self::internal()

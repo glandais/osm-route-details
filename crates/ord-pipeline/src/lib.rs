@@ -2,9 +2,10 @@
 //!
 //! Préparation → zonage (zone France) → typologie (ouvrages et extensions compris) et lecture du
 //! MNT en parallèle (`tokio::join!`) → décision → lectures des ouvrages (MNS, extensions) → fusion,
-//! segments, points de sortie et assemblage.
-//! L'admission (file bornée, 503 `overloaded`) arrive à l'incrément 6.
+//! segments, points de sortie et assemblage. Devant le pipeline, l'admission (file bornée, 503
+//! `overloaded`) ; autour, le budget (504) et l'annulation quand le client part.
 
+pub mod admission;
 pub mod decision;
 pub mod elevation;
 mod orchestrator;
@@ -15,6 +16,7 @@ use std::time::Duration;
 use ord_core::elevation::ElevationError;
 use ord_core::typology::TypologyError;
 
+pub use admission::{Admission, AdmissionLimits, AdmissionPermit, CancelOnDrop};
 pub use decision::decide_outcome;
 pub use orchestrator::{Orchestrator, RetryAfterPolicy, Sources};
 
