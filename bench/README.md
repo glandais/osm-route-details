@@ -593,6 +593,21 @@ inchangés.
    parallèle à ≈ 8 m (`nv-40`) ; le service typait le bon pont, et le banc le jugeait sur un autre.
    La règle ne lit que la trace brute et les tuiles, jamais le service. Passage dessous (E5) : non
    concerné.
+3. **M1 hors graphe vélo.** Une station de la trace recalée (pas de 5 m) dont la voie la plus proche
+   de la couche `streets`, à 30 m au plus (tuiles de la campagne qui juge la trace, tuile et ses
+   8 voisines, comme §4 bis.6), est fermée au vélo par la règle de tags du service (T03 §4.2,
+   étape 1 : `trunk` en France, `bicycle=no`, motorway, pedestrian, bridleway, busway ; `bicycle=*`
+   prime) sort de M1 (non apparié, longueur totale, `unknown`). Elle est rapportée à part
+   (`hors_graphe_velo_m` par trace), avec un **contrôle** : le service doit y rendre
+   `matched: false` avec l'avertissement `unmatched_range` ; une station de cette plage appariée
+   est un échec de M1. Les tags sont lus dans les tuiles, jamais dans la réponse du service. Une
+   station déjà `hors_reseau` (§4 bis.6) y reste. **Risque de circularité, accepté par
+   l'utilisateur** : la règle reprend la règle de tags du service ; un service qui fermerait à tort
+   une voie la voit sortir de M1 au lieu d'échouer. La règle de tags est fixée par T03, pas réglée
+   sur le banc, et le contrôle garde l'autre sens (une voie fermée ne doit pas être appariée).
+   Motif : au jugement du MVP, 4,6 km de `perso-23` suivaient des voies `trunk` (dont
+   `bicycle=no`), GPS brut à 2–4 m, toute autre voie à plus de 40 m ; le matcher y faisait ce que
+   la règle prescrit.
 
 ---
 
