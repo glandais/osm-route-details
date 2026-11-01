@@ -40,7 +40,8 @@ fn profile(r: &PreparedRoute, z: impl Fn(f64) -> Option<f64>) -> ElevationProfil
         .collect();
     let mut rules = Rules::default();
     rules.elevation.gap_fill_max_m = 0.0;
-    fuse(r, &RawProfile { terrain, structures: None }, None, &RequestOptions::default(), &rules).unwrap()
+    fuse(r, &RawProfile { terrain, structures: None, dsm: None }, None, &RequestOptions::default(), &rules)
+        .unwrap()
 }
 
 fn select(r: &PreparedRoute, p: &ElevationProfile, segs: &[TypedSegment]) -> Vec<OutputPoint> {

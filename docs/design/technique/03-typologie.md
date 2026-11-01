@@ -425,7 +425,10 @@ doute (les détecteurs ratent beaucoup). Une détection qui ne recouvre aucun pa
 `heuristic` (corrigé, `structure_untagged`, décision Q17) ; la part d'une détection qui dépasse un
 passage OSM de plus de `untagged_min_m` = 40 m [vc, `deckMinRunM`, `vc:G/DeckDetectorOptions.kt`] devient un verdict `heuristic` contigu (viaduc nord
 de Saint-Nazaire). Une détection qui recouvre un ouvrage OSM d'un autre type est ignorée (OSM prime)
-et comptée en métrique.
+et comptée en métrique. Mise en œuvre V1 (règles 2026.11.2) : constantes `CONFIRM_OVERLAP` et
+`UNTAGGED_MIN_M` de `classification::reconcile` ; une détection qui ne touche aucun passage OSM
+donne un verdict `heuristic` entier, une détection qui en touche donne un verdict par part
+extérieure de plus de 40 m ; T04 §4.3 bis.
 
 ## 8. Segments homogènes
 

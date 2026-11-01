@@ -144,7 +144,7 @@ mod tests {
         let terrain = route.samples.iter().map(|s| sample(Some(s.d_m as f32), None)).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -168,7 +168,7 @@ mod tests {
         let terrain = route.samples.iter().map(|_| sample(Some(1.0), None)).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),

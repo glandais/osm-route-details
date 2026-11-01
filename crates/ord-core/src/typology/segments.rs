@@ -5,7 +5,7 @@
 use ord_domain::route::PreparedRoute;
 
 use super::graph::{ClassId, EdgeClass, LineId};
-use super::{RunMatch, TypedRun};
+use super::{RunMatch, StructureKind, TypedRun};
 use crate::classification::{
     Classified, StructureClass, StructureSource, StructureVerdict, SurfaceClass, SurfaceSource, WayKind,
 };
@@ -89,7 +89,27 @@ pub fn build_segments(
     route: &PreparedRoute,
     min_segment_m: f64,
 ) -> Vec<TypedSegment> {
-    let raw: Vec<TypedSegment> = runs
+    // Ouvrages `heuristic` (V1, T03 §8 étape 1) : tronçons coupés à leurs bornes, puis `structure`
+    // et `structure_source` imposés sur leur plage, revêtement, `way_kind` et `matched` gardés.
+    let heuristic: Vec<&StructureVerdict> =
+        verdicts.iter().filter(|v| v.source == StructureSource::Heuristic).collect();
+    let mut cut: Vec<TypedRun> = Vec::with_capacity(runs.len());
+    for r in runs {
+        let mut bounds: Vec<f64> = heuristic
+            .iter()
+            .flat_map(|v| [v.from_m, v.to_m])
+            .filter(|&x| x > r.from_m + 1e-9 && x < r.to_m - 1e-9)
+            .collect();
+        bounds.sort_by(f64::total_cmp);
+        let mut at = r.from_m;
+        for x in bounds.into_iter().chain(std::iter::once(r.to_m)) {
+            if x > at {
+                cut.push(TypedRun { from_m: at, to_m: x, matched: r.matched });
+                at = x;
+            }
+        }
+    }
+    let raw: Vec<TypedSegment> = cut
         .iter()
         .map(|r| {
             let (c, matched, element, class) = match r.matched {
@@ -106,16 +126,27 @@ pub fn build_segments(
             let mid = 0.5 * (r.from_m + r.to_m);
             let source = verdicts
                 .iter()
-                .find(|v| v.from_m <= mid && mid <= v.to_m)
+                .find(|v| v.passage.is_some() && v.from_m <= mid && mid <= v.to_m)
                 .map_or(StructureSource::Osm, |v| v.source);
             let structure_source =
                 matches!(c.structure, StructureClass::Bridge | StructureClass::Tunnel).then_some(source);
+            let mut structure = if matched || off_graph { c.structure } else { StructureClass::Unknown };
+            let mut structure_source = structure_source;
+            let mut element = element;
+            if let Some(h) = heuristic.iter().find(|v| v.from_m <= mid && mid <= v.to_m) {
+                structure = match h.kind {
+                    StructureKind::Bridge => StructureClass::Bridge,
+                    StructureKind::Tunnel => StructureClass::Tunnel,
+                };
+                structure_source = Some(StructureSource::Heuristic);
+                element = None;
+            }
             TypedSegment {
                 from_m: r.from_m,
                 to_m: r.to_m,
                 from_index: 0,
                 to_index: 0,
-                structure: if matched || off_graph { c.structure } else { StructureClass::Unknown },
+                structure,
                 structure_source,
                 surface_class: c.surface_class,
                 surface_source: c.surface_source,

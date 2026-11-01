@@ -41,8 +41,9 @@ async fn capabilities_publish_bounds_and_defaults() {
     assert_eq!(caps["defaults"]["elevation"]["smoothing_m"], 0.0);
     assert_eq!(caps["defaults"]["elevation"]["gain_preset"], "dem");
     assert_eq!(caps["primary_zone"], "FR-metropole+corse");
-    // Le MNS des ponts n'est lu qu'avec les ouvrages (incrément 4).
-    assert_eq!(caps["data"]["bridge_dsm"], false);
+    // T07 §4 : MNS des ponts = IGN actif ; heuristiques V1 actives avec l'IGN.
+    assert_eq!(caps["data"]["bridge_dsm"], true);
+    assert_eq!(caps["data"]["heuristics"], true);
     assert_eq!(caps["elevation_rules"]["glo30_threshold_m"], 10.0);
     assert_eq!(
         caps["elevation_rules"]["gain_presets"][1],
@@ -69,6 +70,7 @@ async fn capabilities_follow_configuration() {
     let caps = send(app_with(&config), get("/v1/capabilities")).await.json();
     assert_eq!(caps["limits"]["max_points"], 1_000);
     assert_eq!(caps["data"]["bridge_dsm"], false);
+    assert_eq!(caps["data"]["heuristics"], false, "pas de MNS sans IGN");
     assert_eq!(caps["elevation_sources"].as_array().map(Vec::len), Some(1));
     let attribution = send(app_with(&config), get("/v1/attribution")).await.json();
     assert!(!attribution["text"].as_str().unwrap_or("").contains("IGN"));

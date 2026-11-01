@@ -1,6 +1,8 @@
-//! Réconciliation OSM / heuristiques (T03 §7.1). Au MVP, `detected` est vide : chaque passage OSM
-//! reçoit un verdict `osm`. Le chemin de code est celui de la V1, qui y passera les détections des
-//! heuristiques (terrain mesuré).
+//! Réconciliation OSM / heuristiques (T03 §7.1, T04 §4.3). Sans détection (MVP, ou heuristiques
+//! inactives), chaque passage OSM reçoit un verdict `osm`. En V1, les détections des heuristiques
+//! (terrain mesuré) confirment un passage OSM de même nature (`osm_heuristic`), sont écartées sur
+//! un ouvrage OSM de nature opposée, et deviennent des ouvrages `heuristic` hors de tout ouvrage OSM
+//! (ou pour leur part qui dépasse un ouvrage OSM de plus de `UNTAGGED_MIN_M`).
 
 use crate::typology::{PassageId, Structure, StructureId, StructureKind, StructurePassage};
 
@@ -37,9 +39,16 @@ pub struct StructureVerdict {
 /// (`confirm_overlap`, V1) [à calibrer].
 pub const CONFIRM_OVERLAP: f64 = 0.5;
 
+/// Part d'une détection qui dépasse un ouvrage OSM au-delà de laquelle elle devient un ouvrage
+/// `heuristic` contigu (`untagged_min_m`, `deckMinRunM` de vcyclist).
+pub const UNTAGGED_MIN_M: f64 = 40.0;
+
 /// Un verdict par passage OSM (nature de l'élément au milieu du passage) : `osm_heuristic` si une
 /// détection de même nature le recouvre à `CONFIRM_OVERLAP` de la plus courte des deux plages,
-/// `osm` sinon. Les détections hors de tout passage (V1, `heuristic`) ne sont pas encore produites.
+/// `osm` sinon. Puis un verdict `heuristic` (sans passage) par détection qui ne touche aucun
+/// passage OSM, ou par part d'une détection qui dépasse les passages OSM de même nature qu'elle
+/// touche de plus de `UNTAGGED_MIN_M` ; une détection qui touche un passage OSM de nature opposée
+/// est écartée (OSM prime). Triés par distance.
 pub fn reconcile(
     passages: &[StructurePassage],
     structures: &[Structure],
@@ -67,7 +76,46 @@ pub fn reconcile(
             }
         })
         .collect();
-    out.sort_by(|a, b| a.from_m.total_cmp(&b.from_m));
+    let osm: Vec<(f64, f64, StructureKind)> = out.iter().map(|v| (v.from_m, v.to_m, v.kind)).collect();
+    for h in detected {
+        let touching: Vec<&(f64, f64, StructureKind)> =
+            osm.iter().filter(|o| o.1 > h.from_m && o.0 < h.to_m).collect();
+        if touching.iter().any(|o| o.2 != h.kind) {
+            continue;
+        }
+        // Parts de la détection hors des passages OSM qu'elle touche.
+        let mut pieces: Vec<(f64, f64)> = vec![(h.from_m, h.to_m)];
+        for o in &touching {
+            pieces = pieces
+                .into_iter()
+                .flat_map(|(a, b)| {
+                    let mut v = Vec::new();
+                    if o.0 > a {
+                        v.push((a, o.0.min(b)));
+                    }
+                    if o.1 < b {
+                        v.push((o.1.max(a), b));
+                    }
+                    v
+                })
+                .filter(|(a, b)| b > a)
+                .collect();
+        }
+        for (a, b) in pieces {
+            if !touching.is_empty() && b - a <= UNTAGGED_MIN_M {
+                continue;
+            }
+            out.push(StructureVerdict {
+                target: GroupRef::Heuristic(h.id),
+                kind: h.kind,
+                from_m: a,
+                to_m: b,
+                passage: None,
+                source: StructureSource::Heuristic,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.from_m.total_cmp(&b.from_m).then(a.to_m.total_cmp(&b.to_m)));
     out
 }
 
@@ -100,6 +148,25 @@ mod tests {
         let v = reconcile(&[passage(0, 100.0, 200.0)], &[], &[h]);
         assert_eq!(v[0].source, StructureSource::OsmHeuristic);
         let t = DetectedStructure { kind: StructureKind::Tunnel, ..h };
-        assert_eq!(reconcile(&[passage(0, 100.0, 200.0)], &[], &[t])[0].source, StructureSource::Osm);
+        let v = reconcile(&[passage(0, 100.0, 200.0)], &[], &[t]);
+        assert_eq!(v.len(), 1, "nature opposée : écartée, OSM prime");
+        assert_eq!(v[0].source, StructureSource::Osm);
+        // Dépassement de 60 m (> 40 m) : la part au-delà devient un ouvrage heuristique contigu.
+        let v = reconcile(&[passage(0, 100.0, 200.0)], &[], &[h]);
+        assert_eq!(v.len(), 2, "{v:?}");
+        assert_eq!((v[1].from_m, v[1].to_m, v[1].source), (200.0, 260.0, StructureSource::Heuristic));
+        assert_eq!(v[1].passage, None);
+        // Dépassement de 20 m : ignoré.
+        let short = DetectedStructure { to_m: 220.0, ..h };
+        assert_eq!(reconcile(&[passage(0, 100.0, 200.0)], &[], &[short]).len(), 1);
+    }
+
+    #[test]
+    fn a_detection_off_any_osm_structure_is_heuristic() {
+        let h = DetectedStructure { id: 3, kind: StructureKind::Bridge, from_m: 500.0, to_m: 530.0 };
+        let v = reconcile(&[passage(0, 100.0, 200.0)], &[], &[h]);
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[1].target, GroupRef::Heuristic(3));
+        assert_eq!(v[1].source, StructureSource::Heuristic);
     }
 }

@@ -7,7 +7,7 @@ use ord_core::elevation::{ElevationError, RawProfile, StructureSamples};
 use ord_core::typology::TypologyOutput;
 use ord_core::Rules;
 use ord_domain::ctx::RequestCtx;
-use ord_domain::elevation::{DsmSample, TerrainReader};
+use ord_domain::elevation::{DsmSample, TerrainOrigin, TerrainReader};
 use ord_domain::route::PreparedRoute;
 use ord_domain::LatLon;
 
@@ -27,7 +27,50 @@ pub async fn sample_raw(
             pts.len()
         )));
     }
-    Ok(RawProfile { terrain, structures: None })
+    Ok(RawProfile { terrain, structures: None, dsm: None })
+}
+
+/// Portée de la lecture du MNS (T04 §7.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DsmScope {
+    /// MVP : stations des ponts appariés et extensions seulement (`sample_structures`).
+    Structures,
+    /// V1, heuristiques actives : toutes les stations sur terrain IGN LiDAR HD mesuré, sans
+    /// repli (le MNS n'existe qu'à l'IGN, invariant 10), en parallèle de la typologie.
+    LidarHull,
+}
+
+/// MNS sur l'enveloppe LiDAR (`DsmScope::LidarHull`, T04 §2.3) : une valeur par station du
+/// parcours, `NoData` hors du terrain IGN mesuré (ou après un repli d'erreur). Le MNS lu ici sert
+/// aux détecteurs ; il n'est jamais écrit comme altitude hors d'un ouvrage (inv. 9). Une tuile en
+/// échec donne `Unavailable` aux stations concernées, jamais une erreur.
+pub async fn sample_dsm_hull(
+    raw: &mut RawProfile,
+    route: &PreparedRoute,
+    reader: &dyn TerrainReader,
+    ctx: &RequestCtx,
+) -> Result<(), ElevationError> {
+    let idx: Vec<usize> = (0..raw.terrain.len())
+        .filter(|&i| {
+            let t = &raw.terrain[i];
+            t.origin == TerrainOrigin::IgnLidarHd && !t.fallback_after_error && t.ele.is_some()
+        })
+        .collect();
+    let mut dsm = vec![DsmSample::NoData; raw.terrain.len()];
+    if !idx.is_empty() {
+        let pts: Vec<LatLon> = idx.iter().map(|&i| route.samples[i].at).collect();
+        let values = reader.sample_dsm(&pts, ctx).await;
+        if values.len() != pts.len() {
+            return Err(ElevationError::Internal(
+                "terrain reader returned a wrong number of DSM samples".into(),
+            ));
+        }
+        for (i, v) in idx.into_iter().zip(values) {
+            dsm[i] = v;
+        }
+    }
+    raw.dsm = Some(dsm);
+    Ok(())
 }
 
 /// Lectures des ouvrages (étape 4c), seconde phase courte limitée aux ponts appariés (MVP, sans

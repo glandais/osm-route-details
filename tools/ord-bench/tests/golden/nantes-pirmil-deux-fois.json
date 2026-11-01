@@ -28,7 +28,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.1"
+    "rules_version": "2026.11.2"
   },
   "points": [
     {
@@ -602,7 +602,7 @@
         "dsm_deck": 2
       },
       "counts_by_source": {
-        "osm": 2
+        "osm_heuristic": 2
       },
       "tunnels": "none_found"
     },
@@ -644,7 +644,7 @@
       "grade_pct": -0.0,
       "matched": true,
       "structure": "bridge",
-      "structure_source": "osm",
+      "structure_source": "osm_heuristic",
       "surface": {
         "class": "paved",
         "source": "tagged"
@@ -679,7 +679,7 @@
       "grade_pct": 0.0,
       "matched": true,
       "structure": "bridge",
-      "structure_source": "osm",
+      "structure_source": "osm_heuristic",
       "surface": {
         "class": "paved",
         "source": "tagged"
@@ -739,7 +739,7 @@
         "kind": "bridge",
         "length_m": 221.89,
         "method": "dsm_deck",
-        "structure_source": "osm",
+        "structure_source": "osm_heuristic",
         "to_m": 281.93
       },
       {
@@ -747,7 +747,7 @@
         "kind": "bridge",
         "length_m": 221.89,
         "method": "dsm_deck",
-        "structure_source": "osm",
+        "structure_source": "osm_heuristic",
         "to_m": 623.95
       }
     ],

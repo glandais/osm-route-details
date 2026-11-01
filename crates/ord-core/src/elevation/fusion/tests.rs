@@ -10,6 +10,7 @@ use ord_domain::LatLon;
 
 use super::plan::{plan, AxisPoint};
 use super::OutcomeMethod;
+use crate::classification::StructureSource;
 use crate::elevation::{fuse, EleMethod, ElevationProfile, RawProfile, StructureSamples};
 use crate::rules::Rules;
 use crate::typology::tests::{bridge, overpass, tunnel, typology_of, with_surface, Net, ORIGIN};
@@ -80,7 +81,7 @@ fn run_with(
     let (route, typo) = typology_of(net, pts);
     let rules = Rules::default();
     let terrain: Vec<TerrainSample> = route.samples.iter().map(|s| sample(s.at, t)).collect();
-    let mut raw = RawProfile { terrain, structures: None };
+    let mut raw = RawProfile { terrain, structures: None, dsm: None };
     if opts.structure_correction {
         let pixel = |_: LatLon, _| 3.0;
         let plan = plan(&route, &raw.terrain, &typo, &rules, &pixel);
@@ -374,8 +375,14 @@ fn tunnels_further_apart_are_corrected_one_by_one() {
     let r = run_cliff(tunnel_series(140.0));
     let plan = &r.raw.structures.as_ref().unwrap().plan;
     assert_eq!(plan.groups.len(), 2);
+    // OSM seul : le tronçon garde son MNT (paroi). Les heuristiques V1 (règles 2026.11.2) y voient
+    // un tunnel (série de vcyclist, balcon compris) : la part hors des tunnels OSM (> 40 m) devient
+    // un ouvrage `heuristic` corrigé, avec `structure_untagged`.
     let (z, m) = at_d(&r, 500.0);
-    assert_eq!((m, z.round()), (EleMethod::Dem, 140.0));
+    assert_eq!(m, EleMethod::InterpolatedStructure, "{z}");
+    let h: Vec<_> = r.profile.structures.iter().filter(|o| o.source == StructureSource::Heuristic).collect();
+    assert_eq!(h.len(), 1, "{:?}", r.profile.structures);
+    assert!(r.profile.warnings.iter().any(|w| w.code == WarningCode::StructureUntagged));
 }
 
 #[test]

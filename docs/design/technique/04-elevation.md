@@ -291,6 +291,32 @@ consommé par `build_segments` (T03 §8) pour découper les segments.
 Invariant 8 : deux détections de passages différents à moins de 20 m partout [cal] sont unifiées
 (profil de la plus longue).
 
+### 4.3 bis Mise en œuvre V1 (règles 2026.11.2)
+
+- `ElevationRules::heuristics = true` ; MNS lu sur l'enveloppe LiDAR (`DsmScope::LidarHull`,
+  `ord-pipeline::elevation::sample_dsm_hull`) : toutes les stations dont le MNT est IGN LiDAR HD
+  sans repli, dans la branche « terrain » de l'étape 4b, après le MNT et **en parallèle de la
+  typologie** ; seulement si `structure_correction = true`. Valeurs dans `RawProfile::dsm`, une par
+  station (`NoData` ailleurs). Le MNS des ponts OSM (étape 4c) reste lu par `sample_structures`.
+- Détecteurs (`ord-core::elevation::heuristics`) sur les stations uniformes (`k × 5 m`, à 1 cm) du
+  profil **brut** ; MNS `NaN` hors IGN mesuré sans repli (invariant 10). Détections qui touchent
+  une plage `TypologyCoverage` écartées. Tunnel gardé si toutes les stations à ± 100 m de chaque
+  portail sont mesurées (`ign_lidar_hd`, `mapterhorn_measured`) et s'il ne contient ni pont OSM ni
+  tablier détecté.
+- `reconcile` (T03 §7.1) : confirmation `osm_heuristic` à 50 % ; nature opposée écartée ; parts
+  d'une détection hors des passages OSM qu'elle touche gardées au-delà de 40 m
+  (`UNTAGGED_MIN_M`), détection sans passage OSM gardée entière : verdicts `heuristic`.
+- Correction d'un ouvrage `heuristic` (`fusion::heuristic`), après les ouvrages OSM, sur les seules
+  stations restées `dem` : sondes à `abutment_probe_min_m` au-delà de chaque extrémité, lues sur le
+  profil déjà corrigé ; pont : constructeur de tablier de §3.2 (sinon droite entre sondes, ou sol
+  gardé : ouvrage écarté) ; tunnel : droite entre sondes. Sans sonde ou sans altitude de sonde, l'ouvrage n'est ni
+  corrigé ni rendu. Issue `summary.structures[]` de source `heuristic`, avertissement
+  `structure_untagged` sur la plage ; `build_segments` impose `structure` et `structure_source`
+  sur la plage du verdict (revêtement, `way_kind` et `matched` gardés).
+- Non fait en V1 : unification des détections de passages différents à 20 m (invariant 8 sans
+  identité), recalcul d'un seul tenant d'un ouvrage OSM prolongé par une détection (la part
+  heuristique est corrigée seule, sondée sur le profil corrigé de l'ouvrage OSM).
+
 ### 4.4 Interfaces
 
 ```rust
@@ -476,7 +502,7 @@ pub async fn sample_raw(route: &PreparedRoute, reader: &dyn TerrainReader, range
     ctx: &RequestCtx, r: &ElevationRules) -> Result<RawProfile, ElevationError>; // ord-pipeline::elevation, 4b
 pub async fn sample_structures(raw: &mut RawProfile, scope: DsmScope<'_>, reader: &dyn TerrainReader,
     ctx: &RequestCtx, r: &ElevationRules) -> Result<(), ElevationError>;  // 4c : MNS (+ MNT des extensions)
-pub enum DsmScope<'a> { Structures(&'a [Structure], &'a [StructurePassage]) /* MVP */, LidarHull /* V1 */ }
+pub enum DsmScope { Structures /* MVP : sample_structures */, LidarHull /* V1 : sample_dsm_hull, RawProfile::dsm */ }
 pub fn fuse(raw: &RawProfile, typo: Option<&TypologyOutput> /* None : typologie absente */,
     opts: &RequestOptions, rules: &Rules, budget: &dyn Budget)
     -> Result<ElevationProfile, ElevationError>;                       // ord-core::elevation

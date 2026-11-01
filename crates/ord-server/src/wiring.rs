@@ -55,6 +55,9 @@ pub enum StartupError {
     HttpClient(String),
     #[error("typology source not supported yet: {0}")]
     Unsupported(&'static str),
+    /// Fenêtres des détecteurs V1 invalides (T04 §4.1, vérifiées au démarrage).
+    #[error("invalid rules: {0}")]
+    Rules(String),
 }
 
 fn client(config: &Config) -> Result<reqwest::Client, StartupError> {
@@ -318,9 +321,11 @@ pub fn orchestrator(
     let terrain =
         LayeredTerrainReader::new(dtm, dsm, mapterhorn, Arc::clone(&coverage), mode, wiring.pixel_convention);
     let budget = &config.budget;
+    let rules = Rules::default();
+    rules.elevation.validate().map_err(StartupError::Rules)?;
     Ok(Orchestrator::new(
         Sources { typology, terrain: Arc::new(terrain), coverage, catalog },
-        Rules::default(),
+        rules,
         API_VERSION,
         RetryAfterPolicy {
             min: Duration::from_secs(budget.retry_after_min_s),

@@ -8,6 +8,7 @@
 pub mod breakpoints;
 pub mod derive;
 pub mod fusion;
+pub mod heuristics;
 pub mod output;
 
 use std::fmt;
@@ -47,6 +48,10 @@ pub struct RawProfile {
     pub terrain: Vec<TerrainSample>,
     /// Lectures des ouvrages : absentes sans typologie ou avec `structure_correction: false`.
     pub structures: Option<StructureSamples>,
+    /// MNS lu sur tout le terrain IGN LiDAR HD (`DsmScope::LidarHull`, heuristiques V1, T04 §2.3) :
+    /// une valeur par station, `NoData` hors du terrain IGN mesuré sans repli ; `None` sans
+    /// heuristiques (MVP, `structure_correction: false`).
+    pub dsm: Option<Vec<DsmSample>>,
 }
 
 /// Lectures de l'étape 4c, dans l'ordre du plan : MNS aux stations des ponts, MNT et MNS hors du
@@ -326,9 +331,16 @@ pub fn fuse(
         ele.iter().map(|e| if e.is_nan() { EleMethod::None } else { EleMethod::Dem }).collect();
     // Ouvrages d'abord, trous ensuite (doc 01 §3, T04 §8.10).
     let correction = match typo {
-        Some(t) if opts.structure_correction => {
-            fusion::correct(route, &raw.terrain, raw.structures.as_ref(), t, rules, &mut ele, &mut method)
-        }
+        Some(t) if opts.structure_correction => fusion::correct(
+            route,
+            &raw.terrain,
+            raw.structures.as_ref(),
+            raw.dsm.as_deref(),
+            t,
+            rules,
+            &mut ele,
+            &mut method,
+        ),
         Some(t) => fusion::disabled(t),
         None => fusion::Correction::default(),
     };
@@ -523,7 +535,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &no_fill(),
@@ -555,7 +567,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -576,7 +588,7 @@ pub(crate) mod tests {
             .collect();
         let q = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -594,7 +606,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &no_fill(),
@@ -635,7 +647,7 @@ pub(crate) mod tests {
                 }
             })
             .collect();
-        let raw = RawProfile { terrain, structures: None };
+        let raw = RawProfile { terrain, structures: None, dsm: None };
         let opts = RequestOptions { gain_preset: GainPreset::Barometric, ..RequestOptions::default() };
         let p = fuse(&route, &raw, None, &opts, &Rules::default()).unwrap();
         assert_eq!(p.gain.params.adapted.len(), 1);
@@ -685,7 +697,7 @@ pub(crate) mod tests {
         let terrain = (0..n).map(|i| glo(10.0, DemKind::Dtm, (3..=5).contains(&i))).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -710,7 +722,8 @@ pub(crate) mod tests {
             })
             .collect();
         let opts = RequestOptions { smoothing_m: 20.0, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &no_fill()).unwrap();
+        let p = fuse(&route, &RawProfile { terrain, structures: None, dsm: None }, None, &opts, &no_fill())
+            .unwrap();
         let s = p.ele_smoothed.as_ref().unwrap();
         assert!(s[10].is_nan());
         assert!(s.iter().enumerate().all(|(i, v)| i == 10 || v.is_finite()));

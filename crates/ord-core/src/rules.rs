@@ -24,7 +24,9 @@ use serde::Serialize;
 // 2026.10.10 : tunnels OSM en série (balcons de moins de 120 m), droite entre portails extérieurs.
 // 2026.11.1 : état « hors graphe » rendu avec la typologie de la route fermée au vélo suivie
 // (`bicycle_forbidden`, api 1.1).
-pub const RULES_VERSION: &str = "2026.11.1";
+// 2026.11.2 : heuristiques V1 (MNS sur l'enveloppe LiDAR, détecteurs de tablier et de tunnel,
+// ouvrages `heuristic` corrigés, `structure_untagged`).
+pub const RULES_VERSION: &str = "2026.11.2";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -173,6 +175,13 @@ impl Default for CoverageRules {
 pub struct ElevationRules {
     /// Pas des stations internes, en mètres (T04 §2.1, `stepM` de vcyclist).
     pub station_step_m: f64,
+    /// Heuristiques V1 (T04 §4) : MNS sur l'enveloppe LiDAR, détecteurs de tablier et de tunnel,
+    /// ouvrages `heuristic` corrigés (`structure_untagged`).
+    pub heuristics: bool,
+    /// Détecteur de tablier (LiDAR seul, T04 §4.1), `DeckDetectorOptions.DEFAULT` de vcyclist.
+    pub deck_detector: crate::elevation::heuristics::DeckDetectorOptions,
+    /// Détecteur de tunnel (profil MNT, T04 §4.2), `TunnelDetectorOptions.DEFAULT` de vcyclist.
+    pub tunnel_detector: crate::elevation::heuristics::TunnelDetectorOptions,
     pub gain: GainRules,
     pub structures: CorrectionRules,
     pub deck: DeckBuilderRules,
@@ -182,10 +191,26 @@ pub struct ElevationRules {
     pub breakpoints: BreakpointRules,
 }
 
+impl ElevationRules {
+    /// Fenêtres des détecteurs en nombres entiers (et impairs) de stations, vérifiées au démarrage
+    /// (T04 §4.1).
+    pub fn validate(&self) -> Result<(), String> {
+        self.deck_detector.validate()?;
+        self.tunnel_detector.validate()?;
+        if (self.deck_detector.step_m - self.station_step_m).abs() > 1e-9 {
+            return Err("deck detector step differs from the station step".into());
+        }
+        Ok(())
+    }
+}
+
 impl Default for ElevationRules {
     fn default() -> Self {
         Self {
             station_step_m: 5.0,
+            heuristics: true,
+            deck_detector: Default::default(),
+            tunnel_detector: Default::default(),
             gain: GainRules::default(),
             structures: CorrectionRules::default(),
             deck: DeckBuilderRules::default(),
@@ -358,6 +383,11 @@ mod tests {
     /// Empreinte des règles et des tables de classification : une modification sans changement de
     /// `RULES_VERSION` casse ce test (T03 §7). Mettre à jour les deux dans le même commit.
     #[test]
+    fn default_detector_windows_are_valid() {
+        assert_eq!(Rules::default().elevation.validate(), Ok(()));
+    }
+
+    #[test]
     fn rules_fingerprint() {
         let text = format!("{:?}|{}", Rules::default(), crate::classification::tables::canonical());
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -365,6 +395,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.1", "83108d094002e2bd".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.2", "dbb75aceaf44f2ea".to_owned()));
     }
 }

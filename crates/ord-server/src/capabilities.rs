@@ -322,9 +322,10 @@ impl Capabilities {
                 // Shortbread (VersaTiles) : revêtement groupé, pas de gué (T03 §3).
                 ford_detectable: false,
                 surface_detail: false,
-                // Le MNS des ponts n'est lu qu'avec les ouvrages (incrément 4) : sources réellement lues.
-                bridge_dsm: false,
-                heuristics: false,
+                // T07 §4 : MNS des ponts = IGN actif ; heuristiques = `ElevationRules::heuristics`
+                // (V1, MNS sur l'enveloppe LiDAR, T04 §2.3), qui demandent elles aussi l'IGN.
+                bridge_dsm: config.elevation.ign.enabled,
+                heuristics: Rules::default().elevation.heuristics && config.elevation.ign.enabled,
             },
             elevation_sources: catalog.elevation_sources(),
             elevation_rules: ElevationRulesV1::new(&Rules::default()),

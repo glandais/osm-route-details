@@ -443,7 +443,8 @@ mod tests {
             .collect();
         let opts =
             RequestOptions { sampling: Sampling::Distance { step_m: 10.0 }, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &no_fill()).unwrap();
+        let p = fuse(&route, &RawProfile { terrain, structures: None, dsm: None }, None, &opts, &no_fill())
+            .unwrap();
         let pts = sample_output(&route, &p, &opts.sampling, &[], &Default::default());
         let (out, segs) = typology(&route, &[]);
         assemble(&route, &CoverageRanges::default(), part(&out, &segs), p, pts, versions(), Vec::new())
@@ -483,8 +484,14 @@ mod tests {
         let route = line(100.0);
         let terrain = (0..route.samples.len()).map(|_| sample(Some(5.0), None)).collect();
         let opts = RequestOptions::default();
-        let p =
-            fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None, dsm: None },
+            None,
+            &opts,
+            &Rules::default(),
+        )
+        .unwrap();
         let cov = CoverageRanges { outside_primary_zone: vec![40.0..100.0], ..CoverageRanges::default() };
         let (out, segs) = typology(&route, &[]);
         let r = assemble(&route, &cov, part(&out, &segs), p, Vec::new(), versions(), Vec::new());
@@ -499,8 +506,14 @@ mod tests {
         let route = line(100.0);
         let terrain = (0..route.samples.len()).map(|i| sample(Some(10.0 + i as f32), None)).collect();
         let opts = RequestOptions::default();
-        let p =
-            fuse(&route, &RawProfile { terrain, structures: None }, None, &opts, &Rules::default()).unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None, dsm: None },
+            None,
+            &opts,
+            &Rules::default(),
+        )
+        .unwrap();
         let gaps = [(20.0, 30.0, RunMatch::Unmatched), (60.0, 70.0, RunMatch::NoData { failed: false })];
         let (out, segs) = typology(&route, &gaps);
         let r = assemble(
@@ -547,7 +560,7 @@ mod tests {
         let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None },
+            &RawProfile { terrain, structures: None, dsm: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -589,7 +602,7 @@ mod tests {
             let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
             let p = fuse(
                 &route,
-                &RawProfile { terrain, structures: None },
+                &RawProfile { terrain, structures: None, dsm: None },
                 None,
                 &RequestOptions::default(),
                 &Rules::default(),

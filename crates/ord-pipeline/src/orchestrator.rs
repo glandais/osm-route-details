@@ -20,7 +20,7 @@ use tokio::sync::Semaphore;
 
 use crate::admission::{Admission, AdmissionLimits, CancelOnDrop};
 use crate::decision::{decide_outcome, out_of_coverage};
-use crate::elevation::{sample_raw, sample_structures};
+use crate::elevation::{sample_dsm_hull, sample_raw, sample_structures};
 use crate::typology::TypologyChain;
 use crate::{Outcome, PipelineError};
 
@@ -201,6 +201,7 @@ impl Orchestrator {
         let route = Arc::new(route);
 
         check()?;
+        let heuristics = self.rules.elevation.heuristics && options.structure_correction;
         // 4a ∥ 4b. Typologie et MNT aux stations : `join!`, pas `try_join!` (la réponse partielle a
         // besoin des deux branches, T01 §5.2).
         let started = Instant::now();
@@ -211,8 +212,21 @@ impl Orchestrator {
                 r
             },
             async {
-                let r = sample_raw(&route, self.sources.terrain.as_ref(), ctx).await;
+                let mut r = sample_raw(&route, self.sources.terrain.as_ref(), ctx).await;
                 stage("terrain", started);
+                // V1 : MNS sur toute l'enveloppe LiDAR pour les heuristiques, en parallèle de la
+                // typologie (`DsmScope::LidarHull`, T04 §2.3), seulement si la correction est
+                // demandée.
+                if heuristics {
+                    if let Ok(raw) = r.as_mut() {
+                        let dsm_started = Instant::now();
+                        if let Err(e) = sample_dsm_hull(raw, &route, self.sources.terrain.as_ref(), ctx).await
+                        {
+                            r = Err(e);
+                        }
+                        stage("dsm_hull", dsm_started);
+                    }
+                }
                 r
             }
         );

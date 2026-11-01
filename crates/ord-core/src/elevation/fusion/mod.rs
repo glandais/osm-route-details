@@ -6,6 +6,7 @@
 //! (rampes et marges de sonde comprises).
 
 pub mod deck;
+pub mod heuristic;
 pub mod plan;
 
 #[cfg(test)]
@@ -345,16 +346,20 @@ fn group_profile(
 
 /// Corrige les ouvrages en place sur `ele` et `method` (stations du parcours) ; renvoie les issues,
 /// verdicts et avertissements.
+#[allow(clippy::too_many_arguments)]
 pub fn correct(
     route: &PreparedRoute,
     raw: &[TerrainSample],
     samples: Option<&StructureSamples>,
+    dsm: Option<&[DsmSample]>,
     typo: &TypologyOutput,
     rules: &Rules,
     ele: &mut [f64],
     method: &mut [EleMethod],
 ) -> Correction {
-    let verdicts = reconcile(&typo.passages, &typo.structures, &[]);
+    // Heuristiques V1 (T04 §4) : détections sur le profil brut, réconciliées avec les passages OSM.
+    let detected = heuristic::detect(route, raw, dsm, typo, rules);
+    let verdicts = reconcile(&typo.passages, &typo.structures, &detected);
     let source_of = |pid: u32| {
         verdicts.iter().find(|v| v.passage == Some(pid)).map_or(StructureSource::Osm, |v| v.source)
     };
@@ -480,6 +485,18 @@ pub fn correct(
             }
         }
     }
+    // Ouvrages `heuristic` : corrigés après les ouvrages OSM, sur les stations restées au MNT.
+    let verdicts = heuristic::correct_heuristics(
+        verdicts,
+        route,
+        raw,
+        dsm,
+        rules,
+        ele,
+        method,
+        &mut outcomes,
+        &mut warnings,
+    );
     outcomes.sort_by(|a, b| a.from_m.total_cmp(&b.from_m).then(a.kind.cmp(&b.kind)));
     Correction { outcomes, verdicts, warnings }
 }

@@ -28,7 +28,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.1"
+    "rules_version": "2026.11.2"
   },
   "points": [
     {
@@ -330,7 +330,7 @@
         "dsm_deck": 1
       },
       "counts_by_source": {
-        "osm": 1
+        "osm_heuristic": 1
       },
       "tunnels": "none_found"
     },
@@ -372,7 +372,7 @@
       "grade_pct": 0.0,
       "matched": true,
       "structure": "bridge",
-      "structure_source": "osm",
+      "structure_source": "osm_heuristic",
       "surface": {
         "class": "paved",
         "source": "tagged"
@@ -432,7 +432,7 @@
         "kind": "bridge",
         "length_m": 222.05,
         "method": "dsm_deck",
-        "structure_source": "osm",
+        "structure_source": "osm_heuristic",
         "to_m": 282.09
       }
     ],
