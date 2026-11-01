@@ -9,7 +9,7 @@ use anyhow::Context;
 use serde_yaml_ng::Value;
 
 use crate::hash::sha256_file;
-use crate::manifest::{is_plain_sha256, Manifest};
+use crate::manifest::{is_plain_sha256, Manifest, Serie};
 use crate::BenchPaths;
 
 #[derive(Clone, Debug, Default)]
@@ -20,7 +20,11 @@ pub struct CheckReport {
     pub failures: Vec<String>,
     /// Vérifications sautées (traces privées absentes).
     pub skipped: Vec<String>,
+    /// Q1 de la calibration (jugé par `run`).
     pub q1: Q1,
+    /// Q1 de la série tenue à l'écart (jugé par `judge` seulement) : négatifs nouveaux au
+    /// défaut attesté hors du qualificateur (README §4 ter.4, 930f6e8 et 305abd7).
+    pub q1_tenue: Q1,
     pub private_present: bool,
     pub manifest_sha256: String,
     pub criteria_sha256: String,
@@ -32,6 +36,8 @@ pub struct Q1 {
     pub negatives: usize,
     pub verdicts: BTreeMap<String, usize>,
     pub reliable: usize,
+    /// Négatifs nouveaux sans défaut attesté : pas des négatifs, non comptés.
+    pub non_attestes: Vec<String>,
 }
 
 impl Q1 {
@@ -89,9 +95,19 @@ fn criteria_ids(criteria: &str) -> anyhow::Result<BTreeSet<String>> {
     Ok(items.iter().filter_map(|c| c.get("id").and_then(Value::as_str).map(str::to_owned)).collect())
 }
 
+/// `check` de la calibration : les fichiers propres des cas de la série tenue à l'écart (traces,
+/// recalages, itinéraires, références) ne sont pas ouverts ; leurs empreintes sont vérifiées au
+/// jugement (`check_series(…, TenueALEcart)`).
 pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
+    check_series(paths, Serie::Calibration)
+}
+
+/// Empreintes des fichiers de la série `scope` (calibration), ou de tout le banc (série tenue à
+/// l'écart, au jugement, qui lit aussi les extraits des traces de calibration).
+pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckReport> {
     let bench = &paths.bench;
     let manifest = Manifest::load(bench)?;
+    let opens = |serie: Serie| scope == Serie::TenueALEcart || serie == Serie::Calibration;
     let mut report = CheckReport {
         manifest_sha256: manifest.sha256.clone(),
         private_present: paths.private_present(),
@@ -125,7 +141,12 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
     }
     // Traces et ouvrages personnels, s'ils sont présents (jamais en CI).
     if report.private_present {
+        let mut held_out = 0usize;
         for t in &manifest.traces {
+            if !opens(t.serie) {
+                held_out += 1;
+                continue;
+            }
             if let Some(sum) = &t.sha256 {
                 verify(&mut report, &paths.resolve(&t.fichier), sum, &t.id);
             }
@@ -139,6 +160,37 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
         }
         for e in &manifest.hors_git {
             verify(&mut report, &paths.resolve(&e.fichier), &e.sha256, &e.id);
+        }
+        // Série V1 : index (deux séries, lus et vérifiés), puis itinéraires selon leur série.
+        if let Some(v1) = &manifest.v1 {
+            for (label, (fichier, sum)) in
+                [("ouvrages_v1", &v1.ouvrages), ("temoins_v1", &v1.temoins), ("series_v1", &v1.series)]
+            {
+                verify(&mut report, &paths.resolve(fichier), sum, label);
+            }
+            let rows = crate::v1::series_rows(paths, v1).unwrap_or_default();
+            for p in &v1.planifies {
+                let opened = match crate::v1::planned_serie(&rows, &p.id) {
+                    Some(s) => s.in_series(Serie::Calibration) || scope == Serie::TenueALEcart,
+                    None => {
+                        report.failures.push(format!("{} : absent de series-v1.csv", p.id));
+                        false
+                    }
+                };
+                if !opened {
+                    held_out += 1;
+                    continue;
+                }
+                verify(&mut report, &paths.resolve(&p.fichier), &p.sha256, &p.id);
+                if let Some((fichier, sum)) = &p.reference {
+                    verify(&mut report, &paths.resolve(fichier), sum, &format!("{} (référence)", p.id));
+                }
+            }
+        }
+        if held_out > 0 {
+            report.skipped.push(format!(
+                "{held_out} cas de la série tenue à l'écart : fichiers non ouverts, vérifiés au jugement"
+            ));
         }
         report.failures.extend(missing_recalage(&paths.private.join("recales"), &manifest));
     } else {
@@ -163,14 +215,23 @@ pub fn check(paths: &BenchPaths) -> anyhow::Result<CheckReport> {
         report.failures.push(format!("identifiants README §4 {s4:?} ≠ criteria.yaml {crit:?}"));
     }
 
-    // Q1 : verdicts de qualify_baro.py inscrits au manifest.
+    // Groupe E2b d'une trace nouvelle (README §4 ter.4, 13e0ed1), lu au manifest.
+    report.failures.extend(crate::v1::e2b_group_failures(&manifest));
+
+    // Q1 : verdicts de qualify_baro.py inscrits au manifest, par série. Un négatif d'une série
+    // nouvelle n'en est un que si son défaut est attesté hors du qualificateur (README §4 ter.4).
     for t in manifest.traces.iter().filter(|t| t.groupe == "negatif") {
-        report.q1.negatives += 1;
+        let q1 = if t.serie == Serie::Calibration { &mut report.q1 } else { &mut report.q1_tenue };
+        if manifest.is_v1(&t.id) && !crate::v1::q1_attested(t.gain_baro_m, t.gain_mnt_m) {
+            q1.non_attestes.push(t.id.clone());
+            continue;
+        }
+        q1.negatives += 1;
         let verdict = t.verdict.clone().unwrap_or_else(|| "absent".into());
         if verdict == "fiable" {
-            report.q1.reliable += 1;
+            q1.reliable += 1;
         }
-        *report.q1.verdicts.entry(verdict).or_default() += 1;
+        *q1.verdicts.entry(verdict).or_default() += 1;
     }
     Ok(report)
 }

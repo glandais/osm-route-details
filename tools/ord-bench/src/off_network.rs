@@ -292,6 +292,7 @@ mod tests {
             baro_z: Vec::new(),
             baro_inserted: Vec::new(),
             masks: Vec::new(),
+            implicit_masks: Vec::new(),
             ring: Vec::new(),
             raw: None,
         }

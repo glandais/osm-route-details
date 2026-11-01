@@ -16,7 +16,7 @@ pub enum Serie {
 }
 
 impl Serie {
-    fn parse(s: &str) -> anyhow::Result<Self> {
+    pub fn parse(s: &str) -> anyhow::Result<Self> {
         match s {
             "calibration" => Ok(Self::Calibration),
             "tenue_a_l_ecart" => Ok(Self::TenueALEcart),
@@ -65,9 +65,42 @@ pub struct Trace {
     pub passages_masques: Vec<String>,
     /// Verdict de `qualify_baro.py` (Q1).
     pub verdict: Option<String>,
+    /// Distance, D+ enregistré et D+ MNT de `qualify_baro.py` (groupe E2b d'une trace nouvelle,
+    /// défaut attesté d'un négatif Q1 nouveau ; README §4 ter.4).
+    pub dist_km: Option<f64>,
+    pub gain_baro_m: Option<f64>,
+    pub gain_mnt_m: Option<f64>,
 }
 
-#[derive(Clone, Debug)]
+/// Itinéraire planifié de la série V1 (`perso_v1.planifies`) : sans donnée perso, hors git
+/// jusqu'au jugement V1. Sa série est lue dans `series-v1.csv` (`calibration`,
+/// `tenue_a_l_ecart` ou `par_cas`).
+#[derive(Clone, Debug, Default)]
+pub struct Planned {
+    pub id: String,
+    /// `E4`, `S2` ou `R1_R2`.
+    pub role: String,
+    pub nature: Option<String>,
+    pub fichier: String,
+    pub sha256: String,
+    /// Référence R1/R2 au format osm-surface (`reference`, `sha256_reference`).
+    pub reference: Option<(String, String)>,
+    /// Témoin retiré (`retire`) : l'itinéraire reste un cas pour ses ouvrages.
+    pub retire: Option<String>,
+}
+
+/// Section `perso_v1` du manifest : index des ouvrages, témoins et séries V1 (hors git, par
+/// empreinte), itinéraires planifiés et identifiants des traces V1.
+#[derive(Clone, Debug, Default)]
+pub struct PersoV1 {
+    pub ouvrages: (String, String),
+    pub temoins: (String, String),
+    pub series: (String, String),
+    pub planifies: Vec<Planned>,
+    pub traces: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Manifest {
     pub sha256: String,
     pub vcyclist: Vec<FileEntry>,
@@ -78,6 +111,11 @@ pub struct Manifest {
     pub ouvrages_perso: Option<(String, String)>,
     pub traces: Vec<Trace>,
     pub hors_git: Vec<HorsGitEntry>,
+    /// Section `perso_v1` (série V1), absente avant sa constitution.
+    pub v1: Option<PersoV1>,
+    /// Série tenue à l'écart du MVP jugée (`judgements.md`) : devenue calibration (README §2,
+    /// point 3) ; ses traces, ses ouvrages et leurs fenêtres masquées le sont pour V1.
+    pub mvp_judged: bool,
 }
 
 fn s(v: &Value, key: &str) -> Option<String> {
@@ -90,6 +128,39 @@ fn s(v: &Value, key: &str) -> Option<String> {
 
 fn req(v: &Value, key: &str, ctx: &str) -> anyhow::Result<String> {
     s(v, key).with_context(|| format!("{ctx} : champ `{key}` manquant"))
+}
+
+fn f(v: &Value, key: &str) -> Option<f64> {
+    v.get(key)?.as_f64()
+}
+
+/// Traces d'une section (`perso`, `perso_v1`) du manifest.
+fn parse_traces(section: Option<&Value>, name: &str) -> anyhow::Result<Vec<Trace>> {
+    let mut traces = Vec::new();
+    if let Some(Value::Sequence(items)) = section.and_then(|p| p.get("traces")) {
+        for it in items {
+            let id = req(it, "id", name)?;
+            let passages_masques = match it.get("passages_masques") {
+                Some(Value::Sequence(v)) => v.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect(),
+                _ => Vec::new(),
+            };
+            let q = it.get("qualification");
+            traces.push(Trace {
+                groupe: req(it, "groupe", &id)?,
+                serie: Serie::parse(&req(it, "serie", &id)?)?,
+                fichier: req(it, "fichier", &id)?,
+                sha256: s(it, "sha256"),
+                sha256_trim1km: s(it, "sha256_trim1km"),
+                passages_masques,
+                verdict: q.and_then(|q| s(q, "verdict")),
+                dist_km: f(it, "dist_km"),
+                gain_baro_m: q.and_then(|q| f(q, "gain_baro_m")),
+                gain_mnt_m: q.and_then(|q| f(q, "gain_mnt_m")),
+                id,
+            });
+        }
+    }
+    Ok(traces)
 }
 
 fn files(root: &Value, section: &str) -> anyhow::Result<Vec<FileEntry>> {
@@ -133,28 +204,44 @@ impl Manifest {
         };
         let ouvrages_perso =
             ouvrages.get("ouvrages_perso").and_then(|p| Some((s(p, "fichier")?, s(p, "sha256")?)));
-        let mut traces = Vec::new();
-        if let Some(Value::Sequence(items)) = root.get("perso").and_then(|p| p.get("traces")) {
-            for it in items {
-                let id = req(it, "id", "perso")?;
-                let passages_masques = match it.get("passages_masques") {
-                    Some(Value::Sequence(v)) => {
-                        v.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
-                    }
+        let mut traces = parse_traces(root.get("perso"), "perso")?;
+        let v1 = match root.get("perso_v1") {
+            Some(p) => {
+                let v1_traces = parse_traces(Some(p), "perso_v1")?;
+                let pair = |key: &str| -> anyhow::Result<(String, String)> {
+                    let e = p.get(key).with_context(|| format!("perso_v1 : `{key}` manquant"))?;
+                    Ok((req(e, "fichier", key)?, req(e, "sha256", key)?))
+                };
+                let planifies = match p.get("planifies") {
+                    Some(Value::Sequence(items)) => items
+                        .iter()
+                        .map(|it| {
+                            let id = req(it, "id", "planifies")?;
+                            Ok(Planned {
+                                role: req(it, "role", &id)?,
+                                nature: s(it, "nature"),
+                                fichier: req(it, "fichier", &id)?,
+                                sha256: req(it, "sha256", &id)?,
+                                reference: s(it, "reference").zip(s(it, "sha256_reference")),
+                                retire: s(it, "retire"),
+                                id,
+                            })
+                        })
+                        .collect::<anyhow::Result<Vec<_>>>()?,
                     _ => Vec::new(),
                 };
-                traces.push(Trace {
-                    groupe: req(it, "groupe", &id)?,
-                    serie: Serie::parse(&req(it, "serie", &id)?)?,
-                    fichier: req(it, "fichier", &id)?,
-                    sha256: s(it, "sha256"),
-                    sha256_trim1km: s(it, "sha256_trim1km"),
-                    passages_masques,
-                    verdict: it.get("qualification").and_then(|q| s(q, "verdict")),
-                    id,
-                });
+                let ids = v1_traces.iter().map(|t| t.id.clone()).collect();
+                traces.extend(v1_traces);
+                Some(PersoV1 {
+                    ouvrages: pair("ouvrages_v1")?,
+                    temoins: pair("temoins_v1")?,
+                    series: pair("series_v1")?,
+                    planifies,
+                    traces: ids,
+                })
             }
-        }
+            None => None,
+        };
         let hors_git = match root.get("hors_git") {
             Some(Value::Sequence(items)) => items
                 .iter()
@@ -178,14 +265,43 @@ impl Manifest {
             ouvrages_tenus,
             ouvrages_perso,
             traces,
+            v1,
+            mvp_judged: false,
         })
+    }
+
+    /// Série MVP jugée (README §2, point 3) : ses traces et ses ouvrages tenus à l'écart deviennent
+    /// calibration, et les fenêtres masquées des traces du MVP (ouvrages d'une autre série au MVP)
+    /// n'ont plus lieu d'être. Les traces V1 gardent leur série et leurs fenêtres.
+    pub fn with_mvp_judged(mut self) -> Self {
+        let v1: BTreeSet<String> = self.v1.as_ref().map(|v| v.traces.clone()).unwrap_or_default();
+        for t in self.traces.iter_mut().filter(|t| !v1.contains(&t.id)) {
+            t.serie = Serie::Calibration;
+            t.passages_masques.clear();
+        }
+        self.ouvrages_tenus.clear();
+        self.mvp_judged = true;
+        self
+    }
+
+    /// Trace de la section `perso_v1`.
+    pub fn is_v1(&self, id: &str) -> bool {
+        self.v1.as_ref().is_some_and(|v| v.traces.contains(id))
     }
 
     pub fn load(bench: &Path) -> anyhow::Result<Self> {
         let path = bench.join("manifest.yaml");
         let text =
             std::fs::read_to_string(&path).with_context(|| format!("lecture de {}", path.display()))?;
-        Self::parse(&text)
+        let manifest = Self::parse(&text)?;
+        // Après le jugement du MVP, sa série tenue à l'écart est de la calibration (README §2,
+        // point 3) : lu dans `judgements.md`, jamais deviné.
+        let judgements = std::fs::read_to_string(bench.join("judgements.md")).unwrap_or_default();
+        Ok(if crate::judge::already_judged(&judgements, "MVP") {
+            manifest.with_mvp_judged()
+        } else {
+            manifest
+        })
     }
 
     pub fn hors_git(&self, id: &str) -> Option<&HorsGitEntry> {

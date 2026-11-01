@@ -74,6 +74,12 @@ pub fn ouvrage_refs(paths: &BenchPaths) -> anyhow::Result<BTreeMap<String, Vec<L
     if paths.private_present() {
         files.push(paths.private.join("ouvrages-perso.json"));
     }
+    if paths.private_present() {
+        // Série V1 : ouvrages, croisements et extrémités des témoins des deux séries (masques).
+        if let Some(v1) = Manifest::load(&paths.bench)?.v1 {
+            out.extend(crate::v1::refs(paths, &v1)?);
+        }
+    }
     for f in files {
         let Ok(text) = std::fs::read_to_string(&f) else { continue };
         let v: Value = serde_json::from_str(&text).context("géométrie des ouvrages")?;
@@ -110,6 +116,9 @@ pub struct PersoCase {
     /// baro n'est gardé qu'après `inserted::apply` (README §2.1, étape 3).
     pub baro_inserted: Vec<bool>,
     pub masks: Vec<String>,
+    /// Masques ajoutés par le banc (éléments V1 de l'autre série trouvés sur le parcours, sans
+    /// liste au manifest) : pas rapportés quand ils ne sont pas retrouvés.
+    pub implicit_masks: Vec<String>,
     /// Extrait d'une trace tenue à l'écart : points de la trace jusqu'à 3 km de la fenêtre
     /// (abscisse de l'extrait, position, baro transporté), pour le seul repli 1–3 km du décalage
     /// local (baro − MNT, données de référence) ; jamais envoyés au service.
@@ -137,6 +146,11 @@ impl std::fmt::Debug for RawGps {
 }
 
 impl RawGps {
+    /// « Trace brute » d'un itinéraire planifié : l'itinéraire lui-même, abscisses identiques.
+    pub fn identity(pts: Vec<LatLon>, s: Vec<f64>) -> Self {
+        Self { map_s: s.clone(), map_o: s.clone(), pts, s }
+    }
+
     /// Points bruts dont l'abscisse d'origine est entre celles de `s_a` et `s_b` (abscisses
     /// recalées), par interpolation de la correspondance du transport du baro.
     pub fn between(&self, s_a: f64, s_b: f64) -> Vec<LatLon> {
@@ -344,6 +358,7 @@ fn build_case(
         baro_z,
         baro_inserted,
         masks: trace.passages_masques.clone(),
+        implicit_masks: Vec::new(),
         ring: Vec::new(),
         raw: None,
     })
@@ -627,12 +642,33 @@ pub fn held_out_extracts(
             baro_inserted,
             // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
             masks: Vec::new(),
+            implicit_masks: Vec::new(),
             ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
             raw: case.raw.as_ref().map(|r| RawRef { gps: r.gps.clone(), shift: r.shift + s0 }),
         };
         out.push((extract, (w.start - s0)..(w.end - s0)));
     }
     out
+}
+
+/// Fenêtres masquées d'un élément d'une autre série sur un profil (README §2) : ± 500 m autour de
+/// chaque passage ; un témoin V1 masque tout son tronçon, du premier au dernier passage près de
+/// ses extrémités.
+pub fn mask_windows(
+    d: &[f64],
+    pts: &[LatLon],
+    id: &str,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<std::ops::Range<f64>> {
+    let Some(r) = refs.get(id) else { return Vec::new() };
+    let w = passage_windows(d, pts, r, rules.passage_tol_m, rules.mask_half_m);
+    if crate::v1::is_temoin_id(id) && w.len() > 1 {
+        let start = w.iter().map(|x| x.start).fold(f64::INFINITY, f64::min);
+        let end = w.iter().map(|x| x.end).fold(f64::NEG_INFINITY, f64::max);
+        return vec![start..end];
+    }
+    w
 }
 
 /// Fenêtres évaluées d'un cas d'une trace tenue à l'écart (abscisses du cas) : ± 500 m autour de
@@ -651,12 +687,8 @@ pub fn held_out_windows(
     if ll.len() != case.s_ref.len() {
         return Vec::new();
     }
-    let mut windows: Vec<std::ops::Range<f64>> = case
-        .masks
-        .iter()
-        .filter_map(|id| refs.get(id))
-        .flat_map(|r| passage_windows(&case.s_ref, &ll, r, rules.passage_tol_m, rules.mask_half_m))
-        .collect();
+    let mut windows: Vec<std::ops::Range<f64>> =
+        case.masks.iter().flat_map(|id| mask_windows(&case.s_ref, &ll, id, refs, rules)).collect();
     windows.sort_by(|a, b| a.start.total_cmp(&b.start));
     let mut merged: Vec<std::ops::Range<f64>> = Vec::new();
     for w in windows {
@@ -732,13 +764,14 @@ pub async fn measure_held_out(
     rules: &BenchRules,
     rules_core: &Rules,
     cache: &Path,
+    temoins: &[crate::v1::TemoinV1],
 ) -> anyhow::Result<Vec<Value>> {
     let mut items = Vec::new();
     for (extract, window) in held_out_extracts(case, refs, rules) {
         let ring = ring_reference(service, cache, &extract.ring).await?;
         let eval = OuvrageEval { cache, window: Some(window), ring: Some(ring) };
         let (_trace_metrics, _, its) =
-            measure_case(service, &extract, None, refs, ouvrages, rules, rules_core, &eval).await?;
+            measure_case(service, &extract, None, refs, ouvrages, rules, rules_core, &eval, temoins).await?;
         items.extend(held_out_items(its, &trace.id, &trace.passages_masques));
     }
     Ok(items)
@@ -749,7 +782,12 @@ pub async fn measure_held_out(
 pub fn held_out_items(items: Vec<Value>, trace: &str, calibration: &[String]) -> Vec<Value> {
     items
         .into_iter()
-        .filter(|i| i["ouvrage"].as_str().is_some_and(|o| calibration.iter().any(|c| c == o)))
+        .filter(|i| {
+            i["ouvrage"]
+                .as_str()
+                .or_else(|| i["temoin"].as_str())
+                .is_some_and(|o| calibration.iter().any(|c| c == o))
+        })
         .map(|mut i| {
             if let Some(m) = i.as_object_mut() {
                 for k in ["d_milieu_m", "ecart_max_d_m", "emprise_d_m", "_emprise_d_m"] {
@@ -797,9 +835,7 @@ pub(crate) async fn case_dump(
     let baro = interpolate(&bd, &bz, &p.d, rules.baro_gap_max_m);
     let mut windows = Vec::new();
     for id in &case.masks {
-        if let Some(pts) = refs.get(id) {
-            windows.extend(passage_windows(&p.d, &p.pts, pts, rules.passage_tol_m, rules.mask_half_m));
-        }
+        windows.extend(mask_windows(&p.d, &p.pts, id, refs, rules));
     }
     let n = p.d.len();
     let masked: Vec<bool> = p.d.iter().map(|d| windows.iter().any(|w| w.contains(d))).collect();
@@ -859,6 +895,7 @@ pub async fn measure_case(
     rules: &BenchRules,
     rules_core: &Rules,
     eval: &OuvrageEval<'_>,
+    temoins: &[crate::v1::TemoinV1],
 ) -> anyhow::Result<(Value, Value, Vec<Value>)> {
     let dem = rules_core.elevation.gain.preset(GainPreset::Dem);
     let (mut p, tau, responses) = recolle(service, case, true, rules, dem.threshold_m).await?;
@@ -915,11 +952,8 @@ pub async fn measure_case(
     let mut windows = Vec::new();
     let mut not_found = Vec::new();
     for id in &case.masks {
-        let w = refs
-            .get(id)
-            .map(|pts| passage_windows(&p.d, &p.pts, pts, rules.passage_tol_m, rules.mask_half_m))
-            .unwrap_or_default();
-        if w.is_empty() {
+        let w = mask_windows(&p.d, &p.pts, id, refs, rules);
+        if w.is_empty() && !case.implicit_masks.contains(id) {
             not_found.push(id.clone());
         }
         windows.extend(w);
@@ -998,7 +1032,7 @@ pub async fn measure_case(
     // M1 hors graphe vélo (README §4 ter.3) : stations dont la voie la plus proche (≤ 30 m) est
     // fermée au vélo par la règle de tags ; hors de M1, rapportées à part, avec leur contrôle
     // (matched = false et unmatched_range attendus à chaque station).
-    let (closed, closed_at) = if eval.window.is_none() {
+    let (closed, closed_at) = if eval.window.is_none() || !temoins.is_empty() {
         match crate::off_network::closed(case, eval.cache, rules.grid_step_m).await? {
             Ok(r) => r,
             Err(reason) => bail!(reason),
@@ -1093,7 +1127,8 @@ pub async fn measure_case(
             "stations": n,
             "part_comparee": round(compared as f64 / n.max(1) as f64, 4),
             "masque_m": masked_m,
-            "passages_masques": case.masks,
+            "passages_masques": case.masks.iter().filter(|m| !case.implicit_masks.contains(m)).collect::<Vec<_>>(),
+            "masques_v1_implicites": case.masks.iter().filter(|m| case.implicit_masks.contains(m)).count(),
             "passages_non_retrouves": not_found,
             "troncons": case.parts.len(),
             "points_envoyes": case.parts.iter().map(Vec::len).sum::<usize>(),
@@ -1125,6 +1160,10 @@ pub async fn measure_case(
         _ => Vec::new(),
     };
     near.extend(raw_span.iter().copied().filter(near_ouvrage));
+    // Témoins V1 : ponts et tunnels des tuiles sur tout le cas (abords exclus de S2).
+    if !temoins.is_empty() {
+        near.extend(p.pts.iter().copied());
+    }
     let tiles = crate::ouvrages::Tiles::load(eval.cache, &near).await?;
     let raw_gps = |da: f64, db: f64| -> Vec<LatLon> {
         case.raw.as_ref().map_or_else(Vec::new, |r| r.between(to_ref(da), to_ref(db)))
@@ -1147,7 +1186,24 @@ pub async fn measure_case(
         raw_gps: Some(&raw_gps),
         tiles: Some(&tiles),
     };
-    let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
+    let mut items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
+    // Témoins négatifs V1 portés par ce cas (README §4 ter.4–6) ; plages hors graphe vélo en
+    // abscisse du profil.
+    let closed_d: Vec<std::ops::Range<f64>> = closed.iter().map(|c| to_d(c.start)..to_d(c.end)).collect();
+    for t in temoins {
+        if let Some(it) = crate::ouvrages::temoin_v1_item(
+            t,
+            &p.d,
+            &p.pts,
+            &p.on_structure,
+            &tile_structure,
+            &closed_d,
+            eval.window.as_ref(),
+            rules.passage_tol_m,
+        ) {
+            items.push(it);
+        }
+    }
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
 }
 
@@ -1356,7 +1412,7 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
         if !ok {
             fails_r12.push(c["id"].clone());
         }
-        per_group.entry("osm_surface".into()).or_default().push(c);
+        per_group.entry(c["groupe"].as_str().unwrap_or("osm_surface").to_owned()).or_default().push(c);
     }
     for c in perso {
         per_group.entry(c["groupe"].as_str().unwrap_or("").to_owned()).or_default().push(c);
@@ -1453,6 +1509,61 @@ struct Pass {
     held_out_measured: Vec<Value>,
     os_cases: Vec<Value>,
     warm: Vec<Value>,
+    /// Itinéraires planifiés E4 / S2 (README §4 ter.4) : sans baro, ni E1 ni E2.
+    planned: Vec<Value>,
+}
+
+/// Série V1 d'une campagne (manifest `perso_v1`) : séries par cas, témoins de la série mesurée,
+/// itinéraires planifiés retenus. Vide sans `bench/private/` ou sans section `perso_v1`.
+#[derive(Clone, Debug, Default)]
+pub struct V1Ctx {
+    pub rows: Vec<crate::v1::SeriesRow>,
+    pub temoins: Vec<crate::v1::TemoinV1>,
+    pub planned: crate::v1::PlannedSelection,
+}
+
+/// Contexte V1 d'une campagne de la série `target` : l'autre série est retirée des index ici,
+/// avant tout calcul.
+pub fn v1_ctx(
+    paths: &BenchPaths,
+    manifest: &Manifest,
+    ids: &[String],
+    target: Serie,
+) -> anyhow::Result<V1Ctx> {
+    let Some(v1) = manifest.v1.as_ref().filter(|_| paths.private_present()) else {
+        return Ok(V1Ctx::default());
+    };
+    let rows = crate::v1::series_rows(paths, v1)?;
+    let planned = crate::v1::select_planned(manifest, &rows, ids, target);
+    let temoins = crate::v1::temoins(paths, v1, target)?;
+    Ok(V1Ctx { rows, temoins, planned })
+}
+
+impl V1Ctx {
+    /// Témoins de la série mesurée portés par un parcours (trace ou itinéraire).
+    pub fn temoins_on(&self, trace: &str) -> Vec<crate::v1::TemoinV1> {
+        self.temoins.iter().filter(|t| t.trace == trace).cloned().collect()
+    }
+}
+
+/// Masques ajoutés à un cas : éléments V1 de l'autre série sur son parcours (index seulement).
+fn add_implicit_masks(
+    case: &mut PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    v1: &V1Ctx,
+    target: Serie,
+    own: &str,
+) {
+    if v1.rows.is_empty() {
+        return;
+    }
+    let pts = crate::v1::case_points(case);
+    for id in crate::v1::other_series_on(&pts, refs, &v1.rows, target, own) {
+        if !case.masks.contains(&id) {
+            case.masks.push(id.clone());
+            case.implicit_masks.push(id);
+        }
+    }
 }
 
 /// Contexte commun aux passes.
@@ -1467,6 +1578,7 @@ struct PassCtx<'a> {
     ids: &'a [String],
     /// Série mesurée : calibration (`run`) ou tenue à l'écart (`judge`).
     target: Serie,
+    v1: &'a V1Ctx,
 }
 
 /// Bilan des points insérés d'un cas (sans position) : points par km et densité maximale.
@@ -1486,7 +1598,7 @@ fn inserted_stats(stats: &[crate::service::InsertedStats]) -> Value {
 /// Une passe : traces perso, extraits tenus à l'écart, parcours d'osm-surface, ouvrages des
 /// parcours vcyclist et témoins, lus dans le mode du service.
 async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pass> {
-    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids, target } = *ctx;
+    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids, target, v1 } = *ctx;
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let structures_wanted = ids.is_empty();
@@ -1507,7 +1619,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 continue;
             }
         };
+        let temoins = v1.temoins_on(&t.id);
         for mut case in loaded {
+            add_implicit_masks(&mut case, refs, v1, target, &t.id);
             service.take_stats();
             // Baro des points insérés (README §2.1, étape 3) : tuiles de la campagne.
             match crate::inserted::apply(&mut case, &paths.cache, None, &rules).await? {
@@ -1524,7 +1638,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             )
             .ok();
             let eval = OuvrageEval { cache: &paths.cache, window: None, ring: None };
-            match measure_case(service, &case, csv, refs, ouvrages, &rules, &rules_core, &eval).await {
+            match measure_case(service, &case, csv, refs, ouvrages, &rules, &rules_core, &eval, &temoins)
+                .await
+            {
                 Ok((mut c, dv, its)) => {
                     eprintln!("{} : mesuré ({})", case.id, service.mode().as_str());
                     c["mode"] = json!(service.mode().as_str());
@@ -1545,10 +1661,13 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     // passages des ouvrages de la série mesurée seulement (`passages_masques`), sur des extraits
     // (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
     let mut held_out_measured = Vec::new();
+    // Traces V1 tenues à l'écart : jamais ouvertes en calibration (seul `judge` les lit), leurs
+    // ouvrages de calibration perdent ces passages.
     for t in manifest.traces.iter().filter(|t| {
         selection.excluded_held_out.contains(&t.id)
             && !t.passages_masques.is_empty()
             && paths.private_present()
+            && !(target == Serie::Calibration && manifest.is_v1(&t.id))
     }) {
         let Ok(loaded) = load_perso(paths, t, &rules) else {
             skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
@@ -1564,8 +1683,20 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                     .push(json!({"id": case.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
                 continue;
             }
-            let measured =
-                measure_held_out(service, t, &case, refs, ouvrages, &rules, &rules_core, &paths.cache).await;
+            let temoins: Vec<crate::v1::TemoinV1> =
+                v1.temoins_on(&t.id).into_iter().filter(|x| t.passages_masques.contains(&x.id)).collect();
+            let measured = measure_held_out(
+                service,
+                t,
+                &case,
+                refs,
+                ouvrages,
+                &rules,
+                &rules_core,
+                &paths.cache,
+                &temoins,
+            )
+            .await;
             // Aucune sortie du service hors des fenêtres : bilans des extraits jamais rapportés.
             service.take_stats();
             match measured {
@@ -1577,6 +1708,42 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 Err(_) => skipped
                     .push(json!({"id": case.id, "raison": "extraits tenus à l'écart : échec du service"})),
             }
+        }
+    }
+    // Itinéraires planifiés E4 / S2 (README §4 ter.4) : GPX tel quel rééchantillonné à 25 m, sans
+    // baro ; éléments de l'autre série masqués ; ouvrages, croisements et témoins de la série.
+    let mut planned_cases = Vec::new();
+    for (pl, _) in v1.planned.cases.iter().filter(|(pl, _)| pl.role != "R1_R2") {
+        let mut case = match crate::v1::load_planned(paths, pl, target) {
+            Ok(c) => c,
+            Err(reason) => {
+                skipped.push(json!({"id": pl.id, "raison": reason}));
+                continue;
+            }
+        };
+        add_implicit_masks(&mut case, refs, v1, target, &pl.id);
+        let temoins = v1.temoins_on(&pl.id);
+        let eval = OuvrageEval { cache: &paths.cache, window: None, ring: None };
+        match measure_case(service, &case, None, refs, ouvrages, &rules, &rules_core, &eval, &temoins).await {
+            Ok((mut c, dv, its)) => {
+                eprintln!("{} : mesuré ({})", case.id, service.mode().as_str());
+                c["mode"] = json!(service.mode().as_str());
+                if let Some(m) = c.as_object_mut() {
+                    m.remove("metriques");
+                }
+                if let Some(d) = c["diagnostics"].as_object_mut() {
+                    d.retain(|k, _| {
+                        !k.starts_with("E1.") && k != "stations_comparees" && k != "part_comparee"
+                    });
+                }
+                c["role"] = json!(pl.role);
+                planned_cases.push(c);
+                items.extend(its);
+                if data_versions.is_null() {
+                    data_versions = dv;
+                }
+            }
+            Err(e) => skipped.push(json!({"id": case.id, "raison": e.to_string()})),
         }
     }
     // Parcours d'osm-surface : R1, R2, M1 et typologie à chaud.
@@ -1599,6 +1766,32 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
         }
     }
+    // Parcours planifiés R1/R2 (README §4 ter.4) : comme les parcours d'osm-surface, référence
+    // Valhalla FOSSGIS au format osm-surface, entrée rééchantillonnée à 25 m.
+    for (pl, _) in v1.planned.cases.iter().filter(|(pl, _)| pl.role == "R1_R2") {
+        let measured = async {
+            let route = crate::osm_surface::load_planned(paths, pl)?;
+            crate::osm_surface::measure(service, &route).await
+        };
+        match measured.await {
+            Ok(mut c) => {
+                eprintln!("{} : mesuré", pl.id);
+                c["serie"] = json!(target);
+                c["groupe"] = json!("planifie_R1_R2");
+                os_cases.push(c);
+            }
+            Err(e) => skipped.push(json!({"id": pl.id, "raison": e.to_string()})),
+        }
+    }
+    // Témoins V1 de la série mesurée sans mesure S2 (extrémités non retrouvées, parcours non
+    // mesuré) : sautés, rapportés.
+    for t in &v1.temoins {
+        if !items.iter().any(|i| i["metrique"] == "S2" && i["temoin"] == t.id.as_str()) {
+            skipped.push(
+                json!({"id": t.id, "raison": "témoin V1 : extrémités non retrouvées sur un cas mesuré"}),
+            );
+        }
+    }
     // Ouvrages : parcours `test1..4` de vcyclist et témoins (toujours calibration : « déjà vu »).
     if structures_wanted && target == Serie::Calibration {
         items.extend(
@@ -1607,11 +1800,26 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
         );
     }
     items.extend(crate::ouvrages::perimeter_items(ouvrages));
-    Ok(Pass { cases, items, skipped, data_versions, inserted_report, held_out_measured, os_cases, warm })
+    Ok(Pass {
+        cases,
+        items,
+        skipped,
+        data_versions,
+        inserted_report,
+        held_out_measured,
+        os_cases,
+        warm,
+        planned: planned_cases,
+    })
 }
 
 /// Verdicts d'une passe : `(cas, ouvrages publics, agrégats, verdicts)`.
-fn judge_pass(pass: Pass, limits: &[(String, String)]) -> (Vec<Value>, Vec<Value>, Value, Value, Pass) {
+fn judge_pass(
+    pass: Pass,
+    limits: &[(String, String)],
+    info: &crate::coverage::OuvrageInfo,
+    q1: usize,
+) -> (Vec<Value>, Vec<Value>, Value, Value, Pass) {
     let Pass {
         mut cases,
         mut items,
@@ -1621,10 +1829,15 @@ fn judge_pass(pass: Pass, limits: &[(String, String)]) -> (Vec<Value>, Vec<Value
         held_out_measured,
         os_cases,
         warm,
+        planned,
     } = pass;
     crate::ouvrages::annotate_data_limits(&mut items, limits);
     let (ouvrages_agg, ouvrages_verdicts) = crate::ouvrages::judge(&items);
     let (agregats, mut verdicts) = judge(&cases);
+    // Couverture après exclusions (README §4 ter.4) : jugée au jugement seulement.
+    let routes: Vec<Value> = os_cases.iter().filter(|c| c["groupe"] == "planifie_R1_R2").cloned().collect();
+    let couverture =
+        crate::coverage::measure(&cases, &routes, &items, info, q1, BenchRules::default().grid_step_m);
     let (typo_agregats, typo_verdicts) = judge_typology(&os_cases, &cases);
     for (k, v) in typo_verdicts.as_object().into_iter().flatten() {
         verdicts[k] = v.clone();
@@ -1641,10 +1854,17 @@ fn judge_pass(pass: Pass, limits: &[(String, String)]) -> (Vec<Value>, Vec<Value
         "profil": if cfg!(debug_assertions) { "debug" } else { "release" }
     });
     agregats["ouvrages"] = ouvrages_agg;
+    agregats["couverture"] = couverture;
+    agregats["planifies"] = json!(planned
+        .iter()
+        .map(|c| json!({"id": c["id"], "role": c["role"], "M1.non_apparie": c["typologie"]["M1.non_apparie"],
+            "M1.unknown": c["typologie"]["M1.unknown"], "M1.hors_graphe_velo_controle": c["typologie"]["M1.hors_graphe_velo_controle"]}))
+        .collect::<Vec<_>>());
     for (k, v) in ouvrages_verdicts.as_object().into_iter().flatten() {
         verdicts[k] = v.clone();
     }
     cases.extend(os_cases);
+    cases.extend(planned);
     let public = crate::ouvrages::public(&items);
     let rest = Pass { skipped, data_versions, inserted_report, held_out_measured, ..Pass::default() };
     (cases, public, agregats, verdicts, rest)
@@ -1664,19 +1884,25 @@ pub async fn run_series(
     ids: &[String],
     target: Serie,
 ) -> anyhow::Result<Value> {
-    let report = check(paths)?;
+    let report = crate::check::check_series(paths, target)?;
     ensure_check(&report)?;
     let manifest = Manifest::load(&paths.bench)?;
     let selection = select_series(&manifest, groupes, ids, target);
+    let v1 = v1_ctx(paths, &manifest, ids, target)?;
     eprintln!(
-        "cas retenus : {} ; exclus (autre série) avant toute lecture : {}",
+        "cas retenus : {} traces, {} itinéraires ; exclus (autre série) avant toute lecture : {} traces, {} itinéraires",
         selection.cases.len(),
-        selection.excluded_held_out.len()
+        v1.planned.cases.len(),
+        selection.excluded_held_out.len(),
+        v1.planned.excluded.len()
     );
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let refs = ouvrage_refs(paths)?;
-    let mut ouvrages = crate::ouvrages::series_ouvrages(paths, &manifest.ouvrages_tenus, target)?;
+    let mut ouvrages = crate::ouvrages::series_ouvrages(paths, &manifest, target)?;
+    let info: crate::coverage::OuvrageInfo =
+        ouvrages.iter().map(|o| (o.id.clone(), (o.length_m, o.mnh_milieu))).collect();
+    let q1 = if target == Serie::Calibration { &report.q1 } else { &report.q1_tenue };
     // Tuiles de rues du cache : périmètre vélo des ouvrages du corpus (§4 bis.1) et spans vcyclist.
     let structures_wanted = ids.is_empty() && target == Serie::Calibration;
     let geoms = crate::ouvrages::way_geometries(&paths.bench);
@@ -1699,20 +1925,27 @@ pub async fn run_series(
         groupes,
         ids,
         target,
+        v1: &v1,
     };
     // Deux passes (README §2.2, étape 2) : `distance` au pas de la grille, puis le mode par défaut
     // `input_with_breakpoints`, rééchantillonné sur la même grille (étape 3).
     let reference = measure_pass(&service, &ctx).await?;
     let breakpoints = measure_pass(&service.with_mode(BenchMode::Breakpoints), &ctx).await?;
-    let (cases, ouvrages_public, agregats, mut verdicts, rest) = judge_pass(reference, &limits);
-    let (bp_cases, bp_ouvrages, bp_agregats, mut bp_verdicts, bp_rest) = judge_pass(breakpoints, &limits);
+    let (cases, ouvrages_public, agregats, mut verdicts, rest) =
+        judge_pass(reference, &limits, &info, q1.negatives);
+    let (bp_cases, bp_ouvrages, bp_agregats, mut bp_verdicts, bp_rest) =
+        judge_pass(breakpoints, &limits, &info, q1.negatives);
     let Pass { skipped, data_versions, inserted_report, held_out_measured, .. } = rest;
     let bp_inserted: Vec<&Value> = bp_cases.iter().filter_map(|c| c.get("points_inseres")).collect();
     let max_per_km = bp_inserted.iter().filter_map(|v| v["max_sur_un_km"].as_u64()).max().unwrap_or(0);
     let (bp_len, bp_ins) = bp_inserted.iter().fold((0.0, 0u64), |(l, n), v| {
         (l + v["longueur_km"].as_f64().unwrap_or(0.0), n + v["points_inseres"].as_u64().unwrap_or(0))
     });
-    verdicts["Q1"] = json!(if report.q1.pass() { "pass" } else { "fail" });
+    verdicts["Q1"] = json!(match (q1.negatives, q1.pass()) {
+        (0, _) => "skipped",
+        (_, true) => "pass",
+        _ => "fail",
+    });
     bp_verdicts["Q1"] = verdicts["Q1"].clone();
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
@@ -1731,7 +1964,7 @@ pub async fn run_series(
             "increment": "V1",
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1746,6 +1979,8 @@ pub async fn run_series(
             "private_present": paths.private_present(),
             "groupes": groupes,
             exclus_key: selection.excluded_held_out,
+            "itineraires_exclus": v1.planned.excluded,
+            "q1": q1,
             extraits_key: held_out_measured,
             "baro_points_inseres": inserted_report,
             "notes": [
@@ -1769,12 +2004,20 @@ pub async fn run_series(
                 "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement ; M1 hors graphe vélo (README §4 ter.3, V1, resserrée en ec72f13) : stations (même grille) dont la ligne la plus proche de la couche streets à ≤ 30 m (rails exclus) est une route motorisée fermée au vélo (motorway, trunk, route bicycle=no ; bicycle=* prime ; busway exclue), plages continues élargies d'un demi-pas et gardées à partir de 50 m, retirées de M1 et rapportées (M1.hors_graphe_velo_m par cas, agrégat typologie M1.hors_graphe_velo) ; contrôle M1.hors_graphe_velo_controle : à chaque station, segment du service matched = false et avertissement unmatched_range ; une station appariée ou sans unmatched_range = échec de M1",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain ; mesuré aux mêmes seuils, non bloquant (README §4 bis.7, 2026-11-01) : un échec est rapporté sans refuser l'incrément",
                 "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
-                "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
+                "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun",
+                "Série V1 (README §4 ter.4) : série tenue à l'écart du MVP jugée (judgements.md), devenue calibration avec ses ouvrages, fenêtres masquées du MVP retirées ; traces perso_v1 selon leur série ; ouvrages et croisements de ouvrages-v1.json, témoins de temoins-v1.json et itinéraires de series-v1.csv (par_cas : cas de la calibration pour ses seuls éléments de calibration) ; index lus, vérifiés par empreinte et l'autre série retirée avant tout calcul ; fichiers des cas de l'autre série jamais ouverts en calibration (traces, recalages, itinéraires, références ; ni extraits des traces V1 tenues à l'écart) ; éléments V1 de l'autre série dont tous les points sont à ≤ 40 m d'un cas masqués comme les passages_masques (masques_v1_implicites) ; fenêtre d'un témoin = tout son tronçon ± 500 m",
+                "Itinéraires planifiés (README §4 ter.4) : GPX tel quel, sans baro ni recalage, rééchantillonné à 25 m ; E4 / S2 mesurés comme une trace sans baro (pas d'E1, E2, E2b ; M1 rapporté dans agregats.planifies, non jugé) ; trace brute de l'attribution = l'itinéraire ; R1/R2 comme les parcours d'osm-surface (référence Valhalla FOSSGIS au format osm-surface, ligne rééchantillonnée à 25 m), M1 jugé comme pour osm-surface",
+                "Croisements E5 V1 (point de croisement seul, voie du dessous lue dans les tuiles : périmètre et voie = voie au sol la plus proche, §4 bis.1) : passage = trace à ≤ 40 m du croisement ; compté seulement si, à ± 25 m du croisement, la trace suit la voie du dessous au moins aussi bien que tout pont ou tunnel des tuiles (même lecture que l'attribution, §4 ter.2), sinon E5_passage_dessus, rapporté (agregats.ouvrages.E5.passages_dessus), non compté ; voie ou tuile absente : attribution_indeterminee, compté",
+                "S2 des témoins V1 (README §4 ter.4–6, lecture du banc) : tronçon entre les stations les plus proches (≤ 40 m) de debut et fin, ou itinéraire planifié entier ; retirés de la longueur, des ouvrages fictifs et de la longueur typée : plages hors graphe vélo (§4 ter.5) et abords à 100 m de tout pont ou tunnel des tuiles de la campagne (ouvrage réel, jamais fictif) ; ouvrage fictif = suite de stations typées pont ou tunnel par le service hors de ces plages ; covered et avalanche_protector (absents du schéma des tuiles) non lus sur ces témoins ; témoin non retrouvé : cas_sautes",
+                "S2_ouvrage_reel covered=yes (README §4 ter.6, cc59b18) : ecart_max_m = max |service − MNT| aux stations de la plage (reference mnt_aux_stations), rapporté sans seuil dans agregats.ouvrages.limite_donnees",
+                "couverture (par mode) : comptes après exclusions du banc par critère à minimum de jugement (criteria.yaml serie_tenue_a_l_ecart.couverture.minimums) ; informative en calibration ; au jugement V1, un critère sous son minimum prend le verdict sous_minimum (refus, README §2 point 3)",
+                "Q1 : négatifs de la série mesurée ; négatif d'une série nouvelle compté seulement si son défaut est attesté (D+ enregistré < 0,6 ou > 1,6 × D+ MNT, 930f6e8, 305abd7) ; campagne.q1"
             ]
         },
         "cas": cases,
         "ouvrages": ouvrages_public,
         "cas_sautes": skipped,
+        "couverture": agregats["couverture"].clone(),
         "agregats": agregats,
         "verdicts": verdicts,
         "input_with_breakpoints": {
@@ -1788,6 +2031,7 @@ pub async fn run_series(
             "cas": bp_cases,
             "ouvrages": bp_ouvrages,
             "cas_sautes": bp_rest.skipped,
+            "couverture": bp_agregats["couverture"].clone(),
             "agregats": bp_agregats,
             "verdicts": bp_verdicts
         },
@@ -1821,10 +2065,11 @@ pub async fn fill_cache(
     extra_gpx: &[PathBuf],
     target: Serie,
 ) -> anyhow::Result<Value> {
-    let report = check(paths)?;
+    let report = crate::check::check_series(paths, target)?;
     ensure_check(&report)?;
     let manifest = Manifest::load(&paths.bench)?;
     let selection = select_series(&manifest, groupes, ids, target);
+    let v1 = v1_ctx(paths, &manifest, ids, target)?;
     // Série tenue à l'écart (avant `judge`) : ses traces entières et les extraits des traces de
     // calibration autour de ses ouvrages ; rien d'autre (cohérences, golden, témoins : calibration).
     let calibration = target == Serie::Calibration;
@@ -1864,11 +2109,12 @@ pub async fn fill_cache(
     // (fenêtre ± 1 km, README §2), jamais de la trace entière.
     if paths.private_present() {
         let refs = ouvrage_refs(paths)?;
-        for t in manifest
-            .traces
-            .iter()
-            .filter(|t| selection.excluded_held_out.contains(&t.id) && !t.passages_masques.is_empty())
-        {
+        // Traces V1 tenues à l'écart : jamais ouvertes en calibration.
+        for t in manifest.traces.iter().filter(|t| {
+            selection.excluded_held_out.contains(&t.id)
+                && !t.passages_masques.is_empty()
+                && !(target == Serie::Calibration && manifest.is_v1(&t.id))
+        }) {
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
                 crate::inserted::fill(&case, &paths.cache, Some(&held_out_baro_ranges(&case, &refs, &rules)))
@@ -1892,6 +2138,33 @@ pub async fn fill_cache(
                 filled.push(format!("{}#extraits", case.id));
             }
         }
+    }
+    // Itinéraires planifiés de la série (README §4 ter.4) : E4 / S2 comme une trace sans baro
+    // (tuiles du voisinage, deux appels `distance`), R1/R2 comme un parcours d'osm-surface.
+    for (pl, _) in &v1.planned.cases {
+        if pl.role == "R1_R2" {
+            let route = crate::osm_surface::load_planned(paths, pl)?;
+            service.route_details(&route.points, crate::osm_surface::options()).await?;
+        } else {
+            let case =
+                crate::v1::load_planned(paths, pl, target).map_err(|e| anyhow::anyhow!("{}: {e}", pl.id))?;
+            crate::off_network::fill(&case, &paths.cache, rules.grid_step_m).await?;
+            for part in &case.parts {
+                for sc in [true, false] {
+                    service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;
+                }
+            }
+        }
+        eprintln!("{} : tuiles en cache", pl.id);
+        filled.push(pl.id.clone());
+    }
+    // Périmètre vélo des ouvrages de la série (§4 bis.1) : tuiles de leurs stations.
+    {
+        let ouvrages = crate::ouvrages::series_ouvrages(paths, &manifest, target)?;
+        let geoms = crate::ouvrages::way_geometries(&paths.bench);
+        let pts: Vec<LatLon> =
+            ouvrages.iter().flat_map(|o| crate::ouvrages::perimeter_stations(o, &geoms)).collect();
+        crate::ouvrages::Tiles::load_online(&paths.cache, &pts).await?;
     }
     // S2 hors graphe vélo (README §4 ter.5) : voisinage des tuiles de rues des témoins négatifs.
     if ids.is_empty() && target == Serie::Calibration {
@@ -1982,7 +2255,8 @@ pub async fn fill_cache(
         "octets": fingerprint.bytes,
         "cas": filled,
         "serie": target,
-        "exclus_autre_serie": selection.excluded_held_out
+        "exclus_autre_serie": selection.excluded_held_out,
+        "itineraires_exclus": v1.planned.excluded
     });
     crate::privacy::assert_report_clean(&lock, &crate::privacy::private_names(paths))?;
     std::fs::create_dir_all(&paths.cache)?;
@@ -2149,6 +2423,7 @@ mod tests {
             baro_inserted: vec![false; s_ref.len()],
             s_ref,
             masks: vec!["pont".into()],
+            implicit_masks: Vec::new(),
             ring: Vec::new(),
             raw: None,
         };

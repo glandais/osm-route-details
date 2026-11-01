@@ -290,7 +290,7 @@ pub fn entry(
         [main.get(id), bp.get(id)]
             .into_iter()
             .flatten()
-            .any(|v| matches!(v.as_str(), Some("fail" | "skipped")))
+            .any(|v| matches!(v.as_str(), Some("fail" | "skipped" | "sous_minimum")))
     };
     let reported: Vec<&str> =
         criteria.iter().filter(|id| !is_blocking(id, blocking) && failed(id)).map(String::as_str).collect();
@@ -326,7 +326,7 @@ pub fn entry(
         if failing.is_empty() {
             String::new()
         } else {
-            format!(" (en échec ou sautés : {})", failing.join(", "))
+            format!(" (en échec, sautés ou sous leur minimum de couverture : {})", failing.join(", "))
         }
     ));
     if !reported.is_empty() {
@@ -394,7 +394,7 @@ where
     let blocking = blocking_criteria(bench)?;
     let out = report_dir.join("results.json");
     ensure!(!out.exists(), "{} existe déjà : rapport non réécrit", out.display());
-    let results = measure().await?;
+    let mut results = measure().await?;
     ensure!(results["campagne"]["type"] == "jugement", "la campagne mesurée n'est pas un jugement");
     let skipped = skipped_cases(&results);
     if !skipped.is_empty() {
@@ -404,6 +404,13 @@ where
             skipped.len(),
             skipped.join(" ; ")
         );
+    }
+    // Contrôle de couverture au jugement (README §2 point 3, §4 ter.4 ; à partir de V1) : un
+    // critère sous son **minimum de jugement** (pas la cible majorée du tirage) vaut refus.
+    if increment != "MVP" {
+        let minimums = crate::coverage::minimums(bench)?;
+        crate::coverage::apply_minimums(&mut results, &minimums);
+        results["campagne"]["couverture_minimums"] = minimums;
     }
     std::fs::create_dir_all(&report_dir)?;
     std::fs::write(&out, serde_json::to_string_pretty(&results)? + "\n")?;
@@ -453,6 +460,10 @@ mod tests {
 
     /// Dépôt synthétique : banc minimal, gel commité ; renvoie (dossier, commit de gel, gel).
     fn repo() -> (tempfile::TempDir, String, Gel) {
+        repo_for("MVP")
+    }
+
+    fn repo_for(increment: &str) -> (tempfile::TempDir, String, Gel) {
         let dir = tempfile::tempdir().unwrap();
         let r = dir.path();
         run(r, &["init", "-q"]);
@@ -463,16 +474,19 @@ mod tests {
         std::fs::write(r.join("bench/manifest.yaml"), "version: 1\n").unwrap();
         std::fs::write(
             r.join("bench/criteria.yaml"),
-            "criteres:\n  - {id: E1, bloquant: true}\n  - {id: E3, bloquant: true}\n  - {id: R3, bloquant: false}\n",
+            "criteres:\n  - {id: E1, bloquant: true}\n  - {id: E3, bloquant: true}\n  - {id: R3, bloquant: false}\n\
+             serie_tenue_a_l_ecart:\n  couverture:\n    minimums:\n      E1: {traces_france_fiables: 8, km_compares: 800}\n\
+             \x20     E3: {ponts: 12, ponts_mnh_10m_min: 3, ponts_plus_de_150m: 3}\n",
         )
         .unwrap();
         let gel = Gel {
-            increment: "MVP".into(),
+            increment: increment.into(),
             manifest_sha256: "m".into(),
             criteria_sha256: "c".into(),
             bench_rules_sha256: "b".into(),
         };
-        std::fs::write(r.join("bench/gel/MVP.json"), serde_json::to_string(&gel).unwrap()).unwrap();
+        std::fs::write(r.join(format!("bench/gel/{increment}.json")), serde_json::to_string(&gel).unwrap())
+            .unwrap();
         run(r, &["add", "."]);
         run(r, &["commit", "-q", "-m", "gel"]);
         let head = String::from_utf8(git(r, &["rev-parse", "HEAD"]).unwrap().stdout).unwrap();
@@ -504,7 +518,10 @@ mod tests {
         assert!(out.exists());
         let text = std::fs::read_to_string(bench.join("judgements.md")).unwrap();
         assert!(text.contains("## Jugement MVP (2026-11-02)"), "{text}");
-        assert!(text.contains("**refusé** (en échec ou sautés : E3)"), "un échec est consigné : {text}");
+        assert!(
+            text.contains("**refusé** (en échec, sautés ou sous leur minimum de couverture : E3)"),
+            "un échec est consigné : {text}"
+        );
         assert!(text.contains("| E3 | oui | fail | pass |"), "{text}");
         assert!(text.contains("| R3 | non | fail | — |"), "{text}");
         assert!(text.contains("rapportés sans refuser : R3"), "{text}");
@@ -517,6 +534,58 @@ mod tests {
         .await
         .unwrap_err();
         assert!(err.to_string().contains("déjà jugé"), "{err}");
+    }
+
+    /// V1 : un critère bloquant qui passe mais sous son minimum de jugement (README §2 point 3,
+    /// §4 ter.4) refuse l'incrément ; la cible majorée du tirage ne compte pas ; un mode sans
+    /// couverture n'est réputé couvert pour aucun critère.
+    #[tokio::test]
+    async fn v1_coverage_under_the_judgement_minimum_refuses() {
+        let (dir, gel_commit, gel) = repo_for("V1");
+        let (r, bench) = (dir.path(), dir.path().join("bench"));
+        let mut res = results(json!([]));
+        res["verdicts"] = json!({"E1": "pass", "E3": "pass", "R3": "fail"});
+        // E1 au minimum exact (8 traces, 800 km : sous la cible majorée de 25 %, pas sous le
+        // minimum) ; E3 : 11 ponts pour 12.
+        let cov = json!({"E1": {"traces_france_fiables": 8, "km_compares": 800.0},
+            "E3": {"ponts": 11, "ponts_mnh_10m_min": 4, "ponts_plus_de_150m": 4}});
+        res["couverture"] = cov.clone();
+        res["input_with_breakpoints"]["couverture"] = cov;
+        let out = judge_with(r, &bench, "V1", &gel_commit, &gel, true, bench.join("reports/v1"), || async {
+            Ok(res)
+        })
+        .await
+        .unwrap();
+        let written: Value = serde_json::from_str(&std::fs::read_to_string(out).unwrap()).unwrap();
+        assert_eq!(written["verdicts"]["E1"], "pass");
+        assert_eq!(written["verdicts"]["E3"], "sous_minimum");
+        assert_eq!(written["verdicts"]["E3_sous_minimum"], json!(["ponts 11 < 12"]));
+        assert_eq!(written["input_with_breakpoints"]["verdicts"]["E3"], "sous_minimum");
+        assert_eq!(written["campagne"]["couverture_minimums"]["E3"]["ponts"], 12);
+        let text = std::fs::read_to_string(bench.join("judgements.md")).unwrap();
+        assert!(text.contains("## Jugement V1"), "{text}");
+        assert!(
+            text.contains("**refusé** (en échec, sautés ou sous leur minimum de couverture : E3)"),
+            "{text}"
+        );
+        assert!(text.contains("| E3 | oui | sous_minimum | sous_minimum | ponts 11 < 12 |"), "{text}");
+    }
+
+    /// V1 sans couverture mesurée : tout critère à minimum est sous son minimum (refus).
+    #[tokio::test]
+    async fn v1_without_coverage_refuses() {
+        let (dir, gel_commit, gel) = repo_for("V1");
+        let (r, bench) = (dir.path(), dir.path().join("bench"));
+        let mut res = results(json!([]));
+        res["verdicts"] = json!({"E1": "pass", "E3": "pass"});
+        judge_with(r, &bench, "V1", &gel_commit, &gel, true, bench.join("reports/v1"), || async { Ok(res) })
+            .await
+            .unwrap();
+        let text = std::fs::read_to_string(bench.join("judgements.md")).unwrap();
+        assert!(
+            text.contains("**refusé** (en échec, sautés ou sous leur minimum de couverture : E1, E3)"),
+            "{text}"
+        );
     }
 
     #[tokio::test]
@@ -580,6 +649,9 @@ mod tests {
             sha256_trim1km: None,
             passages_masques: Vec::new(),
             verdict: None,
+            dist_km: None,
+            gain_baro_m: None,
+            gain_mnt_m: None,
         };
         let m = Manifest {
             sha256: String::new(),
@@ -594,6 +666,8 @@ mod tests {
                 trace("c", Serie::Calibration),
             ],
             hors_git: Vec::new(),
+            v1: None,
+            mvp_judged: false,
         };
         let held = crate::campaign::select_series(&m, &[], &[], Serie::TenueALEcart);
         assert_eq!(held.cases.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["b"]);
@@ -645,7 +719,9 @@ mod tests {
         let list: Vec<&str> = text.lines().skip(2).take_while(|l| !l.is_empty()).collect();
         assert!(list.iter().all(|l| l.starts_with("- ")), "{text}");
         assert!(
-            list.iter().any(|l| l.starts_with("- Résultat : **refusé** (en échec ou sautés : M1, R1_R2)")),
+            list.iter().any(|l| l.starts_with(
+                "- Résultat : **refusé** (en échec, sautés ou sous leur minimum de couverture : M1, R1_R2)"
+            )),
             "{text}"
         );
         assert!(list.iter().any(|l| l.starts_with("- Non bloquants en échec ou sautés")), "{text}");
@@ -730,9 +806,8 @@ mod tests {
         assert!(text.contains("rapportés sans refuser : E3_hors_france, R3"), "{text}");
         assert!(text.contains("| R1_R2 | oui | pass | — | — |"), "{text}");
         r["verdicts"]["R1_R2"] = json!("fail");
-        assert!(
-            entry("MVP", &COMMITS, "x", &r, &blocking).contains("**refusé** (en échec ou sautés : R1_R2)")
-        );
+        assert!(entry("MVP", &COMMITS, "x", &r, &blocking)
+            .contains("**refusé** (en échec, sautés ou sous leur minimum de couverture : R1_R2)"));
     }
 
     #[tokio::test]

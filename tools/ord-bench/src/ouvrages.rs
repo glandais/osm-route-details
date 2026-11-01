@@ -231,18 +231,22 @@ pub fn annotate_data_limits(items: &mut [Value], limits: &[(String, String)]) {
 /// Ouvrages de calibration (publics, puis extension perso si présente).
 pub fn calibration_ouvrages(
     paths: &crate::BenchPaths,
-    held_out: &BTreeSet<String>,
+    manifest: &crate::manifest::Manifest,
 ) -> anyhow::Result<Vec<Ouvrage>> {
-    series_ouvrages(paths, held_out, crate::manifest::Serie::Calibration)
+    series_ouvrages(paths, manifest, crate::manifest::Serie::Calibration)
 }
 
 /// Ouvrages d'une série : ceux de `ouvrages_tenus` (ou marqués `tenue_a_l_ecart`) pour la série
-/// tenue à l'écart, les autres pour la calibration. Les autres ne sont jamais lus.
+/// tenue à l'écart, les autres pour la calibration. Les autres ne sont jamais lus. Après le
+/// jugement du MVP, ses ouvrages tenus à l'écart sont de la calibration (README §2, point 3) ;
+/// ouvrages et croisements V1 (`ouvrages-v1.json`, empreinte vérifiée) selon leur champ `serie`.
+/// Un croisement V1 (`passage sous pont`, point `croisement` seul) a A = milieu = B.
 pub fn series_ouvrages(
     paths: &crate::BenchPaths,
-    held_out: &BTreeSet<String>,
+    manifest: &crate::manifest::Manifest,
     target: crate::manifest::Serie,
 ) -> anyhow::Result<Vec<Ouvrage>> {
+    let held_out = &manifest.ouvrages_tenus;
     let mut out = Vec::new();
     // MNH au milieu des ouvrages publics : `reference.valeurs` d'`ouvrages.yaml`.
     let public_mnh: BTreeMap<String, f64> = std::fs::read_to_string(paths.bench.join("data/ouvrages.yaml"))
@@ -257,16 +261,25 @@ pub fn series_ouvrages(
                 .collect()
         })
         .unwrap_or_default();
-    let mut files = vec![(paths.bench.join("data/ouvrages-geom.json"), false)];
+    // (fichier, perso, V1)
+    let mut files = vec![(paths.bench.join("data/ouvrages-geom.json"), false, false)];
     if paths.private_present() {
-        files.push((paths.private.join("ouvrages-perso.json"), true));
+        files.push((paths.private.join("ouvrages-perso.json"), true, false));
+        if let Some(v1) = &manifest.v1 {
+            files.push((paths.resolve(&v1.ouvrages.0), true, true));
+        }
     }
-    for (f, perso) in files {
-        let Ok(text) = std::fs::read_to_string(&f) else { continue };
-        let v: Value = serde_json::from_str(&text).context("géométrie des ouvrages")?;
+    for (f, perso, v1) in files {
+        let Ok(bytes) = std::fs::read(&f) else { continue };
+        if v1 && manifest.v1.as_ref().is_some_and(|x| crate::hash::sha256_bytes(&bytes) != x.ouvrages.1) {
+            anyhow::bail!("ouvrages-v1.json : empreinte différente de celle du manifest");
+        }
+        let v: Value = serde_json::from_slice(&bytes).context("géométrie des ouvrages")?;
         for o in v.as_array().into_iter().flatten() {
             let Some(id) = o["id"].as_str() else { continue };
-            let is_held_out = held_out.contains(id) || o["serie"].as_str() == Some("tenue_a_l_ecart");
+            let marked = o["serie"].as_str() == Some("tenue_a_l_ecart");
+            let is_held_out =
+                if v1 { marked } else { !manifest.mvp_judged && (held_out.contains(id) || marked) };
             if is_held_out != (target == crate::manifest::Serie::TenueALEcart) {
                 continue;
             }
@@ -274,7 +287,11 @@ pub fn series_ouvrages(
                 let x = &o["pts"][k];
                 Some(LatLon::new(x[0].as_f64()?, x[1].as_f64()?))
             };
-            let (Some(a), Some(m), Some(b)) = (p("A"), p("milieu"), p("B")) else { continue };
+            let (a, m, b) = match (p("A"), p("milieu"), p("B"), p("croisement")) {
+                (Some(a), Some(m), Some(b), _) => (a, m, b),
+                (_, _, _, Some(c)) => (c, c, c),
+                _ => continue,
+            };
             let chain: Vec<u64> =
                 o["chain"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
             let avalanche_protector = chain
@@ -291,7 +308,9 @@ pub fn series_ouvrages(
                 perimeter_ambiguous: false,
                 chain,
                 avalanche_protector,
-                mnh_milieu: corpus_mnh(o).or_else(|| public_mnh.get(id).copied()),
+                mnh_milieu: corpus_mnh(o)
+                    .or_else(|| o["mnh_milieu_m"].as_f64())
+                    .or_else(|| public_mnh.get(id).copied()),
                 voie: None,
             });
         }
@@ -727,6 +746,93 @@ const LEVEL_MIN_STATIONS: usize = 3;
 /// emprise `[s_A, s_B]`.
 type Passage<'o> = (&'o Ouvrage, usize, usize, usize, (f64, f64));
 
+/// Demi-fenêtre autour d'un croisement V1 où la trace est comparée à la voie du dessous.
+const CROSSING_HALF_M: f64 = 25.0;
+
+/// Croisement V1 : un seul point de référence (A = milieu = B).
+fn is_crossing(o: &Ouvrage) -> bool {
+    o.pts[0] == o.pts[1] && o.pts[1] == o.pts[2]
+}
+
+/// Abords d'ouvrage exclus de la longueur comptée d'un témoin V1 (README §4 ter.4, nature d'un
+/// témoin planifié : « sa longueur comptée exclut les abords d'ouvrage (100 m) »).
+pub const TEMOIN_ABORDS_M: f64 = 100.0;
+
+/// S2 d'un témoin négatif V1 (README §4 ter.4–6) sur le profil d'un cas : tronçon entre les
+/// stations les plus proches de ses extrémités (à 40 m au plus), ou cas entier (itinéraire
+/// planifié). Sont retirés de la longueur comptée, des ouvrages fictifs et de la longueur typée :
+/// les plages hors graphe vélo (§4 ter.5, `closed`, abscisses de `d`) et les abords (100 m) de
+/// tout pont ou tunnel des tuiles de la campagne (`tile_structure`) : un ouvrage réel tagué n'est
+/// jamais fictif (§4 ter.6). Ouvrage fictif = suite de stations typées pont ou tunnel par le
+/// service hors de ces plages. `None` : extrémités non retrouvées sur ce cas. Lecture du banc pour
+/// V1 (rapportée dans les notes) : les tags absents du schéma de la source (`covered`,
+/// `avalanche_protector`) ne sont pas lus sur ces témoins.
+#[allow(clippy::too_many_arguments)]
+pub fn temoin_v1_item(
+    t: &crate::v1::TemoinV1,
+    d: &[f64],
+    pts: &[LatLon],
+    on_structure: &[bool],
+    tile_structure: &[bool],
+    closed: &[std::ops::Range<f64>],
+    window: Option<&std::ops::Range<f64>>,
+    tol: f64,
+) -> Option<Value> {
+    let n = d.len();
+    if n < 2 {
+        return None;
+    }
+    let (i0, i1) = match t.ends {
+        Some([a, b]) if !t.planifie => {
+            let (ia, da) = nearest(d, pts, a, f64::NEG_INFINITY, f64::INFINITY)?;
+            let (ib, db) = nearest(d, pts, b, f64::NEG_INFINITY, f64::INFINITY)?;
+            if da > tol || db > tol || ia == ib {
+                return None;
+            }
+            (ia.min(ib), ia.max(ib))
+        }
+        _ => (0, n - 1),
+    };
+    if window.is_some_and(|w| !(w.contains(&d[i0]) && w.contains(&d[i1]))) {
+        return None;
+    }
+    let real: Vec<f64> = (0..n).filter(|&i| tile_structure[i]).map(|i| d[i]).collect();
+    let near_real = |x: f64| {
+        let k = real.partition_point(|v| *v < x - TEMOIN_ABORDS_M);
+        real.get(k).is_some_and(|v| *v <= x + TEMOIN_ABORDS_M)
+    };
+    let in_closed = |x: f64| closed.iter().any(|c| c.contains(&x));
+    let (mut total, mut fp, mut fictifs, mut closed_m, mut abords_m) = (0.0, 0.0, 0usize, 0.0, 0.0);
+    let mut in_run = false;
+    for i in i0..=i1 {
+        let step = if i > i0 { d[i] - d[i - 1] } else { 0.0 };
+        let off_graph = in_closed(d[i]);
+        let abords = near_real(d[i]);
+        if off_graph {
+            closed_m += step;
+        } else if abords {
+            abords_m += step;
+        }
+        if off_graph || abords {
+            in_run = false;
+            continue;
+        }
+        total += step;
+        if on_structure[i] {
+            fp += step;
+            if !in_run {
+                fictifs += 1;
+            }
+            in_run = true;
+        } else {
+            in_run = false;
+        }
+    }
+    Some(json!({"cas": t.id, "temoin": t.id, "trace": t.trace, "metrique": "S2", "nature": t.nature,
+        "longueur_m": r2(total), "faux_positif_m": r2(fp), "ouvrages_fictifs": fictifs,
+        "hors_graphe_velo_m": r2(closed_m), "abords_ouvrages_m": r2(abords_m)}))
+}
+
 /// Mesures d'ouvrage sur les passages d'un cas perso.
 pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f64) -> Vec<Value> {
     let mut out = Vec::new();
@@ -826,6 +932,31 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             if o.perimeter == Perimeter::Absent {
                 out.push(absent_item(o, case));
                 continue;
+            }
+            // Croisement V1 (un seul point, README §4 ter.4 ; data-init : voie du dessous lue dans
+            // les tuiles) : le passage n'est un passage dessous que si la trace, à ± 25 m du
+            // croisement, suit la voie du dessous au moins aussi bien que tout pont ou tunnel des
+            // tuiles (même lecture que l'attribution, §4 ter.2 ; tuiles et trace seulement).
+            // Sinon la trace franchit le pont par-dessus : rapporté, hors d'E5.
+            if o.kind == Kind::Under && is_crossing(o) {
+                let near: Vec<LatLon> =
+                    (0..n).filter(|&i| (p.d[i] - dm).abs() <= CROSSING_HALF_M).map(|i| p.pts[i]).collect();
+                match (p.tiles, o.voie.as_deref()) {
+                    (Some(tiles), Some(voie)) => match tiles.attribution(&near, voie, None) {
+                        Some(a) if !a.attributed() => {
+                            out.push(json!({"ouvrage": o.id, "cas": case, "metrique": "E5_passage_dessus",
+                                "mediane_voie_dessous_m": r2(a.own_m), "mediane_ouvrage_m": a.other_m.map_or(Value::Null, r2)}));
+                            continue;
+                        }
+                        Some(_) => {}
+                        None => {
+                            item.insert("attribution_indeterminee".into(), json!(true));
+                        }
+                    },
+                    _ => {
+                        item.insert("attribution_indeterminee".into(), json!(true));
+                    }
+                }
             }
             // Attribution par la trace brute (README §4 ter.2) : le passage n'est compté sur ce pont
             // ou ce tunnel que si le GPS d'origine suit sa voie mieux que tout autre pont ou tunnel
@@ -1974,10 +2105,22 @@ pub async fn vc_items(
                     item["limite_donnees"] = json!(GALLERY_NOTE);
                     out.push(item);
                 }
-                out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "S2_ouvrage_reel", "nature": nature,
+                let mut real_item = json!({"ouvrage": id, "cas": r.id, "metrique": "S2_ouvrage_reel", "nature": nature,
                     "de_m": r2(r.d[i0]), "a_m": r2(r.d[i1]), "marge_m": REAL_STRUCTURE_MARGIN_M,
                     "limite_donnees": limit.map_or(Value::Null, |n| json!(n)),
-                    "temoin_sorti": object.is_some()}));
+                    "temoin_sorti": object.is_some()});
+                // Voie couverte (`covered=yes`, au niveau du sol) : erreur d'altitude mesurée contre
+                // le MNT aux stations de la plage, rapportée sans seuil (README §4 ter.6, cc59b18).
+                if nature == "covered" {
+                    let e = (i0..=i1)
+                        .map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs())
+                        .filter(|x| x.is_finite())
+                        .fold(f64::NAN, f64::max);
+                    real_item["reference"] = json!("mnt_aux_stations");
+                    real_item["ecart_max_m"] = r2(e);
+                    real_item["stations"] = json!(i1 + 1 - i0);
+                }
+                out.push(real_item);
             }
             if let Some((nature, i0, i1)) = object {
                 let raison = if names_object(&category, nature) {
@@ -2113,7 +2256,11 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     };
     let limits: Vec<Value> = items
         .iter()
-        .filter(|i| limited(i) && matches!(i["metrique"].as_str(), Some("E3" | "E4")))
+        .filter(|i| {
+            limited(i)
+                && (matches!(i["metrique"].as_str(), Some("E3" | "E4"))
+                    || (i["metrique"] == "S2_ouvrage_reel" && i["ecart_max_m"].is_number()))
+        })
         .map(|i| {
             // Sans seuil : l'erreur est rapportée, jamais jugée.
             let mut i = strip_private(i);
@@ -2159,7 +2306,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "E4": {"tunnels": e4_n, "tunnels_ok": e4_ok, "part": r4(e4_ok as f64 / e4_n.max(1) as f64), "seuil": 0.857, "reference_ambigue": e4_amb, "reference_indisponible": e4_unavailable},
         "E4_non_couverts": not_covered("E4_non_couvert"),
         "limite_donnees": limits,
-        "E5": {"croisements": e5_n, "ok": e5_ok},
+        "E5": {"croisements": e5_n, "ok": e5_ok,
+            "passages_dessus": by("E5_passage_dessus").into_iter().map(strip_private).collect::<Vec<_>>()},
         "S1": {"emprise_m": r2(s1_ref), "type_m": r2(s1_typed), "rappel": r4(s1), "seuil": 0.95},
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
         "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
@@ -2553,6 +2701,120 @@ mod tests {
         let items = perso_items("c", &p, &[o], 40.0);
         assert_eq!(items[0]["metrique"], "E3_hors_france", "{items:?}");
         assert_eq!(items[0]["S1.rappel"], 1.0, "{items:?}");
+    }
+
+    /// Croisement V1 (un point) : compté en E5 si la trace suit la voie du dessous, rapporté en
+    /// `E5_passage_dessus` si elle suit le pont (voie du dessous lue dans les tuiles).
+    #[test]
+    fn a_crossing_counts_only_from_below() {
+        let grid = Shortbread::GRID;
+        let mid = LatLon::new(47.2, -1.5);
+        let u = grid.to_units(mid);
+        let key = grid.tile_of(u);
+        let mut t = StreetTile::empty(key);
+        // Pont est-ouest, voie au sol nord-sud sous le pont.
+        t.attrs.push(way_attrs("primary", StructureTag::Bridge));
+        t.attrs.push(way_attrs("residential", StructureTag::None));
+        let seg = |a: [f64; 2], b: [f64; 2], attr: u32| ord_domain::street::StreetLine {
+            attr,
+            points: vec![a, b],
+            cut: [false, false],
+        };
+        t.lines.push(seg([u[0] - 300.0, u[1]], [u[0] + 300.0, u[1]], 0));
+        t.lines.push(seg([u[0], u[1] - 300.0], [u[0], u[1] + 300.0], 1));
+        let tiles = Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]), bridges: BTreeMap::new() };
+        let (perimeter, _, voie) = tiles.perimeter_and_way(mid, &[mid, mid, mid], Kind::Under);
+        assert_eq!(perimeter, Perimeter::InGraph);
+        let o = Ouvrage {
+            id: "nv-x".into(),
+            kind: Kind::Under,
+            length_m: 0.0,
+            pts: [mid, mid, mid],
+            perso: true,
+            perimeter,
+            perimeter_ambiguous: false,
+            chain: Vec::new(),
+            avalanche_protector: false,
+            mnh_milieu: None,
+            voie,
+        };
+        let run = |dx: f64, dy: f64| {
+            let n = 41;
+            let pts: Vec<LatLon> = (0..n)
+                .map(|k| {
+                    let f = k as f64 - 20.0;
+                    grid.to_latlon([u[0] + dx * f, u[1] + dy * f])
+                })
+                .collect();
+            let d: Vec<f64> = (0..n)
+                .scan(0.0, |acc, k| {
+                    if k > 0 {
+                        *acc += haversine_m(pts[k - 1], pts[k]);
+                    }
+                    Some(*acc)
+                })
+                .collect();
+            let (z, flags) = (vec![0.0; n], vec![false; n]);
+            let p = CaseProfile {
+                d: &d,
+                pts: &pts,
+                svc: &z,
+                raw: &z,
+                ref_svc: &z,
+                baro: &z,
+                on_structure: &flags,
+                ign: &flags,
+                matched: &flags,
+                unmatched_warn: &flags,
+                tile_structure: &flags,
+                ring: None,
+                structure_segs: &[],
+                raw_gps: None,
+                tiles: Some(&tiles),
+            };
+            perso_items("c", &p, std::slice::from_ref(&o), 40.0)
+        };
+        let below = run(0.0, 12.0);
+        assert_eq!(below.len(), 1);
+        assert_eq!(below[0]["metrique"], "E5", "{below:?}");
+        let above = run(12.0, 0.0);
+        assert_eq!(above[0]["metrique"], "E5_passage_dessus", "{above:?}");
+    }
+
+    #[test]
+    fn a_v1_control_excludes_real_structures_and_closed_ranges() {
+        let n = 201;
+        let pts: Vec<LatLon> = (0..n).map(|k| LatLon::new(45.0 + k as f64 * 0.000045, 5.0)).collect();
+        let d: Vec<f64> = (0..n).map(|k| k as f64 * 5.0).collect();
+        let mut on = vec![false; n];
+        let mut tile = vec![false; n];
+        // Pont réel des tuiles aux stations 20–24, typé par le service : abords exclus.
+        on[20..=24].fill(true);
+        tile[20..=24].fill(true);
+        // Ouvrage fictif aux stations 100–103 ; un autre dans une plage hors graphe (150–160).
+        on[100..=103].fill(true);
+        on[155] = true;
+        let t = crate::v1::TemoinV1 {
+            id: "pl-x".into(),
+            trace: "pl-x".into(),
+            planifie: true,
+            nature: "digue".into(),
+            serie: crate::manifest::Serie::Calibration,
+            ends: None,
+        };
+        let closed = [750.0..800.0];
+        let it = temoin_v1_item(&t, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap();
+        assert_eq!(it["ouvrages_fictifs"], 1, "{it}");
+        assert_eq!(it["faux_positif_m"], 20.0, "{it}");
+        assert_eq!(it["hors_graphe_velo_m"], 50.0, "{it}");
+        assert!(it["abords_ouvrages_m"].as_f64().unwrap() > 200.0, "{it}");
+        assert_eq!(it["nature"], "digue");
+        // Témoin de sortie : tronçon entre ses extrémités ; extrémités introuvables : None.
+        let s = crate::v1::TemoinV1 { planifie: false, ends: Some([pts[90], pts[110]]), ..t.clone() };
+        let it = temoin_v1_item(&s, &d, &pts, &on, &tile, &[], None, 40.0).unwrap();
+        assert_eq!(it["longueur_m"], 100.0, "{it}");
+        let far = crate::v1::TemoinV1 { ends: Some([LatLon::new(46.0, 5.0), pts[110]]), ..s };
+        assert!(temoin_v1_item(&far, &d, &pts, &on, &tile, &[], None, 40.0).is_none());
     }
 
     #[test]

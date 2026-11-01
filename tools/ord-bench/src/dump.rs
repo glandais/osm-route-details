@@ -97,7 +97,7 @@ pub async fn dump_profiles(paths: &BenchPaths, ids: &[String]) -> anyhow::Result
     let rules = BenchRules::default();
     let rules_core = ord_core::rules::Rules::default();
     let refs = ouvrage_refs(paths)?;
-    let ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest.ouvrages_tenus)?;
+    let ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest)?;
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
     let dir = paths.private.join("profils");
     std::fs::create_dir_all(&dir).with_context(|| format!("création de {}", dir.display()))?;
@@ -131,6 +131,9 @@ mod tests {
             sha256_trim1km: None,
             passages_masques: Vec::new(),
             verdict: None,
+            dist_km: None,
+            gain_baro_m: None,
+            gain_mnt_m: None,
         }
     }
 

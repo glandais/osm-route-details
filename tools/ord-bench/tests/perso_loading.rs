@@ -16,6 +16,9 @@ fn trace(id: &str) -> Trace {
         sha256_trim1km: None,
         passages_masques: vec![],
         verdict: None,
+        dist_km: None,
+        gain_baro_m: None,
+        gain_mnt_m: None,
     }
 }
 

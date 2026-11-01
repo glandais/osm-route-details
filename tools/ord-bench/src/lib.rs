@@ -13,6 +13,7 @@
 pub mod campaign;
 pub mod check;
 pub mod coherence;
+pub mod coverage;
 pub mod diagnose;
 pub mod dump;
 pub mod golden;
@@ -31,6 +32,7 @@ pub mod service;
 pub mod structures_diag;
 pub mod temoin_tags;
 pub mod typology;
+pub mod v1;
 
 use std::path::{Path, PathBuf};
 
@@ -123,8 +125,11 @@ impl BenchPaths {
 /// Remise à `None` avec les règles 2026.11.4 (galeries couvertes détectées sur le MNT).
 /// Reste à `None` avec les règles 2026.11.5 (couvertures en altitude
 /// seule) ; README §4 ter.6 précisé en eb4c4cc (`covered=yes` lu sur la voie des stations du témoin)
-/// appliqué dans la même révision.
-pub const BENCH_REVISION: Option<&str> = None;
+/// appliqué dans la même révision. `bench1` (règles 2026.11.5 inchangées) : série V1 lue
+/// (`perso_v1` : traces, ouvrages et croisements E5, témoins S2, itinéraires planifiés E4 / S2 /
+/// R1-R2), série du MVP jugée devenue calibration, recalages du Valhalla FOSSGIS (6aba29e),
+/// plages `covered` mesurées contre le MNT (cc59b18), couverture rapportée par critère.
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

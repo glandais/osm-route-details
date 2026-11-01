@@ -200,6 +200,7 @@ mod tests {
             baro_s,
             baro_inserted,
             masks: Vec::new(),
+            implicit_masks: Vec::new(),
             ring: Vec::new(),
             raw: None,
         }

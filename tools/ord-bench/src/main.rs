@@ -29,7 +29,8 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Empreintes du manifest, cohérence criteria.yaml ↔ README, Q1.
+    /// Empreintes du manifest (fichiers de la calibration ; ceux de la série tenue à l'écart sont
+    /// vérifiés au jugement, jamais ouverts ici), cohérence criteria.yaml ↔ README, Q1.
     Check,
     /// Remplit le cache de banc en ligne (IGN à 20 req/s, Mapterhorn, couverture) et écrit
     /// `cache.lock` dans le cache.

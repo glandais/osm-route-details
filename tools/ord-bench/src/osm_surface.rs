@@ -39,6 +39,25 @@ impl std::fmt::Debug for OsRoute {
 pub fn load(bench: &Path, entry: &FileEntry) -> anyhow::Result<OsRoute> {
     let path = bench.join(entry.fichier.trim_end_matches(".gpx").to_owned() + ".reference.json");
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).context("référence osm-surface")?)?;
+    parse(&entry.id, &v)
+}
+
+/// Parcours planifié R1/R2 de la série V1 (README §4 ter.4) : référence Valhalla FOSSGIS au format
+/// osm-surface (`tools/reference_r12_v1.py`, empreinte du manifest vérifiée) ; entrée = sa ligne
+/// (l'itinéraire tel quel), rééchantillonnée à 25 m, abscisse de référence interpolée.
+pub fn load_planned(paths: &crate::BenchPaths, p: &crate::manifest::Planned) -> anyhow::Result<OsRoute> {
+    let (fichier, sum) =
+        p.reference.as_ref().with_context(|| format!("{} : référence R1/R2 absente", p.id))?;
+    let bytes =
+        std::fs::read(paths.resolve(fichier)).with_context(|| format!("{} : référence absente", p.id))?;
+    anyhow::ensure!(crate::hash::sha256_bytes(&bytes) == *sum, "{} : référence d'empreinte différente", p.id);
+    let route = parse(&p.id, &serde_json::from_slice(&bytes).context("référence R1/R2 illisible")?)?;
+    let pts: Vec<LatLon> = route.points.iter().map(|q| LatLon::new(q.lat, q.lon)).collect();
+    let (pts, _, dist) = crate::v1::resample(&pts, &route.dist, crate::v1::PLANNED_STEP_M);
+    Ok(OsRoute { points: pts.iter().map(|q| Pt { lat: q.lat, lon: q.lon }).collect(), dist, ..route })
+}
+
+fn parse(id: &str, v: &Value) -> anyhow::Result<OsRoute> {
     let track = &v["tracks"][0];
     let mut points = Vec::new();
     let mut dist = Vec::new();
@@ -60,7 +79,7 @@ pub fn load(bench: &Path, entry: &FileEntry) -> anyhow::Result<OsRoute> {
         })
         .collect();
     reference.sort_by(|a, b| a.from.total_cmp(&b.from));
-    Ok(OsRoute { id: entry.id.clone(), points, dist, reference })
+    Ok(OsRoute { id: id.to_owned(), points, dist, reference })
 }
 
 /// Distance cumulée du service (haversine, comme `prepare`).
@@ -90,9 +109,20 @@ pub async fn measure(service: &Service, route: &OsRoute) -> anyhow::Result<Value
     for c in r["quality"]["warnings"].as_array().into_iter().flatten().filter_map(|w| w["code"].as_str()) {
         *warnings.entry(c.to_owned()).or_default() += 1;
     }
+    let classed = |c: Option<Class>| -> f64 {
+        route
+            .reference
+            .iter()
+            .filter(|x| x.class != Class::Unknown && c.is_none_or(|c| x.class == c))
+            .map(|x| x.to - x.from)
+            .sum()
+    };
     Ok(json!({
         "id": route.id,
         "serie": "calibration",
+        "longueur_m": (cum.last().copied().unwrap_or(0.0) * 10.0).round() / 10.0,
+        "reference_classee_m": (classed(None) * 10.0).round() / 10.0,
+        "reference_non_revetu_m": (classed(Some(Class::Unpaved)) * 10.0).round() / 10.0,
         "groupe": "osm_surface",
         "mode": "input",
         "typologie": metrics_json(&a, "R1"),
