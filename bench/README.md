@@ -715,6 +715,20 @@ inchangés.
    **Réserve** : ces tags sont ceux du 2026-11-01, pas ceux de la base OSM des témoins vcyclist
    (2026-10-13) ; la règle s'applique aux tags de la base des témoins. Motif : détecter une galerie
    n'est pas inventer un ouvrage ; seul un ouvrage absent d'OSM peut être fictif.
+   **Précisions de lecture** (rédaction, pas une nouvelle décision ; relevées à l'implémentation,
+   rapport 2026.11.4) :
+   - *voie du témoin* : l'identifiant de way porté par chaque station des fichiers de stations des
+     témoins (`analysis/truth/controls/<id>.csv`, `analysis/truth/tunnels/<id>.csv`, colonne `way`),
+     plages X et O comprises ; les plages de `spans.csv` ne suffisent pas. `covered=yes` est donc
+     lisible : stations O de `n08` (6) et `n09` (8) au 2026-11-01. Les tags viennent de la base OSM
+     du témoin (réserve ci-dessus), pas de la copie vcyclist, qui ne les porte pas ;
+   - *objet du témoin* : la catégorie vcyclist du témoin nomme la nature d'un ouvrage que le témoin
+     emprunte (galerie, tunnel, pont, viaduc) ; un ouvrage que le témoin longe ou passe dessous
+     (`under-viaduct-approach`, `quay-under-bridges`) n'en fait pas l'objet. `dam-crest-road`
+     (`tn10`) nomme un barrage, pas un pont : `tn10` reste ;
+   - *plus de la moitié* : ouvrage par ouvrage, sans additionner les ouvrages d'un même témoin.
+     Sans effet sur les témoins actuels : la somme ne dépasse pas non plus la moitié (au plus 46 %
+     pour `tn10`, 14 % pour `tn12`, sorti par sa catégorie).
 
 ---
 
