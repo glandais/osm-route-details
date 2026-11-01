@@ -218,6 +218,11 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
      diffère de celle de la trace, la fenêtre est masquée dans les métriques de la trace (E1 ; E2 et
      E2b sommés sur les tronçons restants, pour le service comme pour ses références). Chaque mètre
      n'appartient qu'à une série, et chaque ouvrage garde tous ses passages baro.
+     **Pratique confirmée** (décision de l'utilisateur, 2026-11-01) : une trace de calibration est
+     envoyée **entière** au service ; ses fenêtres d'ouvrages, de croisements ou de témoins tenus à
+     l'écart sont calculées puis **jetées** : jamais mesurées, ni rapportées autrement que par
+     l'identifiant opaque de l'élément masqué (`passages_masques`), et jamais lues pour régler quoi
+     que ce soit. Les mesures de la trace portent sur le reste.
    - **passage en hauteur sur un pont** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle
      mesure) : le critère horizontal ne distingue pas une trace qui longe un pont par-dessous
      (Cheviré × perso-23, au sol sous un tablier à plus de 50 m). Si le MNH au milieu (médiane MNS
