@@ -1132,26 +1132,33 @@ pub fn controls(bench: &Path) -> anyhow::Result<Vec<(String, String, String)>> {
 /// des galeries du corpus.
 const GALLERY_NOTE: &str = "shortbread sans avalanche_protector";
 
+/// Note `limite_donnees` d'une voie `covered=yes` (§4 bis.4, README §4 ter.6).
+const COVERED_NOTE: &str = "shortbread sans covered";
+
 /// Marge retirée de part et d'autre d'un ouvrage réel d'un témoin (README §4 ter.6, marge `x`).
 const REAL_STRUCTURE_MARGIN_M: f64 = 35.0;
 
-/// Ouvrages réels tagués sur la voie même d'un témoin négatif (README §4 ter.6), tags de la base
-/// des témoins : plages `X` de `spans.csv` de nature `bridge`, `tunnel` ou `gallery`
-/// (`tunnel=avalanche_protector`), `(nature, i0, i1)`. Les plages `underpass` (voie qui croise
-/// au-dessus ou au-dessous) et `layer` (sans tag d'ouvrage) n'en sont pas.
-fn own_structures(bench: &Path, id: &str) -> anyhow::Result<Vec<(String, usize, usize)>> {
-    let mut out = Vec::new();
-    for dir in ["controls", "tunnels"] {
-        let text =
-            std::fs::read_to_string(bench.join(format!("data/vcyclist/analysis/truth/{dir}/spans.csv")))?;
-        for l in text.lines().skip(1) {
-            let f: Vec<&str> = l.split(',').collect();
-            if f.len() > 7 && f[0] == id && f[1] == "X" && matches!(f[7], "bridge" | "tunnel" | "gallery") {
-                out.push((f[7].to_owned(), f[2].parse()?, f[3].parse()?));
-            }
+/// Ouvrages réels tagués sur la voie même d'un témoin négatif (README §4 ter.6, précisé en
+/// eb4c4cc) : suites de stations consécutives dont la way (colonne `way` des stations, plages X et
+/// O comprises) porte, à la base OSM du témoin, `bridge`, `tunnel` (dont `avalanche_protector` :
+/// `gallery`) ou `covered=yes`, de même nature ; `(nature, i0, i1)`. `None` si les tags ne sont pas
+/// dans le cache de banc (`fill-cache`).
+fn own_structures(
+    bench: &Path,
+    cache: &Path,
+    id: &str,
+) -> anyhow::Result<Option<Vec<(String, usize, usize)>>> {
+    let Some(tags) = crate::temoin_tags::load(cache, id)? else { return Ok(None) };
+    let (_, ways) = crate::temoin_tags::station_ways(bench, id)?;
+    let mut out: Vec<(String, usize, usize)> = Vec::new();
+    for (i, w) in ways.iter().enumerate() {
+        let Some(nature) = tags.get(w).and_then(crate::temoin_tags::nature) else { continue };
+        match out.last_mut() {
+            Some(last) if last.0 == nature && last.2 + 1 == i => last.2 = i,
+            _ => out.push((nature.to_owned(), i, i)),
         }
     }
-    Ok(out)
+    Ok(Some(out))
 }
 
 /// Catégorie d'un témoin (`index.csv`, troisième colonne).
@@ -1166,16 +1173,21 @@ fn control_category(bench: &Path, id: &str) -> anyhow::Result<String> {
     Ok(String::new())
 }
 
-/// L'ouvrage réel de cette nature est l'objet même du témoin (README §4 ter.6) : sa catégorie le
-/// nomme (`avalanche-galleries` pour une galerie, un mot `tunnel` ou `bridge` sinon).
+/// L'ouvrage réel de cette nature est l'objet même du témoin (README §4 ter.6, précisé en
+/// eb4c4cc) : la catégorie vcyclist nomme la nature d'un ouvrage que le témoin **emprunte**
+/// (galerie, tunnel, pont, viaduc) ; un ouvrage longé, passé dessous ou dessus (`under`, `above`,
+/// `beside`, `over` avant le nom) n'en fait pas l'objet. `covered` n'a pas de nom de catégorie.
 fn names_object(category: &str, nature: &str) -> bool {
     let words: Vec<&str> = category.split('-').collect();
-    match nature {
-        "gallery" => words.iter().any(|w| w.starts_with("galler")),
-        "tunnel" => words.contains(&"tunnel"),
-        "bridge" => words.contains(&"bridge"),
+    let names = |w: &str| match nature {
+        "gallery" => w.starts_with("galler"),
+        "tunnel" => w.starts_with("tunnel"),
+        "bridge" => w.starts_with("bridge") || w.starts_with("viaduc"),
         _ => false,
-    }
+    };
+    words.iter().enumerate().any(|(k, w)| {
+        names(w) && !words[..k].iter().any(|p| matches!(*p, "under" | "above" | "beside" | "over"))
+    })
 }
 
 fn control_stations(bench: &Path, dir: &str, id: &str) -> anyhow::Result<Stations> {
@@ -1936,7 +1948,10 @@ pub async fn vc_items(
             // A–B ± 35 m retirée de S2 (fictifs, longueur typée, longueur totale) et rapportée ;
             // galerie : limite des données (§4 bis.4), mesurée comme un tunnel entre ses portails.
             // Le témoin sort de S2 si l'ouvrage en est l'objet ou en couvre plus de la moitié.
-            let real = own_structures(bench, &r.id)?;
+            let Some(real) = own_structures(bench, cache, &r.id)? else {
+                skipped.push(json!({"id": r.id, "raison": "S2 : tags de la base OSM du témoin absents du cache (fill-cache)"}));
+                continue;
+            };
             let category = control_category(bench, &r.id)?;
             let length = r.d[n - 1];
             let object = real.iter().find(|(nature, i0, i1)| {
@@ -1946,6 +1961,12 @@ pub async fn vc_items(
                 let (i0, i1) = (*i0, (*i1).min(n - 1));
                 let id = format!("{}#reel{k}", r.id);
                 let gallery = nature == "gallery";
+                // Absents du schéma Shortbread : galerie (`avalanche_protector`), `covered`.
+                let limit = match nature.as_str() {
+                    "gallery" => Some(GALLERY_NOTE),
+                    "covered" => Some(COVERED_NOTE),
+                    _ => None,
+                };
                 if gallery {
                     let (a, b) = (i0.saturating_sub(1), (i1 + 1).min(n - 1));
                     let mut item =
@@ -1955,7 +1976,7 @@ pub async fn vc_items(
                 }
                 out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "S2_ouvrage_reel", "nature": nature,
                     "de_m": r2(r.d[i0]), "a_m": r2(r.d[i1]), "marge_m": REAL_STRUCTURE_MARGIN_M,
-                    "limite_donnees": if gallery { json!(GALLERY_NOTE) } else { Value::Null },
+                    "limite_donnees": limit.map_or(Value::Null, |n| json!(n)),
                     "temoin_sorti": object.is_some()}));
             }
             if let Some((nature, i0, i1)) = object {
@@ -2595,20 +2616,23 @@ mod tests {
     }
 
     #[test]
-    fn real_structures_of_a_negative_and_its_object() {
-        // README §4 ter.6 : la galerie de tn12 est l'objet du témoin ; le couronnement de tn10
-        // (pont, 46 %) ne l'est pas ; un passage inférieur n'est pas un ouvrage de la voie.
+    fn objects_of_a_negative() {
+        // README §4 ter.6 (eb4c4cc) : la galerie de tn12 est l'objet du témoin ; un barrage
+        // (tn10), un viaduc passé dessous ou un tunnel passé dessus ne le sont pas.
         let bench = crate::BenchPaths::repo_bench();
-        let tn12 = own_structures(&bench, "tn12-arly-galleries").unwrap();
-        assert!(tn12.iter().any(|s| s.0 == "gallery"), "{tn12:?}");
         let cat = control_category(&bench, "tn12-arly-galleries").unwrap();
         assert!(names_object(&cat, "gallery") && !names_object(&cat, "bridge"));
         let cat = control_category(&bench, "tn10-roselend").unwrap();
         assert!(!names_object(&cat, "bridge"));
-        assert!(!names_object("urban-street-covered-carriageway", "tunnel"));
-        assert!(names_object("x-tunnel-y", "tunnel"));
-        let n11 = own_structures(&bench, "n11-morlaix-viaduc").unwrap();
-        assert!(n11.is_empty(), "underpass : {n11:?}");
+        for (c, n) in [
+            ("under-viaduct-approach", "bridge"),
+            ("quay-under-bridges", "bridge"),
+            ("road-over-col-above-tunnel", "tunnel"),
+            ("urban-street-covered-carriageway", "covered"),
+        ] {
+            assert!(!names_object(c, n), "{c}");
+        }
+        assert!(names_object("x-tunnel-y", "tunnel") && names_object("long-viaduct", "bridge"));
     }
 
     #[test]

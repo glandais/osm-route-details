@@ -1731,7 +1731,7 @@ pub async fn run_series(
             "increment": "V1",
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1759,7 +1759,7 @@ pub async fn run_series(
                 "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S ; V1 (README §3) : detecte = station du milieu typée pont ou tunnel par le service (stn-acces-nord), part_typee_ouvrage = part des stations de l'emprise (balcons : stations S) typées pont ou tunnel, rapportées sans seuil",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
-                "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; plages hors graphe vélo du témoin (règle de M1 resserrée, README §4 ter.5, 09dcda0) retirées des ouvrages fictifs, de la longueur typée et de la longueur totale, hors_graphe_velo_m par témoin ; ouvrage réel sur la voie même d'un témoin (README §4 ter.6, 32f6867 : plages X de spans.csv de nature bridge, tunnel ou gallery, tags de la base des témoins) : plage A–B ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel ; galerie : limite_donnees, mesurée comme un tunnel entre ses portails) ; témoin sorti de S2 (S2_temoin_sorti) si sa catégorie nomme la nature de l'ouvrage (galerie : « galler… », sinon « tunnel », « bridge ») ou si l'ouvrage couvre plus de la moitié de sa longueur ; covered=yes non lisible dans la base des témoins (non appliqué) ; p06-normandie exclu (ouvrage tenu à l'écart)",
+                "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; plages hors graphe vélo du témoin (règle de M1 resserrée, README §4 ter.5, 09dcda0) retirées des ouvrages fictifs, de la longueur typée et de la longueur totale, hors_graphe_velo_m par témoin ; ouvrage réel sur la voie même d'un témoin (README §4 ter.6, 32f6867, précisé en eb4c4cc : suites de stations dont la way, colonne way des fichiers de stations, plages X et O comprises, porte à la base OSM du témoin bridge, tunnel, dont avalanche_protector = galerie, ou covered=yes ; tags lus par Overpass daté dans le cache de banc, temoins-tags/) : plage A–B ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel ; galerie : limite_donnees, mesurée comme un tunnel entre ses portails) ; témoin sorti de S2 (S2_temoin_sorti) si sa catégorie nomme la nature de l'ouvrage (galerie : « galler… », sinon « tunnel », « bridge ») ou si un ouvrage couvre à lui seul plus de la moitié de sa longueur ; objet = catégorie vcyclist nommant la nature d'un ouvrage emprunté (galler…, tunnel, bridge, viaduc…, sans under/above/beside/over avant le nom) ; covered : limite_donnees (shortbread sans covered), non mesuré ; tags absents du cache : S2 du témoin sauté ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
                 "Passage en hauteur sur un pont (README §2.1, passage_pont.niveau) : MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR) ≥ 10 m : passage compté seulement si la médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) atteint ½ MNH, sinon rapporté en passage_retire_niveau et retiré de E3, S1 et hors_graphe_velo ; MNH < 10 m : niveau_non_discriminant ; moins de 3 stations : niveau_sans_baro",
                 "Extraits tenus à l'écart : repli 1–3 km du décalage local lu sur la trace (baro − MNT IGN LiDAR lu directement, hors ponts et tunnels des tuiles), jamais la sortie du service ; seul le décalage est écrit ; decalage_repli_stations_par_cote = stations d'approche avant / après le pont",
@@ -1797,10 +1797,19 @@ pub async fn run_series(
     Ok(results)
 }
 
+/// Témoins négatifs vcyclist (S2).
+pub fn negative_controls(bench: &std::path::Path) -> anyhow::Result<Vec<String>> {
+    Ok(crate::ouvrages::controls(bench)?
+        .into_iter()
+        .filter(|c| c.2.contains("negative"))
+        .map(|c| c.1)
+        .collect())
+}
+
 /// `fill-cache` : mêmes requêtes que `run`, en ligne, plus les cohérences `test1..4` (service
 /// complet ; `test4` aussi en Mapterhorn seul, deux conventions), les fixtures hors git
 /// (Mapterhorn seul, test de méthode), les scénarios golden et des GPX supplémentaires. Écrit
-/// `cache.lock` dans le cache.
+/// `cache.lock` dans le cache. En calibration, aussi les tags de la voie des témoins négatifs.
 #[allow(clippy::too_many_arguments)]
 pub async fn fill_cache(
     paths: &BenchPaths,
@@ -1826,6 +1835,10 @@ pub async fn fill_cache(
         } else {
             (&none, &none, &none, &[])
         };
+    // Tags de la voie des témoins négatifs à leur base OSM (README §4 ter.6), calibration.
+    if calibration {
+        crate::temoin_tags::fill(&paths.bench, &paths.cache, &negative_controls(&paths.bench)?).await?;
+    }
     let rules = BenchRules::default();
     let service = Service::start(&paths.cache, false, Variant::DEFAULT).await?;
     let mapterhorn = Service::start(&paths.cache, false, Variant::MAPTERHORN).await?;

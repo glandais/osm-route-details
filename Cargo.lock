@@ -1284,6 +1284,7 @@ dependencies = [
  "ord-domain",
  "ord-pipeline",
  "ord-server",
+ "reqwest",
  "roxmltree",
  "serde",
  "serde_json",

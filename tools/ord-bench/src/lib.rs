@@ -29,6 +29,7 @@ pub mod privacy;
 pub mod report_check;
 pub mod service;
 pub mod structures_diag;
+pub mod temoin_tags;
 pub mod typology;
 
 use std::path::{Path, PathBuf};

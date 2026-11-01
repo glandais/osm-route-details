@@ -57,6 +57,9 @@ enum Command {
         #[arg(long, default_value = "calibration")]
         serie: String,
     },
+    /// Tags OSM de la voie des témoins négatifs à leur base (README §4 ter.6), en ligne, dans le
+    /// cache de banc (aussi fait par `fill-cache` en calibration).
+    FillTemoinsTags,
     /// Campagne de calibration sur le cache de banc, sans réseau.
     Run {
         /// Obligatoire : seul le mode hors ligne existe.
@@ -163,6 +166,12 @@ async fn main_inner() -> anyhow::Result<bool> {
             let lock =
                 fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &golden, &gpx, target).await?;
             println!("{}", serde_json::to_string_pretty(&lock)?);
+            Ok(true)
+        }
+        Command::FillTemoinsTags => {
+            let ids = ord_bench::campaign::negative_controls(&paths.bench)?;
+            let filled = ord_bench::temoin_tags::fill(&paths.bench, &paths.cache, &ids).await?;
+            println!("{} témoin(s) rempli(s) sur {}", filled.len(), ids.len());
             Ok(true)
         }
         Command::Run { offline, cas, groupes, out } => {
