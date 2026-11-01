@@ -22,7 +22,8 @@
 # campagne qui juge la trace. Puis E2b : D+ baro en preset dem, comme le service (README §4 bis.5).
 # Modifié le 2026-11-01 (décision de l'utilisateur, README §4 bis.4, avant le gel du MVP) : un
 # ouvrage que le schéma de la source ne type pas comme tel sort d'E4/E3 et de S1, rapporté à part
-# (limite_donnees). Seuils inchangés ; avant toute nouvelle mesure.
+# (limite_donnees). Seuils inchangés ; avant toute nouvelle mesure. Puis M1 : plages d'une trace
+# recalée sans voie streets à 30 m sorties de M1, rapportées à part (README §4 bis.6).
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -71,6 +72,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E2b : D+ baro calculé avec le preset dem (3 m, 30 m), le même que le service et sa référence sans correction ; E2 indicatif reste en barometric (2 m, 15 m)"
   - id: limite_donnees_hors_decompte   # 2026-11-01, remplace limite_donnees_comptee (2026-10-31)
     decision: "Un ouvrage du corpus que la source du service ne type pas comme tunnel ou pont à cause de son schéma sort d'E4 (E3 pour un pont) et de S1 ; rapporté à part comme limite des données du MVP, à la manière de S3, sans seuil"
+  - id: m1_hors_reseau   # 2026-11-01
+    decision: "M1 sur les traces recalées : une plage sans aucune voie de la couche streets à moins de 30 m (tuiles de la campagne qui juge la trace, tuile + 8 voisines) sort de M1 et est rapportée à part (hors_reseau)"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -283,6 +286,13 @@ criteres:
     metrique: "Appariement : part non appariée et part unknown, en longueur"
     cas: {manifest: [osm_surface, perso, vcyclist]}
     agregation: par_parcours
+    hors_reseau:   # README §4 bis.6, 2026-11-01 ; traces recalées
+      regle: "plage de la trace recalée dont aucun point n'a de voie de la couche streets à moins de 30 m"
+      distance_voie_m_max: 30.0
+      tuiles: {source: campagne_qui_juge_la_trace, couche: streets, voisinage: [point, 8_voisines], tuile_absente_a_la_source: sans_voie}
+      exclue_de: [non_apparie, longueur_totale, unknown]
+      rapporte: {cle: hors_reseau, par: trace, mesure: longueur_m}
+      lit: [tuiles, trace_recalee]   # jamais la réponse du service
     seuils:
       - {non_apparie_max: 0.01, unknown_max: 0.02}
     passe_si: tous

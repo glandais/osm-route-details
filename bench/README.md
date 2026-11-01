@@ -426,7 +426,7 @@ E3 pris sur les approches et référence « incertaine » (point 3), bande de po
 tunnel des tuiles (point 2) ; puis, après vérification sur la calibration, plausibilité de la pente
 entre portails (point 2).
 Modifié le 2026-11-01 (décision de l'utilisateur, commits dédiés, avant le gel du MVP et avant toute
-nouvelle mesure) : limite des données hors décompte (point 4).
+nouvelle mesure) : limite des données hors décompte (point 4), plages hors réseau de M1 (point 6).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -534,6 +534,15 @@ nouvelle mesure) : limite des données hors décompte (point 4).
    baro `dem`) : dplus 0,0472 / 0,0635, ouvrage 0,0565 / 0,0703, plaine 0,0165 / 0,0360 ; mêmes
    verdicts. Le baro garde un seuil fixe de 3 m : l'adaptation du seuil sur GLO-30 est une propriété
    de la source MNT, sans objet pour le baro (et sans plage adaptée sur les traces plaine).
+6. **M1 hors réseau** (décision de l'utilisateur, 2026-11-01, avant le gel du MVP). Sur une trace
+   recalée, une plage dont aucun point n'a de voie de la couche `streets` à moins de 30 m, dans les
+   tuiles de la campagne qui juge la trace (tuile du point et ses 8 voisines, comme pour les points
+   insérés, §2.1 ; tuile absente à la source = sans voie), sort de M1 : ni dans la longueur non
+   appariée, ni dans la longueur totale, ni dans la part `unknown`. Elle est rapportée à part
+   (`hors_reseau`, longueur par trace). Motif : M1 mesure les échecs du matcher là où une voie
+   existe ; une sortie réellement hors du réseau cartographié ne peut pas être appariée, quel que
+   soit le service. Le test ne lit que les tuiles et la trace, jamais la réponse du service. Cas
+   déclencheur : `perso-18`.
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
