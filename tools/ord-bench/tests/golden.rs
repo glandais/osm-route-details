@@ -219,3 +219,44 @@ async fn golden_tunnel_series() {
     assert!(out.is_empty(), "{out:#?}");
     println!("{SERIES_SCENARIO} : conforme au snapshot");
 }
+
+/// Raccord entre un pont OSM et son viaduc d'accès non tagué détecté (règles 2026.11.2, T04 §4.3
+/// bis) : `test1` de vcyclist, fin nord du pont de Saint-Nazaire (calibration). Le profil du
+/// tablier est continu : aucune station corrigée ne plonge vers la sonde au sol du pont OSM.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_heuristic_junction() {
+    use ord_bench::golden::{response_with, structure_options, structure_scenario, HEURISTIC_SCENARIO};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let id = HEURISTIC_SCENARIO;
+    let s = structure_scenario(&paths, &manifest, id).expect("scénario");
+    let r = response_with(&service, &s, structure_options()).await.expect("réponse");
+    let entries = r["summary"]["structures"].as_array().expect("structures");
+    assert!(entries.iter().any(|e| e["structure_source"] == "heuristic"), "{entries:?}");
+    let deck: Vec<f64> = r["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["ele_method"] == "dsm_deck")
+        .map(|p| p["ele"].as_f64().unwrap())
+        .collect();
+    assert!(deck.len() > 10, "{id}");
+    // Pas de 10 m : un tablier plafonné à 10 % ne varie pas de plus de 1 m d'un point au suivant
+    // (marge : 3 m).
+    let jump = deck.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f64::max);
+    assert!(jump < 3.0, "{id} : saut de {jump} m sur le tablier");
+    let path = snapshot_path(id);
+    if std::env::var_os("ORD_GOLDEN_UPDATE").is_some() || !path.exists() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+        println!("{id} : snapshot écrit");
+        return;
+    }
+    let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut out = Vec::new();
+    diff("", &expected, &r, &mut out);
+    assert!(out.is_empty(), "{id} : {out:#?}");
+}

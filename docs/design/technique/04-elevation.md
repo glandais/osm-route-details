@@ -313,6 +313,11 @@ Invariant 8 : deux détections de passages différents à moins de 20 m partout 
   corrigé ni rendu. Issue `summary.structures[]` de source `heuristic`, avertissement
   `structure_untagged` sur la plage ; `build_segments` impose `structure` et `structure_source`
   sur la plage du verdict (revêtement, `way_kind` et `matched` gardés).
+- **Raccord rampe OSM / tablier détecté** (règles 2026.11.3) : une station corrigée par un pont OSM
+  hors de ses passages (rampe ou marge vers sa sonde au sol) est reprise par un tablier détecté qui
+  la recouvre, et une sonde du tablier détecté posée sur une telle rampe recule jusqu'au pont OSM :
+  la rampe ne plonge plus sur un viaduc non tagué qui prolonge le way (Saint-Nazaire nord). Les
+  stations des passages OSM ne sont jamais réécrites. Golden `test1-raccord-acces-nord`.
 - Non fait en V1 : unification des détections de passages différents à 20 m (invariant 8 sans
   identité), recalcul d'un seul tenant d'un ouvrage OSM prolongé par une détection (la part
   heuristique est corrigée seule, sondée sur le profil corrigé de l'ouvrage OSM).

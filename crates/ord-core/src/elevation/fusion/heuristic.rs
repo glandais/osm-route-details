@@ -175,24 +175,54 @@ pub fn correct_heuristics(
 ) -> Vec<StructureVerdict> {
     let probe_m = rules.elevation.structures.abutment_probe_min_m;
     let step = rules.elevation.station_step_m;
+    // Plages des passages OSM : leurs stations ne sont jamais réécrites. Une station corrigée par un
+    // pont OSM hors de ses passages est une rampe (ou marge de sonde) vers la sonde au sol ; quand
+    // un tablier détecté prolonge ce pont, la rampe descendrait sur le tablier non tagué : elle est
+    // reprise par le tablier détecté (T04 §4.3 bis, raccord rampe OSM / tablier détecté).
+    let osm: Vec<(f64, f64, StructureKind)> =
+        verdicts.iter().filter(|v| v.passage.is_some()).map(|v| (v.from_m, v.to_m, v.kind)).collect();
+    let in_osm = |x: f64| osm.iter().any(|o| x >= o.0 - 1e-6 && x <= o.1 + 1e-6);
+    let near_osm_bridge = |x: f64, reach: f64| {
+        osm.iter().any(|o| o.2 == StructureKind::Bridge && x >= o.0 - reach && x <= o.1 + reach)
+    };
     let mut kept = Vec::with_capacity(verdicts.len());
     for v in verdicts {
         if v.source != StructureSource::Heuristic {
             kept.push(v);
             continue;
         }
-        let (Some(pa), Some(pb)) =
+        let (Some(mut pa), Some(mut pb)) =
             (station_at(route, v.from_m - probe_m, step), station_at(route, v.to_m + probe_m, step))
         else {
             continue;
         };
+        // Rampe d'un pont OSM voisin, reprise par un tablier détecté (voir plus haut).
+        let ramp = |i: usize, method: &[EleMethod]| {
+            v.kind == StructureKind::Bridge
+                && method[i] != EleMethod::Dem
+                && !in_osm(route.samples[i].d_m)
+                && near_osm_bridge(route.samples[i].d_m, 2.0 * probe_m + step)
+        };
+        // Sonde posée sur une telle rampe : reculée jusqu'au pont OSM (tablier corrigé) ou au sol.
+        let mut guard = 0;
+        while pa > 0 && ramp(pa, method) && guard < 20 {
+            pa -= 1;
+            guard += 1;
+        }
+        guard = 0;
+        while pb + 1 < route.samples.len() && ramp(pb, method) && guard < 20 {
+            pb += 1;
+            guard += 1;
+        }
         let (za, zb) = (ele[pa], ele[pb]);
         if za.is_nan() || zb.is_nan() || pb <= pa + 1 {
             continue;
         }
         let (ca, cb) = (route.samples[pa].d_m, route.samples[pb].d_m);
-        // Stations strictement entre les sondes, restées au MNT (jamais un ouvrage OSM corrigé).
-        let inner: Vec<usize> = (pa + 1..pb).filter(|&i| method[i] == EleMethod::Dem).collect();
+        // Stations strictement entre les sondes, restées au MNT ou rampes d'un pont OSM voisin ;
+        // jamais une station d'un passage OSM.
+        let inner: Vec<usize> =
+            (pa + 1..pb).filter(|&i| method[i] == EleMethod::Dem || ramp(i, method)).collect();
         if inner.is_empty() {
             continue;
         }
@@ -369,6 +399,55 @@ mod tests {
         assert_eq!(method[mid], EleMethod::InterpolatedStructure);
         assert_eq!(ele[osm], -1.0);
         assert_eq!(outcomes[0].method, OutcomeMethod::InterpolatedStructure);
+    }
+
+    #[test]
+    fn an_osm_ramp_rests_on_a_detected_deck_that_extends_the_bridge() {
+        // Viaduc continu à 50 m de 300 à 800 m sur une vallée à 20 m ; le way OSM ne couvre que
+        // 600–800 m : sa rampe (590–600 m, vers la sonde au sol à 590 m) plonge sur le viaduc non
+        // tagué. Le tablier détecté (300–600 m) reprend la rampe ; le passage OSM n'est pas touché.
+        let route = line(1_000.0);
+        let d: Vec<f64> = route.samples.iter().map(|s| s.d_m).collect();
+        let valley = |x: f64| if (300.0..=800.0).contains(&x) { 20.0 } else { 50.0 };
+        let terrain: Vec<TerrainSample> = d.iter().map(|&x| ign_sample(valley(x))).collect();
+        let dsm: Vec<DsmSample> = d.iter().map(|_| DsmSample::Value(50.0)).collect();
+        let mut ele: Vec<f64> = d.iter().map(|&x| valley(x)).collect();
+        let mut method = vec![EleMethod::Dem; d.len()];
+        for (i, &x) in d.iter().enumerate() {
+            if (600.0..=800.0).contains(&x) {
+                (ele[i], method[i]) = (50.0, EleMethod::DsmDeck);
+            } else if (590.0..600.0).contains(&x) {
+                // Rampe OSM vers la sonde au sol (20 m à 590 m).
+                (ele[i], method[i]) = (20.0 + 3.0 * (x - 590.0), EleMethod::DsmDeck);
+            }
+        }
+        let osm = StructureVerdict {
+            target: GroupRef::Osm(1),
+            kind: StructureKind::Bridge,
+            from_m: 600.0,
+            to_m: 800.0,
+            passage: Some(0),
+            source: StructureSource::Osm,
+        };
+        let (mut outcomes, mut warnings) = (Vec::new(), Vec::new());
+        let kept = correct_heuristics(
+            vec![osm, verdict(StructureKind::Bridge, 300.0, 600.0)],
+            &route,
+            &terrain,
+            Some(&dsm),
+            &Rules::default(),
+            &mut ele,
+            &mut method,
+            &mut outcomes,
+            &mut warnings,
+        );
+        assert_eq!(kept.len(), 2);
+        for (i, &x) in d.iter().enumerate() {
+            if (350.0..=800.0).contains(&x) {
+                assert!((ele[i] - 50.0).abs() < 0.5, "{x} : {}", ele[i]);
+            }
+        }
+        assert_eq!(outcomes[0].method, OutcomeMethod::DsmDeck);
     }
 
     #[test]

@@ -27,6 +27,11 @@ pub const SCENARIOS: [&str; 2] = ["krk", "liege-belle-liegeoise"];
 pub const STRUCTURE_SCENARIOS: [&str; 3] =
     ["test1-depart-sur-tablier", "nantes-pirmil-deux-fois", "nantes-pirmil-demi-tour"];
 
+/// Scénario des heuristiques V1 (règles 2026.11.2, T04 §4.3 bis) : `test1` de vcyclist de 3 à 5 km,
+/// fin nord du pont OSM de Saint-Nazaire puis son viaduc d'accès non tagué (calibration) : la rampe
+/// du pont OSM s'appuie sur le tablier détecté.
+pub const HEURISTIC_SCENARIO: &str = "test1-raccord-acces-nord";
+
 /// Scénario de la série de tunnels (règles 2026.10.10, T04 §3.1) : `test4` de vcyclist de 4,8 à
 /// 5,48 km, à travers les tunnels des Petits Goulets (calibration) et leurs balcons à l'air libre.
 pub const SERIES_SCENARIO: &str = "petits-goulets-serie";
@@ -93,6 +98,7 @@ pub fn structure_scenario(paths: &BenchPaths, manifest: &Manifest, id: &str) -> 
     let cut = match id {
         "test1-depart-sur-tablier" => Some(("test1", 2_500.0, 5_000.0)),
         SERIES_SCENARIO => Some(("test4", 4_800.0, 5_480.0)),
+        HEURISTIC_SCENARIO => Some(("test1", 3_000.0, 5_000.0)),
         _ => None,
     };
     if let Some((file, from, to)) = cut {

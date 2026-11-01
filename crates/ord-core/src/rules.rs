@@ -26,7 +26,8 @@ use serde::Serialize;
 // (`bicycle_forbidden`, api 1.1).
 // 2026.11.2 : heuristiques V1 (MNS sur l'enveloppe LiDAR, détecteurs de tablier et de tunnel,
 // ouvrages `heuristic` corrigés, `structure_untagged`).
-pub const RULES_VERSION: &str = "2026.11.2";
+// 2026.11.3 : rampe d'un pont OSM reprise par le tablier détecté qui le prolonge.
+pub const RULES_VERSION: &str = "2026.11.3";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -395,6 +396,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.2", "dbb75aceaf44f2ea".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.3", "dbb75aceaf44f2ea".to_owned()));
     }
 }

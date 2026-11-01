@@ -11,7 +11,8 @@
           "date": "2026-10-31",
           "indicative": true,
           "products": [
-            "mnt"
+            "mnt",
+            "mns"
           ],
           "role": "primary",
           "source": "ign-lidar-hd",
@@ -27,7 +28,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.2"
+    "rules_version": "2026.11.3"
   },
   "points": [
     {
