@@ -27,6 +27,10 @@ pub const SCENARIOS: [&str; 2] = ["krk", "liege-belle-liegeoise"];
 pub const STRUCTURE_SCENARIOS: [&str; 3] =
     ["test1-depart-sur-tablier", "nantes-pirmil-deux-fois", "nantes-pirmil-demi-tour"];
 
+/// Scénario de la série de tunnels (règles 2026.10.10, T04 §3.1) : `test4` de vcyclist de 4,8 à
+/// 5,48 km, à travers les tunnels des Petits Goulets (calibration) et leurs balcons à l'air libre.
+pub const SERIES_SCENARIO: &str = "petits-goulets-serie";
+
 /// Scénario des trois modes de sortie sur le même parcours (T05 §2.6) : traversée du pont de
 /// Pirmil (calibration), points d'entrée à 300 m au-delà des culées et au milieu.
 pub const MODES_SCENARIO: &str = "nantes-pirmil-trois-modes";
@@ -86,8 +90,13 @@ pub fn structure_scenario(paths: &BenchPaths, manifest: &Manifest, id: &str) -> 
             .with_context(|| format!("{o} : point {k}"))?;
         Ok(Pt { lat: x[0].as_f64().context("lat")?, lon: x[1].as_f64().context("lon")? })
     };
-    if id == "test1-depart-sur-tablier" {
-        let pts = crate::gpx::read(&paths.bench.join("data/vcyclist/test1.gpx"))?;
+    let cut = match id {
+        "test1-depart-sur-tablier" => Some(("test1", 2_500.0, 5_000.0)),
+        SERIES_SCENARIO => Some(("test4", 4_800.0, 5_480.0)),
+        _ => None,
+    };
+    if let Some((file, from, to)) = cut {
+        let pts = crate::gpx::read(&paths.bench.join(format!("data/vcyclist/{file}.gpx")))?;
         let mut out = Vec::new();
         let mut s = 0.0;
         for (i, p) in pts.iter().enumerate() {
@@ -98,7 +107,7 @@ pub fn structure_scenario(paths: &BenchPaths, manifest: &Manifest, id: &str) -> 
                     ord_domain::LatLon::new(p.lat, p.lon),
                 );
             }
-            if (2_500.0..=5_000.0).contains(&s) {
+            if (from..=to).contains(&s) {
                 out.push(Pt { lat: p.lat, lon: p.lon });
             }
         }

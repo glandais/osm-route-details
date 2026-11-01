@@ -5,7 +5,8 @@
 //! Choix simples, notés : un ouvrage est lu une fois, sur le passage qui couvre la plus grande part
 //! de son axe (inv. 8), et sur la plus longue suite monotone de ce passage (demi-tour) ; deux
 //! ouvrages à un seul passage séparés de moins de `2 × sonde` sur le parcours sont fusionnés en un
-//! groupe lu sur le parcours ; un ouvrage à plusieurs passages n'est jamais fusionné.
+//! groupe lu sur le parcours, de même une série de tunnels séparés par des balcons à l'air libre de
+//! moins de `tunnel_series_gap_m` ; un ouvrage à plusieurs passages n'est jamais fusionné.
 
 use ord_domain::elevation::{TerrainOrigin, TerrainSample};
 use ord_domain::route::PreparedRoute;
@@ -400,6 +401,29 @@ impl Builder<'_> {
     }
 }
 
+/// Deux passages simples forment une série de tunnels (T04 §3.1) : le premier sort d'un tunnel, le
+/// second entre dans un tunnel, et le tronçon entre eux est à l'air libre et apparié de bout en
+/// bout (pas de portion non appariée ni sans donnée, où un autre ouvrage pourrait se cacher). La
+/// distance est jugée par l'appelant (`tunnel_series_gap_m`).
+fn tunnel_series_link(
+    typo: &TypologyOutput,
+    prev: &StructurePassage,
+    prev_s: &Structure,
+    next: &StructurePassage,
+    next_s: &Structure,
+) -> bool {
+    let out = prev_s.kind_at(prev.chainage_at(prev.to_m));
+    let into = next_s.kind_at(next.chainage_at(next.from_m));
+    if out != StructureKind::Tunnel || into != StructureKind::Tunnel {
+        return false;
+    }
+    let (from, to) = (prev.to_m, next.from_m);
+    typo.runs
+        .iter()
+        .filter(|r| r.from_m < to - 1e-6 && r.to_m > from + 1e-6)
+        .all(|r| matches!(r.matched, crate::typology::RunMatch::Matched { .. }))
+}
+
 /// Groupes d'ouvrages du parcours et ce qu'il faut lire pour les corriger.
 pub fn plan(
     route: &PreparedRoute,
@@ -461,9 +485,12 @@ pub fn plan(
             groups.push(b.structure_group(s, &ps));
             continue;
         }
-        if let Some(&(_, last, _)) = pending.last() {
+        if let Some(&(_, last, last_s)) = pending.last() {
             let i = nearest_station(route, last.to_m);
-            let gap_max = 2.0 * b.probe_at(i);
+            let mut gap_max = 2.0 * b.probe_at(i);
+            if tunnel_series_link(typo, last, last_s, p0, s) {
+                gap_max = gap_max.max(rules.elevation.structures.tunnel_series_gap_m);
+            }
             if p0.from_m - last.to_m >= gap_max {
                 flush(&mut b, &mut pending, &mut groups);
             }

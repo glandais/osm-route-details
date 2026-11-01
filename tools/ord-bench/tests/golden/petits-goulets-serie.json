@@ -1,0 +1,668 @@
+{
+  "attribution": {
+    "text": "© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · © IGN — LiDAR HD · Mapterhorn and its sources",
+    "url": "/v1/attribution"
+  },
+  "meta": {
+    "api_version": "1.0",
+    "data_versions": {
+      "elevation": [
+        {
+          "date": "2026-10-31",
+          "indicative": true,
+          "products": [
+            "mnt"
+          ],
+          "role": "primary",
+          "source": "ign-lidar-hd",
+          "zoom": 15
+        }
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
+    },
+    "duration_ms": null,
+    "request_id": null,
+    "rules_version": "2026.10.10"
+  },
+  "points": [
+    {
+      "d_m": 0.0,
+      "ele": 307.98,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 10.0,
+      "ele": 308.55,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 20.0,
+      "ele": 309.02,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 30.0,
+      "ele": 309.51,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 40.0,
+      "ele": 309.91,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 50.0,
+      "ele": 310.37,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 60.0,
+      "ele": 310.46,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 70.0,
+      "ele": 311.07,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 80.0,
+      "ele": 311.61,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 90.0,
+      "ele": 312.24,
+      "ele_method": "dem",
+      "index": 1
+    },
+    {
+      "d_m": 100.0,
+      "ele": 313.19,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 110.0,
+      "ele": 313.8,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 120.0,
+      "ele": 314.12,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 130.0,
+      "ele": 314.85,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 140.0,
+      "ele": 315.58,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 150.0,
+      "ele": 315.91,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 160.0,
+      "ele": 316.13,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 170.0,
+      "ele": 316.24,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 180.0,
+      "ele": 317.12,
+      "ele_method": "dem",
+      "index": 3
+    },
+    {
+      "d_m": 190.0,
+      "ele": 317.73,
+      "ele_method": "dem",
+      "index": 3
+    },
+    {
+      "d_m": 200.0,
+      "ele": 317.61,
+      "ele_method": "dem",
+      "index": 3
+    },
+    {
+      "d_m": 210.0,
+      "ele": 317.75,
+      "ele_method": "dem",
+      "index": 3
+    },
+    {
+      "d_m": 220.0,
+      "ele": 317.39,
+      "ele_method": "dem",
+      "index": 3
+    },
+    {
+      "d_m": 230.0,
+      "ele": 318.99,
+      "ele_method": "dem",
+      "index": 4
+    },
+    {
+      "d_m": 240.0,
+      "ele": 319.64,
+      "ele_method": "dem",
+      "index": 4
+    },
+    {
+      "d_m": 250.0,
+      "ele": 320.13,
+      "ele_method": "dem",
+      "index": 4
+    },
+    {
+      "d_m": 260.0,
+      "ele": 320.38,
+      "ele_method": "dem",
+      "index": 4
+    },
+    {
+      "d_m": 270.0,
+      "ele": 321.04,
+      "ele_method": "dem",
+      "index": 5
+    },
+    {
+      "d_m": 280.0,
+      "ele": 321.9,
+      "ele_method": "dem",
+      "index": 5
+    },
+    {
+      "d_m": 290.0,
+      "ele": 321.98,
+      "ele_method": "interpolated_structure",
+      "index": 6
+    },
+    {
+      "d_m": 300.0,
+      "ele": 322.06,
+      "ele_method": "interpolated_structure",
+      "index": 6
+    },
+    {
+      "d_m": 310.0,
+      "ele": 322.14,
+      "ele_method": "interpolated_structure",
+      "index": 7
+    },
+    {
+      "d_m": 320.0,
+      "ele": 322.23,
+      "ele_method": "interpolated_structure",
+      "index": 7
+    },
+    {
+      "d_m": 330.0,
+      "ele": 322.31,
+      "ele_method": "interpolated_structure",
+      "index": 8
+    },
+    {
+      "d_m": 340.0,
+      "ele": 322.39,
+      "ele_method": "interpolated_structure",
+      "index": 8
+    },
+    {
+      "d_m": 350.0,
+      "ele": 322.47,
+      "ele_method": "interpolated_structure",
+      "index": 9
+    },
+    {
+      "d_m": 360.0,
+      "ele": 322.56,
+      "ele_method": "interpolated_structure",
+      "index": 10
+    },
+    {
+      "d_m": 370.0,
+      "ele": 322.64,
+      "ele_method": "interpolated_structure",
+      "index": 10
+    },
+    {
+      "d_m": 380.0,
+      "ele": 322.72,
+      "ele_method": "interpolated_structure",
+      "index": 10
+    },
+    {
+      "d_m": 390.0,
+      "ele": 322.8,
+      "ele_method": "interpolated_structure",
+      "index": 11
+    },
+    {
+      "d_m": 400.0,
+      "ele": 322.88,
+      "ele_method": "interpolated_structure",
+      "index": 11
+    },
+    {
+      "d_m": 410.0,
+      "ele": 322.97,
+      "ele_method": "interpolated_structure",
+      "index": 11
+    },
+    {
+      "d_m": 420.0,
+      "ele": 323.05,
+      "ele_method": "interpolated_structure",
+      "index": 12
+    },
+    {
+      "d_m": 430.0,
+      "ele": 323.13,
+      "ele_method": "interpolated_structure",
+      "index": 12
+    },
+    {
+      "d_m": 440.0,
+      "ele": 323.21,
+      "ele_method": "interpolated_structure",
+      "index": 13
+    },
+    {
+      "d_m": 450.0,
+      "ele": 323.29,
+      "ele_method": "interpolated_structure",
+      "index": 13
+    },
+    {
+      "d_m": 460.0,
+      "ele": 323.38,
+      "ele_method": "interpolated_structure",
+      "index": 14
+    },
+    {
+      "d_m": 470.0,
+      "ele": 323.46,
+      "ele_method": "interpolated_structure",
+      "index": 14
+    },
+    {
+      "d_m": 480.0,
+      "ele": 323.54,
+      "ele_method": "interpolated_structure",
+      "index": 14
+    },
+    {
+      "d_m": 490.0,
+      "ele": 323.62,
+      "ele_method": "interpolated_structure",
+      "index": 15
+    },
+    {
+      "d_m": 500.0,
+      "ele": 323.7,
+      "ele_method": "interpolated_structure",
+      "index": 15
+    },
+    {
+      "d_m": 510.0,
+      "ele": 323.79,
+      "ele_method": "interpolated_structure",
+      "index": 15
+    },
+    {
+      "d_m": 520.0,
+      "ele": 323.87,
+      "ele_method": "interpolated_structure",
+      "index": 16
+    },
+    {
+      "d_m": 530.0,
+      "ele": 323.95,
+      "ele_method": "interpolated_structure",
+      "index": 16
+    },
+    {
+      "d_m": 540.0,
+      "ele": 324.03,
+      "ele_method": "interpolated_structure",
+      "index": 16
+    },
+    {
+      "d_m": 550.0,
+      "ele": 324.11,
+      "ele_method": "interpolated_structure",
+      "index": 17
+    },
+    {
+      "d_m": 560.0,
+      "ele": 324.2,
+      "ele_method": "interpolated_structure",
+      "index": 17
+    },
+    {
+      "d_m": 570.0,
+      "ele": 324.28,
+      "ele_method": "interpolated_structure",
+      "index": 17
+    },
+    {
+      "d_m": 580.0,
+      "ele": 324.36,
+      "ele_method": "interpolated_structure",
+      "index": 18
+    },
+    {
+      "d_m": 590.0,
+      "ele": 324.31,
+      "ele_method": "dem",
+      "index": 19
+    },
+    {
+      "d_m": 600.0,
+      "ele": 323.54,
+      "ele_method": "dem",
+      "index": 19
+    },
+    {
+      "d_m": 610.0,
+      "ele": 323.94,
+      "ele_method": "dem",
+      "index": 19
+    },
+    {
+      "d_m": 620.0,
+      "ele": 324.94,
+      "ele_method": "dem",
+      "index": 20
+    },
+    {
+      "d_m": 627.76,
+      "ele": 302.36,
+      "ele_method": "dem",
+      "index": 21
+    }
+  ],
+  "quality": {
+    "elevation_coverage": 1.0,
+    "inferred_surface_ratio": 0.0,
+    "matched_ratio": 1.0,
+    "structure_correction": {
+      "bridges": "none_found",
+      "counts": {
+        "interpolated_structure": 4
+      },
+      "counts_by_source": {
+        "osm": 4
+      },
+      "tunnels": "applied"
+    },
+    "terrain": [
+      {
+        "fallback_after_error": false,
+        "from_m": 0.0,
+        "measured": true,
+        "origin": "ign_lidar_hd",
+        "to_m": 627.76
+      }
+    ],
+    "warnings": []
+  },
+  "segments": [
+    {
+      "ele_end": 321.97,
+      "ele_method": "dem",
+      "ele_start": 307.98,
+      "from_index": 0,
+      "from_m": 0.0,
+      "grade_pct": 4.84,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 7,
+      "to_m": 289.26,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 322.43,
+      "ele_method": "interpolated_structure",
+      "ele_start": 321.97,
+      "from_index": 6,
+      "from_m": 289.26,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "tunnel",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 10,
+      "to_m": 344.36,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 322.73,
+      "ele_method": "interpolated_structure",
+      "ele_start": 322.43,
+      "from_index": 9,
+      "from_m": 344.36,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 12,
+      "to_m": 381.05,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 323.16,
+      "ele_method": "interpolated_structure",
+      "ele_start": 322.73,
+      "from_index": 11,
+      "from_m": 381.05,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "tunnel",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 14,
+      "to_m": 433.54,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 323.32,
+      "ele_method": "interpolated_structure",
+      "ele_start": 323.16,
+      "from_index": 13,
+      "from_m": 433.54,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 15,
+      "to_m": 452.8,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 323.57,
+      "ele_method": "interpolated_structure",
+      "ele_start": 323.32,
+      "from_index": 14,
+      "from_m": 452.8,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "tunnel",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 16,
+      "to_m": 483.81,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 323.8,
+      "ele_method": "interpolated_structure",
+      "ele_start": 323.57,
+      "from_index": 15,
+      "from_m": 483.81,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 16,
+      "to_m": 511.38,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 324.33,
+      "ele_method": "interpolated_structure",
+      "ele_start": 323.8,
+      "from_index": 15,
+      "from_m": 511.38,
+      "grade_pct": 0.82,
+      "matched": true,
+      "structure": "tunnel",
+      "structure_source": "osm",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 19,
+      "to_m": 576.04,
+      "way_kind": "major_road"
+    },
+    {
+      "ele_end": 302.36,
+      "ele_method": "dem",
+      "ele_start": 324.33,
+      "from_index": 18,
+      "from_m": 576.04,
+      "grade_pct": -42.48,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 21,
+      "to_m": 627.76,
+      "way_kind": "major_road"
+    }
+  ],
+  "status": "complete",
+  "summary": {
+    "by_structure_m": {
+      "ground": 424.5,
+      "tunnel": 203.25
+    },
+    "by_surface_class_m": {
+      "paved": 627.76
+    },
+    "by_surface_source_m": {
+      "tagged": 627.76
+    },
+    "by_way_kind_m": {
+      "major_road": 627.76
+    },
+    "ele_max_m": 324.94,
+    "ele_min_m": 302.36,
+    "gain_m": 15.73,
+    "gain_params": {
+      "adapted": [],
+      "partial": false,
+      "preset": "dem",
+      "smoothing_m": 30.0,
+      "threshold_m": 3.0
+    },
+    "length_m": 627.76,
+    "loss_m": 4.33,
+    "structures": [
+      {
+        "from_m": 289.26,
+        "kind": "tunnel",
+        "length_m": 55.1,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 344.36
+      },
+      {
+        "from_m": 381.05,
+        "kind": "tunnel",
+        "length_m": 52.49,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 433.54
+      },
+      {
+        "from_m": 452.8,
+        "kind": "tunnel",
+        "length_m": 31.01,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 483.81
+      },
+      {
+        "from_m": 511.38,
+        "kind": "tunnel",
+        "length_m": 64.66,
+        "method": "interpolated_structure",
+        "structure_source": "osm",
+        "to_m": 576.04
+      }
+    ],
+    "terrain_m": {
+      "ign_lidar_hd": 627.76
+    },
+    "unknown_m": 0.0
+  }
+}

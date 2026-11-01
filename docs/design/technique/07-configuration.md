@@ -67,9 +67,16 @@ pub struct Capabilities {
     pub primary_zone: &'static str,     // "FR-metropole+corse" (contour : T02 §7.2)
     pub data: DataFeatures,             // ford_detectable, surface_detail, bridge_dsm, heuristics
     pub elevation_sources: Vec<DataVersion>, // IGN (zoom, mode direct|sober), Mapterhorn (zoom, role fallback)
-    pub rules: Rules,                   // seuils des ruptures, gap_fill_max_m, presets, glo30_threshold_m
+    pub rules: Rules,                   // seuils des ruptures, gap_fill_max_m, presets, glo30_threshold_m,
+                                        // correction des ouvrages (dont tunnel_series_gap_m)
 }
 ```
+Les règles de correction des ouvrages (`ElevationRules::structures`, `CorrectionRules`) y sont
+publiées : sondes de culée et de portail, gardes de pente `max_tunnel_chord_grade` et
+`max_bridge_chord_grade`, et `tunnel_series_gap_m` = 120 m (règles 2026.10.10) : tronçon à l'air
+libre en deçà duquel deux tunnels OSM consécutifs forment une série, corrigée d'une seule droite
+entre ses portails extérieurs (T04 §3.1). Ce ne sont pas des clés de configuration : les changer
+monte `RULES_VERSION`.
 `ford_detectable` = `caps.ford_ways || caps.ford_nodes` ; `surface_detail` = `caps.surface == Raw` ;
 `bridge_dsm` = IGN actif ; `heuristics` = `ElevationRules::heuristics` (T04 §7.1).
 

@@ -155,3 +155,67 @@ async fn golden_three_modes() {
     assert!(out.is_empty(), "{out:#?}");
     println!("{MODES_SCENARIO} : conforme au snapshot");
 }
+
+/// Série de tunnels (règles 2026.10.10, T04 §3.1) : tunnels des Petits Goulets (calibration, `test4`)
+/// séparés par des balcons de moins de 120 m, une droite entre les portails extérieurs ; les balcons
+/// restent des routes (ni segment ni entrée d'ouvrage inventés), leur profil suit la droite.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_tunnel_series() {
+    use ord_bench::golden::{response_with, structure_options, structure_scenario, SERIES_SCENARIO};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let s = structure_scenario(&paths, &manifest, SERIES_SCENARIO).expect("scénario");
+    let mut r = response_with(&service, &s, structure_options()).await.expect("réponse");
+    for p in r["points"].as_array_mut().into_iter().flatten() {
+        if let Some(m) = p.as_object_mut() {
+            m.remove("lat");
+            m.remove("lon");
+        }
+    }
+    let entries = r["summary"]["structures"].as_array().expect("structures").clone();
+    assert_eq!(entries.len(), 4, "{entries:?}");
+    assert!(entries.iter().all(|e| e["kind"] == "tunnel" && e["method"] == "interpolated_structure"));
+    assert_eq!(r["quality"]["structure_correction"]["tunnels"], "applied");
+    let span = |e: &Value| (e["from_m"].as_f64().unwrap(), e["to_m"].as_f64().unwrap());
+    let (first, last) = (span(&entries[0]).0, span(&entries[3]).1);
+    // Balcons : entre deux entrées, aucun segment d'ouvrage.
+    let balconies: Vec<(f64, f64)> = entries.windows(2).map(|w| (span(&w[0]).1, span(&w[1]).0)).collect();
+    for seg in r["segments"].as_array().expect("segments") {
+        let (f, t) = (seg["from_m"].as_f64().unwrap(), seg["to_m"].as_f64().unwrap());
+        for &(a, b) in &balconies {
+            if f < b - 1.0 && t > a + 1.0 {
+                assert_eq!(seg["structure"], "ground", "balcon typé ouvrage : {seg}");
+            }
+        }
+    }
+    // Profil : une droite de portail extérieur à portail extérieur, balcons compris.
+    let pts: Vec<(f64, f64, String)> = r["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            (p["d_m"].as_f64().unwrap(), p["ele"].as_f64().unwrap(), p["ele_method"].as_str().unwrap().into())
+        })
+        .filter(|p| p.0 > first && p.0 < last)
+        .collect();
+    assert!(pts.iter().all(|p| p.2 == "interpolated_structure"), "{pts:?}");
+    let (a, b) = (&pts[0], &pts[pts.len() - 1]);
+    for p in &pts {
+        let line = a.1 + (b.1 - a.1) * (p.0 - a.0) / (b.0 - a.0);
+        assert!((p.1 - line).abs() < 0.05, "{} : {} ≠ {line}", p.0, p.1);
+    }
+    let path = snapshot_path(SERIES_SCENARIO);
+    if std::env::var_os("ORD_GOLDEN_UPDATE").is_some() || !path.exists() {
+        std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+        println!("{SERIES_SCENARIO} : snapshot écrit");
+        return;
+    }
+    let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut out = Vec::new();
+    diff("", &expected, &r, &mut out);
+    assert!(out.is_empty(), "{out:#?}");
+    println!("{SERIES_SCENARIO} : conforme au snapshot");
+}

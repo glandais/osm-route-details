@@ -112,6 +112,23 @@ fait ≈ 870 m), et supprime la marge de relecture `refreshM` (`vc:E/path/Tunnel
   qui continue.
 - Deux groupes séparés par moins de `2 × abutment_probe_m` sont fusionnés : la sonde de l'un
   tomberait dans l'autre.
+- **Tunnels en série** (règles 2026.10.10, décision de l'utilisateur du 2026-11-01) : sur une route
+  en falaise (Combe Laval, Petits Goulets), des tunnels OSM sont séparés par des balcons à l'air
+  libre non tagués où le MNT lit la paroi, pas la chaussée (26–29 m d'écart E4 sur `combe-laval#2`
+  et `#3` en 2026.10.9). Deux passages simples consécutifs dont le premier **sort** d'un tunnel et
+  le second **entre** dans un tunnel, séparés sur le parcours par moins de
+  `tunnel_series_gap_m = 120 m` [cal] (`CorrectionRules`, T07 §4), forment un même groupe lu sur le
+  parcours, de proche en proche (une série de n tunnels). Le tronçon entre eux doit être apparié de
+  bout en bout : une portion non appariée ou sans donnée coupe la série. La droite va du portail
+  extérieur d'entrée au portail extérieur de sortie, **balcons compris**, comme les spans de
+  vcyclist (`vc:G/TunnelDetectorOptions.kt`, `minValleyHeightM` : terrasse gardée dans le span). La
+  sonde de portail n'est lue qu'aux deux bouts de la série ; la garde de pente
+  (`max_tunnel_chord_grade`) juge la droite de la série entière ; un doute sur un passage, une sonde
+  sans altitude ou une plage sans typologie laissent toute la série non corrigée. Les balcons
+  restent des routes : ni segment ni entrée de `summary.structures[]` n'y est créé, seule leur
+  altitude suit la droite (`ele_method = interpolated_structure`, et donc celle d'un segment de
+  balcon, T06 §2). Un ouvrage à plusieurs passages n'entre jamais dans une série (comme pour la
+  fusion ci-dessus).
 - **Axe du groupe** : stations à 5 m sur l'extension amont (géométrie OSM), puis celles du parcours
   dans `[from_m, to_m]`, puis l'extension aval. Sur le parcours, on lit toujours sur la trace
   (la lecture sur la géométrie OSM reste V1.x, doc 01 §11.2).
