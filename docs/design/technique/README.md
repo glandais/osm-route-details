@@ -63,6 +63,12 @@ vérifié par `ord-bench check` avant toute campagne.
   `stn-acces-nord`), **S1**, **S2** et **E3**/**E4**, jugés sur une **nouvelle** série tenue à
   l'écart (bench README §2, point 3, et §6), et sur le coût à froid du MNS partout, mesuré sous le budget de 90 s
   (T02 §10).
+  - Décisions de l'utilisateur (2026-11-01, après le jugement du MVP, refusé : `bench/judgements.md`) :
+    - l'état « hors graphe » du matcher rend la typologie de la voie suivie (classe, revêtement,
+      ouvrage), avec un avertissement d'accès vélo interdit, au lieu de `matched: false` seul.
+      C'est un ajout au contrat ;
+    - les galeries pare-avalanche, absentes du schéma Shortbread, sont couvertes par la détection
+      MNS des heuristiques. Jusque-là, elles restent en « limite des données » (bench §4 bis.4).
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.
