@@ -582,6 +582,17 @@ inchangés.
    dépendait de la longueur des ponts de la série, pas du service. E3 et E4 ne changent pas : E3 lit
    ses stations entre A et B et le milieu, E4 ses bandes de portail et la droite entre portails ;
    aucun ne compte de longueur typée.
+2. **Attribution d'un passage.** Un passage (trace à moins de 40 m de A, du milieu et de B, §2.1)
+   n'est attribué à un pont ou à un tunnel du corpus que si la **trace brute** (GPS d'origine, pas
+   la trace recalée) suit sa voie mieux que tout autre pont ou tunnel des tuiles de la campagne :
+   sur l'emprise, la médiane des distances des points bruts à la voie de l'ouvrage (élément de même
+   nature qui suit le mieux sa géométrie, §4 bis.1) est la plus petite de celles des voies
+   `bridge=true` / `tunnel=true` des tuiles. Sinon le passage est rapporté en
+   `passage_sur_ouvrage_parallele` et n'est compté ni dans E3, E4, S1, ni dans `hors_graphe_velo`.
+   Motif : au jugement du MVP, deux passages sur un pont routier ont été attribués à la passerelle
+   parallèle à ≈ 8 m (`nv-40`) ; le service typait le bon pont, et le banc le jugeait sur un autre.
+   La règle ne lit que la trace brute et les tuiles, jamais le service. Passage dessous (E5) : non
+   concerné.
 
 ---
 
