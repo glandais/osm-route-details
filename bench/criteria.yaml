@@ -29,6 +29,8 @@
 # README §4 ter) : grain de S1 (recouvrement continu) ; attribution d'un passage par la trace brute ;
 # M1 hors graphe vélo (voie la plus proche fermée au vélo) ; couverture de la série V1 (minimums,
 # sauté ou sous le minimum = refus). Seuils inchangés ; avant toute nouvelle mesure.
+# Après la première calibration V1 (règles 2026.11.2 ; décisions de l'utilisateur, 2026-11-01) :
+# M1 hors graphe vélo resserrée aux routes motorisées fermées au vélo, plages ≥ 50 m (README §4 ter.3).
 # Le gel du MVP (gel/MVP.json) garde les empreintes jugées ; ce fichier sera gelé à nouveau pour V1.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser. À partir de V1, un critère bloquant sauté ou sous son
@@ -89,6 +91,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Passage attribué à un pont ou tunnel du corpus seulement si la trace brute suit sa voie mieux que tout autre pont/tunnel des tuiles (plus petite médiane, §4 bis.1) ; sinon passage_sur_ouvrage_parallele, rapporté, non compté"
   - id: m1_hors_graphe_velo   # 2026-11-01, V1
     decision: "M1 : station recalée dont la voie streets la plus proche (≤ 30 m, tuiles de la campagne) est fermée au vélo par la règle de tags du service sort de M1, rapportée (hors_graphe_velo_m), contrôle matched=false + unmatched_range ; tags des tuiles seulement ; risque de circularité accepté"
+  - id: m1_hors_graphe_motorise   # 2026-11-01, V1, après la calibration 2026.11.2
+    decision: "M1 hors graphe vélo resserrée : seulement les routes motorisées fermées au vélo (motorway, trunk, route bicycle=no), plages continues ≥ 50 m ; piétonnes, trottoirs/sentiers bicycle=no, busways, escaliers, traversées restent dans M1 ; voie la plus proche hors rails (T03 §5.3)"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -348,9 +352,13 @@ criteres:
       exclue_de: [non_apparie, longueur_totale, unknown]
       rapporte: {cle: hors_reseau, par: trace, mesure: longueur_m}
       lit: [tuiles, trace_recalee]   # jamais la réponse du service
-    hors_graphe_velo:   # README §4 ter.3, V1 ; traces recalées
-      regle: "station recalée dont la voie la plus proche de la couche streets (≤ 30 m) est fermée au vélo par la règle de tags du service (T03 §4.2 étape 1)"
+    hors_graphe_velo:   # README §4 ter.3, V1 ; traces recalées ; resserrée le 2026-11-01 (règles 2026.11.2)
+      regle: "plage continue (≥ 50 m) de stations recalées dont la voie la plus proche de la couche streets (≤ 30 m, rails exclus) est une route motorisée fermée au vélo : motorway, trunk, ou route bicycle=no"
       distance_voie_m_max: 30.0
+      voies_visees: {kinds: [motorway, trunk], routes_motorisees_bicycle_no: true, bicycle_prime: true}   # T03 §5.3 étape 6
+      plage_min_m: 50.0   # plage plus courte (simple traversée) : jugée par M1
+      restent_dans_M1: [pedestrian, footway_ou_path_bicycle_no, busway, steps, traversee_moins_de_50m]
+      voie_la_plus_proche_exclut: [rail]
       tuiles: {source: campagne_qui_juge_la_trace, couche: streets, voisinage: [point, 8_voisines], attributs: [kind, bicycle]}
       exclue_de: [non_apparie, longueur_totale, unknown]
       rapporte: {cle: hors_graphe_velo_m, par: trace, mesure: longueur_m}

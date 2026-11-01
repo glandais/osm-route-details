@@ -612,6 +612,15 @@ inchangés.
    Motif : au jugement du MVP, 4,6 km de `perso-23` suivaient des voies `trunk` (dont
    `bicycle=no`), GPS brut à 2–4 m, toute autre voie à plus de 40 m ; le matcher y faisait ce que
    la règle prescrit.
+   **Resserrée** (décision de l'utilisateur, 2026-11-01, après la première calibration V1, règles
+   2026.11.2) : la règle ne vise que les **routes motorisées fermées au vélo**, `motorway`, `trunk`
+   et les routes `bicycle=no` (`kind` de route motorisée, comme l'état hors graphe de T03 §5.3,
+   étape 6), sur des **plages continues d'au moins 50 m** de la trace recalée. Rues piétonnes,
+   trottoirs et sentiers `bicycle=no`, `busway`, escaliers et simples traversées (plage de moins de
+   50 m) restent jugés par M1. La « voie la plus proche » ne compte que les voies de la couche
+   `streets` qui ne sont pas des rails. Motif : la règle précédente contredisait T03 §5.3, où le
+   matcher apparie volontairement ces portions non motorisées à la voie cyclable voisine, et faisait
+   échouer M1 sur 16 traces de calibration, souvent sur un carrefour.
 4. **Couverture de la série tenue à l'écart V1.** Constat au jugement du MVP : 1 seul tunnel E4
    compté, 15 ponts E3, aucun croisement E5, aucun témoin négatif S2, aucun parcours R1/R2. Les deux
    derniers étaient structurels : la règle 2 de `tools/series_groups.py` met d'office en
