@@ -371,7 +371,7 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
 | **E3** | Erreur d'altitude sur tablier | Par passage : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier ; par pont : **médiane sur les passages** de l'une et de l'autre (§4 bis) | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel **OSM**, entre ses propres portails : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel. Altitude de portail = médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche (§4 bis) | `ouvrages.yaml`, vcyclist `N` (par tunnel OSM) |
 | **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
-| **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels OSM du corpus, **portés par une voie du graphe vélo**, typés `bridge`/`tunnel` par le service ÷ longueur de référence ; balcons non tagués exclus (§4 bis) | `ouvrages.yaml`, `structures.csv` |
+| **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels OSM du corpus, **portés par une voie du graphe vélo**, typés `bridge`/`tunnel` par le service ÷ longueur de référence ; balcons non tagués exclus (§4 bis) ; V1 : recouvrement continu (§4 ter.1) | `ouvrages.yaml`, `structures.csv` |
 | **S2** | Faux positifs d'ouvrage | Longueur typée `bridge`/`tunnel` hors de tout ouvrage de référence ÷ longueur totale ; nombre d'ouvrages fictifs | témoins négatifs vcyclist `n*`, `hn*` ; traces `dplus` |
 | **S3** | Ouvrage non tagué | MVP : altitude au milieu de `stn-acces-nord`, et erreur sur les balcons non tagués entre tunnels (Petits Goulets, Combe Laval) (mesurées, signalées, pas de seuil). V1 : détecté oui/non | baro `perso-20..22` ; vcyclist `S` sur les balcons |
 | **R1** | Accord du revêtement vs Stadia | Part de longueur où `surface.class` = classe Stadia ; variante hors inconnu Stadia | osm-surface |
@@ -565,6 +565,23 @@ pire que `paved_rough` (`compacted` compris), comme osm-surface (T03 §5). Cons�
 Sur la série tenue à l'écart, un incrément est accepté si tous les seuils passent. Un échec isolé sur
 un cas tenu à l'écart est consigné et analysé, mais ne se corrige pas sur ce cas (sinon il devient
 calibration).
+
+**§4 ter. Règles pour V1** (décisions de l'utilisateur, 2026-11-01, après le jugement du MVP,
+`7f171d2`, refusé ; commits dédiés, avant toute nouvelle mesure). Le MVP reste refusé : ces règles
+ne s'appliquent qu'à partir de V1, en calibration comme sur la série tenue à l'écart V1. Seuils
+inchangés.
+
+1. **Grain de S1.** La longueur typée d'un passage est la longueur du recouvrement de l'emprise
+   [s_A, s_B] (abscisses de A et de B sur la trace recalée) par les segments structure du service
+   (`bridge` / `tunnel`), mesurée en continu sur leurs abscisses, et non plus le nombre de stations
+   de 5 m typées entre les stations les plus proches de A et de B, bornes comprises. Tolérance d'un
+   demi-pas (2,5 m) à chaque borne : un segment structure qui s'arrête à 2,5 m au plus de s_A ou de
+   s_B est prolongé jusqu'à la borne. Rappel du passage = longueur typée ÷ (s_B − s_A). Motif : au
+   jugement du MVP, presque chaque pont perdait exactement une station de borne (rappels
+   (n − 1)/n, 7 à 8 % sur un pont de 54 à 74 m), soit ≈ 80 m sur 155 m de déficit ; l'effet
+   dépendait de la longueur des ponts de la série, pas du service. E3 et E4 ne changent pas : E3 lit
+   ses stations entre A et B et le milieu, E4 ses bandes de portail et la droite entre portails ;
+   aucun ne compte de longueur typée.
 
 ---
 
