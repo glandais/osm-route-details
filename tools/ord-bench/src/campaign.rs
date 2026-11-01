@@ -862,16 +862,37 @@ pub async fn measure_case(
     let to_ref = |x: f64| interp_one(&d_srv, &case.s_ref, x);
     let ours = ours_of(&responses, &offsets, &to_ref);
     let stadia = surface_csv.map(|text| read_stadia_surface(&text)).unwrap_or_default();
-    let typo = if stadia.is_empty() {
-        let a =
-            agreement(&ours, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
-        json!({"M1.non_apparie": round(a.unmatched, 4), "M1.unknown": round(a.unknown, 4), "R3": "reference_absente"})
+    // M1 hors réseau (README §4 bis.6) : plages de la trace recalée sans voie `streets` à 30 m,
+    // lues sur la trace et les tuiles seulement ; hors de M1, rapportées à part. Un extrait de
+    // trace tenue à l'écart n'a pas de métrique de trace : rien n'y est lu.
+    let off_network = if eval.window.is_none() {
+        match crate::off_network::ranges(case, eval.cache, rules.grid_step_m).await? {
+            Ok(r) => r,
+            Err(reason) => bail!(reason),
+        }
+    } else {
+        Vec::new()
+    };
+    let ours_m1 = crate::typology::without(&ours, &off_network);
+    let m1_agr =
+        agreement(&ours_m1, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
+    let mut typo = if stadia.is_empty() {
+        json!({"R3": "reference_absente"})
     } else {
         metrics_json(&agreement(&ours, &stadia), "R3")
     };
+    typo["M1.non_apparie"] = json!(round(m1_agr.unmatched, 4));
+    typo["M1.unknown"] = json!(round(m1_agr.unknown, 4));
+    typo["M1.hors_reseau_m"] = json!(round(crate::off_network::length(&off_network), 1));
     let to_d = |s: f64| interp_one(&case.s_ref, &d_srv, s);
+    let mut off_diag: Vec<&std::ops::Range<f64>> = off_network.iter().collect();
+    off_diag.sort_by(|a, b| (b.end - b.start).total_cmp(&(a.end - a.start)));
     let typo_diag = json!({
-        "M1.plages_non_appariees": unmatched_ranges(&ours, 10, &to_d),
+        "M1.plages_non_appariees": unmatched_ranges(&ours_m1, 10, &to_d),
+        "M1.plages_hors_reseau": off_diag.iter().take(10).map(|r| {
+            let (a, b) = (to_d(r.start), to_d(r.end));
+            json!({"d_debut_m": round(a, 1), "d_fin_m": round(b, 1), "longueur_plage_m": round(b - a, 1)})
+        }).collect::<Vec<_>>(),
         "R3.desaccords_revetu": disagreements(&ours, &stadia, 10, &to_d),
         "raccords_troncons_d_m": offsets.iter().skip(1).map(|o| round(*o, 1)).collect::<Vec<_>>()
     });
@@ -1184,6 +1205,13 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
         }
     }
     let mut agg = serde_json::Map::new();
+    // M1 hors réseau (README §4 bis.6) : longueur par trace, rapportée à part.
+    let off: serde_json::Map<String, Value> = perso
+        .iter()
+        .filter_map(|c| Some((c["id"].as_str()?.to_owned(), c["typologie"]["M1.hors_reseau_m"].as_f64()?)))
+        .map(|(id, m)| (id, json!(m)))
+        .collect();
+    agg.insert("M1.hors_reseau_m".into(), Value::Object(off));
     for (g, list) in &per_group {
         let mut a = serde_json::Map::new();
         for k in [
@@ -1512,7 +1540,7 @@ pub async fn run_series(
             "increment": "MVP",
             "increment_plan": 6,
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1537,7 +1565,7 @@ pub async fn run_series(
                 "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM ; ou sur un pont ou un tunnel des tuiles de la campagne, station à moins de 10 m à l'intérieur de sa ligne) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule ; pente implicite entre portails retenus (pente_implicite_portails) au-delà de 25 % : référence indisponible, rapportée, non comptée (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
                 "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel, dans les tuiles de la campagne (data_versions, couche streets), de la voie de l'ouvrage = élément de même nature (pont, tunnel, voie au sol d'un passage dessous) de plus petite médiane de distance aux stations du corpus (tous les 5 m sur la géométrie Overpass, sinon A–milieu–B), accepté à ≤ 15 m, sinon toute voie avec le même critère ; deux candidats à moins de 3 m de médiane et de périmètres différents : perimetre_ambigu, rapporté ; jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
                 "hors_graphe_velo : contrôle satisfait si la portion est non appariée avec unmatched_range (controle_par = non_apparie) ou appariée sur toute sa longueur à une voie du graphe vélo, nécessairement distincte de la voie de l'ouvrage exclue du graphe (controle_par = voie_parallele_du_graphe) ; ecart_max_m = altitude rendue contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées, ou sur toute la portion sur une voie parallèle ; null avec raison_ecart sans référence",
-                "Limite des données (README §4 bis.4) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread), comptés avec la note limite_donnees",
+                "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
                 "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
@@ -1546,8 +1574,8 @@ pub async fn run_series(
                 "Extraits tenus à l'écart : repli 1–3 km du décalage local lu sur la trace (baro − MNT IGN LiDAR lu directement, hors ponts et tunnels des tuiles), jamais la sortie du service ; seul le décalage est écrit ; decalage_repli_stations_par_cote = stations d'approche avant / après le pont",
                 "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
-                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service",
-                "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain",
+                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement",
+                "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain ; mesuré aux mêmes seuils, non bloquant (README §4 bis.7, 2026-11-01) : un échec est rapporté sans refuser l'incrément",
                 "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
             ]
@@ -1615,6 +1643,8 @@ pub async fn fill_cache(
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
                 crate::inserted::fill(&case, &paths.cache, None).await?;
+                // M1 hors réseau (README §4 bis.6) : voisinage de toute la trace recalée.
+                crate::off_network::fill(&case, &paths.cache, rules.grid_step_m).await?;
                 for part in &case.parts {
                     for sc in [true, false] {
                         service.route_details(part, distance_options(sc, rules.grid_step_m)).await?;

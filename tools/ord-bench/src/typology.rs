@@ -188,6 +188,25 @@ pub fn ours_of(responses: &[Value], offsets: &[f64], to_ref: &dyn Fn(f64) -> f64
     out
 }
 
+/// Plages du service privées des plages `cut` (triées, disjointes) : M1 hors réseau
+/// (README §4 bis.6), qui ne comptent ni dans la longueur ni dans les parts de M1.
+pub fn without(ours: &[Ours], cut: &[std::ops::Range<f64>]) -> Vec<Ours> {
+    let mut out = Vec::new();
+    for o in ours {
+        let mut from = o.from;
+        for c in cut.iter().filter(|c| c.start < o.to && c.end > o.from) {
+            if c.start > from {
+                out.push(Ours { from, to: c.start, ..*o });
+            }
+            from = from.max(c.end);
+        }
+        if o.to > from {
+            out.push(Ours { from, ..*o });
+        }
+    }
+    out
+}
+
 fn r1(x: f64) -> f64 {
     (x * 10.0).round() / 10.0 + 0.0
 }
@@ -309,6 +328,25 @@ pub fn m1_pass(a: &Agreement) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn off_network_ranges_leave_m1() {
+        let o = |from, to, matched| Ours { from, to, class: Class::Unknown, matched, source: Source::None };
+        // 1 000 m dont 100 m non appariés, tous hors réseau : M1 ne les voit plus.
+        let ours = [o(0.0, 450.0, true), o(450.0, 550.0, false), o(550.0, 1_000.0, true)];
+        let cut = [440.0..560.0];
+        let kept = without(&ours, &cut);
+        assert_eq!(kept.len(), 2);
+        assert_eq!((kept[0].to, kept[1].from), (440.0, 560.0));
+        let a =
+            agreement(&kept, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
+        assert_eq!(a.unmatched, 0.0);
+        let full =
+            agreement(&ours, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
+        assert!((full.unmatched - 0.1).abs() < 1e-9);
+        // Une plage coupée au milieu d'un segment le scinde.
+        assert_eq!(without(&[o(0.0, 100.0, true)], &[20.0..30.0, 50.0..60.0]).len(), 3);
+    }
 
     #[test]
     fn sweep_agreement() {

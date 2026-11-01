@@ -10,6 +10,7 @@
 //! n'a pas eu lieu). Sinon `results.json` est écrit et le résultat ajouté à `bench/judgements.md`,
 //! qu'il passe ou non.
 
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
@@ -157,9 +158,39 @@ fn verdict_cell(v: &Value) -> String {
     v.as_str().map_or_else(|| v.to_string(), str::to_owned)
 }
 
+/// Critères bloquants de `criteria.yaml` (`criteres[].bloquant: true`) : un échec de l'un d'eux
+/// refuse l'incrément ; un critère non bloquant (R3 depuis le 2026-11-01, §4 bis.7) est rapporté.
+pub fn blocking_criteria(bench: &Path) -> anyhow::Result<BTreeSet<String>> {
+    let text = std::fs::read_to_string(bench.join("criteria.yaml")).context("criteria.yaml")?;
+    let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).context("criteria.yaml illisible")?;
+    Ok(root["criteres"]
+        .as_sequence()
+        .into_iter()
+        .flatten()
+        .filter(|c| c["bloquant"].as_bool() == Some(true))
+        .filter_map(|c| c["id"].as_str().map(str::to_owned))
+        .collect())
+}
+
+/// Un verdict de `results.json` porte-t-il un critère bloquant ? `R1_R2` réunit R1 et R2 ; un id
+/// absent de `criteria.yaml` (contrôle rapporté) ne l'est pas.
+fn is_blocking(id: &str, blocking: &BTreeSet<String>) -> bool {
+    match id {
+        "R1_R2" => blocking.contains("R1") || blocking.contains("R2"),
+        _ => blocking.contains(id),
+    }
+}
+
 /// Entrée Markdown de `judgements.md` : identification de la campagne et verdicts par id, deux
-/// modes. Aucune valeur mesurée ni coordonnée : les valeurs sont dans `results.json`.
-pub fn entry(increment: &str, gel_commit: &str, report_rel: &str, results: &Value) -> String {
+/// modes. Aucune valeur mesurée ni coordonnée : les valeurs sont dans `results.json`. Seul un
+/// critère bloquant (`blocking`) en échec ou sauté refuse l'incrément ; les autres sont rapportés.
+pub fn entry(
+    increment: &str,
+    gel_commit: &str,
+    report_rel: &str,
+    results: &Value,
+    blocking: &BTreeSet<String>,
+) -> String {
     let c = &results["campagne"];
     let s = |k: &str| c[k].as_str().unwrap_or("?").to_owned();
     let main = results["verdicts"].as_object().cloned().unwrap_or_default();
@@ -167,16 +198,16 @@ pub fn entry(increment: &str, gel_commit: &str, report_rel: &str, results: &Valu
     let mut ids: Vec<&String> = main.keys().chain(bp.keys()).collect();
     ids.sort();
     ids.dedup();
-    let failing: Vec<&str> = ids
-        .iter()
-        .filter(|id| {
-            [main.get(**id), bp.get(**id)]
-                .into_iter()
-                .flatten()
-                .any(|v| matches!(v.as_str(), Some("fail" | "skipped")))
-        })
-        .map(|id| id.as_str())
-        .collect();
+    let failed = |id: &&&String| {
+        [main.get(**id), bp.get(**id)]
+            .into_iter()
+            .flatten()
+            .any(|v| matches!(v.as_str(), Some("fail" | "skipped")))
+    };
+    let reported: Vec<&str> =
+        ids.iter().filter(|id| !is_blocking(id, blocking)).filter(failed).map(|id| id.as_str()).collect();
+    let failing: Vec<&str> =
+        ids.iter().filter(|id| is_blocking(id, blocking)).filter(failed).map(|id| id.as_str()).collect();
     let mut out = format!("{}({})\n\n", heading(increment), s("date"));
     out.push_str(&format!("- Commit du service : `{}` ; commit de gel : `{gel_commit}`\n", s("commit")));
     out.push_str(&format!(
@@ -206,11 +237,18 @@ pub fn entry(increment: &str, gel_commit: &str, report_rel: &str, results: &Valu
             format!(" (en échec ou sautés : {})", failing.join(", "))
         }
     ));
-    out.push_str("| Id | distance | input_with_breakpoints |\n|---|---|---|\n");
+    if !reported.is_empty() {
+        out.push_str(&format!(
+            "- Non bloquants en échec ou sautés, rapportés sans refuser : {}\n\n",
+            reported.join(", ")
+        ));
+    }
+    out.push_str("| Id | bloquant | distance | input_with_breakpoints |\n|---|---|---|---|\n");
     for id in ids {
         let cell =
             |m: &serde_json::Map<String, Value>| m.get(id).map_or_else(|| "—".to_owned(), verdict_cell);
-        out.push_str(&format!("| {id} | {} | {} |\n", cell(&main), cell(&bp)));
+        let b = if is_blocking(id, blocking) { "oui" } else { "non" };
+        out.push_str(&format!("| {id} | {b} | {} | {} |\n", cell(&main), cell(&bp)));
     }
     out.push_str("\nL1 et L2 (latences) sont mesurés à part (`ord-bench latency`).\n\n");
     out
@@ -234,6 +272,7 @@ where
     Fut: Future<Output = anyhow::Result<Value>>,
 {
     preflight(repo, bench, increment, gel_commit, current, armed)?;
+    let blocking = blocking_criteria(bench)?;
     let out = report_dir.join("results.json");
     ensure!(!out.exists(), "{} existe déjà : rapport non réécrit", out.display());
     let results = measure().await?;
@@ -256,7 +295,7 @@ where
          non (bench §2.3, T05 §3.3).\n\n"
             .to_owned()
     });
-    text.push_str(&entry(increment, gel_commit, &rel, &results));
+    text.push_str(&entry(increment, gel_commit, &rel, &results, &blocking));
     std::fs::write(&path, text)?;
     Ok(out)
 }
@@ -302,7 +341,11 @@ mod tests {
         run(r, &["config", "commit.gpgsign", "false"]);
         std::fs::create_dir_all(r.join("bench/gel")).unwrap();
         std::fs::write(r.join("bench/manifest.yaml"), "version: 1\n").unwrap();
-        std::fs::write(r.join("bench/criteria.yaml"), "criteres: []\n").unwrap();
+        std::fs::write(
+            r.join("bench/criteria.yaml"),
+            "criteres:\n  - {id: E1, bloquant: true}\n  - {id: E3, bloquant: true}\n  - {id: R3, bloquant: false}\n",
+        )
+        .unwrap();
         let gel = Gel {
             increment: "MVP".into(),
             manifest_sha256: "m".into(),
@@ -323,7 +366,7 @@ mod tests {
                 "api_version": "1.0", "data_versions": {"x": 1}, "manifest_sha256": "m",
                 "criteria_sha256": "c", "bench_rules_sha256": "b", "data_fingerprint": "d"},
             "cas_sautes": skipped,
-            "verdicts": {"E1": "pass", "E3": "fail", "S3": "reported"},
+            "verdicts": {"E1": "pass", "E3": "fail", "S3": "reported", "R3": "fail"},
             "input_with_breakpoints": {"cas_sautes": [], "verdicts": {"E1": "pass", "E3": "pass"}}
         })
     }
@@ -342,7 +385,9 @@ mod tests {
         let text = std::fs::read_to_string(bench.join("judgements.md")).unwrap();
         assert!(text.contains("## Jugement MVP (2026-11-02)"), "{text}");
         assert!(text.contains("**refusé** (en échec ou sautés : E3)"), "un échec est consigné : {text}");
-        assert!(text.contains("| E3 | fail | pass |"));
+        assert!(text.contains("| E3 | oui | fail | pass |"), "{text}");
+        assert!(text.contains("| R3 | non | fail | — |"), "{text}");
+        assert!(text.contains("rapportés sans refuser : R3"), "{text}");
         assert!(text.contains(&format!("commit de gel : `{gel_commit}`")));
         assert!(text.contains("Révision du banc (`revision_banc`) : `bench9`"), "{text}");
         // Second jugement du même incrément : refusé avant toute mesure.
@@ -453,7 +498,23 @@ mod tests {
     fn entry_without_bench_revision_says_so() {
         let mut r = results(json!([]));
         r["campagne"]["revision_banc"] = Value::Null;
-        assert!(entry("MVP", "g", "x", &r).contains("Révision du banc (`revision_banc`) : aucune"));
+        assert!(entry("MVP", "g", "x", &r, &BTreeSet::new())
+            .contains("Révision du banc (`revision_banc`) : aucune"));
+    }
+
+    #[test]
+    fn a_non_blocking_failure_is_reported_without_refusing() {
+        // R3 non bloquant (§4 bis.7) : son échec n'est pas un refus ; R1_R2 suit R1 et R2.
+        let mut r = results(json!([]));
+        r["verdicts"] = json!({"E1": "pass", "R3": "fail", "R1_R2": "pass", "E3_hors_france": "skipped"});
+        r["input_with_breakpoints"]["verdicts"] = json!({"E1": "pass", "R3": "fail"});
+        let blocking: BTreeSet<String> = ["E1", "R1", "R2"].map(String::from).into();
+        let text = entry("MVP", "g", "x", &r, &blocking);
+        assert!(text.contains("**accepté**"), "{text}");
+        assert!(text.contains("rapportés sans refuser : E3_hors_france, R3"), "{text}");
+        assert!(text.contains("| R1_R2 | oui | pass | — |"), "{text}");
+        r["verdicts"]["R1_R2"] = json!("fail");
+        assert!(entry("MVP", "g", "x", &r, &blocking).contains("**refusé** (en échec ou sautés : R1_R2)"));
     }
 
     #[tokio::test]

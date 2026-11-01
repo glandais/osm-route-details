@@ -22,6 +22,7 @@ pub mod inserted;
 pub mod judge;
 pub mod manifest;
 pub mod metrics;
+pub mod off_network;
 pub mod osm_surface;
 pub mod ouvrages;
 pub mod privacy;
@@ -107,7 +108,9 @@ impl BenchPaths {
 /// (`run_series`, pour `judge`), `increment_plan` 6 ; mesures de calibration inchangées ; service
 /// avec admission, budget et annulation (sans effet sur les sorties) ; `latency --profile warm`
 /// (L2). Remise à `None` avec les règles 2026.10.10 (tunnels OSM en série : balcons de moins de
-/// 120 m, droite entre les portails extérieurs de la série).
+/// 120 m, droite entre les portails extérieurs de la série) ; règles du banc du 2026-11-01
+/// (README §4 bis.4, 6 et 7 : limite des données hors décompte d'E4/E3 et S1, M1 hors réseau,
+/// R3 non bloquant) appliquées dans la même révision.
 pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

@@ -30,8 +30,10 @@
 //!   portail extérieur suivant du même côté, à moins de 1 km, sinon « référence indisponible »,
 //!   rapportée et non comptée ; sensibilité à 5, 10, 20 et 30 m, « référence ambiguë » si le
 //!   verdict bascule ;
-//! - limite des données : ouvrages de `criteria.yaml` (`perimetre.limite_donnees`) comptés, avec
-//!   la note `limite_donnees` ;
+//! - limite des données (§4 bis.4, décision de l'utilisateur du 2026-11-01) : ouvrage que le
+//!   schéma de la source ne type pas (galerie `tunnel=avalanche_protector` du corpus, et ouvrages
+//!   de `criteria.yaml` `perimetre.limite_donnees`) : note `limite_donnees`, hors d'E4 (E3 pour un
+//!   pont) et de S1, rapporté à part (`limite_donnees`), erreur mesurée sans seuil ;
 //! - E3 par pont = médiane, sur les passages, de l'écart au milieu et de l'écart max.
 //!
 //! Aucune coordonnée, aucun nom ni longueur ou emprise d'ouvrage perso dans les sorties :
@@ -168,7 +170,7 @@ fn absent_item(o: &Ouvrage, case: &str) -> Value {
 }
 
 /// Notes `limite_donnees` de `criteria.yaml` (`perimetre.limite_donnees.cas_connus`, §4 bis.4) :
-/// `(ouvrage, note)`.
+/// `(ouvrage, note)`. Une entrée nomme un ouvrage (`ouvrage`) ou une liste (`ouvrages`).
 pub fn data_limits(bench: &Path) -> anyhow::Result<Vec<(String, String)>> {
     let text = std::fs::read_to_string(bench.join("criteria.yaml")).context("criteria.yaml")?;
     let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).context("criteria.yaml illisible")?;
@@ -177,7 +179,15 @@ pub fn data_limits(bench: &Path) -> anyhow::Result<Vec<(String, String)>> {
         .as_sequence()
         .into_iter()
         .flatten()
-        .filter_map(|c| Some((c["ouvrage"].as_str()?.to_owned(), c["note"].as_str()?.to_owned())))
+        .flat_map(|c| {
+            let note = c["note"].as_str().map(str::to_owned);
+            let ids: Vec<String> = match (c["ouvrage"].as_str(), c["ouvrages"].as_sequence()) {
+                (Some(id), _) => vec![id.to_owned()],
+                (None, Some(list)) => list.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect(),
+                _ => Vec::new(),
+            };
+            ids.into_iter().filter_map(move |id| Some((id, note.clone()?)))
+        })
         .collect())
 }
 
@@ -200,7 +210,8 @@ pub fn corpus_data_limits(ouvrages: &[Ouvrage], known: &[(String, String)]) -> V
     out
 }
 
-/// Porte la note `limite_donnees` sur les mesures de ces ouvrages (comptées, §4 bis.4).
+/// Porte la note `limite_donnees` sur les mesures de ces ouvrages (hors décompte d'E4/E3 et S1,
+/// §4 bis.4 ; voir `judge`).
 pub fn annotate_data_limits(items: &mut [Value], limits: &[(String, String)]) {
     for i in items.iter_mut() {
         let Some(id) = i["ouvrage"].as_str() else { continue };
@@ -1544,8 +1555,10 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         (judged.iter().filter(|i| i["pass"] == true).count(), judged.len())
     };
     // E3 par pont : médiane, sur les passages, de l'écart au milieu et de l'écart max (§4 bis.3).
+    // Limite des données (§4 bis.4) : hors d'E4 (E3 pour un pont) et de S1, rapportée à part.
+    let limited = |i: &Value| i["limite_donnees"].is_string();
     let mut ponts: BTreeMap<String, (Vec<f64>, Vec<f64>, f64)> = BTreeMap::new();
-    for i in by("E3") {
+    for i in by("E3").into_iter().filter(|i| !limited(i)) {
         // Référence incertaine (§4 bis.3) : rapportée, non comptée.
         if i["reference_incertaine"] == true {
             continue;
@@ -1576,7 +1589,7 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         .map(|p| json!({"ouvrage": p.0, "ecart_milieu_mediane_m": r2(p.1), "ecart_max_mediane_m": r2(p.2), "passages": p.4, "pass": p.3}))
         .collect();
     let e3_fail: Vec<&String> = e3.iter().filter(|p| !p.3).map(|p| &p.0).collect();
-    let e4 = by("E4");
+    let e4: Vec<&Value> = by("E4").into_iter().filter(|i| !limited(i)).collect();
     let (e4_ok, e4_n) = rate(&e4);
     let e4_fail: Vec<&Value> = e4.iter().filter(|i| i["pass"] == false).map(|i| &i["ouvrage"]).collect();
     let e4_amb: Vec<&Value> =
@@ -1598,16 +1611,27 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
             })
             .collect()
     };
-    let limits: BTreeMap<&str, &Value> = items
+    let limits: Vec<Value> = items
         .iter()
-        .filter(|i| i["limite_donnees"].is_string())
-        .filter_map(|i| Some((i["ouvrage"].as_str()?, &i["limite_donnees"])))
+        .filter(|i| limited(i) && matches!(i["metrique"].as_str(), Some("E3" | "E4")))
+        .map(|i| {
+            // Sans seuil : l'erreur est rapportée, jamais jugée.
+            let mut i = strip_private(i);
+            if let Some(m) = i.as_object_mut() {
+                m.remove("pass");
+            }
+            i
+        })
         .collect();
     let (e5_ok, e5_n) = rate(&by("E5"));
     let e5_fail: Vec<&Value> =
         by("E5").into_iter().filter(|i| i["pass"] == false).map(|i| &i["ouvrage"]).collect();
     let sum = |k: &str| -> f64 {
-        items.iter().filter_map(|i| i[k].as_f64().or_else(|| i[format!("_{k}")].as_f64())).sum()
+        items
+            .iter()
+            .filter(|i| !limited(i))
+            .filter_map(|i| i[k].as_f64().or_else(|| i[format!("_{k}")].as_f64()))
+            .sum()
     };
     let (s1_ref, s1_typed) = (sum("S1.emprise_m"), sum("S1.type_m"));
     let s1 = s1_typed / s1_ref.max(1e-9);
@@ -2156,18 +2180,28 @@ mod tests {
         let mut items = vec![
             absent_item(&o, "c1"),
             absent_item(&o, "c2"),
-            json!({"ouvrage": "g#1", "metrique": "E4", "pass": false}),
-            json!({"ouvrage": "gx", "metrique": "E4", "pass": true}),
+            json!({"ouvrage": "g#1", "metrique": "E4", "pass": false, "ecart_max_m": 12.0,
+                "S1.emprise_m": 100.0, "S1.type_m": 0.0, "_longueur_m": 100.0}),
+            json!({"ouvrage": "gx", "metrique": "E4", "pass": true, "S1.emprise_m": 50.0, "S1.type_m": 50.0}),
+            json!({"ouvrage": "p", "metrique": "E3", "ecart_milieu_m": 9.0, "ecart_max_m": 9.0,
+                "longueur_m": 50.0, "limite_donnees": "note"}),
         ];
         annotate_data_limits(&mut items, &[("g".into(), "note".into())]);
         assert_eq!(items[2]["limite_donnees"], "note");
         assert!(items[3].get("limite_donnees").is_none());
         let (agg, v) = judge(&items);
         assert_eq!(agg["E3_non_couverts"].as_array().map(Vec::len), Some(1));
-        assert_eq!(agg["E3"]["ponts"], 0);
-        assert_eq!(agg["E4"]["tunnels"], 2, "la galerie reste comptée");
-        assert_eq!(agg["limite_donnees"]["g#1"], "note");
-        assert_eq!(v["E4"], "fail");
+        assert_eq!(agg["E3"]["ponts"], 0, "un pont limité sort d'E3");
+        assert_eq!(agg["S1"]["emprise_m"], 50.0, "ni la galerie ni le pont dans S1");
+        assert_eq!(v["S1"], "pass");
+        assert_eq!(agg["limite_donnees"].as_array().map(Vec::len), Some(2));
+        assert!(agg["limite_donnees"][0].get("_longueur_m").is_none());
+        assert_eq!(agg["limite_donnees"][0]["ecart_max_m"], 12.0, "erreur mesurée, rapportée");
+        assert!(agg["limite_donnees"][0].get("pass").is_none(), "sans seuil");
+        assert_eq!(agg["E4"]["tunnels"], 1, "la galerie sort du décompte d'E4");
+        assert_eq!(agg["limite_donnees"][0]["ouvrage"], "g#1");
+        assert_eq!(agg["limite_donnees"][0]["limite_donnees"], "note");
+        assert_eq!(v["E4"], "pass", "l'échec de la galerie ne compte pas");
     }
 
     #[test]
