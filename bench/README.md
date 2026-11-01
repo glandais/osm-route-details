@@ -597,6 +597,25 @@ inchangés.
    parallèle à ≈ 8 m (`nv-40`) ; le service typait le bon pont, et le banc le jugeait sur un autre.
    La règle ne lit que la trace brute et les tuiles, jamais le service. Passage dessous (E5) : non
    concerné.
+   **Un tablier, un ouvrage** (décision de l'utilisateur, 2026-11-01, après la première calibration
+   V1, règles 2026.11.2). Les voies `bridge=true` d'un même pont (piste, trottoir, tram cartographiés
+   à part sur le même tablier) forment un seul ouvrage : la règle ne départage que des ponts
+   distincts, et la médiane de l'ouvrage est la plus petite de celles de ses voies. Une voie
+   concurrente est du **même pont** que la voie de l'ouvrage si, dans les tuiles de la campagne :
+   (a) leurs points les plus proches du milieu de l'ouvrage sont dans un même polygone de la couche
+   `bridges` (`man_made=bridge` ; les morceaux d'un polygone coupés aux bords de tuile comptent
+   pour un) ; deux polygones différents font deux ponts ; (b) sinon, si l'une au moins des deux n'est
+   dans aucun polygone `bridges`, quand la concurrente reste à 10 m au plus de la voie de l'ouvrage
+   sur toute l'emprise (21 points de A à B, extrémités comprises). Tunnels : inchangés (pas de
+   couche d'emprise). Vérifié sur les tuiles du banc (`versatiles-shortbread-z14-d2e31ed09602913b`) :
+   `nantes-pirmil` (route, trottoir à 8 m, tram à 18 m, piste à 23 m : même polygone),
+   `nantes-audibert` (route, trottoir, tram, piste à 23 m : même polygone), `mauves` (route et piste :
+   même polygone), `nv-32` (piste et route à 4 m : même polygone) et `nv-45` (aucun polygone,
+   trottoir à 4,7–4,8 m sur toute l'emprise : (b)) redeviennent un seul ouvrage ; `nv-40`
+   (passerelle hors de tout polygone, pont routier dans un polygone, à 8 m au milieu mais à 34 m
+   d'une extrémité) reste un pont distinct, et ses passages restent `passage_sur_ouvrage_parallele`.
+   Motif : au rapport 2026.11.2, ces ponts sortaient d'E3 et `nantes-audibert` perdait la moitié de
+   ses passages, attribués à la piste du même tablier.
 3. **M1 hors graphe vélo.** Une station de la trace recalée (pas de 5 m) dont la voie la plus proche
    de la couche `streets`, à 30 m au plus (tuiles de la campagne qui juge la trace, tuile et ses
    8 voisines, comme §4 bis.6), est fermée au vélo par la règle de tags du service (T03 §4.2,

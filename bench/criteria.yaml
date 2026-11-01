@@ -32,6 +32,7 @@
 # Après la première calibration V1 (règles 2026.11.2 ; décisions de l'utilisateur, 2026-11-01) :
 # M1 hors graphe vélo resserrée aux routes motorisées fermées au vélo, plages ≥ 50 m (README §4 ter.3).
 # S2 sans les plages hors graphe vélo des témoins (README §4 ter.5).
+# Attribution d'un passage : un tablier, un ouvrage (README §4 ter.2).
 # Le gel du MVP (gel/MVP.json) garde les empreintes jugées ; ce fichier sera gelé à nouveau pour V1.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser. À partir de V1, un critère bloquant sauté ou sous son
@@ -96,6 +97,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "M1 hors graphe vélo resserrée : seulement les routes motorisées fermées au vélo (motorway, trunk, route bicycle=no), plages continues ≥ 50 m ; piétonnes, trottoirs/sentiers bicycle=no, busways, escaliers, traversées restent dans M1 ; voie la plus proche hors rails (T03 §5.3)"
   - id: s2_hors_graphe_velo   # 2026-11-01, V1, après la calibration 2026.11.2
     decision: "S2 : les plages où la trace suit une voie fermée au vélo (plages hors graphe de M1, §4 ter.3 resserrée) sortent de S2 et sont rapportées par témoin ; le service y rend les ponts OSM réels (bicycle_forbidden), pas des ouvrages fictifs ; E5 inchangé"
+  - id: un_tablier_un_ouvrage   # 2026-11-01, V1, après la calibration 2026.11.2
+    decision: "Attribution : les voies bridge d'un même tablier forment un seul ouvrage (même polygone man_made=bridge des tuiles ; à défaut de polygone, voie à ≤ 10 m sur toute l'emprise) ; seuls des ponts distincts sont départagés ; tunnels inchangés"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -138,6 +141,12 @@ passage_pont:   # README §2.1
     mesure: "médiane des distances des points bruts de l'emprise à la voie de l'ouvrage (§4 bis.1)"
     concurrents: {source: campagne.data_versions, couche: streets, attributs: [bridge, tunnel]}
     attribue_si: plus_petite_mediane
+    meme_ouvrage:   # README §4 ter.2, « un tablier, un ouvrage », 2026-11-01 ; ponts seulement
+      types: [bridge]
+      mediane_de_l_ouvrage: min_sur_ses_voies
+      polygone_commun: {couche: bridges, point: plus_proche_du_milieu, morceaux_de_tuiles: reunis}   # même polygone ⇒ même pont ; polygones différents ⇒ ponts distincts
+      sinon_si_une_voie_sans_polygone: {ecart_max_m: 10.0, points: 21, sur: emprise_A_B_extremites_comprises}
+      verifie_sur: {meme_pont: [nantes-pirmil, nantes-audibert, mauves, nv-32, nv-45], distinct: [nv-40]}
     sinon: {marque: passage_sur_ouvrage_parallele, rapporte: true, compte: false}
     porte_sur: [E3, E4, S1, hors_graphe_velo]   # E5 (passage dessous) non concerné
 
