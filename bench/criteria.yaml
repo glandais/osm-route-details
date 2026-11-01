@@ -27,10 +27,12 @@
 # rapporté, non bloquant, seuils inchangés (README §4 bis.7).
 # Après le jugement du MVP (7f171d2, refusé), règles pour V1 (décisions de l'utilisateur, 2026-11-01,
 # README §4 ter) : grain de S1 (recouvrement continu) ; attribution d'un passage par la trace brute ;
-# M1 hors graphe vélo (voie la plus proche fermée au vélo). Seuils inchangés ; avant toute nouvelle mesure.
+# M1 hors graphe vélo (voie la plus proche fermée au vélo) ; couverture de la série V1 (minimums,
+# sauté ou sous le minimum = refus). Seuils inchangés ; avant toute nouvelle mesure.
 # Le gel du MVP (gel/MVP.json) garde les empreintes jugées ; ce fichier sera gelé à nouveau pour V1.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
-# `bloquant: false` est rapporté sans refuser.
+# `bloquant: false` est rapporté sans refuser. À partir de V1, un critère bloquant sauté ou sous son
+# minimum de couverture (serie_tenue_a_l_ecart.couverture) refuse aussi l'incrément.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
 # (calibration : réglage et non-régression ; tenue_a_l_ecart : jugement unique par incrément).
 version: 1
@@ -87,6 +89,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Passage attribué à un pont ou tunnel du corpus seulement si la trace brute suit sa voie mieux que tout autre pont/tunnel des tuiles (plus petite médiane, §4 bis.1) ; sinon passage_sur_ouvrage_parallele, rapporté, non compté"
   - id: m1_hors_graphe_velo   # 2026-11-01, V1
     decision: "M1 : station recalée dont la voie streets la plus proche (≤ 30 m, tuiles de la campagne) est fermée au vélo par la règle de tags du service sort de M1, rapportée (hors_graphe_velo_m), contrôle matched=false + unmatched_range ; tags des tuiles seulement ; risque de circularité accepté"
+  - id: couverture_serie_v1   # 2026-11-01, V1
+    decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -129,6 +133,32 @@ passage_pont:   # README §2.1
     attribue_si: plus_petite_mediane
     sinon: {marque: passage_sur_ouvrage_parallele, rapporte: true, compte: false}
     porte_sur: [E3, E4, S1, hors_graphe_velo]   # E5 (passage dessous) non concerné
+
+serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
+  refus_si: [bloquant_en_echec, bloquant_saute, bloquant_sous_minimum]
+  couverture:   # comptée après les exclusions du banc
+    compte_apres_exclusions: [hors_graphe_velo, limite_donnees, absent_des_donnees, reference_indisponible, reference_incertaine, passage_retire_niveau, passage_sur_ouvrage_parallele]
+    minimums:
+      E1: {traces_france_fiables: 8, km_compares: 800}
+      E2b: {traces_par_groupe: 3, groupes: [dplus, plaine, ouvrage]}
+      E3: {ponts: 12, ponts_mnh_10m_min: 3, ponts_plus_de_150m: 3}
+      E4: {tunnels_osm: 7, tunnels_plus_de_300m: 2}
+      E5: {croisements: 8}
+      S1: {ouvrages: 15, emprise_m: 2000}
+      S2: {temoins: 4, km: 40, natures_min: 3, natures: [remblai_deblai, couvert_arbore, bati_ou_falaise, digue]}
+      R1_R2: {parcours: 4, km: 400, part_non_revetu_min: 0.10, regions: hors_osm_surface}
+      M1: {traces: toutes, km: 800}
+      Q1: {traces_negatives: 2}
+  constitution:
+    donnees: nouvelles_seulement   # ni calibration (série MVP comprise), ni vcyclist, ni osm-surface ; ouvrages hors calibration, fenêtres ± 500 m comprises
+    tirage:
+      fige_avant_mesure: true
+      strates: [E4, E5, S2, R1_R2, E3, Q1, reste]   # dans cet ordre ; un cas garde la première affectation
+      ordre: "sha256('osm-route-details:v1:' + id)"
+      tenue_a_l_ecart: {jusqu_au_minimum: true, part_min_de_la_strate: 0.333}
+    controle_couverture: {lit: [corpus, tuiles, mnt], jamais: service, ecrit_dans: manifest}
+    minimum_non_atteint: collecter_d_autres_cas   # jamais changer le sel
+  reference_R1_R2: {source: "Stadia Maps trace_attributes", donnees_perso: false, meme_semaine_que: campagne.data_versions, stockage: hors_git_regenerable}
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Stadia Maps trace_attributes", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx"}

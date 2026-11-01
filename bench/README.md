@@ -254,6 +254,10 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
 3. La série tenue à l'écart est jugée **une seule fois par incrément** (MVP, V1…) : on note le commit
    du service, les `data_versions` et `rules_version`, et l'empreinte du manifest. Après jugement, elle
    devient calibration et une nouvelle série doit être constituée pour l'incrément suivant.
+   Un critère bloquant sans cas dans la série tenue à l'écart (sauté), ou sous son minimum de
+   couverture (§4 ter.4), n'est pas vert : l'incrément est refusé. Le jugement ne se refait pas ;
+   la série est complétée pour l'incrément suivant (décision de l'utilisateur, 2026-11-01, à partir
+   de V1 ; le jugement du MVP appliquait déjà « sauté = refus » dans `ord-bench judge`).
 4. Les données externes sont figées par empreinte (manifest) : un fichier dont le sha256 a changé
    invalide la comparaison.
 
@@ -608,6 +612,42 @@ inchangés.
    Motif : au jugement du MVP, 4,6 km de `perso-23` suivaient des voies `trunk` (dont
    `bicycle=no`), GPS brut à 2–4 m, toute autre voie à plus de 40 m ; le matcher y faisait ce que
    la règle prescrit.
+4. **Couverture de la série tenue à l'écart V1.** Constat au jugement du MVP : 1 seul tunnel E4
+   compté, 15 ponts E3, aucun croisement E5, aucun témoin négatif S2, aucun parcours R1/R2. Les deux
+   derniers étaient structurels : la règle 2 de `tools/series_groups.py` met d'office en
+   calibration les parcours d'osm-surface et les négatifs. Minimums, comptés **après** les
+   exclusions du banc (hors graphe vélo, `limite_donnees`, `absent_des_donnees`, référence
+   indisponible ou incertaine, passage retiré au niveau, passage sur ouvrage parallèle) :
+   | Critère | Minimum sur la série tenue à l'écart | Source possible |
+   |---|---|---|
+   | E1 | ≥ 8 traces France fiables, ≥ 800 km comparés | perso (baro) |
+   | E2b | ≥ 3 traces par groupe (dplus, plaine, ouvrage) | perso |
+   | E3 | ≥ 12 ponts comptés, dont ≥ 3 à MNH ≥ 10 m et ≥ 3 de plus de 150 m | perso |
+   | E4 | ≥ 7 tunnels OSM comptés (le seuil 6/7 n'a pas de sens en deçà), dont ≥ 2 de plus de 300 m | MNT seul |
+   | E5 | ≥ 8 croisements sous un pont | MNT seul |
+   | S1 | ≥ 15 ouvrages, ≥ 2 km d'emprise | OSM seul |
+   | S2 | ≥ 4 témoins négatifs, ≥ 40 km, ≥ 3 natures (remblai / déblai, couvert arboré, bâti ou falaise, digue) | OSM et MNT |
+   | R1 / R2 | ≥ 4 parcours, ≥ 400 km, ≥ 10 % non revêtu, régions hors osm-surface | parcours planifiés |
+   | M1 | toutes les traces, ≥ 800 km | — |
+   | Q1 | ≥ 2 traces négatives (baro défaillant) | perso |
+   « MNT seul » / « OSM seul » : la référence ne demande pas de baro ; ces cas peuvent être des
+   itinéraires planifiés, composés de ways OSM à travers des ouvrages choisis.
+   Constitution :
+   - **Données nouvelles seulement** : rien de la calibration (toute la série jugée au MVP
+     comprise), de vcyclist ni d'osm-surface ; ouvrages absents de la calibration, fenêtres de
+     ± 500 m comprises. Sources : activités Strava non encore qualifiées (`qualify_baro.py`, période
+     du GPS défectueux toujours exclue), sorties récentes, itinéraires planifiés.
+   - **Tirage stratifié, figé avant toute mesure.** Strates, dans cet ordre : E4, E5, S2, R1/R2, E3,
+     Q1, puis le reste. Dans chaque strate, tri par sha256(`osm-route-details:v1:` + id) ; le cas va
+     à la série tenue à l'écart jusqu'au minimum et jusqu'à au moins 1/3 de la strate. Un cas
+     affecté par une strate précédente garde son affectation.
+   - **Contrôle de couverture sans le service** (corpus, tuiles, MNT), écrit dans le manifest. Un
+     minimum non atteint impose de collecter d'autres cas, jamais de changer le sel.
+   - **Au jugement**, un critère sous son minimum (exclusions découvertes à la campagne) vaut refus,
+     comme un critère sauté (§2, point 3).
+   - **R1 / R2** : référence Stadia Maps `trace_attributes` des parcours planifiés (aucune donnée
+     perso), demandée la même semaine que la date des tuiles de la campagne, pour limiter l'écart
+     de version qui a rendu R3 non bloquant. Réponses hors git, régénérables (conditions de Stadia).
 
 ---
 
