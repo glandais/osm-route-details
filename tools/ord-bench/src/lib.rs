@@ -103,8 +103,11 @@ impl BenchPaths {
 /// la sortie non corrigée de ce mode). `bench2` (règles 2026.10.9, banc 405f956, criteria.yaml
 /// `preset_baro: dem`, README §4 bis.5) : D+ baro d'E2b au preset `dem` (`E2b.dplus_baro_dem_m`,
 /// `E2b.ratio*`), le même que le service et sa référence sans correction ; E2 reste en
-/// `barometric`.
-pub const BENCH_REVISION: Option<&str> = Some("bench2");
+/// `barometric`. `bench3` (règles 2026.10.9, incrément 6) : campagne paramétrée par série
+/// (`run_series`, pour `judge`), `increment_plan` 6 ; mesures de calibration inchangées ; service
+/// avec admission, budget et annulation (sans effet sur les sorties) ; `latency --profile warm`
+/// (L2).
+pub const BENCH_REVISION: Option<&str> = Some("bench3");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

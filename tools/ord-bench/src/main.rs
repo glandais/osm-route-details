@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use ord_bench::campaign::{default_report_dir, fill_cache, latency_cold, run};
+use ord_bench::campaign::{default_report_dir, fill_cache, latency_cold, latency_warm, run};
 use ord_bench::check::check;
 use ord_bench::manifest::Serie;
 use ord_bench::BenchPaths;
@@ -112,13 +112,16 @@ enum Command {
         #[arg(long, value_delimiter = ',', required = true)]
         cas: Vec<String>,
     },
-    /// L1 : latence à froid (live, caches disque et mémoire neufs à chaque essai).
+    /// L1 (`--profile cold`) : latence à froid (live, caches disque et mémoire neufs à chaque
+    /// essai). L2 (`--profile warm`) : même requête rejouée, cache de banc, hors ligne.
     Latency {
-        /// Cas personnels (traces de 90 à 130 km).
+        /// Cas personnels de calibration (traces de 90 à 130 km).
         #[arg(long, value_delimiter = ',', required = true)]
         cas: Vec<String>,
         #[arg(long, default_value_t = 1)]
         essais: usize,
+        #[arg(long, default_value = "cold")]
+        profile: String,
     },
 }
 
@@ -241,8 +244,12 @@ async fn main_inner() -> anyhow::Result<bool> {
             }
             Ok(true)
         }
-        Command::Latency { cas, essais } => {
-            let result = latency_cold(&paths, &cas, essais).await?;
+        Command::Latency { cas, essais, profile } => {
+            let result = match profile.as_str() {
+                "cold" => latency_cold(&paths, &cas, essais).await?,
+                "warm" => latency_warm(&paths, &cas, essais).await?,
+                other => anyhow::bail!("profil inconnu : {other} (cold | warm)"),
+            };
             println!("{}", serde_json::to_string_pretty(&result)?);
             Ok(true)
         }

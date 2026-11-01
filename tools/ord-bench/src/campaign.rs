@@ -1789,6 +1789,66 @@ pub async fn latency_cold(paths: &BenchPaths, ids: &[String], trials: usize) -> 
     Ok(result)
 }
 
+/// L2 (latence à chaud, hors ligne) : un service sur le cache de banc, la requête `distance` 5 m
+/// envoyée une fois pour chauffer les caches mémoire, puis rejouée `trials` fois ; p50 et p95 en
+/// ms. Le mode par défaut (`input_with_breakpoints`) est mesuré de même, en diagnostic. Aucune
+/// sortie du service n'est écrite, seulement des durées.
+pub async fn latency_warm(paths: &BenchPaths, ids: &[String], trials: usize) -> anyhow::Result<Value> {
+    let report = check(paths)?;
+    ensure_check(&report)?;
+    let manifest = Manifest::load(&paths.bench)?;
+    let selection = select(&manifest, &[], ids);
+    let rules = BenchRules::default();
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
+    let mut out = Vec::new();
+    for t in &selection.cases {
+        for case in load_perso(paths, t, &rules).map_err(|e| anyhow::anyhow!("{} : {e}", t.id))? {
+            if case.parts.len() != 1 {
+                bail!("{} : cas en tronçons, hors du protocole L2", case.id);
+            }
+            let mut modes = serde_json::Map::new();
+            for (mode, options) in [
+                ("distance", distance_options(true, rules.grid_step_m)),
+                ("input_with_breakpoints", json!({"sampling": {"mode": "input_with_breakpoints"}})),
+            ] {
+                let first = std::time::Instant::now();
+                let r = service.route_details(&case.parts[0], options.clone()).await?;
+                let first_ms = first.elapsed().as_secs_f64() * 1e3;
+                let mut ms = Vec::new();
+                for _ in 0..trials.max(1) {
+                    let start = std::time::Instant::now();
+                    service.route_details(&case.parts[0], options.clone()).await?;
+                    ms.push(start.elapsed().as_secs_f64() * 1e3);
+                }
+                ms.sort_by(f64::total_cmp);
+                modes.insert(
+                    mode.into(),
+                    json!({
+                        "longueur_service_m": r["summary"]["length_m"],
+                        "points_sortie": r["points"].as_array().map_or(0, Vec::len),
+                        "premier_ms": round(first_ms, 1),
+                        "p50_ms": round(crate::metrics::percentile(&ms, 50.0), 1),
+                        "p95_ms": round(crate::metrics::percentile(&ms, 95.0), 1),
+                        "max_ms": round(ms.last().copied().unwrap_or(0.0), 1)
+                    }),
+                );
+            }
+            eprintln!("{} : L2 mesuré", case.id);
+            out.push(json!({"id": case.id, "groupe": case.groupe, "points_entree": case.parts[0].len(), "modes": modes}));
+        }
+    }
+    let result = json!({
+        "date": today_utc(),
+        "rules_version": ord_core::RULES_VERSION,
+        "profil": if cfg!(debug_assertions) { "debug" } else { "release" },
+        "essais": trials,
+        "cpus": std::thread::available_parallelism().map_or(1, usize::from),
+        "L2": out
+    });
+    crate::privacy::assert_report_clean(&result, &crate::privacy::private_names(paths))?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
