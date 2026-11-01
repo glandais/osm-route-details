@@ -677,6 +677,9 @@ inchangés.
      `qualify_baro.py`). Une sortie de la période sans défaut attesté n'est pas un négatif : sur 6
      tirées par empreinte en V1, 5 étaient saines (D+ conforme, bruit 1,1–1,8 m). Motif : choisir
      les négatifs par le verdict du qualificateur rendrait Q1 circulaire.
+     **Complément** (décision de l'utilisateur, 2026-11-01) : le défaut inverse, altitude GPS en
+     excès, est aussi un négatif : D+ Strava supérieur à 1,6 × D+ MNT au scan **et** confirmé sur le
+     stream complet (D+ enregistré > 1,6 × D+ MNT de `qualify_baro.py`), comme `neg-03` et `neg-04`.
    - **Tirage stratifié, figé avant toute mesure.** Strates, dans cet ordre : E4, E5, S2, R1/R2, E3,
      Q1, puis le reste. Dans chaque strate, tri par sha256(`osm-route-details:v1:` + id) ; le cas va
      à la série tenue à l'écart jusqu'au minimum et jusqu'à au moins 1/3 de la strate. Un cas
