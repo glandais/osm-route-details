@@ -689,6 +689,18 @@ inchangés.
      ci-dessus. Motif : remplie jusqu'au minimum exact, une strate s'arrête juste au-dessus
      (S2 à 40,3 km pour 40 au contrôle du 2026-11-01), et une seule exclusion découverte à la
      campagne la ferait passer dessous, ce qui vaut refus.
+   - **Nature d'un témoin S2 planifié** (décision de l'utilisateur, 2026-11-01). Un témoin planifié est
+     un cas, de nature déclarée ; sa longueur comptée exclut les abords d'ouvrage (100 m) et les plages
+     hors graphe vélo (point 5). La nature déclarée n'est retenue que si OSM la confirme sur au moins
+     50 % de la longueur comptée ; sinon le témoin prend la nature que ses tags confirment sur au
+     moins 50 %, et il est retiré si aucune ne l'est. Confirmation, à chaque station : couvert arboré,
+     dans un polygone `landuse=forest` / `natural=wood` ou à 20 m au plus de son bord (forêts en
+     parcelles bordées par la route) ; bâti ou falaise, `natural=cliff` à 100 m au plus (falaise
+     au-dessus de la route, gorges) ; digue, `man_made=dyke` à 30 m au plus ; remblai / déblai,
+     `embankment=yes`, `cutting=yes` ou `man_made=embankment` à 30 m au plus. Le bâti n'est pas lu.
+     Cas du 2026-11-01 : la « Digue à la Mer » de Camargue, taguée `embankment=yes`, devient
+     remblai / déblai ; le témoin du Tarn en amont (falaise confirmée sur 11 %) est reclassé selon
+     ses tags, ou retiré.
    - **Contrôle de couverture sans le service** (corpus, tuiles, MNT), écrit dans le manifest. Un
      minimum non atteint impose de collecter d'autres cas, jamais de changer le sel.
    - **Au jugement**, un critère sous son minimum (exclusions découvertes à la campagne) vaut refus,

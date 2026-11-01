@@ -106,6 +106,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Négatif Q1 d'une série nouvelle : sortie de 2015-05 → 2020-09 au défaut attesté hors du qualificateur (D+ Strava < 60 % du D+ MNT au scan, confirmé sur le stream complet)"
   - id: ouvrage_reel_sur_temoin   # 2026-11-01
     decision: "Un ouvrage réel tagué dans OSM sur la voie d'un témoin négatif (même avalanche_protector ou covered) n'est jamais fictif : plage A–B + 35 m retirée de S2, rapportée ; le témoin sort si l'ouvrage en est l'objet ou en couvre plus de la moitié (tn12 sort, tn10 reste masqué)"
+  - id: nature_temoin_planifie   # 2026-11-01, V1
+    decision: "Témoin S2 planifié : nature déclarée retenue si OSM la confirme sur ≥ 50 % de la longueur comptée, sinon nature confirmée par ses tags, sinon retiré"
   - id: marge_du_tirage   # 2026-11-01, V1
     decision: "Tirage : chaque strate remplie jusqu'à son minimum majoré de 25 % (arrondi supérieur, chaque composante), sinon la strate entière ; tiers si plus ; seuil de jugement = minimum inchangé"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -188,6 +190,10 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
       strates: [E4, E5, S2, R1_R2, E3, Q1, reste]   # dans cet ordre ; un cas garde la première affectation
       ordre: "sha256('osm-route-details:v1:' + id)"
       tenue_a_l_ecart: {jusqu_au_minimum: true, part_min_de_la_strate: 0.333}
+      nature_temoin_planifie:   # README §4 ter.4, décision de l'utilisateur, 2026-11-01
+        retenue_si: {part_confirmee_osm_min: 0.5, sur: longueur_comptee}
+        sinon: [nature_des_tags_confirmee_a_0.5, retire]
+        confirmation_m: {couvert_arbore: {foret_ou_bord: 20}, bati_ou_falaise: {cliff: 100}, digue: {man_made_dyke: 30}, remblai_deblai: {embankment_cutting: 30}}
       marge:   # README §4 ter.4, décision de l'utilisateur, 2026-11-01
         remplissage: {minimum_majore: 0.25, arrondi: superieur, sur: chaque_composante}   # cas, km, sous-comptes, part, natures
         sinon: strate_entiere
