@@ -1,0 +1,13 @@
+# Contexte de construction minimal : manifestes et sources des crates (voir Dockerfile).
+# Jamais de secret, de trace personnelle ni de donnée du banc dans le contexte.
+.env
+.env.*
+.git
+.github
+target
+bench
+docs
+contract
+**/tests
+**/*.md
+LICENSE

@@ -555,7 +555,13 @@ pour aws-lc, couche de dépendances séparée, `cargo build --release --locked -
 `EXPOSE 8080` et `9090` (non publié) ; sonde `osm-route-details healthcheck` (pas de `curl` en
 distroless). Les fichiers de couverture Mapterhorn viennent de `tools/fetch-coverage` et sont
 montés, pas intégrés à l'image : ils suivent les publications de Mapterhorn. Le contour LiDAR HD (et
-zone France) est embarqué dans le binaire (T02 §7.1–7.2).
+zone France) est embarqué dans le binaire (T02 §7.1–7.2). Mise en œuvre (incrément 6) : `Dockerfile`
+et `.dockerignore` à la racine ; la crypto de rustls est `ring` (pas `aws-lc`), donc ni `cmake` ni
+`clang` ; le contexte exclut `bench/` (traces privées), `.env*`, `docs/` et les tests ; couche de
+dépendances construite sur des sources vides des membres du workspace ; `HEALTHCHECK` par la
+sous-commande `healthcheck` (HTTP/1.0 sur `127.0.0.1`, port de `server.listen_addr`) ; à l'arrêt,
+les requêtes en vol sont attendues au plus `shutdown_grace_s`, puis abandonnées (`docker stop -t`
+supérieur au budget). Aucune image n'est poussée par le dépôt.
 
 **Déploiement : une seule instance** (décision doc 01 §10). La cadence IGN (20 req/s) et les budgets
 par hôte sont locaux au processus (§6, T02 §4.2) : deux réplicas derrière une même IP doubleraient
