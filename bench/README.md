@@ -698,6 +698,23 @@ inchangés.
    les ponts OSM réels de cette voie (avertissement `bicycle_forbidden`, T03 §5.3 étape 6) ; ce ne
    sont pas des ouvrages fictifs. Cas déclencheurs : `n08-nantes-centre` (1 ouvrage, 30 m) et
    `n09-peage-lancon` (2 ouvrages, 45 m), S2 en échec au rapport 2026.11.2.
+6. **Ouvrage réel sur la voie d'un témoin négatif** (décision de l'utilisateur, 2026-11-01). Un
+   ouvrage réel tagué dans OSM sur la voie même d'un témoin négatif (`bridge`, `tunnel`, y compris
+   `tunnel=avalanche_protector`, ou `covered=yes`), même absent du schéma de la source du service,
+   n'est jamais un ouvrage fictif : sa plage (de A à B, plus la marge `x` de 35 m) est retirée de S2
+   (ouvrages fictifs, longueur typée, longueur totale) et rapportée à part, en `limite_donnees`
+   (§4 bis.4) si le schéma de la source ne le porte pas (`avalanche_protector`, `covered`), sinon
+   comme ouvrage. Le témoin ne sort entièrement de S2 que si l'ouvrage réel en est l'objet même
+   (catégorie du témoin) ou en couvre plus de la moitié de la longueur. Cas : `tn12-arly-galleries`
+   (galeries pare-avalanche, objet du témoin) sort de S2, ses galeries rejoignent les ouvrages
+   mesurés en limite des données ; `tn10-roselend` (couronnement de barrage tagué `bridge`, 46 % du
+   témoin) reste, la plage du couronnement masquée. Vérification du 2026-11-01 (tags OSM actuels de
+   347 voies, API OSM) : ouvrages tagués aussi sur la voie de `tn08` (dont `avalanche_protector`),
+   `tn02`, `tn07`, `tn09`, `tn11`, `hn01`, `hn03`, `hn06`, `n04`, `n08` (dont `covered`), `n09`
+   (`covered`), `n12`, `n14` : déjà en plages X ou O, ils restent dans S2, plages masquées.
+   **Réserve** : ces tags sont ceux du 2026-11-01, pas ceux de la base OSM des témoins vcyclist
+   (2026-10-13) ; la règle s'applique aux tags de la base des témoins. Motif : détecter une galerie
+   n'est pas inventer un ouvrage ; seul un ouvrage absent d'OSM peut être fictif.
 
 ---
 

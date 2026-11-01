@@ -33,6 +33,7 @@
 # M1 hors graphe vélo resserrée aux routes motorisées fermées au vélo, plages ≥ 50 m (README §4 ter.3).
 # S2 sans les plages hors graphe vélo des témoins (README §4 ter.5).
 # Attribution d'un passage : un tablier, un ouvrage (README §4 ter.2).
+# S2 : un ouvrage réel tagué sur la voie d'un témoin n'est jamais fictif (README §4 ter.6).
 # Le gel du MVP (gel/MVP.json) garde les empreintes jugées ; ce fichier sera gelé à nouveau pour V1.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser. À partir de V1, un critère bloquant sauté ou sous son
@@ -103,6 +104,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Groupe E2b d'une trace nouvelle : dplus si D+ MNT ≥ 11 m/km, sinon ouvrage si ≥ 2 ouvrages comptés, sinon plaine ; calculé avant le tirage, sans le service"
   - id: negatif_q1_serie_nouvelle   # 2026-11-01, V1
     decision: "Négatif Q1 d'une série nouvelle : sortie de 2015-05 → 2020-09 au défaut attesté hors du qualificateur (D+ Strava < 60 % du D+ MNT au scan, confirmé sur le stream complet)"
+  - id: ouvrage_reel_sur_temoin   # 2026-11-01
+    decision: "Un ouvrage réel tagué dans OSM sur la voie d'un témoin négatif (même avalanche_protector ou covered) n'est jamais fictif : plage A–B + 35 m retirée de S2, rapportée ; le témoin sort si l'ouvrage en est l'objet ou en couvre plus de la moitié (tn12 sort, tn10 reste masqué)"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -329,6 +332,15 @@ criteres:
       exclues_de: [ouvrages_fictifs, longueur_typee, longueur_totale]
       rapporte: {cle: hors_graphe_velo_m, par: temoin, mesure: longueur_m}
       ne_touche_pas: [E5]
+    ouvrage_reel_sur_temoin:   # README §4 ter.6, décision de l'utilisateur, 2026-11-01
+      tags: [bridge, tunnel, "tunnel=avalanche_protector", "covered=yes"]   # sur la voie même du témoin
+      jamais_fictif: true
+      plage_retiree: {de: A, a: B, marge_m: 35}   # comme la marge x de vcyclist
+      exclue_de: [ouvrages_fictifs, longueur_typee, longueur_totale]
+      rapporte_en: {absent_du_schema_de_la_source: limite_donnees, sinon: ouvrage}
+      temoin_sort_si: [ouvrage_objet_du_temoin, {part_longueur_min: 0.5}]
+      cas: {sort: [tn12-arly-galleries], reste_masque: [tn10-roselend]}
+      source_tags: base_osm_du_temoin   # réserve : vérifié le 2026-11-01 sur les tags actuels
     seuils:
       - {ouvrages_fictifs_max: 0, part_longueur_max: 0.005}
     passe_si: tous
