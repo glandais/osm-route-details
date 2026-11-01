@@ -38,6 +38,11 @@ pub enum RunMatch {
         element: Option<ElementId>,
     },
     Unmatched,
+    /// Route fermée au vélo suivie (état « hors graphe » du HMM, T03 §5.3) : non appariée au
+    /// graphe vélo, typologie de cette route rendue avec l'avertissement `bicycle_forbidden`.
+    OffGraph {
+        class: ClassId,
+    },
     /// Pas de donnée : tuile absente de l'emprise, ou en panne (`failed`).
     NoData {
         failed: bool,

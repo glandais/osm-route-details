@@ -22,6 +22,9 @@ pub struct TypedSegment {
     pub surface_source: SurfaceSource,
     pub way_kind: WayKind,
     pub matched: bool,
+    /// Route fermée au vélo suivie (état « hors graphe », T03 §5.3) : `matched = false`, mais
+    /// `structure`, revêtement et `way_kind` de cette route ; avertissement `bicycle_forbidden`.
+    pub off_graph: bool,
     /// Élément d'ouvrage (deux ponts contigus restent deux segments).
     pub element: Option<LineId>,
     /// Classe du premier tronçon (attributs bruts de `debug`).
@@ -45,6 +48,7 @@ impl TypedSegment {
             self.surface_source,
             self.way_kind,
             self.matched,
+            self.off_graph,
             self.element,
         ) == (
             o.structure,
@@ -53,6 +57,7 @@ impl TypedSegment {
             o.surface_source,
             o.way_kind,
             o.matched,
+            o.off_graph,
             o.element,
         )
     }
@@ -91,8 +96,13 @@ pub fn build_segments(
                 RunMatch::Matched { class, element } => {
                     (classes[class as usize].classified, true, element, Some(class))
                 }
+                // Route fermée au vélo : sa typologie, sans appariement au graphe vélo.
+                RunMatch::OffGraph { class } => {
+                    (classes[class as usize].classified, false, None, Some(class))
+                }
                 RunMatch::Unmatched | RunMatch::NoData { .. } => (Classified::UNMATCHED, false, None, None),
             };
+            let off_graph = matches!(r.matched, RunMatch::OffGraph { .. });
             let mid = 0.5 * (r.from_m + r.to_m);
             let source = verdicts
                 .iter()
@@ -105,12 +115,13 @@ pub fn build_segments(
                 to_m: r.to_m,
                 from_index: 0,
                 to_index: 0,
-                structure: if matched { c.structure } else { StructureClass::Unknown },
+                structure: if matched || off_graph { c.structure } else { StructureClass::Unknown },
                 structure_source,
                 surface_class: c.surface_class,
                 surface_source: c.surface_source,
                 way_kind: c.way_kind,
                 matched,
+                off_graph,
                 element,
                 class,
             }

@@ -230,7 +230,16 @@ Surchargeables par configuration (comme `MATCH_*`) ; valeurs effectives dans `ru
    voie fermée la plus proche, à ≤ `search_radius_m`, avec la même émission. Transitions : de cet
    état à lui-même `|droite − gc| / β` (la voie est suivie, sans routage) ; entre lui et un candidat
    du graphe, `closed_way_cost + |droite − gc| / β` si la droite ≤ `max_jump_m`. Une observation dans
-   cet état est non appariée et coupe la chaîne. Motif : sans cet état, le Viterbi normalisé n'a pas
+   cet état est non appariée et coupe la chaîne. ▲ **Typologie de la voie suivie** (règles 2026.11.1,
+   api 1.1 ; décision de l'utilisateur du 2026-11-01) : l'index des voies fermées garde leur classe
+   (`EdgeClass`, ajoutée à `classes` sans entrer au graphe) ; l'observation retenue dans cet état
+   devient `ObsState::OffGraph { class }` (voie fermée la plus proche), et l'intervalle entre deux
+   observations hors graphe un tronçon `RunMatch::OffGraph { class }` (moitié à chaque classe si elle
+   change ; un intervalle entre le graphe et l'état hors graphe reste `Unmatched`). `build_segments`
+   (§8) en rend `structure`, revêtement et `way_kind`, avec `matched = false` : la portion n'est
+   toujours pas appariée au graphe vélo (`unmatched_range`, `unknown_m`), et l'assembleur y ajoute
+   `bicycle_forbidden` (T06 §4). Un pont ou un tunnel de la voie fermée n'est **pas** un passage
+   d'ouvrage (§6) : typé dans `segments[]`, jamais corrigé, absent de `summary.structures[]`. Motif : sans cet état, le Viterbi normalisé n'a pas
    d'alternative à « la rue la plus proche » ; un parcours sur un pont, un tunnel ou une autoroute
    fermés au vélo accrochait les rues à 20–40 m (dessous, dessus ou à côté) en les enchaînant par
    des sauts, et fabriquait des ouvrages (passages supérieurs parallèles d'une autoroute en
@@ -251,7 +260,7 @@ d'ouvrage. Cas de test obligatoire du corpus (jamais évalué par osm-surface).
 ### 5.4 Sortie
 
 ```rust
-pub enum ObsState { Matched { cand: Cand, chain: u32 }, Unmatched, NoData }
+pub enum ObsState { Matched { cand: Cand, chain: u32 }, Unmatched, OffGraph { class: ClassId }, NoData }
 pub struct MatchedPath { pub obs: Vec<Obs>, pub state: Vec<ObsState>, pub steps: Vec<Option<Step>> }
 ```
 
@@ -268,10 +277,12 @@ des longueurs réseau. Un **saut** est coupé en deux : première moitié à la 
 atteinte (`os:src/trace.rs:521-539`). Les changements de classe aux nœuds sont **recalés** en
 projetant le nœud du graphe sur la polyligne du parcours dans la fenêtre [d_t − step, d_t+1 + step]
 (à ≤ `search_radius_m`), sinon au prorata. Les intervalles hors chaîne donnent `Unmatched` ou
-`NoData`. Les tronçons adjacents de même clé sont fusionnés.
+`NoData`, ou `OffGraph` entre deux observations hors graphe (§5.3, étape 6). Les tronçons adjacents
+de même clé sont fusionnés. Pour les doutes d'un passage (§6.3), `OffGraph` compte comme `Unmatched`.
 
 ```rust
-pub enum RunMatch { Matched { class: ClassId, element: Option<ElementId> }, Unmatched, NoData }
+pub enum RunMatch { Matched { class: ClassId, element: Option<ElementId> }, Unmatched,
+                   OffGraph { class: ClassId }, NoData }
 pub struct TypedRun { pub from_m: f64, pub to_m: f64, pub matched: RunMatch,
                       pub passage: Option<PassageId> }
 ```
@@ -427,9 +438,12 @@ et comptée en métrique.
    `matched = false`, `surface.class = unknown`, `surface.source = none`, `way_kind = unknown` ;
    `unknown` reste réservé au non apparié **sans** ouvrage détecté (doc 01 §5.3). La plage compte
    dans `unknown_m` et garde `unmatched_range` (T06 §2, §4).
+   **Sur une voie fermée au vélo** (`RunMatch::OffGraph`, §5.3 étape 6, règles 2026.11.1) :
+   `structure`, revêtement et `way_kind` de cette voie (`structure_source = osm` sur un pont ou un
+   tunnel), `matched = false`, `off_graph = true`.
 2. Clé de coupe (doc 02 §4.3) : `structure`, `structure_source`, `surface.class`, `surface.source`,
-   `way_kind`, `matched`, **et** l'élément d'ouvrage (`ElementId`) ; ni `ele_method` ni l'origine du
-   terrain ne coupent.
+   `way_kind`, `matched`, `off_graph`, **et** l'élément d'ouvrage (`ElementId`) ; ni `ele_method` ni
+   l'origine du terrain ne coupent.
 3. Absorption : un tronçon **au sol apparié** de moins de `min_segment_m` = **20 m** (`MIN_SPAN_M`
    de tribly, `os:src/tribly.rs:14`) est absorbé par le voisin le plus long ; jamais un ouvrage, ni un
    changement de `matched` (sinon on fabrique de l'appariement).
@@ -441,6 +455,7 @@ pub struct TypedSegment { pub from_m: f64, pub to_m: f64, pub from_index: u32, p
     pub structure: StructureClass, pub structure_source: Option<StructureSource>,
     pub surface_class: SurfaceClass, pub surface_source: SurfaceSource,
     pub surface_detail: Option<SurfaceDetail>, pub way_kind: WayKind, pub matched: bool,
+    pub off_graph: bool /* voie fermée au vélo suivie, bicycle_forbidden */,
     pub passage: Option<PassageId>, pub debug_attrs: Option<WayAttrs> }
 ```
 
@@ -521,8 +536,12 @@ pub enum TypologyError { Timeout, Cancelled, Internal(String) }
 2. **Voies interdites au vélo hors graphe** (motorway, trunk en France, pedestrian, busway) : un
    parcours planifié qui les emprunte devient `unknown`, et un pont de trunk n'est pas corrigé.
    Depuis 2026.10.6, sur une route motorisée fermée au vélo, l'état hors graphe (§5.3, étape 6) le
-   dit explicitement au lieu d'apparier les rues voisines. Une rue piétonne ou un sentier
-   `bicycle=no` restent appariés à la voie voisine du graphe, comme avant.
+   dit explicitement au lieu d'apparier les rues voisines. Depuis 2026.11.1 (api 1.1), la portion
+   porte la typologie de cette route (classe, revêtement, pont ou tunnel) avec `bicycle_forbidden`,
+   toujours `matched = false` ; son pont ou son tunnel n'est toujours pas corrigé. Une rue piétonne
+   ou un sentier `bicycle=no` restent appariés à la voie voisine du graphe, comme avant : la règle
+   M1 hors graphe vélo du banc (bench README §4 ter.3) les compte pourtant parmi les voies fermées
+   (écart signalé à l'utilisateur, non tranché ici).
 3. **Trois écarts à osm-surface jamais mesurés** (clé de nœud par niveau, recollage au même niveau,
    jonction inter-niveaux par les fins de ligne) : nécessaires aux niveaux déconnectés, mais les 3
    parcours d'osm-surface doivent être rejoués en non-régression.

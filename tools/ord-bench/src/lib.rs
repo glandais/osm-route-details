@@ -114,8 +114,9 @@ impl BenchPaths {
 /// règles V1 du 2026-11-01 : 304f767, 16f6097, c1d231c) : S1 en recouvrement continu de
 /// [s_A, s_B] (tolérance de 2,5 m), attribution d'un passage par la trace brute
 /// (`passage_sur_ouvrage_parallele`), M1 hors graphe vélo avec contrôle `matched: false` +
-/// `unmatched_range` ; campagne `increment` V1.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// `unmatched_range` ; campagne `increment` V1. Remise à `None` avec les règles 2026.11.1 (état
+/// « hors graphe » rendu avec la typologie de la route fermée suivie, api 1.1).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

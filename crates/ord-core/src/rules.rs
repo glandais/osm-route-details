@@ -22,7 +22,9 @@ use serde::Serialize;
 // 2026.10.8 : saut court à une culée, qui n'est pas un saut dans l'ouvrage.
 // 2026.10.9 : sélection des points de rupture du mode `input_with_breakpoints` (T04 §6).
 // 2026.10.10 : tunnels OSM en série (balcons de moins de 120 m), droite entre portails extérieurs.
-pub const RULES_VERSION: &str = "2026.10.10";
+// 2026.11.1 : état « hors graphe » rendu avec la typologie de la route fermée au vélo suivie
+// (`bicycle_forbidden`, api 1.1).
+pub const RULES_VERSION: &str = "2026.11.1";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -363,6 +365,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.10.10", "83108d094002e2bd".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.1", "83108d094002e2bd".to_owned()));
     }
 }

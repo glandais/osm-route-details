@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.0"
+    "version": "1.1"
   },
   "paths": {
     "/health/live": {
@@ -1598,7 +1598,7 @@
           },
           "matched": {
             "type": "boolean",
-            "description": "`false` on a stretch not matched on the street network."
+            "description": "`false` on a stretch not matched on the bicycle street network. Since api 1.1, a stretch\nthat follows a way closed to bicycles (motorway, trunk, `bicycle=no` road...) stays\n`false` but carries the `structure`, `surface` and `way_kind` of that way, with the\nwarnings `unmatched_range` and `bicycle_forbidden`; its structures are not corrected."
           },
           "osm": {
             "type": [
@@ -1777,7 +1777,7 @@
       },
       "StructureV1": {
         "type": "string",
-        "description": "Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch.",
+        "description": "Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch with no known\nway. On a way closed to bicycles (warning `bicycle_forbidden`), the structure of that way.",
         "enum": [
           "ground",
           "bridge",
@@ -1881,7 +1881,7 @@
             "items": {
               "$ref": "#/components/schemas/StructureEntryV1"
             },
-            "description": "Bridges and tunnels met, sorted by distance: one entry per run of elements of the same\nkind on each passage."
+            "description": "Bridges and tunnels met on the bicycle network, sorted by distance: one entry per run of\nelements of the same kind on each passage. Structures of a way closed to bicycles are\nnot listed (segments only, warning `bicycle_forbidden`)."
           },
           "terrain_m": {
             "type": "object",
@@ -2072,7 +2072,8 @@
           "outside_primary_zone",
           "typology_unavailable",
           "elevation_unavailable",
-          "structure_untagged"
+          "structure_untagged",
+          "bicycle_forbidden"
         ]
       },
       "WarningV1": {

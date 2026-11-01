@@ -22,10 +22,12 @@ pub enum WarningCode {
     ElevationUnavailable,
     // V1 : ouvrage détecté par heuristique.
     StructureUntagged,
+    // V1 (api 1.1) : route fermée au vélo suivie, typologie rendue (état « hors graphe »).
+    BicycleForbidden,
 }
 
 impl WarningCode {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::UnmatchedRange,
         Self::StructureUncorrected,
         Self::StructureSlopeImplausible,
@@ -39,6 +41,7 @@ impl WarningCode {
         Self::TypologyUnavailable,
         Self::ElevationUnavailable,
         Self::StructureUntagged,
+        Self::BicycleForbidden,
     ];
 }
 

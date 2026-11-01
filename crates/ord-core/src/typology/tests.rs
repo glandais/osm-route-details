@@ -128,7 +128,13 @@ fn follows_the_parallel_track_it_is_on() {
         .iter()
         .filter(|s| s.way_kind == WayKind::Track)
         .all(|s| s.surface_source == SurfaceSource::InferredTracktype));
-    assert!(out.classes.iter().all(|c| &*c.attrs.highway != "motorway"), "autoroute hors graphe");
+    // L'autoroute est connue (état hors graphe) mais jamais suivie ici.
+    assert!(
+        segs.iter()
+            .all(|s| !s.off_graph
+                && s.class.is_none_or(|c| &*out.classes[c as usize].attrs.highway != "motorway")),
+        "autoroute hors graphe"
+    );
     assert!(out.coverage.missing.is_empty() && out.coverage.unavailable.is_empty());
 }
 
@@ -414,6 +420,20 @@ fn a_closed_bridge_does_not_snap_to_the_streets_below() {
     let (segs, out) = run(net(), &[(-550.0, 0.0), (550.0, 0.0)], None);
     assert!(segs.iter().all(|s| !s.matched), "{segs:?}");
     assert!(out.passages.is_empty(), "{:?}", out.passages);
+    // Typologie de la route fermée suivie (api 1.1) : pont, route principale, revêtue ; jamais
+    // appariée au graphe vélo, jamais un passage d'ouvrage corrigé.
+    let off = length_where(&segs, |s| s.off_graph);
+    assert!(off > 1_000.0, "{off} m hors graphe : {segs:?}");
+    let deck = length_where(&segs, |s| s.off_graph && s.structure == StructureClass::Bridge);
+    assert!((780.0..=820.0).contains(&deck), "{deck} m de pont : {segs:?}");
+    assert!(segs
+        .iter()
+        .filter(|s| s.off_graph)
+        .all(|s| s.way_kind == WayKind::MajorRoad && s.surface_class == SurfaceClass::Paved));
+    assert!(segs
+        .iter()
+        .filter(|s| s.structure == StructureClass::Bridge)
+        .all(|s| s.structure_source == Some(crate::classification::StructureSource::Osm)));
 }
 
 #[test]

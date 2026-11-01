@@ -20,12 +20,12 @@ deux intervalles, comme `TerrainRange`. Les sommes sont faites dans l'ordre des 
 
 | Champ du contrat | Calcul |
 |---|---|
-| `segments[]` | `TypedSegment` (T03 §8) + `ele_start`/`ele_end` = `profile.at(from_m/to_m)`, `grade_pct` = `profile.grade_pct`. `ele_method` = méthode qui couvre la plus grande longueur du segment ; à égalité, `dsm_deck` > `interpolated_structure` > `gap_filled` > `dem` > `none`. `structure_source` absent sur `ground` et `unknown`. Un ouvrage `heuristic` sur une portion non appariée garde `matched = false` (T03 §8, doc 02 §4.3). `osm` = `debug_attrs` |
+| `segments[]` | `TypedSegment` (T03 §8) + `ele_start`/`ele_end` = `profile.at(from_m/to_m)`, `grade_pct` = `profile.grade_pct`. `ele_method` = méthode qui couvre la plus grande longueur du segment ; à égalité, `dsm_deck` > `interpolated_structure` > `gap_filled` > `dem` > `none`. `structure_source` absent sur `ground` et `unknown`. Un ouvrage `heuristic` sur une portion non appariée garde `matched = false` (T03 §8, doc 02 §4.3). Sur une voie fermée au vélo (`off_graph`, T03 §5.3 étape 6, api 1.1) : typologie de cette voie, `matched = false`. `osm` = `debug_attrs` |
 | `summary.length_m`, `gain_m`, `loss_m`, `gain_params` | `L` ; `profile.gain` (T04 §5.4) |
 | `ele_min_m`, `ele_max_m` | Extrema de `ele` corrigé non lissé sur les stations non `none` ; absents si aucune |
 | `by_structure_m`, `by_surface_class_m`, `by_surface_source_m`, `by_way_kind_m` | Somme des longueurs de segments par valeur (`BTreeMap`, valeurs nulles omises) |
 | `structures[]` | Un élément par `StructureOutcome` (T04 §5.5), trié par `from_m`. `fuse` en produit un par **suite d'éléments de même nature** d'un ouvrage : deux ponts contigus font une entrée, un pont enchaîné à un tunnel en fait deux, **contiguës** (`to_m` de l'une = `from_m` de la suivante), chacune avec sa méthode (doc 02 §4.4). Champs : `kind`, `from_m`/`to_m` coupés au parcours, `length_m = to_m − from_m`, `structure_source`, `method` ← `OutcomeMethod` (`DsmDeck` → `dsm_deck`, `InterpolatedStructure` → `interpolated_structure`, `KeptGround` → `kept_ground`, `Uncorrected` → `none`). Avec `structure_correction: false`, tous en `none` |
-| `terrain_m` ; `unknown_m` | Somme des `TerrainRange` par `origin` ; somme des segments `matched = false`, ouvrages heuristiques non appariés compris |
+| `terrain_m` ; `unknown_m` | Somme des `TerrainRange` par `origin` ; somme des segments `matched = false`, ouvrages heuristiques non appariés et voies fermées au vélo (`off_graph`) compris |
 | `quality.matched_ratio` | `(L − unknown_m) / L` |
 | `inferred_surface_ratio` | Longueur `surface.source ∈ {inferred_tracktype, inferred_highway}` / `L` |
 | `elevation_coverage` | Longueur des stations dont `ele ≠ none` / `L` |
@@ -48,6 +48,7 @@ Un seul producteur par code :
 | Code | Producteur | Plage |
 |---|---|---|
 | `unmatched_range` | assemble | segments `matched = false` hors plages `typology_*` |
+| `bicycle_forbidden` (api 1.1) | assemble | segments `off_graph` (voie fermée au vélo suivie, T03 §5.3 étape 6) hors plages `typology_*` ; toujours avec `unmatched_range` |
 | `typology_missing` | assemble | `TypologyCoverage::missing` ∪ `CoverageRanges::typology_absent` |
 | `typology_unavailable` | assemble | `TypologyCoverage::unavailable`, si `Proceed { typology_failed }` |
 | `outside_primary_zone` | assemble | `CoverageRanges::outside_primary_zone` (zone France : T02 §7.2) |

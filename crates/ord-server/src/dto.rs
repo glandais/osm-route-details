@@ -281,8 +281,9 @@ pub struct SummaryV1 {
     pub by_way_kind_m: BTreeMap<String, f64>,
     /// Length not matched on the street network, in metres.
     pub unknown_m: f64,
-    /// Bridges and tunnels met, sorted by distance: one entry per run of elements of the same
-    /// kind on each passage.
+    /// Bridges and tunnels met on the bicycle network, sorted by distance: one entry per run of
+    /// elements of the same kind on each passage. Structures of a way closed to bicycles are
+    /// not listed (segments only, warning `bicycle_forbidden`).
     pub structures: Vec<StructureEntryV1>,
 }
 
@@ -339,7 +340,8 @@ pub struct StructureCorrectionV1 {
     pub counts_by_source: BTreeMap<String, u32>,
 }
 
-/// Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch.
+/// Structure of a segment; `ford` is reserved, `unknown` is an unmatched stretch with no known
+/// way. On a way closed to bicycles (warning `bicycle_forbidden`), the structure of that way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StructureV1 {
@@ -472,7 +474,10 @@ pub struct SegmentV1 {
     pub structure_source: Option<StructureSourceV1>,
     pub surface: SurfaceV1,
     pub way_kind: WayKindV1,
-    /// `false` on a stretch not matched on the street network.
+    /// `false` on a stretch not matched on the bicycle street network. Since api 1.1, a stretch
+    /// that follows a way closed to bicycles (motorway, trunk, `bicycle=no` road...) stays
+    /// `false` but carries the `structure`, `surface` and `way_kind` of that way, with the
+    /// warnings `unmatched_range` and `bicycle_forbidden`; its structures are not corrected.
     pub matched: bool,
     /// Dominant elevation method on the stretch.
     pub ele_method: EleMethodV1,

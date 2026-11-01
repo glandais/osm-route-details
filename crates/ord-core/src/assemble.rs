@@ -253,6 +253,17 @@ pub fn assemble(
             warnings.push(warning(WarningCode::UnmatchedRange, "route not matched on the street network", r));
         }
     }
+    // Producteur unique de `bicycle_forbidden` : route fermée au vélo suivie (état « hors graphe »
+    // du HMM, T03 §5.3), typologie de cette route rendue, non appariée au graphe vélo.
+    for s in segs.iter().filter(|s| s.off_graph) {
+        for r in subtract(s.from_m..s.to_m, &no_typology) {
+            warnings.push(warning(
+                WarningCode::BicycleForbidden,
+                "route follows a way closed to bicycles; its typology is given, its structures are not corrected",
+                r,
+            ));
+        }
+    }
     for r in tcov.missing.iter().chain(&cov.typology_absent) {
         warnings.push(warning(WarningCode::TypologyMissing, "no street data on this range", r.clone()));
     }
@@ -525,6 +536,50 @@ mod tests {
             "la plage sans tuile n'est pas aussi `unmatched_range`"
         );
         assert_eq!(r.status, Status::Partial, "typology_missing rend la réponse partielle");
+    }
+
+    #[test]
+    fn a_way_closed_to_bicycles_gives_its_typology_and_a_warning() {
+        // Plage 30–70 m sur une route fermée au vélo (classe 0 de `typology`, une route revêtue) :
+        // typologie rendue, non appariée, `unmatched_range` et `bicycle_forbidden`, réponse
+        // complète.
+        let route = line(100.0);
+        let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None },
+            None,
+            &RequestOptions::default(),
+            &Rules::default(),
+        )
+        .unwrap();
+        let (out, segs) = typology(&route, &[(30.0, 70.0, RunMatch::OffGraph { class: 0 })]);
+        let r = assemble(
+            &route,
+            &CoverageRanges::default(),
+            part(&out, &segs),
+            p,
+            Vec::new(),
+            versions(),
+            Vec::new(),
+        );
+        assert_eq!(r.status, Status::Complete);
+        let off = r.segments.iter().find(|s| s.typed.off_graph).expect("segment hors graphe");
+        assert!(!off.typed.matched);
+        assert_eq!(
+            (off.typed.structure, off.typed.surface_class),
+            (StructureClass::Ground, SurfaceClass::Paved)
+        );
+        assert_eq!(r.summary.unknown_m, 40.0, "non apparié au graphe vélo");
+        let codes: Vec<(WarningCode, Option<std::ops::Range<f64>>)> =
+            r.warnings.iter().map(|w| (w.code, w.range.clone())).collect();
+        assert_eq!(
+            codes,
+            vec![
+                (WarningCode::UnmatchedRange, Some(30.0..70.0)),
+                (WarningCode::BicycleForbidden, Some(30.0..70.0))
+            ]
+        );
     }
 
     #[test]

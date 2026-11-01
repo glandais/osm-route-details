@@ -51,8 +51,9 @@ pub struct GraphSeg {
 }
 
 pub type SegIndex = RTree<GeomWithData<Line<[f64; 2]>, SegId>>;
-/// Segments des routes fermées au vélo, sans topologie.
-pub type ClosedIndex = RTree<Line<[f64; 2]>>;
+/// Segments des routes fermées au vélo, sans topologie, avec leur classe (typologie rendue par
+/// l'état « hors graphe », T03 §5.3).
+pub type ClosedIndex = RTree<GeomWithData<Line<[f64; 2]>, ClassId>>;
 
 pub struct StreetGraph {
     pub grid: Grid,
@@ -120,7 +121,10 @@ impl StreetGraph {
         let mut cut_ends: Vec<(NodeId, LineId)> = Vec::new();
         let mut raw: Vec<RawSeg> = Vec::new();
         let mut line_count: LineId = 0;
-        let mut closed: Vec<Line<[f64; 2]>> = Vec::new();
+        let mut closed: Vec<GeomWithData<Line<[f64; 2]>, ClassId>> = Vec::new();
+        // Classes des routes fermées au vélo : dans `classes` (la typologie de la voie suivie est
+        // rendue), jamais dans le graphe.
+        let mut closed_ids: FxHashMap<WayAttrs, ClassId> = FxHashMap::default();
 
         for tile in tiles {
             let tile_classes: Vec<Option<ClassId>> = tile
@@ -148,12 +152,19 @@ impl StreetGraph {
                 .collect();
             for line in &tile.lines {
                 let Some(class) = tile_classes.get(line.attr as usize).copied().flatten() else {
-                    if tile.attrs.get(line.attr as usize).is_some_and(bicycle_closed) {
+                    if let Some(a) = tile.attrs.get(line.attr as usize).filter(|a| bicycle_closed(a)) {
+                        let id = *closed_ids.entry(a.clone()).or_insert_with(|| {
+                            let classified = classify(a, caps);
+                            // Niveau sans objet hors graphe : code du sol, aligné sur `classes`.
+                            class_level.push(0);
+                            classes.push(EdgeClass { attrs: a.clone(), classified });
+                            (classes.len() - 1) as ClassId
+                        });
                         closed.extend(
                             line.points
                                 .windows(2)
                                 .filter(|w| w[0] != w[1] && corridor.touches(w[0], w[1]))
-                                .map(|w| Line::new(w[0], w[1])),
+                                .map(|w| GeomWithData::new(Line::new(w[0], w[1]), id)),
                         );
                     }
                     continue;

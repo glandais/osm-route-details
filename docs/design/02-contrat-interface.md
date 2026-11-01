@@ -134,13 +134,13 @@ sur le profil interne densifié : ils ne se recalculent pas à partir de `points
 |---|---|
 | `from_m`, `to_m` | Plage en distance. |
 | `from_index`, `to_index` | Points d'entrée qui encadrent la plage. |
-| `structure` | `ground`, `bridge`, `tunnel`, `unknown`. `ford` est réservé. `unknown` : portion non appariée **sans** ouvrage détecté. |
+| `structure` | `ground`, `bridge`, `tunnel`, `unknown`. `ford` est réservé. `unknown` : portion non appariée **sans** ouvrage détecté ni voie connue. Sur une voie fermée au vélo (api 1.1), celle de cette voie. |
 | `structure_source` | Sur un ouvrage : `osm`, `heuristic` (V1, détecté hors de tout way OSM), `osm_heuristic` (V1, les deux concordent). Absent sur `ground` et `unknown`. |
 | `surface.class` | `paved`, `unpaved`, `unknown`. Gelé en v1. |
 | `surface.detail` | **Absent en v1.** Extensible, rempli en V2. |
 | `surface.source` | `tagged`, `inferred_tracktype`, `inferred_highway`, `none`. |
 | `way_kind` | `major_road`, `minor_road`, `track`, `path`, `cycleway`, `footway`, `steps`, `unknown`. |
-| `matched` | `false` sur une portion non appariée. En V1, un ouvrage détecté par l'heuristique seule sur une portion non appariée est un segment `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, revêtement et `way_kind` à `unknown` : `matched: false` n'implique donc pas `structure: unknown`. |
+| `matched` | `false` sur une portion non appariée. En V1, un ouvrage détecté par l'heuristique seule sur une portion non appariée est un segment `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, revêtement et `way_kind` à `unknown` : `matched: false` n'implique donc pas `structure: unknown`. Depuis l'api 1.1, une portion qui suit une voie **fermée au vélo** (autoroute, trunk, route `bicycle=no`…) reste `matched: false` (elle n'est pas sur le réseau vélo) mais porte `structure`, `surface` et `way_kind` de cette voie, avec les avertissements `unmatched_range` et `bicycle_forbidden` ; un pont ou un tunnel de cette voie n'est pas corrigé. |
 | `ele_method` | Méthode d'élévation dominante sur le tronçon. |
 | `ele_start`, `ele_end`, `grade_pct` | Altitudes aux bornes et pente moyenne. |
 | `osm` | Seulement avec `debug` : attributs bruts de la source. |
@@ -159,7 +159,8 @@ changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
   manquent ;
 - `ele_min_m`, `ele_max_m` ;
 - répartitions en mètres par `structure`, `surface.class`, `surface.source` et `way_kind` ;
-- `structures[]` : liste des ponts et tunnels rencontrés, triée par distance : `kind` (`bridge` ou
+- `structures[]` : liste des ponts et tunnels rencontrés sur le réseau vélo (pas ceux d'une voie
+  fermée au vélo, portés par `segments[]` seulement), triée par distance : `kind` (`bridge` ou
   `tunnel`), plage, longueur, `structure_source`, méthode appliquée : `dsm_deck`,
   `interpolated_structure`, `kept_ground` (pont OSM sans tablier dans le MNS, au ras du sol :
   l'altitude du sol est gardée, ce qui compte comme une correction), ou `none` (non corrigé). Un
@@ -186,7 +187,9 @@ Codes d'avertissement prévus en v1 : `unmatched_range`, `structure_uncorrected`
 pont interpolé au lieu d'être lu dans le MNS), `dsm_source` (plage lue sur GLO-30, un MNS : seuil de
 D+ adapté), `outside_primary_zone` (plage hors France : Mapterhorn seul, mode dégradé), et
 `typology_unavailable` / `elevation_unavailable` (seulement avec `accept_partial`). En V1 :
-`structure_untagged` (ouvrage détecté par heuristique hors de tout way OSM, corrigé).
+`structure_untagged` (ouvrage détecté par heuristique hors de tout way OSM, corrigé) et, depuis
+l'api 1.1, `bicycle_forbidden` (le parcours suit une voie fermée au vélo : typologie de cette voie
+rendue, portion non appariée au réseau vélo, ouvrages non corrigés).
 
 Aucun référentiel vertical n'est déclaré ni signalé : les écarts entre référentiels nationaux sont
 jugés négligeables pour l'usage (doc 01 §2.2). Les altitudes sont des altitudes au-dessus du niveau
@@ -202,7 +205,7 @@ pas être calibré sans vérité terrain. La confiance se lit dans les facteurs 
 ```json
 {
   "meta": {
-    "api_version": "1.0",
+    "api_version": "1.1",
     "rules_version": "2026.11.1",
     "data_versions": {
       "typology": {"source": "versatiles-shortbread", "date": "2026-10-27"},
@@ -343,6 +346,7 @@ Le 429 (quota) est renvoyé par le reverse proxy, pas par le service.
 | Passage sous un pont | `structure: ground`, altitude MNT. |
 | Passage sous un pont puis sur ce même pont | Chaque passage a son niveau, décidé par la continuité de l'appariement. |
 | Portion hors réseau (bridleway, chemin absent des tuiles, champ, plage, bac) | Segment `unknown`, `matched: false`, avertissement `unmatched_range`. `status` reste `complete`. |
+| Portion sur une route motorisée fermée au vélo (autoroute, trunk en France, route `bicycle=no`) (api 1.1) | `matched: false`, `structure`, `surface` et `way_kind` de cette route, avertissements `unmatched_range` et `bicycle_forbidden` ; un pont ou un tunnel de cette route n'est pas corrigé (MNT) et n'entre pas dans `summary.structures[]`. `status` reste `complete`. Une rue piétonne ou un sentier `bicycle=no` restent appariés à la voie cyclable voisine. |
 | Points d'entrée trop espacés pour suivre la voie | Ligne droite entre les points : appariement souvent impossible, donc `unknown` ; altitude lue sur la ligne droite. |
 | Pont ou tunnel non tagué ou absent d'OSM | MVP : `structure: ground`, MNT brut, aucun avertissement. V1, sur terrain mesuré : ouvrage détecté par heuristique et **corrigé**, `structure_source: heuristic`, avertissement `structure_untagged`. |
 | Pont sur le terrain LiDAR, MNS illisible | Interpolation entre culées, `dsm_unavailable`. Réponse 200. |
@@ -376,6 +380,9 @@ Elles permettent d'expliquer pourquoi deux réponses diffèrent : nouvelles règ
 `request_id` et `duration_ms`. Un client ou le reverse proxy peut la mettre en cache avec ce triplet
 dans la clé. Pour toute source lue en ligne (tuiles distantes en dev, IGN dans tous les modes), `data_versions`
 n'est qu'indicatif (doc 01 §8.3) : deux réponses peuvent différer si l'IGN publie de nouvelles zones.
+
+Historique : `1.1` (2026-11-01) ajoute l'avertissement `bicycle_forbidden` et la typologie d'une
+portion qui suit une voie fermée au vélo (§4.3, §5.3), sans changer les champs existants.
 
 Règles d'évolution à l'intérieur de la v1 :
 

@@ -13,7 +13,7 @@ use ord_domain::geo::{dist_units, haversine_m, project_on_segment};
 use ord_domain::LatLon;
 use rustc_hash::FxHashSet;
 
-use super::graph::{SegId, StreetGraph};
+use super::graph::{ClassId, SegId, StreetGraph};
 use super::TypologyError;
 use crate::rules::MatchParams;
 
@@ -67,6 +67,11 @@ pub enum ObsState {
         chain: u32,
     },
     Unmatched,
+    /// État « hors graphe » : l'observation suit une route fermée au vélo (T03 §5.3, étape 6),
+    /// non appariée ; `class` est celle de cette route (typologie rendue, avec avertissement).
+    OffGraph {
+        class: ClassId,
+    },
     /// `failed` : tuile en panne (sinon absente de l'emprise).
     NoData {
         failed: bool,
@@ -240,6 +245,7 @@ pub fn candidates(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Vec<Cand> {
 struct Closed {
     pos: [f64; 2],
     dist_m: f64,
+    class: ClassId,
 }
 
 fn closed_candidate(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Option<Closed> {
@@ -248,11 +254,18 @@ fn closed_candidate(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Option<Cl
     g.closed
         .locate_within_distance(o.p, r * r)
         .map(|l| {
-            let pr = project_on_segment(o.p, l.from, l.to);
-            Closed { pos: pr.point, dist_m: dist_units(o.p, pr.point) * mpu }
+            let g = l.geom();
+            let pr = project_on_segment(o.p, g.from, g.to);
+            Closed { pos: pr.point, dist_m: dist_units(o.p, pr.point) * mpu, class: l.data }
         })
         .filter(|c| c.dist_m <= params.search_radius_m)
-        .min_by(|a, b| a.dist_m.total_cmp(&b.dist_m).then(a.pos[0].total_cmp(&b.pos[0])))
+        .min_by(|a, b| {
+            a.dist_m
+                .total_cmp(&b.dist_m)
+                .then(a.pos[0].total_cmp(&b.pos[0]))
+                .then(a.pos[1].total_cmp(&b.pos[1]))
+                .then(a.class.cmp(&b.class))
+        })
 }
 
 /// Apparie les observations sur le graphe ; le budget est lu toutes les 1 000 observations.
@@ -396,6 +409,8 @@ pub fn match_obs(
     // Retour arrière de chaque chaîne depuis sa fin ; l'état hors graphe n'est pas apparié et
     // coupe la chaîne : chaque morceau apparié devient une chaîne.
     let mut chosen: Vec<Option<usize>> = vec![None; n];
+    // Observations retenues dans l'état hors graphe, avec la classe de la route suivie.
+    let mut off_graph: Vec<Option<ClassId>> = vec![None; n];
     let mut visited = vec![false; n];
     let mut t = n;
     while t > 0 {
@@ -410,6 +425,7 @@ pub fn match_obs(
         loop {
             visited[k] = true;
             chosen[k] = (j < cands[k].len()).then_some(j);
+            off_graph[k] = if j == cands[k].len() { closed[k].map(|c| c.class) } else { None };
             let b = back[k][j];
             if b == u16::MAX || k == 0 {
                 break;
@@ -521,10 +537,11 @@ pub fn match_obs(
         });
     }
     let state = (0..n)
-        .map(|t| match (chosen[t], obs[t].no_data) {
-            (Some(j), _) => ObsState::Matched { cand: cands[t][j], chain: chain_of[t] },
-            (None, Some(failed)) => ObsState::NoData { failed },
-            (None, None) => ObsState::Unmatched,
+        .map(|t| match (chosen[t], obs[t].no_data, off_graph[t]) {
+            (Some(j), _, _) => ObsState::Matched { cand: cands[t][j], chain: chain_of[t] },
+            (None, Some(failed), _) => ObsState::NoData { failed },
+            (None, None, Some(class)) => ObsState::OffGraph { class },
+            (None, None, None) => ObsState::Unmatched,
         })
         .collect();
     Ok(MatchedPath { obs, state, steps })

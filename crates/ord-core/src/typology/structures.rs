@@ -975,7 +975,7 @@ fn add_path_doubts(
 ) {
     let guard = rules.doubt_guard_m;
     let unmatched = runs.iter().any(|r| {
-        matches!(r.matched, RunMatch::Unmatched | RunMatch::NoData { .. })
+        matches!(r.matched, RunMatch::Unmatched | RunMatch::OffGraph { .. } | RunMatch::NoData { .. })
             && r.to_m > p.from_m - guard
             && r.from_m < p.to_m + guard
     });

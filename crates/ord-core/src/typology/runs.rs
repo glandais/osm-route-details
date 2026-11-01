@@ -35,6 +35,10 @@ pub fn project_runs(g: &StreetGraph, path: &MatchedPath, length_m: f64) -> Vec<T
         (ObsState::NoData { failed }, _) | (_, ObsState::NoData { failed }) => {
             RunMatch::NoData { failed: *failed }
         }
+        // Bouts du parcours au-delà d'une observation hors graphe.
+        (ObsState::OffGraph { class: x }, ObsState::OffGraph { class: y }) if x == y => {
+            RunMatch::OffGraph { class: *x }
+        }
         _ => RunMatch::Unmatched,
     };
     if let Some(first) = obs.first() {
@@ -68,6 +72,13 @@ pub fn project_runs(g: &StreetGraph, path: &MatchedPath, length_m: f64) -> Vec<T
                         }
                     }
                 }
+            }
+            // Route fermée au vélo suivie d'un bout à l'autre : sa typologie, moitié à chaque
+            // classe si elle change.
+            (ObsState::OffGraph { class: a }, ObsState::OffGraph { class: b }, _) => {
+                let mid = 0.5 * (d0 + d1);
+                push(&mut out, d0, mid, RunMatch::OffGraph { class: *a });
+                push(&mut out, mid, d1, RunMatch::OffGraph { class: *b });
             }
             (a, b, _) => push(&mut out, d0, d1, gap(a, b)),
         }
