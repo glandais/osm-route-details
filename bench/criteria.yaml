@@ -20,6 +20,9 @@
 # (README §2.1) : test de niveau si MNH au milieu ≥ 10 m (vérifié sur la calibration avant adoption).
 # Puis baro des points insérés (README §2.1) : gardé à 30 m au plus d'une voie des tuiles de la
 # campagne qui juge la trace. Puis E2b : D+ baro en preset dem, comme le service (README §4 bis.5).
+# Modifié le 2026-11-01 (décision de l'utilisateur, README §4 bis.4, avant le gel du MVP) : un
+# ouvrage que le schéma de la source ne type pas comme tel sort d'E4/E3 et de S1, rapporté à part
+# (limite_donnees). Seuils inchangés ; avant toute nouvelle mesure.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser.
 # Les cas évalués sont désignés par les groupes du manifest ; les séries par tools/series_groups.py
@@ -66,8 +69,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Point d'origine inséré à la place d'un saut (insere = 1) : baro gardé seulement à ≤ 30 m d'une voie de la couche streets des tuiles de la campagne qui juge la trace ; tuile absente à la source = sans voie ; test fait par ord-bench"
   - id: e2b_preset_baro_dem   # 2026-10-31
     decision: "E2b : D+ baro calculé avec le preset dem (3 m, 30 m), le même que le service et sa référence sans correction ; E2 indicatif reste en barometric (2 m, 15 m)"
-  - id: limite_donnees_comptee   # 2026-10-31
-    decision: "Un ouvrage que la source ne décrit pas comme tel reste compté, avec la note limite_donnees (Arly : shortbread sans avalanche_protector)"
+  - id: limite_donnees_hors_decompte   # 2026-11-01, remplace limite_donnees_comptee (2026-10-31)
+    decision: "Un ouvrage du corpus que la source du service ne type pas comme tunnel ou pont à cause de son schéma sort d'E4 (E3 pour un pont) et de S1 ; rapporté à part comme limite des données du MVP, à la manière de S3, sans seuil"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -84,11 +87,13 @@ perimetre:   # README §4 bis.1
     rapporte_en: {tunnel: E4_non_couvert, bridge: E3_non_couvert}
     compte: false
     cas_connus: [nantes-anne-de-bretagne]
-  limite_donnees:
-    regle: "ouvrage que la source ne décrit pas comme tel : compté, avec une note"
-    compte: true
-    cas_connus:
-      - {ouvrage: arly-galerie, criteres: [E4, S1], note: "shortbread sans avalanche_protector"}
+  limite_donnees:   # README §4 bis.4, 2026-11-01
+    regle: "ouvrage du corpus que la source du service ne type pas comme tunnel ou pont à cause de son schéma (attribut absent de la couche lue), non un tag OSM absent ou faux"
+    exclus_de: {tunnel: [E4, S1], bridge: [E3, S1]}
+    compte: false
+    rapporte: {erreur_altitude: mesuree_contre_sa_reference, seuils: [], note: attribut_manquant}
+    cas_connus:   # appliquée par le schéma, jamais par cette liste
+      - {ouvrages: [arly-galerie, nv-30, nv-37], note: "shortbread sans avalanche_protector"}
 
 passage_pont:   # README §2.1
   horizontal: {tolerance_m: 40, points: [A, milieu, B]}

@@ -425,6 +425,8 @@ mesure) après l'analyse des échecs E3/E4 de la campagne 2026.10.7 en calibrati
 E3 pris sur les approches et référence « incertaine » (point 3), bande de portail sur un pont ou un
 tunnel des tuiles (point 2) ; puis, après vérification sur la calibration, plausibilité de la pente
 entre portails (point 2).
+Modifié le 2026-11-01 (décision de l'utilisateur, commits dédiés, avant le gel du MVP et avant toute
+nouvelle mesure) : limite des données hors décompte (point 4).
 
 1. **Ouvrages hors graphe vélo.** Un ouvrage dont la voie OSM est exclue du graphe vélo par la règle
    de tags du service (T03 §4.2, étape 1 : motorway, trunk en France, pedestrian, bridleway, busway ;
@@ -497,11 +499,19 @@ entre portails (point 2).
    - Si les décalages des deux côtés diffèrent de plus de 2 m (la tolérance E3), la référence du
      passage est « incertaine » : rapportée, non comptée. Un saut de baro entre les deux approches
      est ainsi écarté sans détecteur séparé.
-4. **Limite des données, comptée.** Un ouvrage que la source choisie ne décrit pas comme tel reste
-   compté : l'échec appartient au service tel qu'il est construit, et le rapport doit le montrer. Il
-   porte la note `limite_donnees`. Cas connu : la galerie pare-avalanche de l'Arly
-   (`tunnel=avalanche_protector`), que le schéma Shortbread de VersaTiles rend en voie ordinaire sans
-   `tunnel` ; elle reste dans E4 et S1 avec `limite_donnees: shortbread sans avalanche_protector`.
+4. **Limite des données, hors décompte** (décision de l'utilisateur, 2026-11-01, avant le gel du MVP ;
+   remplace la règle « compter, avec la limite » du 2026-10-31). Un ouvrage du corpus que la source
+   du service ne type pas comme tunnel ou pont **à cause de son schéma** (l'attribut qui le décrit
+   n'existe pas dans la couche lue par le service, et non un tag absent ou faux dans OSM) sort
+   d'E4 et de S1 (d'E3 et de S1 pour un pont). Il est rapporté à part, comme limite des données du
+   MVP, à la manière de S3 : erreur d'altitude mesurée contre sa référence, sans seuil, avec la note
+   `limite_donnees` qui nomme l'attribut manquant. Motif : le MVP lit les tuiles telles qu'elles
+   sont ; un ouvrage que leur schéma ne peut pas exprimer mesure le choix de la source, pas le
+   service, et le compter ferait échouer E4 sur un défaut qu'aucune correction du service ne peut
+   lever. La règle porte sur le schéma, jamais sur une liste de cas ; un ouvrage absent de la
+   géométrie des tuiles reste `absent_des_donnees` (point 1). Cas connus : les galeries
+   pare-avalanche (`tunnel=avalanche_protector`), que le schéma Shortbread de VersaTiles rend en
+   voie ordinaire sans `tunnel` : `arly-galerie`, `nv-30`, `nv-37`.
 5. **E2b à traitement égal** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle mesure).
    Le D+ baro d'E2b est calculé avec le preset `dem` (hystérésis 3 m, lissage 30 m), le même que pour
    le service et sa référence sans correction ; E2, indicatif, reste en `barometric` (2 m, 15 m),
