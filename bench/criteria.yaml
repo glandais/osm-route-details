@@ -101,6 +101,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Attribution : les voies bridge d'un même tablier forment un seul ouvrage (même polygone man_made=bridge des tuiles ; à défaut de polygone, voie à ≤ 10 m sur toute l'emprise) ; seuls des ponts distincts sont départagés ; tunnels inchangés"
   - id: groupe_e2b_trace_nouvelle   # 2026-11-01, V1
     decision: "Groupe E2b d'une trace nouvelle : dplus si D+ MNT ≥ 11 m/km, sinon ouvrage si ≥ 2 ouvrages comptés, sinon plaine ; calculé avant le tirage, sans le service"
+  - id: negatif_q1_serie_nouvelle   # 2026-11-01, V1
+    decision: "Négatif Q1 d'une série nouvelle : sortie de 2015-05 → 2020-09 au défaut attesté hors du qualificateur (D+ Strava < 60 % du D+ MNT au scan, confirmé sur le stream complet)"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -172,6 +174,9 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
       dplus_si: {gain_dem_m_par_km_min: 11.0}   # qualify_baro.py gain_dem_m ÷ dist_km
       sinon_ouvrage_si: {ouvrages_comptes_min: 2}   # après exclusions
       sinon: plaine
+    negatif_q1_serie_nouvelle:   # README §4 ter.4, décision de l'utilisateur, 2026-11-01
+      periode: ["2015-05", "2020-09"]
+      defaut_atteste_hors_qualificateur: {scan_dplus_ratio_max: 0.6, confirme_stream: {gain_rec_sur_gain_dem_max: 0.6}}
     donnees: nouvelles_seulement   # ni calibration (série MVP comprise), ni vcyclist, ni osm-surface ; ouvrages hors calibration, fenêtres ± 500 m comprises
     tirage:
       fige_avant_mesure: true

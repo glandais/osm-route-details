@@ -670,6 +670,13 @@ inchangés.
      passe sur au moins 2 ouvrages comptés (après exclusions) ; sinon `plaine`. Calculé avant le
      tirage, sans le service. Au MVP, le groupe était choisi à la main par l'intention de la sortie ;
      une règle est nécessaire pour un tirage figé sur des sorties non choisies.
+   - **Négatif Q1 d'une série nouvelle** (décision de l'utilisateur, 2026-11-01) : sortie de la
+     période du GPS défectueux (2015-05 → 2020-09) dont le défaut est attesté **hors du
+     qualificateur** : D+ Strava inférieur à 60 % du D+ MNT au scan des polylignes
+     (`strava_scan_dplus.py`), confirmé sur le stream complet (D+ enregistré < 60 % du D+ MNT de
+     `qualify_baro.py`). Une sortie de la période sans défaut attesté n'est pas un négatif : sur 6
+     tirées par empreinte en V1, 5 étaient saines (D+ conforme, bruit 1,1–1,8 m). Motif : choisir
+     les négatifs par le verdict du qualificateur rendrait Q1 circulaire.
    - **Tirage stratifié, figé avant toute mesure.** Strates, dans cet ordre : E4, E5, S2, R1/R2, E3,
      Q1, puis le reste. Dans chaque strate, tri par sha256(`osm-route-details:v1:` + id) ; le cas va
      à la série tenue à l'écart jusqu'au minimum et jusqu'à au moins 1/3 de la strate. Un cas
