@@ -665,6 +665,11 @@ inchangés.
      comprise), de vcyclist ni d'osm-surface ; ouvrages absents de la calibration, fenêtres de
      ± 500 m comprises. Sources : activités Strava non encore qualifiées (`qualify_baro.py`, période
      du GPS défectueux toujours exclue), sorties récentes, itinéraires planifiés.
+   - **Groupe E2b d'une trace nouvelle** (décision de l'utilisateur, 2026-11-01) : `dplus` si le
+     D+ MNT (`qualify_baro.py`, `gain_dem_m`) est d'au moins 11 m/km ; sinon `ouvrage` si la trace
+     passe sur au moins 2 ouvrages comptés (après exclusions) ; sinon `plaine`. Calculé avant le
+     tirage, sans le service. Au MVP, le groupe était choisi à la main par l'intention de la sortie ;
+     une règle est nécessaire pour un tirage figé sur des sorties non choisies.
    - **Tirage stratifié, figé avant toute mesure.** Strates, dans cet ordre : E4, E5, S2, R1/R2, E3,
      Q1, puis le reste. Dans chaque strate, tri par sha256(`osm-route-details:v1:` + id) ; le cas va
      à la série tenue à l'écart jusqu'au minimum et jusqu'à au moins 1/3 de la strate. Un cas
