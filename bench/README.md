@@ -795,8 +795,14 @@ inchangés.
    - **sinon référence = MNT LiDAR**, **indisponible** (rapporté `e5_reference_indisponible`, non
      compté) si le MNT est sans donnée à 10 m au plus du croisement, ou s'il lit le tablier :
      MNT au croisement − moyenne des médianes du MNT entre 20 et 50 m de part et d'autre, le long de
-     la voie du dessous, > **2,0 m** (deux fois la tolérance d'E5 ; un gabarit sous tablier fait au
-     moins 4,5 m). Une cuvette (écart négatif) reste une référence : les passages dessous creusent.
+     la voie du dessous, > **2,0 m** (deux fois la tolérance MNT d'E5 ; un gabarit sous tablier fait
+     au moins 4,5 m). Bosse entre **1,0 et 2,0 m** : référence **incertaine** (rapportée
+     `e5_reference_incertaine`, non comptée ; décision de l'utilisateur, 2026-11-01, après la
+     calibration 2026.11.6) : une bosse de l'ordre de la tolérance ne distingue pas le tablier du sol.
+     Une cuvette (écart négatif) reste une référence : les passages dessous creusent. Effet sur la
+     calibration 2026.11.6, sans le service : 3 des 29 passages au MNT deviennent incertains
+     (`nv-361` sur `perso-06`, bosse 1,9 m ; `nv-461`, 1,8 m ; `n05-canal-midi-platanes#1`, 1,5 m),
+     dont les 2 échecs au MNT.
    Le « trou comblé » du MNT (gap_filled du service) n'est pas lisible dans la donnée : le MNT
    LiDAR HD de l'IGN est déjà interpolé sous les tabliers (aucun no-data sur 218 croisements de
    calibration) ; c'est la bosse qui le trahit. Vérification sur la calibration 2026.11.5-bench1
@@ -809,6 +815,13 @@ inchangés.
    le service y lit aussi le tablier. Échec restant au MNT seul : `nv-416` (bosse 1,7 m, sous le
    seuil). Série tenue à l'écart (MNT par l'API IGN, tuiles V1, sans le service) : 105 croisements,
    78 gardent une référence (tous au baro), au-dessus du minimum (8) et de la cible (10).
+   Recompté après la calibration 2026.11.6 en testant aussi le verdict `fiable` et le pas brut au
+   croisement (le premier comptage ne les testait pas) : 77 croisements gardent une référence
+   (59 au baro, 18 au MNT), 27 sont retirés (trace sur un ouvrage), 1 est indisponible. Avec la
+   tolérance baro et les deux références incertaines du 2026-11-01 : **65** croisements gardent une
+   référence (48 au baro, 17 au MNT), 10 ont un baro incertain (côtés à plus de 2 m), 1 une bosse
+   MNT de 1 à 2 m, 1 n'a de baro que d'un côté du croisement ; toujours au-dessus du minimum (8) et
+   de la cible (10).
 8. **Référence incertaine en E1 plaine** (décision de l'utilisateur, 2026-11-01, après la
    calibration 2026.11.5-bench1). Une trace du groupe `plaine` dont le bruit baro mesuré par
    `qualify_baro.py` (`noise_m`, 1,4826 × MAD du résidu baro − MNT après retrait de tendance)
