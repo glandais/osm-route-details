@@ -114,6 +114,102 @@ pub struct PersoCase {
     /// (abscisse de l'extrait, position, baro transporté), pour le seul repli 1–3 km du décalage
     /// local (baro − MNT, données de référence) ; jamais envoyés au service.
     pub ring: Vec<RingPoint>,
+    /// Trace brute (GPS d'origine) et abscisse du cas dans celle de la trace recalée entière
+    /// (`shift` : début d'un extrait), pour l'attribution des passages (README §4 ter.2).
+    pub raw: Option<RawRef>,
+}
+
+/// Trace brute d'un cas (`private/traces/<id>.trim1km.gpx`, segment `.sN` découpé comme par
+/// `tools/stadia_match.py`) et correspondance abscisse recalée → abscisse brute (colonnes
+/// `s_recale_m` et `s_origine_m` de `<id>.baro.csv`).
+#[derive(Clone)]
+pub struct RawGps {
+    pub pts: Vec<LatLon>,
+    pub s: Vec<f64>,
+    map_s: Vec<f64>,
+    map_o: Vec<f64>,
+}
+
+impl std::fmt::Debug for RawGps {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RawGps").field("points", &self.pts.len()).finish_non_exhaustive()
+    }
+}
+
+impl RawGps {
+    /// Points bruts dont l'abscisse d'origine est entre celles de `s_a` et `s_b` (abscisses
+    /// recalées), par interpolation de la correspondance du transport du baro.
+    pub fn between(&self, s_a: f64, s_b: f64) -> Vec<LatLon> {
+        if self.map_s.is_empty() {
+            return Vec::new();
+        }
+        let (oa, ob) = (interp_one(&self.map_s, &self.map_o, s_a), interp_one(&self.map_s, &self.map_o, s_b));
+        let (lo, hi) = (oa.min(ob), oa.max(ob));
+        let i = self.s.partition_point(|x| *x < lo);
+        let j = self.s.partition_point(|x| *x <= hi);
+        self.pts[i..j].to_vec()
+    }
+}
+
+/// Trace brute d'un cas et décalage de son abscisse (extrait).
+#[derive(Clone, Debug)]
+pub struct RawRef {
+    pub gps: std::sync::Arc<RawGps>,
+    pub shift: f64,
+}
+
+impl RawRef {
+    pub fn between(&self, s_a: f64, s_b: f64) -> Vec<LatLon> {
+        self.gps.between(s_a + self.shift, s_b + self.shift)
+    }
+}
+
+/// Saut entre deux points bruts qui coupe la trace en segments, et longueur minimale d'un
+/// segment gardé (`GAP_M`, `MIN_SEG_KM` de `tools/stadia_match.py`).
+const RAW_GAP_M: f64 = 2_000.0;
+const RAW_MIN_SEGMENT_M: f64 = 5_000.0;
+
+/// Trace brute d'un cas : `<trace>.trim1km.gpx` (points avec altitude), segments coupés aux sauts
+/// de plus de 2 km et gardés à partir de 5 km ; `segment` = rang `.sN` (1…), `None` pour une trace
+/// d'un seul segment. Correspondance lue dans `baro` (toutes les lignes). `None` si illisible.
+fn load_raw(trace: &std::path::Path, baro: &std::path::Path, segment: Option<usize>) -> Option<RawGps> {
+    let pts: Vec<LatLon> = gpx::read(trace)
+        .ok()?
+        .into_iter()
+        .filter(|p| p.ele.is_some())
+        .map(|p| LatLon::new(p.lat, p.lon))
+        .collect();
+    let mut segs: Vec<Vec<LatLon>> = vec![Vec::new()];
+    for (k, p) in pts.iter().enumerate() {
+        if k > 0 && haversine_m(pts[k - 1], *p) > RAW_GAP_M {
+            segs.push(Vec::new());
+        }
+        segs.last_mut()?.push(*p);
+    }
+    let length = |g: &[LatLon]| g.windows(2).map(|w| haversine_m(w[0], w[1])).sum::<f64>();
+    let segs: Vec<Vec<LatLon>> =
+        segs.into_iter().filter(|g| g.len() > 1 && length(g) >= RAW_MIN_SEGMENT_M).collect();
+    let seg = match (segment, segs.len()) {
+        (None, 1) => segs.into_iter().next()?,
+        (Some(k), n) if k >= 1 && k <= n && n > 1 => segs.into_iter().nth(k - 1)?,
+        _ => return None,
+    };
+    let mut s = vec![0.0];
+    for w in seg.windows(2) {
+        s.push(s.last().copied().unwrap_or(0.0) + haversine_m(w[0], w[1]));
+    }
+    let text = std::fs::read_to_string(baro).ok()?;
+    let mut rows: Vec<(f64, f64)> = text
+        .lines()
+        .skip(1)
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split(',').collect();
+            Some((f.first()?.trim().parse().ok()?, f.get(2)?.trim().parse().ok()?))
+        })
+        .collect();
+    rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let (map_s, map_o) = rows.into_iter().unzip();
+    Some(RawGps { pts: seg, s, map_s, map_o })
 }
 
 /// Point de référence du repli 1–3 km d'un extrait tenu à l'écart.
@@ -249,6 +345,7 @@ fn build_case(
         baro_inserted,
         masks: trace.passages_masques.clone(),
         ring: Vec::new(),
+        raw: None,
     })
 }
 
@@ -260,6 +357,24 @@ fn build_case(
 /// - `<id>.s1.gpx`, `.s2.gpx`… : segments disjoints (transport coupé), un cas indépendant
 ///   `<id>.sN` chacun, avec son `<id>.sN.baro.csv`.
 pub fn load_perso(paths: &BenchPaths, trace: &Trace, rules: &BenchRules) -> Result<Vec<PersoCase>, String> {
+    let mut cases = load_perso_geometry(paths, trace, rules)?;
+    // Trace brute (attribution des passages, README §4 ter.2) ; absente : passages non tranchés.
+    let raw_file = paths.private.join("traces").join(format!("{}.trim1km.gpx", trace.id));
+    let several = cases.len() > 1 || cases.first().is_some_and(|c| c.id != trace.id);
+    for (k, case) in cases.iter_mut().enumerate() {
+        let baro = paths.private.join("recales").join(format!("{}.baro.csv", case.id));
+        let segment = several.then_some(k + 1);
+        case.raw = load_raw(&raw_file, &baro, segment)
+            .map(|gps| RawRef { gps: std::sync::Arc::new(gps), shift: 0.0 });
+    }
+    Ok(cases)
+}
+
+fn load_perso_geometry(
+    paths: &BenchPaths,
+    trace: &Trace,
+    rules: &BenchRules,
+) -> Result<Vec<PersoCase>, String> {
     let dir = paths.private.join("recales");
     let id = &trace.id;
     let file = |name: String| dir.join(name);
@@ -317,6 +432,8 @@ struct Profile {
     unmatched_warn: Vec<bool>,
     /// `ele_method` de chaque station.
     method: Vec<String>,
+    /// Segments structure (`bridge` / `tunnel`), en abscisse de `d` (S1, README §4 ter.1).
+    structure_segs: Vec<(f64, f64)>,
 }
 
 fn profile(r: &Value) -> anyhow::Result<Profile> {
@@ -353,7 +470,10 @@ fn profile(r: &Value) -> anyhow::Result<Profile> {
     let at = |v: &[(f64, f64, bool)], d: f64| {
         v.iter().find(|s| d >= s.0 && d < s.1).or(v.last()).is_some_and(|s| s.2)
     };
-    let mut p = Profile::default();
+    let mut p = Profile {
+        structure_segs: segs.iter().filter(|s| s.2).map(|s| (s.0, s.1)).collect(),
+        ..Profile::default()
+    };
     for x in points {
         let d = x["d_m"].as_f64().context("d_m")?;
         p.d.push(d);
@@ -416,6 +536,7 @@ async fn recolle(
         p.matched.extend(q.matched.iter().skip(skip));
         p.unmatched_warn.extend(q.unmatched_warn.iter().skip(skip));
         p.method.extend(q.method.iter().skip(skip).cloned());
+        p.structure_segs.extend(q.structure_segs.iter().map(|&(a, b)| (a + offset, b + offset)));
         tau.extend(t.iter().skip(skip));
         offset += q.d.last().copied().unwrap_or(0.0);
         responses.push(r);
@@ -507,6 +628,7 @@ pub fn held_out_extracts(
             // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
             masks: Vec::new(),
             ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
+            raw: case.raw.as_ref().map(|r| RawRef { gps: r.gps.clone(), shift: r.shift + s0 }),
         };
         out.push((extract, (w.start - s0)..(w.end - s0)));
     }
@@ -873,7 +995,41 @@ pub async fn measure_case(
     } else {
         Vec::new()
     };
-    let ours_m1 = crate::typology::without(&ours, &off_network);
+    // M1 hors graphe vélo (README §4 ter.3) : stations dont la voie la plus proche (≤ 30 m) est
+    // fermée au vélo par la règle de tags ; hors de M1, rapportées à part, avec leur contrôle
+    // (matched = false et unmatched_range attendus à chaque station).
+    let (closed, closed_at) = if eval.window.is_none() {
+        match crate::off_network::closed(case, eval.cache, rules.grid_step_m).await? {
+            Ok(r) => r,
+            Err(reason) => bail!(reason),
+        }
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    let warn_ranges: Vec<(f64, f64)> = responses
+        .iter()
+        .zip(&offsets)
+        .flat_map(|(x, off)| {
+            x["quality"]["warnings"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|w| w["code"] == "unmatched_range")
+                .filter_map(|w| {
+                    Some((to_ref(w["from_m"].as_f64()? + off), to_ref(w["to_m"].as_f64()? + off)))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let closed_matched = closed_at
+        .iter()
+        .filter(|&&st| ours.iter().find(|o| o.from <= st && st < o.to).is_some_and(|o| o.matched))
+        .count();
+    let closed_unwarned = closed_at
+        .iter()
+        .filter(|&&st| !warn_ranges.iter().any(|w| w.0 - 1e-6 <= st && st <= w.1 + 1e-6))
+        .count();
+    let ours_m1 = crate::typology::without(&ours, &crate::off_network::union(&off_network, &closed));
     let m1_agr =
         agreement(&ours_m1, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
     let mut typo = if stadia.is_empty() {
@@ -884,6 +1040,13 @@ pub async fn measure_case(
     typo["M1.non_apparie"] = json!(round(m1_agr.unmatched, 4));
     typo["M1.unknown"] = json!(round(m1_agr.unknown, 4));
     typo["M1.hors_reseau_m"] = json!(round(crate::off_network::length(&off_network), 1));
+    typo["M1.hors_graphe_velo_m"] = json!(round(crate::off_network::length(&closed), 1));
+    typo["M1.hors_graphe_velo_controle"] = json!({
+        "stations": closed_at.len(),
+        "appariees": closed_matched,
+        "sans_unmatched_range": closed_unwarned,
+        "ok": closed_matched == 0 && closed_unwarned == 0,
+    });
     let to_d = |s: f64| interp_one(&case.s_ref, &d_srv, s);
     let mut off_diag: Vec<&std::ops::Range<f64>> = off_network.iter().collect();
     off_diag.sort_by(|a, b| (b.end - b.start).total_cmp(&(a.end - a.start)));
@@ -953,13 +1116,19 @@ pub async fn measure_case(
     let (svc_eval, raw_eval, ref_svc_eval) = (keep(&p.ele), keep(&ref_raw), keep(&ref_svc));
     // Ponts et tunnels des tuiles de la campagne (§4 bis.2, §4 bis.3) : tuiles des abords des
     // ouvrages du corpus seulement.
-    let near: Vec<LatLon> = p
-        .pts
-        .iter()
-        .copied()
-        .filter(|q| ouvrages.iter().any(|o| haversine_m(*q, o.pts[1]) <= o.length_m + 2_500.0))
-        .collect();
+    let near_ouvrage =
+        |q: &LatLon| ouvrages.iter().any(|o| haversine_m(*q, o.pts[1]) <= o.length_m + 2_500.0);
+    let mut near: Vec<LatLon> = p.pts.iter().copied().filter(near_ouvrage).collect();
+    // Trace brute sur l'étendue du cas (attribution des passages, README §4 ter.2).
+    let raw_span: Vec<LatLon> = match (&case.raw, case.s_ref.first(), case.s_ref.last()) {
+        (Some(r), Some(&a), Some(&b)) => r.between(a, b),
+        _ => Vec::new(),
+    };
+    near.extend(raw_span.iter().copied().filter(near_ouvrage));
     let tiles = crate::ouvrages::Tiles::load(eval.cache, &near).await?;
+    let raw_gps = |da: f64, db: f64| -> Vec<LatLon> {
+        case.raw.as_ref().map_or_else(Vec::new, |r| r.between(to_ref(da), to_ref(db)))
+    };
     let tile_structure = tiles.structure_mask(&p.pts);
     let cp = crate::ouvrages::CaseProfile {
         d: &p.d,
@@ -974,6 +1143,9 @@ pub async fn measure_case(
         unmatched_warn: &p.unmatched_warn,
         tile_structure: &tile_structure,
         ring: eval.ring.as_deref(),
+        structure_segs: &p.structure_segs,
+        raw_gps: Some(&raw_gps),
+        tiles: Some(&tiles),
     };
     let items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
@@ -1200,7 +1372,11 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
         }
     }
     for c in os_cases.iter().chain(perso) {
-        if !(m(c, "M1.non_apparie") <= M1_UNMATCHED_MAX && m(c, "M1.unknown") <= M1_UNKNOWN_MAX) {
+        // M1 hors graphe vélo (README §4 ter.3) : une station appariée (ou sans unmatched_range)
+        // sur une voie fermée au vélo est un échec de M1.
+        let closed_ok = c["typologie"]["M1.hors_graphe_velo_controle"]["ok"] != false;
+        if !(m(c, "M1.non_apparie") <= M1_UNMATCHED_MAX && m(c, "M1.unknown") <= M1_UNKNOWN_MAX && closed_ok)
+        {
             fails_m1.push(c["id"].clone());
         }
     }
@@ -1212,6 +1388,18 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
         .map(|(id, m)| (id, json!(m)))
         .collect();
     agg.insert("M1.hors_reseau_m".into(), Value::Object(off));
+    // M1 hors graphe vélo (README §4 ter.3) : longueur et contrôle par trace, rapportés à part.
+    let closed: serde_json::Map<String, Value> = perso
+        .iter()
+        .filter_map(|c| {
+            let t = &c["typologie"];
+            Some((
+                c["id"].as_str()?.to_owned(),
+                json!({"longueur_m": t["M1.hors_graphe_velo_m"].as_f64()?, "controle": t["M1.hors_graphe_velo_controle"]}),
+            ))
+        })
+        .collect();
+    agg.insert("M1.hors_graphe_velo".into(), Value::Object(closed));
     for (g, list) in &per_group {
         let mut a = serde_json::Map::new();
         for k in [
@@ -1537,10 +1725,10 @@ pub async fn run_series(
             "date": today_utc(),
             "type": if target == Serie::Calibration { "calibration" } else { "jugement" },
             "serie": target,
-            "increment": "MVP",
-            "increment_plan": 6,
+            "increment": "V1",
+            "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -1568,13 +1756,14 @@ pub async fn run_series(
                 "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
                 "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
-                "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
+                "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
                 "Passage en hauteur sur un pont (README §2.1, passage_pont.niveau) : MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR) ≥ 10 m : passage compté seulement si la médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) atteint ½ MNH, sinon rapporté en passage_retire_niveau et retiré de E3, S1 et hors_graphe_velo ; MNH < 10 m : niveau_non_discriminant ; moins de 3 stations : niveau_sans_baro",
                 "Extraits tenus à l'écart : repli 1–3 km du décalage local lu sur la trace (baro − MNT IGN LiDAR lu directement, hors ponts et tunnels des tuiles), jamais la sortie du service ; seul le décalage est écrit ; decalage_repli_stations_par_cote = stations d'approche avant / après le pont",
+                "Attribution d'un passage (README §4 ter.2, V1) : trace brute = private/traces/<trace>.trim1km.gpx (points avec altitude, segments coupés aux sauts > 2 km et gardés dès 5 km, comme tools/stadia_match.py), points dont l'abscisse d'origine est entre celles de s_A et s_B (correspondance s_recale_m → s_origine_m de <id>.baro.csv, interpolée) ; médiane des distances de ces points à la voie de l'ouvrage (élément de la tuile qui suit le mieux la géométrie du corpus, §4 bis.1) et à chaque autre élément bridge/tunnel des tuiles de la campagne (tuile de chaque point, éléments = lignes d'attributs identiques) ; voie de l'ouvrage pas strictement la plus proche : passage_sur_ouvrage_parallele, rapporté, compté ni dans E3, E4, S1 ni dans hors_graphe_velo ; sans point brut ou sans voie de l'ouvrage dans ces tuiles : attribution_indeterminee, passage compté ; E5 non concerné",
                 "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
-                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement",
+                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement ; M1 hors graphe vélo (README §4 ter.3, V1) : stations (même grille) dont la ligne la plus proche de la couche streets à ≤ 30 m (toutes lignes, comme hors réseau) est une voie fermée au vélo par la règle de tags du service (kind routable hors rail, bicycle_routable faux : motorway, trunk, pedestrian, bridleway, busway, bicycle=no… ; bicycle=* prime), plages élargies d'un demi-pas, retirées de M1 et rapportées (M1.hors_graphe_velo_m par cas, agrégat typologie M1.hors_graphe_velo) ; contrôle M1.hors_graphe_velo_controle : à chaque station, segment du service matched = false et avertissement unmatched_range ; une station appariée ou sans unmatched_range = échec de M1",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain ; mesuré aux mêmes seuils, non bloquant (README §4 bis.7, 2026-11-01) : un échec est rapporté sans refuser l'incrément",
                 "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
@@ -1928,6 +2117,7 @@ mod tests {
             s_ref,
             masks: vec!["pont".into()],
             ring: Vec::new(),
+            raw: None,
         };
         (case, refs)
     }

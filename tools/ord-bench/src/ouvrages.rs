@@ -90,6 +90,9 @@ pub struct Ouvrage {
     /// MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR au milieu), pour le test de niveau
     /// d'un passage de pont (README §2.1, `passage_pont.niveau`) ; `None` sans valeur LiDAR.
     pub mnh_milieu: Option<f64>,
+    /// Voie de l'ouvrage dans les tuiles de la campagne (§4 bis.1) : clé de l'élément (attributs
+    /// identiques) qui suit le mieux sa géométrie ; sert à l'attribution des passages (§4 ter.2).
+    pub voie: Option<String>,
 }
 
 /// Périmètre vélo d'un ouvrage du corpus, lu dans les tuiles de la campagne (couche `streets` :
@@ -149,7 +152,8 @@ pub fn perimeter_stations(o: &Ouvrage, geoms: &BTreeMap<u64, Vec<LatLon>>) -> Ve
 pub fn apply_perimeter(ouvrages: &mut [Ouvrage], tiles: &Tiles, geoms: &BTreeMap<u64, Vec<LatLon>>) {
     for o in ouvrages {
         let stations = perimeter_stations(o, geoms);
-        (o.perimeter, o.perimeter_ambiguous) = tiles.perimeter(o.pts[1], &stations, o.kind);
+        let (perimeter, ambiguous, voie) = tiles.perimeter_and_way(o.pts[1], &stations, o.kind);
+        (o.perimeter, o.perimeter_ambiguous, o.voie) = (perimeter, ambiguous, voie);
     }
 }
 
@@ -288,6 +292,7 @@ pub fn series_ouvrages(
                 chain,
                 avalanche_protector,
                 mnh_milieu: corpus_mnh(o).or_else(|| public_mnh.get(id).copied()),
+                voie: None,
             });
         }
     }
@@ -357,6 +362,14 @@ pub struct CaseProfile<'a> {
     pub tile_structure: &'a [bool],
     /// Extrait tenu à l'écart : repli 1–3 km lu sur la trace, `(abscisse, baro − MNT)`.
     pub ring: Option<&'a [(f64, f64)]>,
+    /// Segments structure (`bridge` / `tunnel`) de la sortie testée, en abscisse de `d` (S1,
+    /// README §4 ter.1).
+    pub structure_segs: &'a [(f64, f64)],
+    /// Points bruts (GPS d'origine) entre deux abscisses de `d` (attribution d'un passage, README
+    /// §4 ter.2) ; `None` : pas de trace brute (le passage reste attribué).
+    pub raw_gps: Option<&'a dyn Fn(f64, f64) -> Vec<LatLon>>,
+    /// Tuiles de la campagne autour des ouvrages (attribution d'un passage).
+    pub tiles: Option<&'a Tiles>,
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -376,6 +389,61 @@ fn r2(x: f64) -> Value {
 
 fn r4(x: f64) -> f64 {
     (x * 10_000.0).round() / 10_000.0
+}
+
+/// Tolérance de borne de S1 (README §4 ter.1, `S1.longueur_typee.tolerance_borne_m`) : un demi-pas.
+pub const S1_BORDER_TOL_M: f64 = 2.5;
+
+/// Longueur typée d'une emprise `[s_a, s_b]` (README §4 ter.1) : recouvrement, mesuré en continu
+/// sur leurs abscisses, de l'emprise par les segments structure du service (`bridge` / `tunnel`,
+/// `segs`, plages disjointes) ; un segment qui s'arrête à `S1_BORDER_TOL_M` au plus d'une borne,
+/// à l'intérieur de l'emprise, est prolongé jusqu'à elle.
+pub fn typed_overlap(segs: &[(f64, f64)], s_a: f64, s_b: f64) -> f64 {
+    let (a, b) = (s_a.min(s_b), s_a.max(s_b));
+    let mut spans: Vec<(f64, f64)> = segs
+        .iter()
+        .map(|&(from, to)| {
+            let from = if from > a && from - a <= S1_BORDER_TOL_M { a } else { from };
+            let to = if to < b && b - to <= S1_BORDER_TOL_M { b } else { to };
+            (from.max(a), to.min(b))
+        })
+        .filter(|(f, t)| t > f)
+        .collect();
+    spans.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let mut total = 0.0;
+    let mut cur: Option<(f64, f64)> = None;
+    for (f, t) in spans {
+        match cur {
+            Some((cf, ct)) if f <= ct => cur = Some((cf, ct.max(t))),
+            Some((cf, ct)) => {
+                total += ct - cf;
+                cur = Some((f, t));
+            }
+            None => cur = Some((f, t)),
+        }
+    }
+    if let Some((cf, ct)) = cur {
+        total += ct - cf;
+    }
+    total
+}
+
+/// Abscisse continue de `target` sur la polyligne des stations (`d`, `pts`), projetée sur les
+/// deux segments qui encadrent la station `i` (la plus proche de `target`).
+fn abscissa_near(d: &[f64], pts: &[LatLon], target: LatLon, i: usize) -> f64 {
+    let grid = Shortbread::GRID;
+    let u = grid.to_units(target);
+    let lo = i.saturating_sub(1);
+    let hi = (i + 1).min(d.len().saturating_sub(1));
+    let mut best = (f64::INFINITY, d[i]);
+    for k in lo..hi {
+        let (pa, pb) = (grid.to_units(pts[k]), grid.to_units(pts[k + 1]));
+        let pr = project_on_segment(u, pa, pb);
+        if pr.dist2 < best.0 {
+            best = (pr.dist2, d[k] + pr.t.clamp(0.0, 1.0) * (d[k + 1] - d[k]));
+        }
+    }
+    best.1
 }
 
 /// Seuils E3 (`criteria.yaml`) : `|milieu| ≤ 2 m`, `max ≤ 3 m` (< 300 m) ou `≤ 5 m`.
@@ -511,12 +579,13 @@ fn tunnel_item(
     d: &[f64],
     svc: &[f64],
     raw: &[f64],
-    on: &[bool],
+    segs: &[(f64, f64)],
     blocked: &[bool],
     i0: usize,
     i1: usize,
 ) -> Value {
-    let typed = (i0..=i1).filter(|&k| on[k]).count() as f64 / (i1 - i0 + 1) as f64 * (d[i1] - d[i0]);
+    // S1 (README §4 ter.1) : recouvrement continu de l'emprise entre les portails.
+    let typed = typed_overlap(segs, d[i0], d[i1]);
     let (Some(a), Some(b)) = (portal(d, raw, blocked, i0, -1.0), portal(d, raw, blocked, i1, 1.0)) else {
         // Rapporté, non compté en E4 (pas de `pass`) ; S1 reste mesuré.
         return json!({"ouvrage": id, "cas": case, "metrique": "E4", "reference_indisponible": true,
@@ -654,12 +723,16 @@ const LEVEL_MNH_MIN_M: f64 = 10.0;
 const LEVEL_HALF_M: f64 = 12.5;
 const LEVEL_MIN_STATIONS: usize = 3;
 
+/// Passage d'un ouvrage sur un cas perso : ouvrage, station du milieu, stations de A et B,
+/// emprise `[s_A, s_B]`.
+type Passage<'o> = (&'o Ouvrage, usize, usize, usize, (f64, f64));
+
 /// Mesures d'ouvrage sur les passages d'un cas perso.
 pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f64) -> Vec<Value> {
     let mut out = Vec::new();
     let n = p.d.len();
-    // Passages de chaque ouvrage : (ouvrage, station du milieu, A, B).
-    let mut found: Vec<(&Ouvrage, usize, usize, usize)> = Vec::new();
+    // Passages de chaque ouvrage : (ouvrage, station du milieu, A, B, emprise [s_A, s_B]).
+    let mut found: Vec<Passage<'_>> = Vec::new();
     for o in ouvrages {
         // Un passage par traversée du disque de rayon `tol` autour du milieu : suite de stations
         // dans le disque, coupée dès que la trace en sort (écart de plus de deux pas). Deux
@@ -698,13 +771,15 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
             if da > tol || db > tol {
                 continue;
             }
-            found.push((o, im, ia.min(ib), ia.max(ib)));
+            // Abscisses de A et de B sur la trace (S1, README §4 ter.1) : projection continue.
+            let (sa, sb) = (abscissa_near(p.d, p.pts, o.pts[0], ia), abscissa_near(p.d, p.pts, o.pts[2], ib));
+            found.push((o, im, ia.min(ib), ia.max(ib), (sa.min(sb), sa.max(sb))));
         }
     }
     // Stations dans un tunnel du corpus franchi (bandes de portail, §4 bis.2).
     let tunnels: Vec<(usize, usize)> =
         found.iter().filter(|f| f.0.kind == Kind::Tunnel).map(|f| (f.2, f.3)).collect();
-    for &(o, im, i0, i1) in &found {
+    for &(o, im, i0, i1, (sa, sb)) in &found {
         let dm = p.d[im];
         {
             let mut item = serde_json::Map::new();
@@ -752,6 +827,31 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                 out.push(absent_item(o, case));
                 continue;
             }
+            // Attribution par la trace brute (README §4 ter.2) : le passage n'est compté sur ce pont
+            // ou ce tunnel que si le GPS d'origine suit sa voie mieux que tout autre pont ou tunnel
+            // des tuiles ; sinon rapporté (`passage_sur_ouvrage_parallele`), hors d'E3, E4, S1 et
+            // `hors_graphe_velo`. Trace brute et tuiles seulement, jamais le service.
+            let mut attribution: Option<Attribution> = None;
+            if matches!(o.kind, Kind::Bridge | Kind::Tunnel) {
+                if let (Some(raw_gps), Some(tiles)) = (p.raw_gps, p.tiles) {
+                    attribution = o.voie.as_deref().and_then(|v| tiles.attribution(&raw_gps(sa, sb), v));
+                    if let Some(a) = attribution.filter(|a| !a.attributed()) {
+                        out.push(json!({"ouvrage": o.id, "cas": case, "metrique": "passage_sur_ouvrage_parallele",
+                            "mediane_voie_ouvrage_m": r2(a.own_m), "mediane_autre_ouvrage_m": a.other_m.map_or(Value::Null, r2),
+                            "points_bruts": a.points}));
+                        continue;
+                    }
+                    if attribution.is_none() {
+                        item.insert("attribution_indeterminee".into(), json!(true));
+                    }
+                }
+            }
+            if let Some(a) = attribution {
+                item.insert(
+                    "attribution_mediane_m".into(),
+                    json!({"voie_ouvrage": r2(a.own_m), "autre_ouvrage": a.other_m.map_or(Value::Null, r2), "points_bruts": a.points}),
+                );
+            }
             // Passage en hauteur sur un pont (README §2.1, `passage_pont.niveau`) : baro et MNT
             // seulement, jamais le service.
             let mut level_note: Option<&str> = None;
@@ -785,18 +885,20 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                 if let Some(note) = level_note {
                     h[note] = json!(true);
                 }
+                if item.contains_key("attribution_indeterminee") {
+                    h["attribution_indeterminee"] = json!(true);
+                }
                 h["d_milieu_m"] = r2(dm);
                 out.push(h);
                 continue;
             }
-            if matches!(o.kind, Kind::Bridge | Kind::Tunnel) && i1 > i0 {
-                let typed = (i0..=i1).filter(|&i| p.on_structure[i]).count();
-                item.insert(format!("{pre}S1.emprise_m"), r2(p.d[i1] - p.d[i0]));
-                item.insert(
-                    format!("{pre}S1.type_m"),
-                    r2(typed as f64 / (i1 - i0 + 1) as f64 * (p.d[i1] - p.d[i0])),
-                );
-                item.insert("S1.rappel".into(), json!(r4(typed as f64 / (i1 - i0 + 1) as f64)));
+            if matches!(o.kind, Kind::Bridge | Kind::Tunnel) && i1 > i0 && sb > sa {
+                // S1 (README §4 ter.1) : recouvrement continu de [s_A, s_B] par les segments
+                // structure du service, tolérance d'un demi-pas à chaque borne.
+                let typed = typed_overlap(p.structure_segs, sa, sb);
+                item.insert(format!("{pre}S1.emprise_m"), r2(sb - sa));
+                item.insert(format!("{pre}S1.type_m"), r2(typed));
+                item.insert("S1.rappel".into(), json!(r4(typed / (sb - sa))));
             }
             match o.kind {
                 Kind::Bridge | Kind::Untagged => {
@@ -851,7 +953,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     for k in (0..n).filter(|&k| k <= i0 || k >= i1) {
                         blocked[k] |= p.tile_structure[k];
                     }
-                    let t = tunnel_item(&o.id, case, p.d, p.svc, p.raw, p.on_structure, &blocked, i0, i1);
+                    let t = tunnel_item(&o.id, case, p.d, p.svc, p.raw, p.structure_segs, &blocked, i0, i1);
                     for (k, v) in t.as_object().into_iter().flatten() {
                         if !k.starts_with("S1.") {
                             item.insert(k.clone(), v.clone());
@@ -893,14 +995,23 @@ pub struct Query {
     pub matched: Vec<bool>,
     /// Station couverte par `unmatched_range`.
     pub warn: Vec<bool>,
+    /// Segments structure (`bridge` / `tunnel`) en abscisse cumulée des points (S1, §4 ter.1).
+    pub segs: Vec<(f64, f64)>,
 }
 
 pub async fn query_points(service: &Service, pts: &[Pt], correction: bool) -> anyhow::Result<Query> {
     const CHUNK: usize = 15_000;
     let n = pts.len();
-    let mut q =
-        Query { ele: vec![f64::NAN; n], on: vec![false; n], matched: vec![true; n], warn: vec![false; n] };
+    let mut q = Query {
+        ele: vec![f64::NAN; n],
+        on: vec![false; n],
+        matched: vec![true; n],
+        warn: vec![false; n],
+        segs: Vec::new(),
+    };
+    let d_all = cum(pts);
     for (c, chunk) in pts.chunks(CHUNK).enumerate() {
+        let offset = d_all[c * CHUNK];
         let r = service
             .route_details(
                 chunk,
@@ -921,6 +1032,7 @@ pub async fn query_points(service: &Service, pts: &[Pt], correction: bool) -> an
                 )
             })
             .collect();
+        q.segs.extend(segs.iter().filter(|s| s.2).map(|s| (s.0 + offset, s.1 + offset)));
         let warns: Vec<(f64, f64)> = r["quality"]["warnings"]
             .as_array()
             .into_iter()
@@ -1016,6 +1128,23 @@ pub fn control_points(bench: &Path, dir: &str, id: &str) -> anyhow::Result<Vec<P
     Ok(control_stations(bench, dir, id)?.pts)
 }
 
+/// Attribution d'un passage par la trace brute (README §4 ter.2) : médianes des distances des
+/// points bruts de l'emprise à la voie de l'ouvrage et à la plus proche des autres voies `bridge`
+/// / `tunnel` des tuiles.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Attribution {
+    pub own_m: f64,
+    pub other_m: Option<f64>,
+    pub points: usize,
+}
+
+impl Attribution {
+    /// La trace brute suit la voie de l'ouvrage au moins aussi bien que toute autre.
+    pub fn attributed(&self) -> bool {
+        self.other_m.is_none_or(|o| self.own_m <= o)
+    }
+}
+
 /// Tuiles VersaTiles du cache (hors ligne), pour la règle de tags des spans vcyclist.
 pub struct Tiles {
     tiles: BTreeMap<TileKey, Option<Arc<StreetTile>>>,
@@ -1064,11 +1193,24 @@ impl Tiles {
     /// défaut, toute voie avec le même critère (ouvrage que la source ne décrit pas comme tel,
     /// §4 bis.4). Aucune : pont ou tunnel absent des données. Ambigu si un autre candidat du même
     /// lot est à moins de 3 m de médiane en plus et donne l'autre périmètre.
+    #[cfg(test)]
     fn perimeter(&self, mid: LatLon, stations: &[LatLon], kind: Kind) -> (Perimeter, bool) {
+        let (p, ambiguous, _) = self.perimeter_and_way(mid, stations, kind);
+        (p, ambiguous)
+    }
+
+    /// Comme `perimeter`, avec la clé de la voie de l'ouvrage retenue (attributs de l'élément),
+    /// relue par l'attribution des passages (§4 ter.2).
+    pub fn perimeter_and_way(
+        &self,
+        mid: LatLon,
+        stations: &[LatLon],
+        kind: Kind,
+    ) -> (Perimeter, bool, Option<String>) {
         let grid = Shortbread::GRID;
         if !matches!(self.tiles.get(&grid.tile_of(grid.to_units(mid))), Some(Some(_))) || stations.is_empty()
         {
-            return (Perimeter::Unknown, false);
+            return (Perimeter::Unknown, false, None);
         }
         // Distance de chaque station à chaque élément candidat (∞ hors de sa tuile).
         let mut dist: BTreeMap<String, (bool, bool, Vec<f64>)> = BTreeMap::new();
@@ -1102,20 +1244,71 @@ impl Tiles {
                 e.2[s] = e.2[s].min(d);
             }
         }
-        let medians: Vec<(bool, bool, f64)> =
-            dist.values().map(|(same, r, d)| (*same, *r, median(d))).filter(|c| c.2 <= 15.0).collect();
+        let medians: Vec<(bool, bool, f64, &String)> =
+            dist.iter().map(|(k, (same, r, d))| (*same, *r, median(d), k)).filter(|c| c.2 <= 15.0).collect();
         for pool in [true, false] {
-            let cands: Vec<&(bool, bool, f64)> = medians.iter().filter(|c| !pool || c.0).collect();
+            let cands: Vec<&(bool, bool, f64, &String)> = medians.iter().filter(|c| !pool || c.0).collect();
             let Some(best) = cands.iter().min_by(|a, b| a.2.total_cmp(&b.2)) else { continue };
             let ambiguous = cands.iter().any(|c| c.1 != best.1 && c.2 - best.2 < 3.0);
             let p = if best.1 { Perimeter::InGraph } else { Perimeter::OffGraph };
-            return (p, ambiguous);
+            return (p, ambiguous, Some(best.3.clone()));
         }
         if matches!(kind, Kind::Bridge | Kind::Tunnel) {
-            (Perimeter::Absent, false)
+            (Perimeter::Absent, false, None)
         } else {
-            (Perimeter::Unknown, false)
+            (Perimeter::Unknown, false, None)
         }
+    }
+
+    /// Attribution d'un passage (README §4 ter.2) : médiane des distances des points bruts
+    /// `raw` (GPS d'origine sur l'emprise) à la voie de l'ouvrage (`voie`, clé de
+    /// `perimeter_and_way`), et plus petite médiane des autres voies `bridge` / `tunnel` des
+    /// tuiles de la campagne. Même lecture que le périmètre : tuile de chaque point, distance à
+    /// l'élément (lignes d'attributs identiques). `None` : aucun point brut, ou voie de l'ouvrage
+    /// absente des tuiles de ces points.
+    pub fn attribution(&self, raw: &[LatLon], voie: &str) -> Option<Attribution> {
+        if raw.is_empty() {
+            return None;
+        }
+        let grid = Shortbread::GRID;
+        let mut dist: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+        for (s, p) in raw.iter().enumerate() {
+            let u = grid.to_units(*p);
+            let mpu = grid.metres_per_unit(p.lat);
+            let Some(Some(t)) = self.tiles.get(&grid.tile_of(u)) else { continue };
+            for l in &t.lines {
+                let a = &t.attrs[l.attr as usize];
+                let key = format!("{a:?}");
+                let structure = matches!(
+                    a.structure,
+                    StructureTag::Bridge
+                        | StructureTag::Tunnel
+                        | StructureTag::Covered
+                        | StructureTag::BuildingPassage
+                );
+                if !structure && key != voie {
+                    continue;
+                }
+                let d = l
+                    .points
+                    .windows(2)
+                    .map(|w| dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu)
+                    .fold(f64::INFINITY, f64::min);
+                let e = dist.entry(key).or_insert_with(|| vec![f64::INFINITY; raw.len()]);
+                e[s] = e[s].min(d);
+            }
+        }
+        let own = median(dist.get(voie)?);
+        if !own.is_finite() {
+            return None;
+        }
+        let other = dist
+            .iter()
+            .filter(|(k, _)| k.as_str() != voie)
+            .map(|(_, d)| median(d))
+            .filter(|m| m.is_finite())
+            .fold(None, |acc: Option<f64>, m| Some(acc.map_or(m, |a| a.min(m))));
+        Some(Attribution { own_m: own, other_m: other, points: raw.len() })
     }
 
     /// Stations sur un pont ou un tunnel des tuiles de la campagne (`bridge` / `tunnel`, du corpus ou
@@ -1362,7 +1555,7 @@ pub async fn vc_items(
                     &r.d,
                     &r.svc.ele,
                     &r.raw.ele,
-                    &r.svc.on,
+                    &r.svc.segs,
                     &inside[ri],
                     i0,
                     i1,
@@ -1386,9 +1579,8 @@ pub async fn vc_items(
 
     for (ri, r) in routes.iter().enumerate() {
         let n = r.s.pts.len();
-        let span_typed = |i0: usize, i1: usize| {
-            (i0..=i1).filter(|&i| r.svc.on[i]).count() as f64 / (i1 - i0 + 1) as f64 * (r.d[i1] - r.d[i0])
-        };
+        // S1 (README §4 ter.1) : recouvrement continu de l'emprise par les segments structure.
+        let span_typed = |i0: usize, i1: usize| typed_overlap(&r.svc.segs, r.d[i0], r.d[i1]);
         if r.role == "route" {
             let route = r.id.trim_start_matches("vc-");
             for (k, (kind, i0, i1, flag)) in vc_spans(bench, route)?.into_iter().enumerate() {
@@ -1488,7 +1680,7 @@ pub async fn vc_items(
                         &r.d,
                         &r.svc.ele,
                         &r.raw.ele,
-                        &r.svc.on,
+                        &r.svc.segs,
                         &inside[ri],
                         a,
                         b,
@@ -1664,6 +1856,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
         "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
         "passages_retires_niveau": by("passage_retire_niveau").into_iter().map(strip_private).collect::<Vec<_>>(),
+        // README §4 ter.2 : rapportés, comptés ni dans E3, E4, S1, ni dans hors_graphe_velo.
+        "passages_sur_ouvrage_parallele": by("passage_sur_ouvrage_parallele").into_iter().map(strip_private).collect::<Vec<_>>(),
         "hors_graphe_velo": {"ouvrages": hg.len(), "controle_ok": hg_ok, "detail": hg.iter().map(|i| strip_private(i)).collect::<Vec<_>>()},
     });
     let verdicts = json!({
@@ -1704,6 +1898,9 @@ fn strip_private(v: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Segments structure couvrant tout le parcours.
+    const ALL: [(f64, f64); 1] = [(f64::NEG_INFINITY, f64::INFINITY)];
 
     #[test]
     fn e3_thresholds_by_length() {
@@ -1756,7 +1953,7 @@ mod tests {
         // 30 à 40) qui suit la pente n'a que l'écart de la bande à son portail (≤ 0,2 m), et non
         // les 0,75 m d'un portail extérieur ramené à l'entrée du tunnel.
         let slope: Vec<f64> = (0..60).map(|k| k as f64 * 0.05).collect();
-        let t = tunnel_item("t", "c", &d, &slope, &slope, &[true; 60], &blocked, 30, 40);
+        let t = tunnel_item("t", "c", &d, &slope, &slope, &ALL, &blocked, 30, 40);
         let entry = &t["bande_remplacee"]["entree"];
         assert_eq!(entry["remplacee"], true);
         assert_eq!(entry["distance_m"], 55.0);
@@ -1776,7 +1973,7 @@ mod tests {
         let raw = vec![10.0; 300];
         let svc = vec![10.0; 300];
         let blocked: Vec<bool> = (0..300).map(|k| k < 229 && k % 40 != 0).collect();
-        let t = tunnel_item("t", "c", &d, &svc, &raw, &[true; 300], &blocked, 230, 260);
+        let t = tunnel_item("t", "c", &d, &svc, &raw, &ALL, &blocked, 230, 260);
         assert_eq!(t["reference_indisponible"], true);
         assert!(t.get("pass").is_none());
         let (agg, v) = judge(&[t]);
@@ -1855,6 +2052,163 @@ mod tests {
     }
 
     #[test]
+    fn s1_is_the_continuous_overlap_with_a_half_step_tolerance() {
+        // Emprise [100, 160] ; segment arrêté à 2 m de chaque borne : prolongé.
+        assert_eq!(typed_overlap(&[(102.0, 158.0)], 100.0, 160.0), 60.0);
+        // À 3 m d'une borne : non prolongé, recouvrement mesuré en continu.
+        assert_eq!(typed_overlap(&[(103.0, 160.0)], 100.0, 160.0), 57.0);
+        // Segment qui déborde : coupé aux bornes ; deux segments contigus (pont puis tunnel)
+        // comptés une fois, même prolongés.
+        assert_eq!(typed_overlap(&[(90.0, 130.0), (130.0, 158.5)], 100.0, 160.0), 60.0);
+        // Un trou intérieur n'est jamais comblé.
+        assert_eq!(typed_overlap(&[(100.0, 120.0), (122.0, 160.0)], 100.0, 160.0), 58.0);
+        assert_eq!(typed_overlap(&[], 100.0, 160.0), 0.0);
+        // Un segment entièrement hors de l'emprise ne compte pas, même à moins de 2,5 m.
+        assert_eq!(typed_overlap(&[(161.0, 200.0)], 100.0, 160.0), 0.0);
+    }
+
+    fn tiles_of(lines: Vec<(WayAttrsT, f64)>, mid: LatLon) -> (Tiles, [f64; 2]) {
+        let grid = Shortbread::GRID;
+        let u = grid.to_units(mid);
+        let key = grid.tile_of(u);
+        let mut t = StreetTile::empty(key);
+        for (k, (a, north)) in lines.into_iter().enumerate() {
+            t.attrs.push(a);
+            t.lines.push(ord_domain::street::StreetLine {
+                attr: k as u32,
+                points: vec![[u[0] - 50.0, u[1] + north], [u[0] + 50.0, u[1] + north]],
+                cut: [false, false],
+            });
+        }
+        (Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]) }, u)
+    }
+
+    type WayAttrsT = ord_domain::street::WayAttrs;
+
+    fn way_attrs(kind: &str, structure: StructureTag) -> WayAttrsT {
+        WayAttrsT {
+            highway: Arc::from(kind),
+            surface: ord_domain::street::SurfaceTag::Absent,
+            tracktype: None,
+            bicycle: None,
+            service: None,
+            link: false,
+            rail: false,
+            structure,
+            layer: None,
+            smoothness: None,
+            osm_id: None,
+            raw: None,
+        }
+    }
+
+    #[test]
+    fn a_passage_is_attributed_by_the_raw_trace() {
+        let mid = LatLon::new(47.2, -1.5);
+        // Pont routier sur l'axe, passerelle à 20 unités (≈ 8 m) au nord.
+        let (tiles, u) = tiles_of(
+            vec![
+                (way_attrs("primary", StructureTag::Bridge), 0.0),
+                (way_attrs("footway", StructureTag::Bridge), 20.0),
+            ],
+            mid,
+        );
+        let grid = Shortbread::GRID;
+        let stations: Vec<LatLon> = (-8..=8).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1]])).collect();
+        let (p, _, voie) = tiles.perimeter_and_way(mid, &stations, Kind::Bridge);
+        assert_eq!(p, Perimeter::InGraph);
+        let voie = voie.expect("voie de l'ouvrage");
+        // GPS brut sur la passerelle : passage sur un ouvrage parallèle.
+        let on_footbridge: Vec<LatLon> =
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 19.0])).collect();
+        let a = tiles.attribution(&on_footbridge, &voie).unwrap();
+        assert!(!a.attributed(), "{a:?}");
+        // GPS brut sur le pont routier : attribué.
+        let on_road: Vec<LatLon> =
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 2.0])).collect();
+        assert!(tiles.attribution(&on_road, &voie).unwrap().attributed());
+        // Aucun point brut : non tranché.
+        assert!(tiles.attribution(&[], &voie).is_none());
+    }
+
+    #[test]
+    fn a_parallel_structure_passage_is_reported_not_counted() {
+        let grid = Shortbread::GRID;
+        let mid = LatLon::new(47.2, -1.5);
+        let (tiles, u) = tiles_of(
+            vec![
+                (way_attrs("primary", StructureTag::Bridge), 0.0),
+                (way_attrs("footway", StructureTag::Bridge), 20.0),
+            ],
+            mid,
+        );
+        let n = 41;
+        let pts: Vec<LatLon> =
+            (0..n).map(|k| grid.to_latlon([u[0] - 100.0 + 5.0 * k as f64, u[1]])).collect();
+        let d: Vec<f64> = (0..n)
+            .scan(0.0, |acc, k| {
+                if k > 0 {
+                    *acc += haversine_m(pts[k - 1], pts[k]);
+                }
+                Some(*acc)
+            })
+            .collect();
+        let stations: Vec<LatLon> = (-8..=8).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1]])).collect();
+        let (perimeter, _, voie) = tiles.perimeter_and_way(mid, &stations, Kind::Bridge);
+        let o = Ouvrage {
+            id: "pont".into(),
+            kind: Kind::Bridge,
+            length_m: d[28] - d[12],
+            pts: [pts[12], pts[20], pts[28]],
+            perso: false,
+            perimeter,
+            perimeter_ambiguous: false,
+            chain: Vec::new(),
+            avalanche_protector: false,
+            mnh_milieu: None,
+            voie,
+        };
+        let flat = vec![0.0; n];
+        let flags = vec![false; n];
+        let footbridge = |_: f64, _: f64| -> Vec<LatLon> {
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1] + 19.0])).collect()
+        };
+        let segs = [(d[12], d[28])];
+        let p = CaseProfile {
+            d: &d,
+            pts: &pts,
+            svc: &flat,
+            raw: &flat,
+            ref_svc: &flat,
+            baro: &flat,
+            on_structure: &flags,
+            ign: &flags,
+            matched: &flags,
+            unmatched_warn: &flags,
+            tile_structure: &flags,
+            ring: None,
+            structure_segs: &segs,
+            raw_gps: Some(&footbridge),
+            tiles: Some(&tiles),
+        };
+        let items = perso_items("c", &p, std::slice::from_ref(&o), 40.0);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["metrique"], "passage_sur_ouvrage_parallele", "{items:?}");
+        let (agg, v) = judge(&items);
+        assert_eq!(agg["S1"]["emprise_m"], 0.0);
+        assert_eq!(v["E3"], "skipped");
+        assert_eq!(agg["passages_sur_ouvrage_parallele"].as_array().map(Vec::len), Some(1));
+        // GPS brut sur le pont : compté, S1 en recouvrement continu de [s_A, s_B].
+        let road = |_: f64, _: f64| -> Vec<LatLon> {
+            (-6..=6).map(|k| grid.to_latlon([u[0] + 5.0 * k as f64, u[1]])).collect()
+        };
+        let p = CaseProfile { raw_gps: Some(&road), ..p };
+        let items = perso_items("c", &p, &[o], 40.0);
+        assert_eq!(items[0]["metrique"], "E3_hors_france", "{items:?}");
+        assert_eq!(items[0]["S1.rappel"], 1.0, "{items:?}");
+    }
+
+    #[test]
     fn off_graph_error_is_measured_against_a_reference_or_null() {
         // Portion non appariée (stations 1 à 3) : l'altitude rendue est le MNT brut.
         let matched = [true, false, false, false, true];
@@ -1900,7 +2254,7 @@ mod tests {
         let mut blocked: Vec<bool> =
             (0..121).map(|k| tunnels.iter().any(|&(a, b)| (a, b) != (20, 40) && k > a && k < b)).collect();
         block_short_balconies(&d, &tunnels, &mut blocked);
-        let t = tunnel_item("t", "c", &d, &svc, &raw, &[true; 121], &blocked, 20, 40);
+        let t = tunnel_item("t", "c", &d, &svc, &raw, &ALL, &blocked, 20, 40);
         assert_eq!(t["bande_remplacee"]["sortie"]["remplacee"], true, "{t}");
         // Sortie du 1er tunnel, puis entrée et sortie du 2e, entrée du 3e : bande retenue à la
         // sortie du dernier tunnel de la série.
@@ -1927,6 +2281,7 @@ mod tests {
             chain: vec![1],
             avalanche_protector: true,
             mnh_milieu: None,
+            voie: None,
         };
         let known = vec![("arly-galerie".to_owned(), "shortbread sans avalanche_protector".to_owned())];
         let l = corpus_data_limits(std::slice::from_ref(&o), &known);
@@ -1958,6 +2313,9 @@ mod tests {
                 unmatched_warn: &flags,
                 tile_structure: &flags,
                 ring: None,
+                structure_segs: &[],
+                raw_gps: None,
+                tiles: None,
             };
             approach_offset(&p, 100, 120, others)
         };
@@ -1984,7 +2342,7 @@ mod tests {
         let d: Vec<f64> = (0..41).map(|k| k as f64 * 5.0).collect();
         // Tunnel des stations 10 à 14 (20 m) ; MNT à 100 m avant, 140 m après : 40 m sur 40 m.
         let raw: Vec<f64> = (0..41).map(|k| if k < 12 { 100.0 } else { 140.0 }).collect();
-        let t = tunnel_item("t", "c", &d, &raw, &raw, &[true; 41], &[false; 41], 10, 14);
+        let t = tunnel_item("t", "c", &d, &raw, &raw, &ALL, &[false; 41], 10, 14);
         assert_eq!(t["reference_indisponible"], true, "{t}");
         assert!(t["pass"].is_null(), "non compté");
         assert!(t["pente_implicite_portails"].as_f64().unwrap() > IMPLICIT_GRADE_MAX);
@@ -2022,6 +2380,7 @@ mod tests {
             chain: Vec::new(),
             avalanche_protector: false,
             mnh_milieu: mnh,
+            voie: None,
         };
         let items = |baro: &[f64], mnh: Option<f64>| {
             let p = CaseProfile {
@@ -2037,6 +2396,9 @@ mod tests {
                 unmatched_warn: &flags,
                 tile_structure: &flags,
                 ring: None,
+                structure_segs: &[],
+                raw_gps: None,
+                tiles: None,
             };
             perso_items("c", &p, &[o(mnh)], 40.0)
         };
@@ -2086,6 +2448,7 @@ mod tests {
             chain: Vec::new(),
             avalanche_protector: false,
             mnh_milieu: mnh,
+            voie: None,
         };
         let os = [
             ouvrage("pont", Kind::Bridge, 180, 220, Some(12.0)),
@@ -2107,6 +2470,9 @@ mod tests {
                 unmatched_warn: &flags,
                 tile_structure: &flags,
                 ring: None,
+                structure_segs: &[],
+                raw_gps: None,
+                tiles: None,
             };
             perso_items("c", &p, &os, 40.0)
         };
@@ -2176,6 +2542,7 @@ mod tests {
             chain: Vec::new(),
             avalanche_protector: false,
             mnh_milieu: None,
+            voie: None,
         };
         let mut items = vec![
             absent_item(&o, "c1"),
@@ -2210,7 +2577,7 @@ mod tests {
         // Tunnel des stations 10 à 30, service plat à 10 m ; falaise à 5 m de l'entrée.
         let raw: Vec<f64> = (0..41).map(|k| if k == 9 { 40.0 } else { 10.0 }).collect();
         let svc = vec![10.0; 41];
-        let t = tunnel_item("t", "c", &d, &svc, &raw, &[true; 41], &[false; 41], 10, 30);
+        let t = tunnel_item("t", "c", &d, &svc, &raw, &ALL, &[false; 41], 10, 30);
         assert_eq!(t["pass"], true);
         assert_eq!(t["reference_ambigue"], true, "le portail à 5 m fait basculer le verdict");
     }

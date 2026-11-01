@@ -110,8 +110,12 @@ impl BenchPaths {
 /// (L2). Remise à `None` avec les règles 2026.10.10 (tunnels OSM en série : balcons de moins de
 /// 120 m, droite entre les portails extérieurs de la série) ; règles du banc du 2026-11-01
 /// (README §4 bis.4, 6 et 7 : limite des données hors décompte d'E4/E3 et S1, M1 hors réseau,
-/// R3 non bloquant) appliquées dans la même révision.
-pub const BENCH_REVISION: Option<&str> = None;
+/// R3 non bloquant) appliquées dans la même révision. `bench1` (règles 2026.10.10, README §4 ter,
+/// règles V1 du 2026-11-01 : 304f767, 16f6097, c1d231c) : S1 en recouvrement continu de
+/// [s_A, s_B] (tolérance de 2,5 m), attribution d'un passage par la trace brute
+/// (`passage_sur_ouvrage_parallele`), M1 hors graphe vélo avec contrôle `matched: false` +
+/// `unmatched_range` ; campagne `increment` V1.
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

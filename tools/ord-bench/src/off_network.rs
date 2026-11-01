@@ -13,12 +13,19 @@
 //! station vaut pour son pas), bornée à la trace ; pas de longueur minimale. Le test ne lit que
 //! les tuiles et la trace, jamais la réponse du service. Une tuile absente du cache n'est jamais
 //! « sans voie » : le cas est sauté avec sa raison.
+//!
+//! M1 hors graphe vélo (README §4 ter.3, V1) : une station dont la voie la plus proche (≤ 30 m,
+//! mêmes tuiles) est fermée au vélo par la règle de tags du service sort aussi de M1, rapportée à
+//! part (`M1.hors_graphe_velo_m`) avec son contrôle (`matched: false` et `unmatched_range`
+//! attendus, lus dans la réponse ; une station appariée est un échec de M1).
 
 use std::ops::Range;
 use std::path::Path;
 
 use ord_adapters::Shortbread;
+use ord_core::classification::tables::{bicycle_routable, ROUTABLE_KINDS};
 use ord_domain::geo::{dist_units, project_on_segment};
+use ord_domain::street::WayAttrs;
 use ord_domain::tiles::TileKey;
 use ord_domain::LatLon;
 
@@ -71,6 +78,109 @@ pub fn street_within(tiles: &StreetTiles, p: LatLon, max_m: f64) -> Result<bool,
         }
     }
     Ok(found)
+}
+
+/// Voie fermée au vélo par la règle de tags du service (T03 §4.2, étape 1 : motorway, trunk en
+/// France, pedestrian, bridleway, busway, `bicycle=no`… ; `bicycle=*` prime) : une voie (`kind`
+/// routable, hors rail) que `bicycle_routable` exclut du graphe vélo (README §4 ter.3).
+pub fn closed_by_tag_rule(a: &WayAttrs) -> bool {
+    !a.rail && ROUTABLE_KINDS.contains(&&*a.highway) && !bicycle_routable(a)
+}
+
+/// Voie la plus proche de `p` dans la couche `streets` (tuile et 8 voisines), à `max_m` au plus :
+/// `Some(fermée au vélo ?)`, `None` sans voie ; `Err(tuile)` si l'une d'elles est absente du
+/// cache. Toutes les lignes de la couche comptent, comme pour M1 hors réseau (§4 bis.6).
+pub fn nearest_street_closed(tiles: &StreetTiles, p: LatLon, max_m: f64) -> Result<Option<bool>, TileKey> {
+    let grid = Shortbread::GRID;
+    let u = grid.to_units(p);
+    let mpu = grid.metres_per_unit(p.lat);
+    let mut best: Option<(f64, bool)> = None;
+    for key in neighbourhood(p) {
+        match tiles.get(&key) {
+            None => return Err(key),
+            Some(None) => {}
+            Some(Some(t)) => {
+                for l in &t.lines {
+                    let d = l
+                        .points
+                        .windows(2)
+                        .map(|w| dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu)
+                        .fold(f64::INFINITY, f64::min);
+                    if d <= max_m && best.is_none_or(|b| d < b.0) {
+                        let closed = t.attrs.get(l.attr as usize).is_some_and(closed_by_tag_rule);
+                        best = Some((d, closed));
+                    }
+                }
+            }
+        }
+    }
+    Ok(best.map(|b| b.1))
+}
+
+/// M1 hors graphe vélo (README §4 ter.3, `criteria.yaml` `M1.hors_graphe_velo`) : stations de la
+/// trace recalée dont la voie la plus proche (≤ 30 m) est fermée au vélo par la règle de tags, et
+/// leurs plages (abscisse `s_recale_m`, élargies d'un demi-pas, bornées à la trace, comme les
+/// plages hors réseau). Une station sans voie à 30 m est hors réseau (§4 bis.6) et y reste.
+pub fn closed_with(
+    tiles: &StreetTiles,
+    stations: &[(f64, LatLon)],
+    step: f64,
+    max_m: f64,
+) -> Result<(Vec<Range<f64>>, Vec<f64>), String> {
+    let Some((&(lo, _), &(hi, _))) = stations.first().zip(stations.last()) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let half = 0.5 * step;
+    let mut out: Vec<Range<f64>> = Vec::new();
+    let mut at: Vec<f64> = Vec::new();
+    let mut run: Option<(f64, f64)> = None;
+    for &(s, p) in stations {
+        let closed = nearest_street_closed(tiles, p, max_m).map_err(|_| {
+            "tuile de rues absente du cache le long de la trace (M1 hors graphe vélo)".to_owned()
+        })? == Some(true);
+        if closed {
+            at.push(s);
+        }
+        match (closed, run) {
+            (true, None) => run = Some((s, s)),
+            (true, Some((a, _))) => run = Some((a, s)),
+            (false, Some((a, b))) => {
+                out.push((a - half).max(lo)..(b + half).min(hi));
+                run = None;
+            }
+            (false, None) => {}
+        }
+    }
+    if let Some((a, b)) = run {
+        out.push((a - half).max(lo)..(b + half).min(hi));
+    }
+    Ok((out, at))
+}
+
+/// Plages hors graphe vélo d'une trace recalée et abscisses de leurs stations, tuiles du cache
+/// de la campagne (hors ligne) ; `Err(raison)` si une tuile manque au cache.
+pub async fn closed(
+    case: &PersoCase,
+    cache: &Path,
+    step: f64,
+) -> anyhow::Result<Result<(Vec<Range<f64>>, Vec<f64>), String>> {
+    let st = stations(case, step);
+    let tiles = load_tiles(cache, &keys(&st), true).await?;
+    Ok(closed_with(&tiles, &st, step, STREET_MAX_M))
+}
+
+/// Union triée de plages (chacune triée et disjointe).
+pub fn union(a: &[Range<f64>], b: &[Range<f64>]) -> Vec<Range<f64>> {
+    let mut all: Vec<Range<f64>> = a.iter().chain(b).cloned().collect();
+    all.sort_by(|x, y| x.start.total_cmp(&y.start));
+    let mut out: Vec<Range<f64>> = Vec::new();
+    for r in all {
+        match out.last_mut() {
+            Some(last) if r.start <= last.end => last.end = last.end.max(r.end),
+            _ => out.push(r),
+        }
+    }
+    out
 }
 
 /// Plages hors réseau (abscisse `s_recale_m`) à partir des stations et des tuiles.
@@ -160,6 +270,7 @@ mod tests {
             baro_inserted: Vec::new(),
             masks: Vec::new(),
             ring: Vec::new(),
+            raw: None,
         }
     }
 
@@ -228,6 +339,52 @@ mod tests {
         let k = *t.keys().next().unwrap();
         t.remove(&k);
         assert!(ranges_with(&t, &st, 5.0, STREET_MAX_M).is_err());
+    }
+
+    #[test]
+    fn stations_nearest_to_a_way_closed_to_bicycles_leave_m1() {
+        use ord_domain::street::{StructureTag, SurfaceTag, WayAttrs};
+        let attrs = |kind: &str, bicycle: Option<&str>| WayAttrs {
+            highway: Arc::from(kind),
+            surface: SurfaceTag::Absent,
+            tracktype: None,
+            bicycle: bicycle.map(Arc::from),
+            service: None,
+            link: false,
+            rail: false,
+            structure: StructureTag::None,
+            layer: None,
+            smoothness: None,
+            osm_id: None,
+            raw: None,
+        };
+        let m_per_deg = haversine_m(LatLon::new(47.0, 0.0), LatLon::new(47.0, 1.0));
+        let lon = |s: f64| 0.5 + s / m_per_deg;
+        let st = stations(&case(), 5.0);
+        // Trunk à 3 m de 0 à 1 000 m ; piste cyclable à 20 m tout du long ; au-delà de 1 000 m,
+        // la piste est la plus proche. Puis une primaire `bicycle=no` à 2 m de 1 500 à 2 000 m.
+        let mut l1 = line(0.4, lon(1_000.0), 3.0);
+        l1.attr = 0;
+        let mut l2 = line(0.4, 0.6, 20.0);
+        l2.attr = 1;
+        let mut l3 = line(lon(1_500.0), 0.6, 2.0);
+        l3.attr = 2;
+        let mut t = tiles(&st, &[l1, l2, l3]);
+        for tile in t.values_mut().flatten() {
+            let tile = Arc::make_mut(tile);
+            tile.attrs = vec![attrs("trunk", None), attrs("cycleway", None), attrs("primary", Some("no"))];
+        }
+        let (r, at) = closed_with(&t, &st, 5.0, STREET_MAX_M).unwrap();
+        assert_eq!(r.len(), 2, "{r:?}");
+        // Le bout du trunk reste la voie la plus proche jusqu'à ≈ 1 016 m (à moins de 20 m).
+        assert!(r[0].start.abs() < 1e-9 && (1_000.0..1_020.0).contains(&r[0].end), "{r:?}");
+        assert!((1_480.0..1_500.0).contains(&r[1].start) && (r[1].end - 2_000.0).abs() < 1e-9, "{r:?}");
+        assert!(at.len() > 300);
+        // `bicycle=yes` sur le trunk : ouvert, plus rien n'en sort.
+        assert!(!closed_by_tag_rule(&attrs("trunk", Some("yes"))));
+        assert!(closed_by_tag_rule(&attrs("pedestrian", None)));
+        assert!(!closed_by_tag_rule(&WayAttrs { rail: true, ..attrs("rail", None) }));
+        assert_eq!(union(&[0.0..1.0, 5.0..6.0], &[0.5..2.0]), vec![0.0..2.0, 5.0..6.0]);
     }
 
     #[test]
