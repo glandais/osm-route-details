@@ -720,6 +720,7 @@ perso_v1:
   recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-01", donnees_serveur: "2026-11-01T13:01Z", sorties: private/recales/}
   ouvrages_v1: {fichier: private/v1/ouvrages-v1.json, sha256: d2d7e45e085127d87db0568ad8ae9a7c338f991dee3c014e4e61e11bff3b78ab, nombre: 554, ponts_tunnels: 213, croisements_e5: 341, tenus_a_l_ecart: 177}
   temoins_v1: {fichier: private/v1/temoins-v1.json, sha256: 92c4b90ae4dd47a48db32fb22d4d3376f91b7451bbb0d2facd0885b81d024e45}
+  temoins_v1_tags: {fichier: private/v1/temoins-v1-tags.json, sha256: 0bc3c1c04a594874f0f5382cef9d16f83f9c42ec0d6a9afdb1fe28de3db9b014, temoins: 17, plages: 17, outil: tools/temoins_v1_tags.py, osm_date: "2026-11-01T13:00:00Z"}   # ouvrages réels sur la voie des témoins (README §4 ter.6)
   series_v1: {fichier: private/v1/series-v1.csv, sha256: b7f2facb61124e4cc90a6722809fbe85a541866899c4ed9e26cd30f4b7f3950e}
   planifies:   # sans donnée perso ; hors git jusqu'au jugement V1 (discipline de la série)
     - {id: pl-e4-boisclair, role: E4, km: 7.94, fichier: private/v1/planifies/pl-e4-boisclair.gpx, sha256: 646393ee929f326229f0470ee686445cced30246ae13450a2e9300b931f3e7c4}
