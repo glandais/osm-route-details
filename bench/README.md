@@ -388,7 +388,7 @@ Le recalage a tourné le 2026-10-30 (envoi autorisé par l'utilisateur). Il est 
 | **E2b** | Les corrections ne dégradent pas le D+ | par groupe : médiane \|ln(D+ service / D+ baro)\| ≤ médiane \|ln(D+ service avec `structure_correction: false` / D+ baro)\| ; mêmes sources, géométrie recalée, preset `dem` **des trois côtés (baro compris, §4 bis.5)** et masques | idem |
 | **E3** | Erreur d'altitude sur tablier | Par passage : erreur max et erreur au milieu de (service − référence) sur l'emprise du tablier ; par pont : **médiane sur les passages** de l'une et de l'autre (§4 bis) | baro corrigé localement (seule référence indépendante) ; à défaut, médiane MNS 25 m (`ouvrages.yaml` `milieu_mns_mediane_25m`, vcyclist `B`), référence de **cohérence** seulement |
 | **E4** | Erreur en tunnel | Par tunnel **OSM**, entre ses propres portails : erreur max de (service − droite entre portails) ; D+ fictif ajouté dans le tunnel. Altitude de portail = médiane du MNT des stations entre 10 et 30 m hors du portail, sur l'approche (§4 bis) | `ouvrages.yaml`, vcyclist `N` (par tunnel OSM) |
-| **E5** | Passage sous un pont | \|service − MNT\| au croisement | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
+| **E5** | Passage sous un pont | \|service − référence\| au croisement (baro corrigé ou MNT, §4 ter.7) | `chevire-dessous`, `rotonde-dessous`, `perso-23..25` |
 | **S1** | Rappel des ouvrages OSM tagués | Longueur des ponts/tunnels OSM du corpus, **portés par une voie du graphe vélo**, typés `bridge`/`tunnel` par le service ÷ longueur de référence ; balcons non tagués exclus (§4 bis) ; V1 : recouvrement continu (§4 ter.1) | `ouvrages.yaml`, `structures.csv` |
 | **S2** | Faux positifs d'ouvrage | Longueur typée `bridge`/`tunnel` hors de tout ouvrage de référence ÷ longueur totale ; nombre d'ouvrages fictifs | témoins négatifs vcyclist `n*`, `hn*` ; traces `dplus` |
 | **S3** | Ouvrage non tagué | MVP : altitude au milieu de `stn-acces-nord`, et erreur sur les balcons non tagués entre tunnels (Petits Goulets, Combe Laval) (mesurées, signalées, pas de seuil). V1 : détecté oui/non | baro `perso-20..22` ; vcyclist `S` sur les balcons |
@@ -414,7 +414,7 @@ Proposés, à geler avant le premier passage du service. « France » = terrain 
 | E3 | France, pont tagué : \|erreur au milieu\| ≤ 2 m et max ≤ 3 m (ponts < 300 m), ≤ 5 m (grands ponts) ; ≥ 90 % des ponts du corpus passent | vcyclist : ≤ 2 m Nantes, ≤ 5 m Saint-Nazaire, 18/21 = 86 % ; baro − MNS mesuré ≤ 1 m sur Saint-Nazaire, Pirmil, Mauves |
 | E3 hors France | Mesuré et rapporté, pas de seuil (pont interpolé, `interpolated_structure`) | 22–40 m d'erreur attendus sur grands ponts bombés (doc 01 §9) |
 | E4 | \|erreur max\| ≤ 5 m et D+ fictif ≤ 5 m par tunnel ; ≥ 6/7 des tunnels tagués | Critère Grands Goulets de vcyclist ; 6/7 hors échantillon ; Strava : +190 m d'erreur, +112 m de D+ fictif aux Grands Goulets |
-| E5 | \|service − MNT\| ≤ 1 m au croisement, 100 % des cas | Erreur ≈ 50 m si le MNS est lu ; tolérance zéro |
+| E5 | \|service − référence\| au croisement ≤ 1 m (MNT), ≤ 2 m (baro corrigé localement, §4 ter.7), 100 % des cas | Erreur ≈ 50 m si le MNS est lu ; le baro corrigé porte l'erreur de son décalage, comme en E3 |
 | S1 | ≥ 95 % de la longueur des ouvrages tagués typée correctement | Le MVP se fonde sur OSM seul : seul l'appariement peut faire échouer |
 | S2 | 0 ouvrage fictif sur les négatifs ; ≤ 0,5 % de longueur hors ouvrage typée pont/tunnel | Pas d'heuristique au MVP : un faux positif ne peut venir que d'un mauvais appariement |
 | S3 | Pas de seuil au MVP (limite documentée, `structure: ground`) ; V1 : détecté | doc 01 §5.5 |
@@ -783,7 +783,15 @@ inchangés.
    - **référence = baro corrigé localement** (décalage = médiane baro − MNT de 200 à 1 500 m de part
      et d'autre, comme au §2.1) au croisement, interpolé sur la grille de 5 m, si la trace est une
      trace perso fiable dont le baro existe des deux côtés du croisement sans pas brut de plus de
-     100 m (`baro_gap_max_m`) ;
+     100 m (`baro_gap_max_m`). Tolérance **2 m** avec cette référence, comme E3 (décision de
+     l'utilisateur, 2026-11-01, après la calibration 2026.11.6) ; référence **incertaine**
+     (rapportée `e5_reference_incertaine`, non comptée) si les deux décalages, médiane baro − MNT
+     de 200 à 1 500 m de chaque côté pris à part, diffèrent de plus de **2 m**. Effet sur la
+     calibration 2026.11.6, sans le service (MNT du cache ; 153 des 174 passages au baro mesurables
+     ainsi, les 21 autres sur des traces en plusieurs parties ou sans pas brut au croisement) :
+     14 passages incertains, dont 6 sans baro sur l'un des côtés ; des 17 échecs au baro, 2 deviennent
+     incertains (`nv-328`, `nv-432`), 12 passent à 2 m, 3 restent (`nv-268`, `nv-269`, `nv-352`,
+     écart de 2,1 à 2,9 m, côtés à 0,4 m au plus l'un de l'autre) ;
    - **sinon référence = MNT LiDAR**, **indisponible** (rapporté `e5_reference_indisponible`, non
      compté) si le MNT est sans donnée à 10 m au plus du croisement, ou s'il lit le tablier :
      MNT au croisement − moyenne des médianes du MNT entre 20 et 50 m de part et d'autre, le long de

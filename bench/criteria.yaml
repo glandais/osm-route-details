@@ -114,6 +114,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Recalage et références de revêtement (R3, R1/R2 des parcours planifiés) par le Valhalla public de la FOSSGIS, 1 req/s, en séquence ; toutes les traces recalées par cette source (perso-01..39 comprises) ; données du serveur 2026-11-01T13:01Z"
   - id: e5_reference   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E5 : passage retiré si la trace est elle-même sur un ouvrage des tuiles (≤ 10 m, < 20°) ; référence = baro corrigé localement sur les traces perso fiables ; sinon MNT, indisponible s'il est sans donnée ou lit le tablier (bosse > 2 m vs approches 20–50 m)"
+  - id: e5_tolerance_baro   # 2026-11-01, après la calibration 2026.11.6
+    decision: "E5, référence baro corrigé localement : tolérance 2 m (comme E3) ; incertaine, rapportée, non comptée, si les décalages baro − MNT des deux côtés (200–1 500 m) diffèrent de plus de 2 m ; MNT : 1 m inchangé ; tous exigé"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -320,18 +322,20 @@ criteres:
     bloquant: true
 
   - id: E5
-    metrique: "|service − MNT| au croisement d'un passage sous un pont"
+    metrique: "|service − référence| au croisement d'un passage sous un pont (README §4 ter.7)"
     cas: {manifest: [ouvrages, perso], types: [passage_sous_pont]}
     agregation: par_croisement
     perimetre: graphe_velo   # l'ouvrage du dessus peut être hors graphe ; c'est le passage dessous qui doit l'être
     reference:   # README §4 ter.7, décision de l'utilisateur, 2026-11-01 ; jamais le service
       retire_si: {trace_sur_ouvrage: {couche: streets, attributs: [bridge, tunnel], distance_m_max: 10, angle_deg_max: 20}, marque: e5_trace_sur_ouvrage}
-      baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100}
+      baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100,
+                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500]}, marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
       sinon_mnt:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]
         marque: e5_reference_indisponible
     seuils:
-      - {abs_m_max: 1.0}
+      - {abs_m_max: 1.0, reference: mnt}
+      - {abs_m_max: 2.0, reference: baro_corrige_local}   # comme E3 ; 2026-11-01, après 2026.11.6
     passe_si: tous
     bloquant: true
 
