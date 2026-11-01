@@ -10,18 +10,20 @@
 //! Choix simples, notés :
 //! - la trace est la polyligne des observations (tous les points d'entrée y sont) : c'est sur elle
 //!   que l'altitude est lue ;
-//! - une ligne coupée au bord de tuile n'a pas d'extrémité réelle de ce côté (`cut`) : la distance
-//!   à la culée la plus proche ne lit que les extrémités réelles du morceau croisé ;
+//! - une ligne coupée au bord de tuile n'a pas d'extrémité réelle de ce côté (`cut`), et une
+//!   extrémité posée sur une autre ligne de pont (≤ `MERGE_UNITS`, way découpé au-dessus de la
+//!   voie) est une jonction du même tablier : la distance à la culée ne lit que les autres ;
 //! - un même croisement lu dans deux tuiles (géométrie tamponnée au bord) est compté une fois
 //!   (moins de 1 m d'écart en distance de parcours).
 
 use std::sync::Arc;
 
-use ord_domain::geo::{dist_units, Grid};
+use ord_domain::geo::{dist_units, project_on_segment, Grid};
 use ord_domain::street::{StreetTile, StructureTag};
 use rstar::primitives::{GeomWithData, Line};
 use rstar::{RTree, AABB};
 
+use super::graph::MERGE_UNITS;
 use super::matcher::Obs;
 use super::TileState;
 
@@ -38,6 +40,20 @@ pub struct Overpass {
     /// Distance du croisement à l'extrémité réelle (non coupée) la plus proche du morceau de ligne
     /// croisé ; `f64::INFINITY` si les deux extrémités sont coupées au bord de tuile.
     pub end_m: f64,
+}
+
+/// Une extrémité de ligne de pont posée sur l'intérieur d'une autre ligne de pont (≤
+/// `MERGE_UNITS`) : jonction de deux éléments du même ouvrage, pas une culée.
+fn segs_touch(data: &[&Arc<StreetTile>], e: [f64; 2], own: (usize, usize)) -> bool {
+    data.iter().enumerate().any(|(ti, t)| {
+        t.lines.iter().enumerate().any(|(li, l)| {
+            (ti, li) != own
+                && t.attrs.get(l.attr as usize).is_some_and(|a| a.structure == StructureTag::Bridge)
+                && l.points
+                    .windows(2)
+                    .any(|w| dist_units(e, project_on_segment(e, w[0], w[1]).point) <= MERGE_UNITS)
+        })
+    })
 }
 
 /// Intersection propre de `[p0, p1]` et `[q0, q1]` : paramètres `(t, u)` dans `[0, 1]`.
@@ -90,6 +106,29 @@ pub fn find(grid: Grid, obs: &[Obs], tiles: &[(ord_domain::tiles::TileKey, TileS
     if segs.is_empty() || obs.len() < 2 {
         return Vec::new();
     }
+    // Extrémités de lignes de pont (non coupées), pour reconnaître une jonction pont – pont : une
+    // ligne découpée au-dessus de la voie (deux ways de même tablier) n'y a pas de culée.
+    let bridge_ends: Vec<([f64; 2], (usize, usize))> = segs
+        .iter()
+        .filter_map(|s| {
+            let (ti, li, k) = s.data;
+            let l = &data[ti].lines[li];
+            let last = l.points.len() - 2;
+            let mut v = Vec::new();
+            if k == 0 && !l.cut[0] {
+                v.push((l.points[0], (ti, li)));
+            }
+            if k == last && !l.cut[1] {
+                v.push((l.points[last + 1], (ti, li)));
+            }
+            (!v.is_empty()).then_some(v)
+        })
+        .flatten()
+        .collect();
+    let joined = |e: [f64; 2], own: (usize, usize)| {
+        bridge_ends.iter().any(|(q, id)| *id != own && dist_units(e, *q) <= MERGE_UNITS)
+            || segs_touch(&data, e, own)
+    };
     let index = RTree::bulk_load(segs);
     let mut out: Vec<Overpass> = Vec::new();
     for w in obs.windows(2) {
@@ -111,7 +150,7 @@ pub fn find(grid: Grid, obs: &[Obs], tiles: &[(ord_domain::tiles::TileKey, TileS
             let ends = [(line.points[0], line.cut[0]), (line.points[line.points.len() - 1], line.cut[1])];
             let end_m = ends
                 .iter()
-                .filter(|(_, cut)| !cut)
+                .filter(|(e, cut)| !cut && !joined(*e, (ti, li)))
                 .map(|(e, _)| dist_units(x, *e) * mpu)
                 .fold(f64::INFINITY, f64::min);
             let r = [b.p[0] - a.p[0], b.p[1] - a.p[1]];

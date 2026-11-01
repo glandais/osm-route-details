@@ -246,7 +246,8 @@ de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (b
     ≈ 44 m à 20° ;
   - `end_clearance_m = 2,5 m` : un croisement plus proche d'une extrémité réelle de la ligne du pont
     est sa culée (la trace rejoint le pont ou le frôle, nœud partagé) ; moitié d'une ouverture
-    minimale de 5 m sous tablier, et demi-pas des stations ;
+    minimale de 5 m sous tablier, et demi-pas des stations ; une extrémité posée sur une autre
+    ligne de pont (way découpé au-dessus de la voie) n'est pas une culée (T03 §6.4) ;
   - sonde : `abutment_probe_min_m = 10 m` au-delà de l'emprise, comme les culées (§3.1) : la
     droite va de l'approche au sol amont à l'approche aval, soit 25 m de part et d'autre à 90°,
     ≈ 54 m à 20° ;

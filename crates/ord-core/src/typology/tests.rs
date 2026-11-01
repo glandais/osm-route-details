@@ -494,3 +494,16 @@ fn bridges_crossing_the_trace_are_overpasses() {
     let (_, out) = typology_of(overpass(), &[(-300.0, 0.0), (300.0, 0.0)]);
     assert!(out.overpasses.iter().all(|o| o.angle_deg < 20.0), "{:?}", out.overpasses);
 }
+
+/// Un pont découpé en deux ways juste au-dessus de la route du dessous (§6.4) : la jonction des
+/// deux ways n'est pas une culée.
+#[test]
+fn a_bridge_split_above_the_trace_has_no_abutment_there() {
+    let net = Net::new()
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)])
+        .add(bridge("tertiary"), &[(-60.0, 0.0), (1.0, 0.0)])
+        .add(bridge("tertiary"), &[(1.0, 0.0), (60.0, 0.0)]);
+    let (_, out) = typology_of(net, &[(0.0, -300.0), (0.0, 300.0)]);
+    assert!(!out.overpasses.is_empty(), "{:?}", out.overpasses);
+    assert!(out.overpasses.iter().all(|o| o.end_m > 50.0), "{:?}", out.overpasses);
+}

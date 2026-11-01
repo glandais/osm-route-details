@@ -376,7 +376,9 @@ pub struct Overpass { pub d_m: f64,      // distance de parcours du croisement
 ```
 
 La typologie **constate** ; la fusion décide (niveau de la trace au croisement, angle, culée). Un
-même croisement lu dans deux tuiles (géométrie tamponnée) est compté une fois (< 1 m). Limite : une
+même croisement lu dans deux tuiles (géométrie tamponnée) est compté une fois (< 1 m). Une extrémité
+posée (≤ `MERGE_UNITS`) sur une autre ligne de pont est une jonction du même tablier (way découpé
+au-dessus de la voie du dessous), pas une culée : `end_m` ne la lit pas. Limite : une
 ligne coupée au bord de tuile n'a pas d'extrémité réelle de ce côté ; une culée juste au-delà du
 bord n'est pas vue (`end_m` infini de ce côté).
 
