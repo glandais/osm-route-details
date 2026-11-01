@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.2"
+    "version": "1.3"
   },
   "paths": {
     "/health/live": {
@@ -2074,7 +2074,8 @@
           "elevation_unavailable",
           "structure_untagged",
           "bicycle_forbidden",
-          "elevation_cover_corrected"
+          "elevation_cover_corrected",
+          "elevation_overpass_corrected"
         ]
       },
       "WarningV1": {

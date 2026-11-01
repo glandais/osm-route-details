@@ -422,3 +422,116 @@ fn the_chord_grade_guard_judges_the_whole_series() {
         r.profile.warnings.iter().filter(|w| w.code == WarningCode::StructureSlopeImplausible).collect();
     assert_eq!(w.len(), 1, "{w:?}");
 }
+
+/// Sol plat à 100 m ; sous le pont est-ouest (|nord| < 8 m), le MNT lit une bosse de 6 m (tablier
+/// interpolé par le LiDAR) sur la route nord-sud.
+fn bump_under_deck(p: LatLon) -> f64 {
+    let (e, n) = en(p);
+    if n.abs() < 8.0 && e.abs() < 10.0 {
+        100.0 + 6.0 * (1.0 - n.abs() / 8.0)
+    } else {
+        100.0
+    }
+}
+
+/// Même bosse, de 0,8 m : sous la rugosité du MNT d'une chaussée.
+fn small_bump(p: LatLon) -> f64 {
+    let (e, n) = en(p);
+    if n.abs() < 8.0 && e.abs() < 10.0 {
+        100.0 + 0.8 * (1.0 - n.abs() / 8.0)
+    } else {
+        100.0
+    }
+}
+
+fn overpass_codes(r: &Run) -> usize {
+    codes(r).iter().filter(|c| **c == WarningCode::ElevationOverpassCorrected).count()
+}
+
+#[test]
+fn a_dem_bump_under_an_overpass_is_replaced_by_the_line_between_the_approaches() {
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    let (z, m) = at_d(&r, 300.0);
+    assert_eq!(m, EleMethod::GapFilled);
+    assert!((z - 100.0).abs() < 0.01, "{z}");
+    assert!(r.profile.ele.iter().all(|z| (z - 100.0).abs() < 0.01), "bosse retirée partout");
+    assert_eq!(overpass_codes(&r), 1, "{:?}", codes(&r));
+    let w = r.profile.warnings.iter().find(|w| w.code == WarningCode::ElevationOverpassCorrected).unwrap();
+    let range = w.range.clone().unwrap();
+    assert!(range.start > 285.0 && range.end < 315.0, "{range:?}");
+    // Altitude seule : aucun ouvrage, la trace reste au sol.
+    assert!(r.profile.structures.is_empty());
+}
+
+#[test]
+fn the_overpass_correction_keeps_real_relief_and_its_own_bridge() {
+    // Cuvette sous le pont (passage creusé) : gardée.
+    let r = run(overpass(), &[(0.0, -300.0), (0.0, 300.0)]);
+    assert!(r.profile.method.iter().all(|m| *m == EleMethod::Dem));
+    assert_eq!(overpass_codes(&r), 0);
+    // Vraie bosse sans pont au-dessus : la route est-ouest est au sol.
+    let net = Net::new()
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (400.0, 0.0)]);
+    let r = run_with(
+        net,
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert!((at_d(&r, 300.0).0 - 106.0).abs() < 0.5);
+    assert_eq!(overpass_codes(&r), 0);
+    // Trace sur le pont (ici sans sursol, sol gardé) : jamais la droite d'un passage dessous.
+    let r = run_with(
+        overpass(),
+        &[(-300.0, 0.0), (300.0, 0.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert_eq!(r.profile.structures.len(), 1);
+    assert!(!r.profile.method.contains(&EleMethod::GapFilled));
+    assert_eq!(overpass_codes(&r), 0);
+    // Bosse sous la rugosité du MNT : rien n'est réécrit.
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: small_bump },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert!(r.profile.method.iter().all(|m| *m == EleMethod::Dem));
+    // Correction désactivée : MNT brut.
+    let opts = RequestOptions { structure_correction: false, ..RequestOptions::default() };
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &opts,
+        |_| {},
+    );
+    assert!((at_d(&r, 300.0).0 - 106.0).abs() < 0.5);
+    assert_eq!(overpass_codes(&r), 0);
+}
+
+#[test]
+fn the_overpass_correction_needs_the_lidar_dtm() {
+    fn mapterhorn(_: LatLon) -> TerrainOrigin {
+        TerrainOrigin::Mapterhorn
+    }
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: mapterhorn, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert_eq!(overpass_codes(&r), 0);
+}

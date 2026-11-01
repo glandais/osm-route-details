@@ -310,3 +310,49 @@ async fn golden_gallery() {
     diff("", &expected, &r, &mut out);
     assert!(out.is_empty(), "{id} : {out:#?}");
 }
+
+/// Pont au-dessus de la trace au sol (règles 2026.11.6, T04 §3.4) : témoin `tt04-tuileries` de
+/// vcyclist (calibration). La bosse du MNT sous le tablier est retirée : droite entre les approches,
+/// `gap_filled`, `elevation_overpass_corrected`, aucun ouvrage, segments au sol.
+#[tokio::test]
+#[ignore = "cache de banc requis (ord-bench fill-cache)"]
+async fn golden_overpass() {
+    use ord_bench::golden::{response_with, structure_options, structure_scenario, OVERPASS_SCENARIO};
+    let bench = BenchPaths::repo_bench();
+    let paths = BenchPaths::new(&bench, None, None);
+    let manifest = Manifest::load(&bench).expect("manifest");
+    let service = Service::start(&paths.cache, true, Variant::DEFAULT).await.expect("service");
+    let id = OVERPASS_SCENARIO;
+    let s = structure_scenario(&paths, &manifest, id).expect("scénario");
+    let mut r = response_with(&service, &s, structure_options()).await.expect("réponse");
+    for p in r["points"].as_array_mut().into_iter().flatten() {
+        if let Some(m) = p.as_object_mut() {
+            m.remove("lat");
+            m.remove("lon");
+        }
+    }
+    assert!(r["summary"]["structures"].as_array().expect("structures").is_empty());
+    assert!(r["segments"].as_array().unwrap().iter().all(|g| g["structure"] == "ground"));
+    assert_eq!(
+        codes(&r).iter().filter(|c| **c == "elevation_overpass_corrected").count(),
+        1,
+        "{:?}",
+        codes(&r)
+    );
+    assert!(r["points"].as_array().unwrap().iter().any(|p| p["ele_method"] == "gap_filled"));
+    // Profil plat (quai) : plus aucune bosse de plus de 1 m au-dessus des voisins à 20 m.
+    let z: Vec<f64> = r["points"].as_array().unwrap().iter().map(|p| p["ele"].as_f64().unwrap()).collect();
+    let bump = (2..z.len() - 2).map(|i| z[i] - 0.5 * (z[i - 2] + z[i + 2])).fold(f64::MIN, f64::max);
+    assert!(bump < 1.0, "{id} : bosse de {bump} m");
+    let path = snapshot_path(id);
+    if std::env::var_os("ORD_GOLDEN_UPDATE").is_some() || !path.exists() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, serde_json::to_string_pretty(&r).unwrap() + "\n").unwrap();
+        println!("{id} : snapshot écrit");
+        return;
+    }
+    let expected: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut out = Vec::new();
+    diff("", &expected, &r, &mut out);
+    assert!(out.is_empty(), "{id} : {out:#?}");
+}

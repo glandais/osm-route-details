@@ -445,6 +445,7 @@ mod tests {
                 stats: Default::default(),
                 structures: Vec::new(),
                 passages: Vec::new(),
+                overpasses: Vec::new(),
             })
         }
     }

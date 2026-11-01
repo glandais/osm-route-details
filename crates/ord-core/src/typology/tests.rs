@@ -472,3 +472,25 @@ fn passing_under_a_closed_bridge_stays_matched() {
     assert!(segs.iter().all(|s| s.matched && s.structure == StructureClass::Ground), "{segs:?}");
     assert!(out.passages.is_empty());
 }
+
+/// Ponts au-dessus du parcours (§6.4) : le pont routier est-ouest croise à angle droit la route
+/// au sol qui passe dessous, loin de ses culées ; un pont rail (hors graphe vélo) aussi ; la trace
+/// qui suit le pont ne le croise pas.
+#[test]
+fn bridges_crossing_the_trace_are_overpasses() {
+    let (_, out) = typology_of(overpass(), &[(0.0, -300.0), (0.0, 300.0)]);
+    assert_eq!(out.overpasses.len(), 1, "{:?}", out.overpasses);
+    let o = out.overpasses[0];
+    assert!((o.d_m - 300.0).abs() < 1.0, "{o:?}");
+    assert!((o.angle_deg - 90.0).abs() < 1.0, "{o:?}");
+    assert!((o.end_m - 60.0).abs() < 1.0, "{o:?}");
+    let rail = WayAttrs { rail: true, structure: StructureTag::Bridge, ..way("rail") };
+    let net = Net::new()
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)])
+        .add(rail, &[(-30.0, -30.0), (30.0, 30.0)]);
+    let (_, out) = typology_of(net, &[(0.0, -300.0), (0.0, 300.0)]);
+    assert_eq!(out.overpasses.len(), 1, "{:?}", out.overpasses);
+    assert!((out.overpasses[0].angle_deg - 45.0).abs() < 1.0, "{:?}", out.overpasses);
+    let (_, out) = typology_of(overpass(), &[(-300.0, 0.0), (300.0, 0.0)]);
+    assert!(out.overpasses.iter().all(|o| o.angle_deg < 20.0), "{:?}", out.overpasses);
+}

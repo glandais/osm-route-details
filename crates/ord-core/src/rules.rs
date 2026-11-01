@@ -31,7 +31,10 @@ use serde::Serialize;
 // `heuristic` de nature tunnel.
 // 2026.11.5 : couvertures lues dans le MNT corrigées en altitude seule (`gap_filled`,
 // `elevation_cover_corrected`), sans ouvrage ; passages OSM prioritaires.
-pub const RULES_VERSION: &str = "2026.11.5";
+// 2026.11.6 : pont des tuiles au-dessus de la trace au sol, bosse du MNT LiDAR (tablier
+// interpolé) remplacée par la droite entre les approches (`gap_filled`,
+// `elevation_overpass_corrected`, api 1.3).
+pub const RULES_VERSION: &str = "2026.11.6";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -212,6 +215,11 @@ impl ElevationRules {
         if (self.gallery_detector.step_m - self.station_step_m).abs() > 1e-9 {
             return Err("gallery detector step differs from the station step".into());
         }
+        let o = &self.structures.overpass;
+        let valid = o.min_angle_deg > 0.0 && o.min_angle_deg <= 90.0 && o.deck_half_width_m > 0.0;
+        if !valid {
+            return Err("overpass angle must be in (0, 90] degrees and deck half width positive".into());
+        }
         Ok(())
     }
 }
@@ -288,6 +296,35 @@ pub struct CorrectionRules {
     /// d'une route en falaise, où le MNT lit la paroi) : une série, droite entre ses portails
     /// extérieurs (T04 §3.1 ; décision de l'utilisateur, 2026-11-01 ; spans de vcyclist).
     pub tunnel_series_gap_m: f64,
+    /// Pont des tuiles au-dessus de la trace au sol (T04 §3.4, règles 2026.11.6) : le MNT LiDAR,
+    /// interpolé sous le tablier, y lit une bosse, remplacée par la droite entre les approches.
+    pub overpass: OverpassRules,
+}
+
+/// Pont au-dessus de la trace (T04 §3.4) : bornes tirées de la géométrie d'un ouvrage, jamais des
+/// cas du banc.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OverpassRules {
+    /// Demi-largeur maximale d'un tablier porté par une seule ligne OSM : 2 × 3 voies, bandes
+    /// d'arrêt et trottoirs ≈ 30 m (une chaussée séparée est cartographiée par deux lignes).
+    pub deck_half_width_m: f64,
+    /// Angle minimal entre la trace et le pont : en deçà, la trace longe le pont (ou est dessus) ;
+    /// un pont qui enjambe une voie la croise franchement. Emprise sur la trace bornée à
+    /// `deck_half_width_m / sin(angle)`, ≈ 44 m à 20°.
+    pub min_angle_deg: f64,
+    /// Un croisement plus proche d'une extrémité réelle de la ligne du pont est sa culée : la trace
+    /// y rejoint le pont ou le frôle, elle ne passe pas dessous (moitié d'une ouverture minimale de
+    /// 5 m sous tablier, et demi-pas des stations).
+    pub end_clearance_m: f64,
+    /// Bosse minimale au-dessus de la droite entre approches pour corriger : rugosité du MNT LiDAR
+    /// sur une chaussée (≈ 1 m, comme l'approche lisse du détecteur de couverture, T04 §4.2 bis).
+    pub min_bump_m: f64,
+}
+
+impl Default for OverpassRules {
+    fn default() -> Self {
+        Self { deck_half_width_m: 15.0, min_angle_deg: 20.0, end_clearance_m: 2.5, min_bump_m: 1.0 }
+    }
 }
 
 impl Default for CorrectionRules {
@@ -298,6 +335,7 @@ impl Default for CorrectionRules {
             max_tunnel_chord_grade: 0.12,
             max_bridge_chord_grade: 0.10,
             tunnel_series_gap_m: 120.0,
+            overpass: OverpassRules::default(),
         }
     }
 }
@@ -408,6 +446,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.5", "acee8b80a8bff571".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.6", "acba367349144f08".to_owned()));
     }
 }

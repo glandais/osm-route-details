@@ -168,8 +168,11 @@ pub struct Detections {
 /// `abutment_probe_min_m` au-delà de chaque extrémité, sur les seules stations restées `dem`,
 /// méthode `gap_filled`, avertissement `elevation_cover_corrected`. Ni ouvrage ni verdict : la
 /// nature des segments ne change pas. Sans sonde ou sans altitude de sonde, rien n'est corrigé.
+/// Une couverture qui touche, approches comprises, une fenêtre de pont au-dessus de la trace déjà
+/// corrigée (`overpasses`, T04 §3.4) est écartée : le pont OSM prime.
 pub fn correct_covers(
     covers: &[(f64, f64)],
+    overpasses: &[(f64, f64)],
     route: &PreparedRoute,
     rules: &Rules,
     ele: &mut [f64],
@@ -178,7 +181,11 @@ pub fn correct_covers(
 ) {
     let probe_m = rules.elevation.structures.abutment_probe_min_m;
     let step = rules.elevation.station_step_m;
+    let reach = rules.elevation.gallery_detector.approach_m;
     for &(a, b) in covers {
+        if overpasses.iter().any(|w| w.1 > a - reach && w.0 < b + reach) {
+            continue;
+        }
         let (Some(pa), Some(pb)) =
             (station_at(route, a - probe_m, step), station_at(route, b + probe_m, step))
         else {
@@ -544,7 +551,15 @@ mod tests {
         let osm = d.iter().position(|&x| (x - 300.0).abs() < 1e-6).unwrap();
         method[osm] = EleMethod::InterpolatedStructure;
         let mut warnings = Vec::new();
-        correct_covers(&[(250.0, 350.0)], &route, &Rules::default(), &mut ele, &mut method, &mut warnings);
+        correct_covers(
+            &[(250.0, 350.0)],
+            &[],
+            &route,
+            &Rules::default(),
+            &mut ele,
+            &mut method,
+            &mut warnings,
+        );
         for (i, &x) in d.iter().enumerate() {
             if i != osm && (245.0..=355.0).contains(&x) {
                 assert!((ele[i] - road(x)).abs() < 0.05, "{x} : {}", ele[i]);

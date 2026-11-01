@@ -496,7 +496,7 @@ coordonnée de 2 à 9 décimales (et sa partie décimale seule dès 5), les tuil
 
 ## 9. Versions, déterminisme, idempotence
 
-- `api_version` : constante `API_VERSION` (`ord-server`, "1.2" depuis le 2026-11-01), montée **à la main** quand le
+- `api_version` : constante `API_VERSION` (`ord-server`, "1.3" depuis le 2026-11-01), montée **à la main** quand le
   contrat change de façon observable, jamais la version du paquet (`VC/api/.../ApiVersion.kt:5-12`).
 - `rules_version` : constante `RULES_VERSION` (`AAAA.MM.n`, doc 02 §4.6) dans `ord-core`. Un test
   calcule l'empreinte de la table de classification et des paramètres de fusion, de D+, de ruptures

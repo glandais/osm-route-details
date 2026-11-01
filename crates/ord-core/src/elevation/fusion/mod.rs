@@ -7,6 +7,7 @@
 
 pub mod deck;
 pub mod heuristic;
+pub mod overpass;
 pub mod plan;
 
 #[cfg(test)]
@@ -497,8 +498,12 @@ pub fn correct(
         &mut outcomes,
         &mut warnings,
     );
+    // Ponts au-dessus de la trace au sol (T04 §3.4) : bosse du MNT retirée, altitude seule, après
+    // les ouvrages ; avant les couvertures, qu'ils priment (le pont OSM confirme ce que la
+    // couverture devine).
+    let overpasses = overpass::correct_overpasses(typo, route, raw, rules, ele, method, &mut warnings);
     // Couvertures lues dans le MNT : altitude seule, après tous les ouvrages (T04 §4.2 bis).
-    heuristic::correct_covers(&detected.covers, route, rules, ele, method, &mut warnings);
+    heuristic::correct_covers(&detected.covers, &overpasses, route, rules, ele, method, &mut warnings);
     outcomes.sort_by(|a, b| a.from_m.total_cmp(&b.from_m).then(a.kind.cmp(&b.kind)));
     Correction { outcomes, verdicts, warnings }
 }

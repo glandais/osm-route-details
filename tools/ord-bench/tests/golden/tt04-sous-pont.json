@@ -1,0 +1,300 @@
+{
+  "attribution": {
+    "text": "© OpenStreetMap contributors · © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium · © IGN — LiDAR HD · Mapterhorn and its sources",
+    "url": "/v1/attribution"
+  },
+  "meta": {
+    "api_version": "1.3",
+    "data_versions": {
+      "elevation": [
+        {
+          "date": "2026-10-31",
+          "indicative": true,
+          "products": [
+            "mnt",
+            "mns"
+          ],
+          "role": "primary",
+          "source": "ign-lidar-hd",
+          "zoom": 15
+        }
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
+    },
+    "duration_ms": null,
+    "request_id": null,
+    "rules_version": "2026.11.6"
+  },
+  "points": [
+    {
+      "d_m": 0.0,
+      "ele": 29.18,
+      "ele_method": "dem",
+      "index": 0
+    },
+    {
+      "d_m": 10.0,
+      "ele": 29.21,
+      "ele_method": "dem",
+      "index": 2
+    },
+    {
+      "d_m": 20.0,
+      "ele": 29.29,
+      "ele_method": "dem",
+      "index": 4
+    },
+    {
+      "d_m": 30.0,
+      "ele": 29.09,
+      "ele_method": "dem",
+      "index": 6
+    },
+    {
+      "d_m": 40.0,
+      "ele": 29.12,
+      "ele_method": "dem",
+      "index": 7
+    },
+    {
+      "d_m": 50.0,
+      "ele": 28.93,
+      "ele_method": "dem",
+      "index": 10
+    },
+    {
+      "d_m": 60.0,
+      "ele": 29.61,
+      "ele_method": "dem",
+      "index": 12
+    },
+    {
+      "d_m": 70.0,
+      "ele": 29.3,
+      "ele_method": "dem",
+      "index": 14
+    },
+    {
+      "d_m": 80.0,
+      "ele": 28.67,
+      "ele_method": "dem",
+      "index": 16
+    },
+    {
+      "d_m": 90.0,
+      "ele": 29.24,
+      "ele_method": "dem",
+      "index": 17
+    },
+    {
+      "d_m": 100.0,
+      "ele": 29.06,
+      "ele_method": "dem",
+      "index": 20
+    },
+    {
+      "d_m": 110.0,
+      "ele": 29.36,
+      "ele_method": "dem",
+      "index": 22
+    },
+    {
+      "d_m": 120.0,
+      "ele": 29.39,
+      "ele_method": "dem",
+      "index": 24
+    },
+    {
+      "d_m": 130.0,
+      "ele": 29.31,
+      "ele_method": "dem",
+      "index": 25
+    },
+    {
+      "d_m": 140.0,
+      "ele": 29.22,
+      "ele_method": "dem",
+      "index": 28
+    },
+    {
+      "d_m": 150.0,
+      "ele": 29.32,
+      "ele_method": "gap_filled",
+      "index": 30
+    },
+    {
+      "d_m": 160.0,
+      "ele": 29.3,
+      "ele_method": "gap_filled",
+      "index": 32
+    },
+    {
+      "d_m": 170.0,
+      "ele": 29.0,
+      "ele_method": "dem",
+      "index": 34
+    },
+    {
+      "d_m": 180.0,
+      "ele": 29.25,
+      "ele_method": "gap_filled",
+      "index": 36
+    },
+    {
+      "d_m": 190.0,
+      "ele": 29.14,
+      "ele_method": "dem",
+      "index": 38
+    },
+    {
+      "d_m": 200.0,
+      "ele": 29.33,
+      "ele_method": "dem",
+      "index": 40
+    },
+    {
+      "d_m": 210.0,
+      "ele": 29.46,
+      "ele_method": "dem",
+      "index": 41
+    },
+    {
+      "d_m": 220.0,
+      "ele": 29.27,
+      "ele_method": "dem",
+      "index": 43
+    },
+    {
+      "d_m": 230.0,
+      "ele": 29.64,
+      "ele_method": "dem",
+      "index": 46
+    },
+    {
+      "d_m": 240.0,
+      "ele": 29.31,
+      "ele_method": "dem",
+      "index": 48
+    },
+    {
+      "d_m": 250.0,
+      "ele": 29.75,
+      "ele_method": "dem",
+      "index": 50
+    },
+    {
+      "d_m": 260.0,
+      "ele": 29.8,
+      "ele_method": "dem",
+      "index": 52
+    },
+    {
+      "d_m": 270.0,
+      "ele": 29.73,
+      "ele_method": "dem",
+      "index": 54
+    },
+    {
+      "d_m": 280.0,
+      "ele": 29.82,
+      "ele_method": "dem",
+      "index": 56
+    },
+    {
+      "d_m": 290.0,
+      "ele": 29.52,
+      "ele_method": "dem",
+      "index": 58
+    },
+    {
+      "d_m": 299.98,
+      "ele": 29.97,
+      "ele_method": "dem",
+      "index": 60
+    }
+  ],
+  "quality": {
+    "elevation_coverage": 1.0,
+    "inferred_surface_ratio": 0.0,
+    "matched_ratio": 1.0,
+    "structure_correction": {
+      "bridges": "none_found",
+      "counts": {},
+      "counts_by_source": {},
+      "tunnels": "none_found"
+    },
+    "terrain": [
+      {
+        "fallback_after_error": false,
+        "from_m": 0.0,
+        "measured": true,
+        "origin": "ign_lidar_hd",
+        "to_m": 299.98
+      }
+    ],
+    "warnings": [
+      {
+        "code": "elevation_overpass_corrected",
+        "from_m": 144.97,
+        "message": "terrain model reads a bridge deck above the road; elevation set to the line between the approaches",
+        "to_m": 180.0
+      }
+    ]
+  },
+  "segments": [
+    {
+      "ele_end": 29.97,
+      "ele_method": "dem",
+      "ele_start": 29.18,
+      "from_index": 0,
+      "from_m": 0.0,
+      "grade_pct": 0.26,
+      "matched": true,
+      "structure": "ground",
+      "surface": {
+        "class": "paved",
+        "source": "tagged"
+      },
+      "to_index": 60,
+      "to_m": 299.98,
+      "way_kind": "minor_road"
+    }
+  ],
+  "status": "complete",
+  "summary": {
+    "by_structure_m": {
+      "ground": 299.98
+    },
+    "by_surface_class_m": {
+      "paved": 299.98
+    },
+    "by_surface_source_m": {
+      "tagged": 299.98
+    },
+    "by_way_kind_m": {
+      "minor_road": 299.98
+    },
+    "ele_max_m": 29.97,
+    "ele_min_m": 28.65,
+    "gain_m": 0.0,
+    "gain_params": {
+      "adapted": [],
+      "partial": false,
+      "preset": "dem",
+      "smoothing_m": 30.0,
+      "threshold_m": 3.0
+    },
+    "length_m": 299.98,
+    "loss_m": 0.0,
+    "structures": [],
+    "terrain_m": {
+      "ign_lidar_hd": 299.98
+    },
+    "unknown_m": 0.0
+  }
+}

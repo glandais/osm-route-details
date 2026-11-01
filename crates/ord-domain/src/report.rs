@@ -26,10 +26,13 @@ pub enum WarningCode {
     BicycleForbidden,
     // V1 (api 1.2) : couverture lue dans le MNT au-dessus de la route, altitude corrigée seule.
     ElevationCoverCorrected,
+    // V1 (api 1.3) : pont OSM au-dessus de la trace au sol, bosse du MNT (tablier interpolé)
+    // remplacée par la droite entre les approches.
+    ElevationOverpassCorrected,
 }
 
 impl WarningCode {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::UnmatchedRange,
         Self::StructureUncorrected,
         Self::StructureSlopeImplausible,
@@ -45,6 +48,7 @@ impl WarningCode {
         Self::StructureUntagged,
         Self::BicycleForbidden,
         Self::ElevationCoverCorrected,
+        Self::ElevationOverpassCorrected,
     ];
 }
 

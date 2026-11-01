@@ -222,7 +222,58 @@ de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (b
   `vc:G/TunnelDetectorOptions.kt:60`) [vc] ou 10 % sur un pont (`maxSlopeP95`) [vc], on émet
   `structure_slope_implausible` et on **garde** la valeur (doc 01 §6).
 
-### 3.4 Interfaces
+### 3.4 Pont au-dessus de la trace au sol (`fusion::overpass`, règles 2026.11.6)
+
+- **Défaut corrigé** (décision de l'utilisateur, 2026-11-01, après la calibration
+  2026.11.5-bench1). Le MNT LiDAR HD de l'IGN est **interpolé sous les tabliers** : les points
+  sol manquent sous le pont, et l'interpolation s'appuie sur les remblais d'accès et les culées,
+  classés sol. Sous un pont qui enjambe la voie suivie, le MNT lit donc une **bosse** de quelques
+  mètres là où la chaussée est plane. Le service la rendait telle quelle (le passage dessous n'est
+  pas un ouvrage, invariant 6). Ni `no-data` ni trou comblé ne la signalent : c'est la géométrie OSM
+  qui la trahit.
+- **Repérage** : les croisements de la trace avec les lignes `bridge` des tuiles lues, toutes
+  classes (route, voie fermée au vélo, rail), viennent de la typologie (`overpasses`, T03 §6.4). Un
+  croisement est retenu si la trace y est **au sol** : tronçon apparié à une voie de niveau sol
+  hors élément d'ouvrage, ou voie fermée au vélo suivie de niveau sol (`OffGraph`) ; jamais une
+  portion non appariée ou sans donnée (doute : invariant 4).
+- **Bornes, tirées de la géométrie d'un ouvrage** (`CorrectionRules::overpass`), jamais des cas du banc :
+  - `deck_half_width_m = 15 m` : demi-largeur d'un tablier porté par **une** ligne OSM (2 × 3
+    voies, bandes d'arrêt et trottoirs ≈ 30 m ; une chaussée séparée est cartographiée par deux
+    lignes, dont les fenêtres se réunissent) ;
+  - `min_angle_deg = 20°` : un pont qui enjambe une voie la croise franchement ; en deçà, la trace
+    longe le pont ou est dessus (même borne que le banc, README §4 ter.7, choisie séparément) ;
+    l'emprise du tablier sur la trace vaut `deck_half_width_m / sin(angle)`, de 15 m à 90° à
+    ≈ 44 m à 20° ;
+  - `end_clearance_m = 2,5 m` : un croisement plus proche d'une extrémité réelle de la ligne du pont
+    est sa culée (la trace rejoint le pont ou le frôle, nœud partagé) ; moitié d'une ouverture
+    minimale de 5 m sous tablier, et demi-pas des stations ;
+  - sonde : `abutment_probe_min_m = 10 m` au-delà de l'emprise, comme les culées (§3.1) : la
+    droite va de l'approche au sol amont à l'approche aval, soit 25 m de part et d'autre à 90°,
+    ≈ 54 m à 20° ;
+  - `min_bump_m = 1 m` : rugosité du MNT LiDAR d'une chaussée (approche lisse à 1 m du détecteur
+    de couverture, §4.2 bis). Une bosse moindre n'est pas distinguable du bruit ; rien n'est
+    réécrit. Pas de borne haute : sous un pont, la chaussée ne peut pas monter vers le tablier ;
+    le gabarit (≥ 4,5 m) et l'épaisseur du tablier bornent la bosse lue, sans servir de seuil.
+- **Garde-fous** : aucune correction si la fenêtre (approche à approche) touche un passage
+  d'ouvrage OSM (la trace sur un pont ou dans un tunnel garde la correction de son ouvrage ; un
+  pont `kept_ground` compte), une plage sans typologie, une station déjà corrigée (tablier,
+  ouvrage heuristique : seules les stations `dem` sont lues et réécrites), ou une station hors IGN
+  LiDAR HD (le défaut est celui de ce MNT ; Mapterhorn et GLO-30 ne sont pas corrigés). **Seule la
+  bosse est retirée** : une station sous la droite (cuvette, passage creusé sous l'ouvrage) garde
+  son altitude ; un vrai relief sans pont au-dessus n'est jamais lu.
+- **Écriture : altitude seule**, après les ouvrages OSM et heuristiques, **avant** les
+  couvertures (§4.2 bis) : une couverture qui touche, approches comprises, une fenêtre corrigée est
+  écartée (le pont OSM confirme ce que la couverture devine). Stations au-dessus de la droite
+  ramenées dessus, méthode `gap_filled`, avertissement `elevation_overpass_corrected` (api 1.3) sur
+  la plage réécrite ; ni ouvrage, ni verdict, ni changement de `structure`. Désactivée avec
+  `structure_correction: false` (MNT brut, comme les ouvrages).
+- **Tests** : unitaires sur le réseau `overpass` (bosse retirée ; cuvette, vraie bosse sans pont,
+  trace sur le pont, bosse sous 1 m, correction désactivée, terrain hors LiDAR : rien) ; golden
+  `tt04-sous-pont` (témoin `tt04-tuileries` de vcyclist, calibration : bosse de 2,6 m retirée).
+  Cas du banc qui ont motivé la règle (calibration 2026.11.5-bench1, non utilisés pour régler les
+  bornes) : 14 croisements à bosse de 2,5 à 11 m (README §4 ter.7).
+
+### 3.5 Interfaces
 
 ```rust
 // Consommés de T03 §6.3 : Structure, StructureId, StructureKind, StructureElement, StructureEnd,
@@ -418,7 +469,8 @@ pub fn detect_galleries(mnt: &[f64], mns: &[f64], o: &GalleryDetectorOptions) ->
    linéairement (`gap_filled`, avertissement `elevation_gap_filled`). Ce seuil est publié dans
    `/v1/capabilities`. Au-delà, on garde `none` : plage `elevation_missing`, ou `elevation_unavailable`
    si l'absence vient d'une panne acceptée par `accept_partial`.
-4. `ele_method` par station ∈ {`dem`, `dsm_deck`, `interpolated_structure`, `gap_filled`, `none`} ;
+4. `ele_method` par station ∈ {`dem`, `dsm_deck`, `interpolated_structure`, `gap_filled`, `none`}
+   (`gap_filled` aussi sur une couverture, §4.2 bis, et sous un pont au-dessus de la trace, §3.4) ;
    rampes et marges de sonde prennent celle de leur patch. `structure_correction = false` : ni patch
    ni heuristique.
 
@@ -615,7 +667,7 @@ par `proptest`.
 | Parcours de 2 points très proches (moins de 5 m) | Grille réduite aux deux points d'entrée ; pas d'heuristique (fenêtres trop courtes) ; D+ sur 2 stations |
 | Trace qui commence ou finit sur un pont | Axe prolongé par la géométrie OSM jusqu'à l'extrémité (§3.1). Sans `beyond` : `structure_uncorrected` |
 | Tunnel dont un portail est en no-data | `structure_uncorrected` (invariant 4), jamais de 0 m |
-| Pont OSM au-dessus de la trace | Écarté par la typologie (invariant 6), et le MNS n'est lu qu'aux stations d'un pont apparié (§2.3). Sinon, la rampe de plus de 15 % le rejette (§3.2, étape 8). Cas du banc : piste sous Cheviré, MNS à 57 m au croisement pour un sol à 6,9 m (E5, `bench/README.md` §3–§4 : écart au MNT ≤ 1 m) |
+| Pont OSM au-dessus de la trace | Écarté par la typologie (invariant 6), et le MNS n'est lu qu'aux stations d'un pont apparié (§2.3). Sinon, la rampe de plus de 15 % le rejette (§3.2, étape 8). Cas du banc : piste sous Cheviré, MNS à 57 m au croisement pour un sol à 6,9 m (E5). Depuis 2026.11.6, la bosse du MNT LiDAR sous son tablier est retirée (§3.4) |
 | Plage GLO-30 de moins de 200 m (littoral) | Pas d'adaptation. La provenance la montre quand même |
 | Trou long au milieu d'un ouvrage | L'ouvrage est remplacé en entier si ses sondes sont valides. Sinon, il n'est pas corrigé |
 

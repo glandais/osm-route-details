@@ -1,9 +1,11 @@
 //! Chaîne typologie, partie pure (T03) : couloir, graphe par niveaux, HMM, tronçons typés,
-//! ouvrages et passages (graphe des ouvrages, extension aux tuiles voisines), segments homogènes.
+//! ouvrages et passages (graphe des ouvrages, extension aux tuiles voisines), ponts au-dessus du
+//! parcours, segments homogènes.
 
 pub mod corridor;
 pub mod graph;
 pub mod matcher;
+pub mod overpasses;
 pub mod runs;
 pub mod segments;
 pub mod structures;
@@ -21,6 +23,7 @@ use rustc_hash::FxHashMap;
 use crate::rules::TypologyRules;
 pub use corridor::{corridor_tiles, Corridor};
 pub use graph::{ClassId, EdgeClass, LineId, StreetGraph};
+pub use overpasses::Overpass;
 pub use segments::{build_segments, TypedSegment};
 pub use structures::{
     EndKind, PassageDoubt, PassageId, Structure, StructureElement, StructureEnd, StructureId, StructureKind,
@@ -83,6 +86,9 @@ pub struct TypologyOutput {
     pub structures: Vec<Structure>,
     /// Passages du parcours sur ces ouvrages, triés par distance.
     pub passages: Vec<StructurePassage>,
+    /// Ponts des tuiles qui croisent la trace (§6.4), triés par distance ; la fusion décide si la
+    /// trace passe dessous (T04 §3.4).
+    pub overpasses: Vec<Overpass>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -230,6 +236,7 @@ pub fn finish(
         stats: TypologyStats { tiles: tiles.len(), ..m.stats },
         structures: s.structures,
         passages: s.passages,
+        overpasses: overpasses::find(m.graph.grid, &m.path.obs, tiles),
     })
 }
 

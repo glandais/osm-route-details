@@ -38,6 +38,12 @@ pub const HEURISTIC_SCENARIO: &str = "test1-raccord-acces-nord";
 /// rendue en droite entre ses portails, sans ouvrage (règles 2026.11.5). Snapshot sans coordonnées.
 pub const GALLERY_SCENARIO: &str = "arly-galerie-detectee";
 
+/// Scénario du pont au-dessus de la trace (règles 2026.11.6, T04 §3.4) : témoin `tt04-tuileries`
+/// de vcyclist (calibration) de 1 200 à 1 500 m, voie au sol qui passe sous un pont ; le MNT LiDAR y
+/// lit une bosse de ≈ 2,6 m (tablier interpolé), rendue en droite entre les approches,
+/// `gap_filled`, `elevation_overpass_corrected`, sans ouvrage. Snapshot sans coordonnées.
+pub const OVERPASS_SCENARIO: &str = "tt04-sous-pont";
+
 /// Scénario de la série de tunnels (règles 2026.10.10, T04 §3.1) : `test4` de vcyclist de 4,8 à
 /// 5,48 km, à travers les tunnels des Petits Goulets (calibration) et leurs balcons à l'air libre.
 pub const SERIES_SCENARIO: &str = "petits-goulets-serie";
@@ -107,6 +113,11 @@ pub fn structure_scenario(paths: &BenchPaths, manifest: &Manifest, id: &str) -> 
         HEURISTIC_SCENARIO => Some(("test1", 3_000.0, 5_000.0)),
         _ => None,
     };
+    if id == OVERPASS_SCENARIO {
+        let pts = crate::ouvrages::control_points(&paths.bench, "tunnels", "tt04-tuileries")?;
+        // Stations du témoin au pas de 5 m : de 1 200 à 1 500 m.
+        return Ok(Scenario { id: id.to_owned(), points: pts[240..=300].to_vec() });
+    }
     if id == GALLERY_SCENARIO {
         let pts = crate::ouvrages::control_points(&paths.bench, "tunnels", "tt08-arly-cliets")?;
         // Stations du témoin au pas de 5 m : de 150 à 390 m.

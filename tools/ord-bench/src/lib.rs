@@ -128,8 +128,11 @@ impl BenchPaths {
 /// appliqué dans la même révision. `bench1` (règles 2026.11.5 inchangées) : série V1 lue
 /// (`perso_v1` : traces, ouvrages et croisements E5, témoins S2, itinéraires planifiés E4 / S2 /
 /// R1-R2), série du MVP jugée devenue calibration, recalages du Valhalla FOSSGIS (6aba29e),
-/// plages `covered` mesurées contre le MNT (cc59b18), couverture rapportée par critère.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// plages `covered` mesurées contre le MNT (cc59b18), couverture rapportée par critère. Remise à
+/// `None` avec les règles 2026.11.6 (pont au-dessus de la trace) ; révision du banc à la même
+/// campagne : référence d'E5 au croisement (800d4e0), E1 plaine incertaine (4423741), ouvrages
+/// réels des témoins V1 (57e9d95).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

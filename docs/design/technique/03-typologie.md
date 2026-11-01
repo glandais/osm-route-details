@@ -359,6 +359,27 @@ profil de l'ouvrage **une fois**, en chaînage, puis le rend à chaque passage, 
 pas de correction en cas de doute, `structure_uncorrected`) et y ajoute les siens (extrémité sans
 altitude).
 
+### 6.4 Ponts au-dessus du parcours (`overpasses`, règles 2026.11.6)
+
+Le graphe par niveaux (§4.2) ne relie un pont au sol que par ses culées : un pont qui croise la
+route du dessous par un sommet intérieur l'enjambe, et le passage dessous reste apparié au sol
+(§5.3). La fusion a besoin de savoir où, pour retirer du MNT la bosse du tablier interpolé (T04
+§3.4). `TypologyOutput::overpasses` liste les croisements de la **trace** (polyligne des
+observations, qui contient tous les points d'entrée : c'est sur elle que l'altitude est lue) avec
+les lignes `bridge` de **toutes** les tuiles lues (couloir et extensions), **sans filtre de classe** :
+un pont ferroviaire ou autoroutier, hors du graphe vélo, fait la même bosse qu'un pont routier.
+
+```rust
+pub struct Overpass { pub d_m: f64,      // distance de parcours du croisement
+    pub angle_deg: f64,                  // angle trace / pont, dans [0°, 90°]
+    pub end_m: f64 }                     // distance à l'extrémité réelle (non `cut`) la plus proche
+```
+
+La typologie **constate** ; la fusion décide (niveau de la trace au croisement, angle, culée). Un
+même croisement lu dans deux tuiles (géométrie tamponnée) est compté une fois (< 1 m). Limite : une
+ligne coupée au bord de tuile n'a pas d'extrémité réelle de ce côté ; une culée juste au-delà du
+bord n'est pas vue (`end_m` infini de ce côté).
+
 ## 7. Classification (règles versionnées)
 
 Composant séparé et testable seul (doc 01 §4). Entrée : `WayAttrs` + `SchemaCapabilities` ; sortie :
@@ -485,7 +506,7 @@ pub struct TypedSegment { pub from_m: f64, pub to_m: f64, pub from_index: u32, p
 pub struct TypologyRequest<'a> { pub route: &'a PreparedRoute, pub debug: bool, pub ctx: &'a RequestCtx }
 pub struct TypologyOutput { pub runs: Vec<TypedRun>, pub structures: Vec<Structure>,
     pub passages: Vec<StructurePassage>, pub coverage: TypologyCoverage, pub classes: Arc<[EdgeClass]>,
-    pub data_version: DataVersion, pub stats: TypologyStats }
+    pub overpasses: Vec<Overpass> /* §6.4 */, pub data_version: DataVersion, pub stats: TypologyStats }
 pub struct TypologyCoverage { pub missing: Vec<Range<f64>>, pub unavailable: Vec<Range<f64>> }
 pub enum TypologyError { Timeout, Cancelled, Internal(String) }
 #[async_trait] pub trait TypologyChain: Send + Sync {          // ord-pipeline::typology
