@@ -72,7 +72,7 @@ enum Command {
     },
     /// Jugement unique de la série tenue à l'écart (T05 §3.3) : exige `ORD_JUDGE=1`, un commit
     /// de gel (`bench/gel/<incrément>.json`) aux empreintes courantes, un incrément absent de
-    /// `bench/judgements.md` et un cache complet ; ajoute le résultat à `bench/judgements.md`.
+    /// `bench/judgements.md` et de `bench/reports/*-jugement-<incrément>`, et un cache complet ; ajoute le résultat à `bench/judgements.md`.
     Judge {
         #[arg(long)]
         increment: String,

@@ -1,7 +1,8 @@
 //! Jugement unique de la série tenue à l'écart (T05 §3.3, bench §2.3) :
 //! `ORD_JUDGE=1 ord-bench judge --increment MVP --gel <commit>`.
 //!
-//! Avant toute lecture : `ORD_JUDGE=1` exigé ; incrément absent de `bench/judgements.md` ; fichier
+//! Avant toute lecture : `ORD_JUDGE=1` exigé ; incrément absent de `bench/judgements.md` et sans
+//! dossier `bench/reports/*-jugement-<incrément>`, quelle qu'en soit la date ; fichier
 //! de gel `bench/gel/<incrément>.json` présent au commit de gel, ancêtre de `HEAD`, et empreintes
 //! courantes (`manifest_sha256`, `criteria_sha256`, `bench_rules_sha256`) égales à celles du gel,
 //! manifest et critères inchangés depuis ce commit. Puis la campagne ne lit que la série tenue à
@@ -57,6 +58,30 @@ pub fn already_judged(judgements: &str, increment: &str) -> bool {
     judgements.lines().any(|l| l.starts_with(&h) || l.trim_end() == h.trim_end())
 }
 
+/// Nom du dossier du rapport de jugement : `<date>-<rules_version>-<révision du banc>-jugement-<i>`,
+/// révision omise quand elle vaut `None` (convention de `campaign::default_report_dir`).
+pub fn report_dir_name(date: &str, rules_version: &str, revision: Option<&str>, increment: &str) -> String {
+    match revision {
+        Some(rev) => format!("{date}-{rules_version}-{rev}-jugement-{increment}"),
+        None => format!("{date}-{rules_version}-jugement-{increment}"),
+    }
+}
+
+/// Dossiers `bench/reports/*-jugement-<i>` déjà présents, quelle que soit leur date.
+pub fn existing_reports(bench: &Path, increment: &str) -> Vec<String> {
+    let suffix = format!("-jugement-{increment}");
+    let mut found: Vec<String> = std::fs::read_dir(bench.join("reports"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+        .filter(|n| n.ends_with(&suffix))
+        .collect();
+    found.sort();
+    found
+}
+
 fn git(repo: &Path, args: &[&str]) -> anyhow::Result<std::process::Output> {
     std::process::Command::new("git").args(args).current_dir(repo).output().context("git")
 }
@@ -80,6 +105,12 @@ pub fn preflight(
     ensure!(
         !already_judged(&judgements, increment),
         "incrément {increment} déjà jugé dans bench/judgements.md : jugement refusé"
+    );
+    let reports = existing_reports(bench, increment);
+    ensure!(
+        reports.is_empty(),
+        "incrément {increment} déjà jugé : rapport bench/reports/{} présent, jugement refusé",
+        reports.join(", bench/reports/")
     );
     ensure!(
         git_ok(repo, &["cat-file", "-e", &format!("{gel_commit}^{{commit}}")])?,
@@ -152,6 +183,10 @@ pub fn entry(increment: &str, gel_commit: &str, report_rel: &str, results: &Valu
         "- `rules_version` : {} ; `api_version` : {}\n",
         s("rules_version"),
         s("api_version")
+    ));
+    out.push_str(&format!(
+        "- Révision du banc (`revision_banc`) : {}\n",
+        c["revision_banc"].as_str().map_or_else(|| "aucune".to_owned(), |r| format!("`{r}`"))
     ));
     out.push_str(&format!("- `data_versions` : `{}`\n", c["data_versions"]));
     out.push_str(&format!(
@@ -234,10 +269,11 @@ pub async fn judge(paths: &crate::BenchPaths, increment: &str, gel_commit: &str)
     let repo = paths.bench.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let repo = if repo.as_os_str().is_empty() { PathBuf::from(".") } else { repo };
     let current = current_gel(paths, increment)?;
-    let dir = paths.bench.join("reports").join(format!(
-        "{}-{}-jugement-{increment}",
-        crate::campaign::today_utc(),
-        ord_core::RULES_VERSION
+    let dir = paths.bench.join("reports").join(report_dir_name(
+        &crate::campaign::today_utc(),
+        ord_core::RULES_VERSION,
+        crate::BENCH_REVISION,
+        increment,
     ));
     let groupes = ["dplus", "plaine", "ouvrage", "hors_france", "osm_surface"].map(String::from);
     judge_with(&repo, &paths.bench, increment, gel_commit, &current, armed, dir, || {
@@ -283,6 +319,7 @@ mod tests {
     fn results(skipped: Value) -> Value {
         json!({
             "campagne": {"type": "jugement", "date": "2026-11-02", "commit": "abc", "rules_version": "r",
+                "revision_banc": "bench9",
                 "api_version": "1.0", "data_versions": {"x": 1}, "manifest_sha256": "m",
                 "criteria_sha256": "c", "bench_rules_sha256": "b", "data_fingerprint": "d"},
             "cas_sautes": skipped,
@@ -307,6 +344,7 @@ mod tests {
         assert!(text.contains("**refusé** (en échec ou sautés : E3)"), "un échec est consigné : {text}");
         assert!(text.contains("| E3 | fail | pass |"));
         assert!(text.contains(&format!("commit de gel : `{gel_commit}`")));
+        assert!(text.contains("Révision du banc (`revision_banc`) : `bench9`"), "{text}");
         // Second jugement du même incrément : refusé avant toute mesure.
         let err = judge_with(r, &bench, "MVP", &gel_commit, &gel, true, bench.join("reports/j2"), || async {
             panic!("aucune mesure attendue")
@@ -397,6 +435,45 @@ mod tests {
         assert_eq!(held.excluded_held_out, ["a", "c"]);
         let cal = crate::campaign::select(&m, &[], &[]);
         assert_eq!(cal.cases.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["a", "c"]);
+    }
+
+    #[test]
+    fn report_dir_name_follows_the_campaign_convention() {
+        assert_eq!(
+            report_dir_name("2026-11-02", "2026.10.10", Some("bench1"), "MVP"),
+            "2026-11-02-2026.10.10-bench1-jugement-MVP"
+        );
+        assert_eq!(
+            report_dir_name("2026-11-02", "2026.10.10", None, "MVP"),
+            "2026-11-02-2026.10.10-jugement-MVP"
+        );
+    }
+
+    #[test]
+    fn entry_without_bench_revision_says_so() {
+        let mut r = results(json!([]));
+        r["campagne"]["revision_banc"] = Value::Null;
+        assert!(entry("MVP", "g", "x", &r).contains("Révision du banc (`revision_banc`) : aucune"));
+    }
+
+    #[tokio::test]
+    async fn an_existing_judgement_report_refuses_whatever_its_date() {
+        let (dir, gel_commit, gel) = repo();
+        let (r, bench) = (dir.path(), dir.path().join("bench"));
+        // Rapport d'un jugement antérieur, autre date et autres versions, sans entrée consignée.
+        std::fs::create_dir_all(bench.join("reports/2025-01-01-2025.01.1-bench2-jugement-MVP")).unwrap();
+        // Un autre incrément ou un nom voisin ne compte pas.
+        std::fs::create_dir_all(bench.join("reports/2025-01-01-2025.01.1-jugement-MVP2")).unwrap();
+        assert_eq!(existing_reports(&bench, "MVP"), ["2025-01-01-2025.01.1-bench2-jugement-MVP"]);
+        assert!(existing_reports(&bench, "V1").is_empty());
+        let err = judge_with(r, &bench, "MVP", &gel_commit, &gel, true, bench.join("reports/j"), || async {
+            panic!("aucune mesure attendue")
+        })
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("2025-01-01-2025.01.1-bench2-jugement-MVP"), "{err}");
+        assert!(!bench.join("judgements.md").exists());
+        assert!(!bench.join("reports/j").exists());
     }
 
     #[test]
