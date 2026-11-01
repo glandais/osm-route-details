@@ -1,0 +1,4519 @@
+{
+  "agregats": {
+    "E1": {
+      "dplus.p95_m_max": 4.333,
+      "dplus.p95_m_mediane": 2.246,
+      "dplus.rmse_m_max": 2.13,
+      "dplus.rmse_m_mediane": 1.707,
+      "ouvrage.p95_m_max": 0.978,
+      "ouvrage.p95_m_mediane": 0.878,
+      "ouvrage.rmse_m_max": 0.479,
+      "ouvrage.rmse_m_mediane": 0.466,
+      "plaine.p95_m_max": 2.564,
+      "plaine.p95_m_mediane": 1.406,
+      "plaine.rmse_m_max": 1.288,
+      "plaine.rmse_m_mediane": 0.696
+    },
+    "E2": {
+      "dplus.ratio_mediane": 0.9861,
+      "dplus.ratio_mnt_brut_mediane": 1.0062,
+      "ouvrage.ratio_mediane": 0.9943,
+      "ouvrage.ratio_mnt_brut_mediane": 1.0517,
+      "plaine.ratio_mediane": 0.9757,
+      "plaine.ratio_mnt_brut_mediane": 0.9874
+    },
+    "E2b": {
+      "dplus": {
+        "mediane_ecart_log_mnt_brut": 0.03169,
+        "mediane_ecart_log_service": 0.02205,
+        "verdict": "pass"
+      },
+      "ouvrage": {
+        "mediane_ecart_log_mnt_brut": 0.11166,
+        "mediane_ecart_log_service": 0.05565,
+        "verdict": "pass"
+      },
+      "plaine": {
+        "mediane_ecart_log_mnt_brut": 0.05345,
+        "mediane_ecart_log_service": 0.04765,
+        "verdict": "pass"
+      }
+    },
+    "ouvrages": {
+      "E3": {
+        "par_pont": [
+          {
+            "ecart_max_mediane_m": 0.29,
+            "ecart_milieu_mediane_m": -0.14,
+            "ouvrage": "nv-01",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.3,
+            "ecart_milieu_mediane_m": 0.25,
+            "ouvrage": "nv-03",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.96,
+            "ecart_milieu_mediane_m": 0.91,
+            "ouvrage": "nv-05",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 1.05,
+            "ecart_milieu_mediane_m": -0.13,
+            "ouvrage": "nv-06",
+            "pass": true,
+            "passages": 2
+          },
+          {
+            "ecart_max_mediane_m": 2.53,
+            "ecart_milieu_mediane_m": -1.49,
+            "ouvrage": "nv-07",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.55,
+            "ecart_milieu_mediane_m": 0.4,
+            "ouvrage": "nv-08",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.91,
+            "ecart_milieu_mediane_m": 0.81,
+            "ouvrage": "nv-15",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.66,
+            "ecart_milieu_mediane_m": 0.45,
+            "ouvrage": "nv-19",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.9,
+            "ecart_milieu_mediane_m": -0.66,
+            "ouvrage": "nv-23",
+            "pass": true,
+            "passages": 2
+          },
+          {
+            "ecart_max_mediane_m": 0.78,
+            "ecart_milieu_mediane_m": -0.58,
+            "ouvrage": "nv-27",
+            "pass": true,
+            "passages": 3
+          },
+          {
+            "ecart_max_mediane_m": 0.78,
+            "ecart_milieu_mediane_m": 0.74,
+            "ouvrage": "nv-31",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.91,
+            "ecart_milieu_mediane_m": 0.77,
+            "ouvrage": "nv-38",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.87,
+            "ecart_milieu_mediane_m": -0.4,
+            "ouvrage": "nv-40",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.66,
+            "ecart_milieu_mediane_m": -0.22,
+            "ouvrage": "nv-43",
+            "pass": true,
+            "passages": 1
+          },
+          {
+            "ecart_max_mediane_m": 0.93,
+            "ecart_milieu_mediane_m": 0.66,
+            "ouvrage": "nv-47",
+            "pass": true,
+            "passages": 1
+          }
+        ],
+        "part": 1.0,
+        "ponts": 15,
+        "ponts_ok": 15,
+        "references_incertaines": [
+          {
+            "S1.rappel": 0.9167,
+            "cas": "perso-09",
+            "decalage_approches_m": [
+              2.76,
+              -1.11
+            ],
+            "decalage_local_m": 0.29,
+            "ecart_max_m": 1.91,
+            "ecart_milieu_m": -1.47,
+            "extrait_tenu_a_l_ecart": true,
+            "metrique": "E3",
+            "niveau_non_discriminant": true,
+            "ouvrage": "nv-18",
+            "reference": "baro_corrige_local",
+            "reference_incertaine": true
+          },
+          {
+            "S1.rappel": 0.9231,
+            "cas": "perso-28",
+            "decalage_approches_m": [
+              -9.2,
+              -6.61
+            ],
+            "decalage_local_m": -7.74,
+            "ecart_max_m": 0.65,
+            "ecart_milieu_m": -0.39,
+            "extrait_tenu_a_l_ecart": true,
+            "metrique": "E3",
+            "niveau_non_discriminant": true,
+            "ouvrage": "nv-51",
+            "reference": "baro_corrige_local",
+            "reference_incertaine": true
+          },
+          {
+            "S1.rappel": 0.5789,
+            "cas": "perso-29",
+            "decalage_approches_m": [
+              -2.93,
+              -6.61
+            ],
+            "decalage_local_m": -4.24,
+            "ecart_max_m": 0.67,
+            "ecart_milieu_m": 0.53,
+            "extrait_tenu_a_l_ecart": true,
+            "metrique": "E3",
+            "niveau_non_discriminant": true,
+            "ouvrage": "nv-40",
+            "reference": "baro_corrige_local",
+            "reference_incertaine": true
+          },
+          {
+            "S1.rappel": 0.8462,
+            "cas": "perso-29",
+            "decalage_approches_m": [
+              -3.49,
+              -1.44
+            ],
+            "decalage_local_m": -2.12,
+            "ecart_max_m": 2.23,
+            "ecart_milieu_m": 1.87,
+            "extrait_tenu_a_l_ecart": true,
+            "metrique": "E3",
+            "niveau_non_discriminant": true,
+            "ouvrage": "nv-31",
+            "reference": "baro_corrige_local",
+            "reference_incertaine": true
+          }
+        ],
+        "seuil": 0.9
+      },
+      "E3_hors_france": [
+        {
+          "S1.emprise_m": 105.0,
+          "S1.rappel": 1.0,
+          "S1.type_m": 105.0,
+          "cas": "perso-37",
+          "decalage_approches_m": [
+            12.71,
+            16.12
+          ],
+          "decalage_local_m": 14.19,
+          "ecart_max_m": 1.74,
+          "ecart_milieu_m": -1.42,
+          "extrait_tenu_a_l_ecart": true,
+          "longueur_m": 105.0,
+          "metrique": "E3_hors_france",
+          "niveau_non_discriminant": true,
+          "ouvrage": "donostia-zurriola",
+          "reference": "baro_corrige_local",
+          "reference_incertaine": true
+        }
+      ],
+      "E3_non_couverts": [],
+      "E4": {
+        "part": 1.0,
+        "reference_ambigue": [],
+        "reference_indisponible": [],
+        "seuil": 0.857,
+        "tunnels": 1,
+        "tunnels_ok": 1
+      },
+      "E4_non_couverts": [],
+      "E5": {
+        "croisements": 0,
+        "ok": 0
+      },
+      "S1": {
+        "emprise_m": 2955.0,
+        "rappel": 0.9474,
+        "seuil": 0.95,
+        "type_m": 2799.48
+      },
+      "S2": {
+        "faux_positif_m": 0.0,
+        "longueur_m": 0.0,
+        "ouvrages_fictifs": 0,
+        "part": -0.0
+      },
+      "S3": [],
+      "hors_graphe_velo": {
+        "controle_ok": 0,
+        "detail": [],
+        "ouvrages": 0
+      },
+      "limite_donnees": [
+        {
+          "S1.rappel": 0.0,
+          "bande_remplacee": {
+            "entree": {
+              "altitude_m": 1645.05,
+              "bandes_sautees": 0,
+              "remplacee": false
+            },
+            "sortie": {
+              "altitude_m": 1659.8,
+              "bandes_sautees": 0,
+              "remplacee": false
+            }
+          },
+          "cas": "perso-10",
+          "dplus_fictif_m": -3.7,
+          "ecart_max_m": 7.54,
+          "extrait_tenu_a_l_ecart": true,
+          "limite_donnees": "shortbread sans avalanche_protector",
+          "metrique": "E4",
+          "ouvrage": "nv-29",
+          "pente_implicite_portails": 0.1283,
+          "reference": "droite_portails_mnt_median_10_30m",
+          "reference_ambigue": false,
+          "sensibilite_portail_m": {
+            "10": false,
+            "20": false,
+            "30": false,
+            "5": false
+          }
+        }
+      ],
+      "passages_retires_niveau": []
+    },
+    "typologie": {
+      "M1.hors_reseau_m": {
+        "perso-12": 0.0,
+        "perso-13.s1": 0.0,
+        "perso-13.s2": 85.0,
+        "perso-14": 0.0,
+        "perso-15": 0.0,
+        "perso-23": 10.0,
+        "perso-26": 0.0,
+        "perso-31": 0.0,
+        "perso-35": 205.0,
+        "perso-36": 0.0
+      },
+      "dplus": {
+        "M1.non_apparie.max": 0.0041,
+        "M1.non_apparie.mediane": -0.0,
+        "M1.non_apparie.min": -0.0,
+        "M1.unknown.max": 0.0041,
+        "M1.unknown.mediane": -0.0,
+        "M1.unknown.min": -0.0,
+        "R3.accord_classe.max": 1.0,
+        "R3.accord_classe.mediane": 0.995,
+        "R3.accord_classe.min": 0.9483,
+        "R3.accord_classe_hors_inconnu.max": 1.0,
+        "R3.accord_classe_hors_inconnu.mediane": 0.995,
+        "R3.accord_classe_hors_inconnu.min": 0.9483,
+        "R3.accord_revetu_non_revetu.max": 1.0,
+        "R3.accord_revetu_non_revetu.mediane": 0.995,
+        "R3.accord_revetu_non_revetu.min": 0.9483,
+        "cas": 5
+      },
+      "ouvrage": {
+        "M1.non_apparie.max": 0.0338,
+        "M1.non_apparie.mediane": 0.0169,
+        "M1.non_apparie.min": -0.0,
+        "M1.unknown.max": 0.0338,
+        "M1.unknown.mediane": 0.0169,
+        "M1.unknown.min": -0.0,
+        "R3.accord_classe.max": 0.9997,
+        "R3.accord_classe.mediane": 0.9905,
+        "R3.accord_classe.min": 0.9812,
+        "R3.accord_classe_hors_inconnu.max": 0.9997,
+        "R3.accord_classe_hors_inconnu.mediane": 0.9905,
+        "R3.accord_classe_hors_inconnu.min": 0.9812,
+        "R3.accord_revetu_non_revetu.max": 0.9997,
+        "R3.accord_revetu_non_revetu.mediane": 0.995,
+        "R3.accord_revetu_non_revetu.min": 0.9902,
+        "cas": 2
+      },
+      "plaine": {
+        "M1.non_apparie.max": -0.0,
+        "M1.non_apparie.mediane": -0.0,
+        "M1.non_apparie.min": -0.0,
+        "M1.unknown.max": -0.0,
+        "M1.unknown.mediane": -0.0,
+        "M1.unknown.min": -0.0,
+        "R3.accord_classe.max": 1.0,
+        "R3.accord_classe.mediane": 1.0,
+        "R3.accord_classe.min": 0.9947,
+        "R3.accord_classe_hors_inconnu.max": 1.0,
+        "R3.accord_classe_hors_inconnu.mediane": 1.0,
+        "R3.accord_classe_hors_inconnu.min": 0.9947,
+        "R3.accord_revetu_non_revetu.max": 1.0,
+        "R3.accord_revetu_non_revetu.mediane": 1.0,
+        "R3.accord_revetu_non_revetu.min": 0.9947,
+        "cas": 3
+      }
+    },
+    "typologie_a_chaud": {
+      "parcours": [],
+      "profil": "release",
+      "seuil_ms": 160.0,
+      "total_km": -0.0,
+      "total_ms": -0.0
+    }
+  },
+  "campagne": {
+    "api_version": "1.0",
+    "baro_points_inseres": [
+      {
+        "id": "perso-12",
+        "inseres": 2,
+        "retires": 0
+      },
+      {
+        "id": "perso-13.s1",
+        "inseres": 1,
+        "retires": 0
+      },
+      {
+        "id": "perso-13.s2",
+        "inseres": 18,
+        "retires": 2
+      },
+      {
+        "id": "perso-14",
+        "inseres": 0,
+        "retires": 0
+      },
+      {
+        "id": "perso-15",
+        "inseres": 0,
+        "retires": 0
+      },
+      {
+        "id": "perso-23",
+        "inseres": 99,
+        "retires": 0
+      },
+      {
+        "id": "perso-26",
+        "inseres": 0,
+        "retires": 0
+      },
+      {
+        "id": "perso-31",
+        "inseres": 0,
+        "retires": 0
+      },
+      {
+        "id": "perso-35",
+        "inseres": 6,
+        "retires": 6
+      },
+      {
+        "id": "perso-36",
+        "inseres": 0,
+        "retires": 0
+      }
+    ],
+    "bench_rules": {
+      "baro_gap_max_m": 100.0,
+      "detrend_step_m": 50.0,
+      "detrend_window_m": 5000.0,
+      "grid_step_m": 5.0,
+      "inserted_street_max_m": 30.0,
+      "mask_half_m": 500.0,
+      "match_max_m": 30.0,
+      "passage_tol_m": 40.0,
+      "request_resample_m": 10.0
+    },
+    "bench_rules_sha256": "ea7c9f203dab75744e65f211d4534f1e076576ac55262685d684a0ea5b73fb85",
+    "commit": "f1f9c9e",
+    "criteria_sha256": "caf05c9781754d171a57c599ee9ad87a3d320e5a7c79154c308bb0edc2afacb3",
+    "data_fingerprint": "16cd7587dd2798027ef7dc4cd51ec6607793036b7cdfa680c79633f885638a10",
+    "data_versions": {
+      "elevation": [
+        {
+          "date": "2026-11-01",
+          "indicative": true,
+          "products": [
+            "mnt",
+            "mns"
+          ],
+          "role": "primary",
+          "source": "ign-lidar-hd",
+          "zoom": 15
+        }
+      ],
+      "typology": {
+        "indicative": true,
+        "role": "primary",
+        "source": "versatiles-shortbread",
+        "zoom": 14
+      }
+    },
+    "date": "2026-11-01",
+    "exclus_serie_calibration": [
+      "perso-01",
+      "perso-02",
+      "perso-03",
+      "perso-04",
+      "perso-05",
+      "perso-06",
+      "perso-07",
+      "perso-08",
+      "perso-09",
+      "perso-10",
+      "perso-11",
+      "perso-16",
+      "perso-17",
+      "perso-18",
+      "perso-19",
+      "perso-20",
+      "perso-21",
+      "perso-22",
+      "perso-24",
+      "perso-25",
+      "perso-27",
+      "perso-28",
+      "perso-29",
+      "perso-30",
+      "perso-32",
+      "perso-33",
+      "perso-34",
+      "perso-37",
+      "perso-38",
+      "perso-39"
+    ],
+    "extraits_calibration": [
+      {
+        "id": "perso-02",
+        "mesures": 1
+      },
+      {
+        "id": "perso-06",
+        "mesures": 2
+      },
+      {
+        "id": "perso-09",
+        "mesures": 2
+      },
+      {
+        "id": "perso-10",
+        "mesures": 1
+      },
+      {
+        "id": "perso-19",
+        "mesures": 1
+      },
+      {
+        "id": "perso-21",
+        "mesures": 2
+      },
+      {
+        "id": "perso-25",
+        "mesures": 2
+      },
+      {
+        "id": "perso-27",
+        "mesures": 2
+      },
+      {
+        "id": "perso-28",
+        "mesures": 3
+      },
+      {
+        "id": "perso-29",
+        "mesures": 2
+      },
+      {
+        "id": "perso-30",
+        "mesures": 2
+      },
+      {
+        "id": "perso-32",
+        "mesures": 3
+      },
+      {
+        "id": "perso-34",
+        "mesures": 1
+      },
+      {
+        "id": "perso-37",
+        "mesures": 1
+      }
+    ],
+    "groupes": [
+      "dplus",
+      "plaine",
+      "ouvrage",
+      "hors_france",
+      "osm_surface"
+    ],
+    "increment": "MVP",
+    "increment_plan": 6,
+    "manifest_sha256": "c5d04b265cbbeed807dda525d44dafdb3a4a420a5a1cbdd4847acad00c66e470",
+    "modes": [
+      "distance",
+      "input_with_breakpoints"
+    ],
+    "notes": [
+      "Deux modes (README §2.2, étape 2) : cas, ouvrages, agrégats et verdicts de premier niveau en sampling.mode = distance au pas de 5 m (les mesures point par point des témoins et des parcours vcyclist en mode input) ; clé input_with_breakpoints : mêmes requêtes envoyées dans le mode par défaut, sortie rééchantillonnée sur la même grille de 5 m (étape 3 ; altitude interpolée linéairement entre points consécutifs, null si l'un est sans altitude ; position des points d'entrée = position envoyée ; méthode de la station = none si l'un des deux points est none, sinon dsm_deck ou interpolated_structure si l'un des deux la porte, sinon celle du plus proche), et réduite aux points d'entrée pour les mesures point par point ; références des ouvrages (MNT des approches E3, test de niveau, E5, bandes de portail E4, repli 1–3 km du décalage local) et positions des passages toujours lues en mode distance, seule la sortie testée venant du mode input_with_breakpoints ; E2b de ce mode compare ses sorties corrigée et non corrigée ; points_inseres = bilan des points insérés par cas de calibration (sans position), jamais pour les extraits tenus à l'écart ; typologie à chaud mesurée dans la première passe seulement",
+      "Baro des points insérés (README §2.1, étape 3 ; criteria.yaml preparation.baro_points_inseres) : point insere = 1 gardé seulement si sa position sur la géométrie recalée est à ≤ 30 m d'une ligne de la couche streets (toutes classes, tuile z14 et 8 voisines, cache de la campagne) ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté ; baro_points_inseres = bilan par cas de calibration ; traces tenues à l'écart : règle appliquée sur les seules plages lues des extraits, bilan non rapporté",
+      "E1 : stations hors fenêtres masquées et hors ouvrage (segment pont ou tunnel, ou altitude dsm_deck / interpolated_structure, rampes comprises)",
+      "E3 : baro corrigé localement sur les traces perso, décalage = médiane (baro − MNT LiDAR, profil du service sans correction d'ouvrage) sur les approches de 50 à 300 m de chaque côté du pont, hors autres ouvrages (service ou tuiles) et fenêtres masquées ; moins de 20 stations d'un côté : repli sur la médiane baro − service au sol entre 1 et 3 km du milieu (decalage_repli_1_3km) ; côtés différant de plus de 2 m : reference_incertaine, rapportée, non comptée (README §4 bis.3) ; médiane MNS 25 m de vcyclist (B, cohérence) sur test1..3 ; par pont, médiane des passages de l'écart au milieu et de l'écart max (README §4 bis.3)",
+      "E4 : par tunnel OSM entre ses propres portails (tunnels d'ouvrages.yaml sur test4 ou un témoin, tunnels N des témoins, tunnels perso) ; altitude de portail = médiane du MNT brut entre 10 et 30 m hors portail ; bande invalide (station dans un autre ouvrage : tunnel, galerie, balcon S ; ou moins de 3 stations ; ou sur un tronçon à l'air libre de moins de 120 m entre deux tunnels OSM ; ou sur un pont ou un tunnel des tuiles de la campagne, station à moins de 10 m à l'intérieur de sa ligne) remplacée par la bande du portail extérieur suivant du même côté, à moins de 1 km, sinon référence indisponible, rapportée et non comptée ; bande_remplacee : par côté, distance curviligne au portail, bandes sautées, altitude retenue (distance retirée pour les ouvrages perso) ; droite passant par chaque portail retenu à sa place ; sensibilité 5/10/20/30 m, référence ambiguë si le verdict bascule ; pente implicite entre portails retenus (pente_implicite_portails) au-delà de 25 % : référence indisponible, rapportée, non comptée (README §4 bis.2) ; D+ fictif = D+ dem du service − D+ dem de la droite",
+      "Périmètre vélo (README §4 bis.1) : tags kind/bicycle/bridge/tunnel, dans les tuiles de la campagne (data_versions, couche streets), de la voie de l'ouvrage = élément de même nature (pont, tunnel, voie au sol d'un passage dessous) de plus petite médiane de distance aux stations du corpus (tous les 5 m sur la géométrie Overpass, sinon A–milieu–B), accepté à ≤ 15 m, sinon toute voie avec le même critère ; deux candidats à moins de 3 m de médiane et de périmètres différents : perimetre_ambigu, rapporté ; jamais le corpus Overpass ; voie exclue du graphe vélo : sortie de S1/E3/E4/E5, rapportée en hors_graphe_velo ; pont ou tunnel sans voie : absent_des_donnees, rapporté en E3_non_couvert/E4_non_couvert, non compté ; négatifs à trace hors graphe gardés en S2/E5",
+      "hors_graphe_velo : contrôle satisfait si la portion est non appariée avec unmatched_range (controle_par = non_apparie) ou appariée sur toute sa longueur à une voie du graphe vélo, nécessairement distincte de la voie de l'ouvrage exclue du graphe (controle_par = voie_parallele_du_graphe) ; ecart_max_m = altitude rendue contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées, ou sur toute la portion sur une voie parallèle ; null avec raison_ecart sans référence",
+      "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
+      "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S",
+      "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
+      "S1 : longueur typée pont/tunnel sur l'emprise des ouvrages tagués (perso, structures.csv bridge/tunnel/missed, témoins D/N) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; p06-normandie exclu (ouvrage tenu à l'écart)",
+      "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
+      "Passage en hauteur sur un pont (README §2.1, passage_pont.niveau) : MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR) ≥ 10 m : passage compté seulement si la médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) atteint ½ MNH, sinon rapporté en passage_retire_niveau et retiré de E3, S1 et hors_graphe_velo ; MNH < 10 m : niveau_non_discriminant ; moins de 3 stations : niveau_sans_baro",
+      "Extraits tenus à l'écart : repli 1–3 km du décalage local lu sur la trace (baro − MNT IGN LiDAR lu directement, hors ponts et tunnels des tuiles), jamais la sortie du service ; seul le décalage est écrit ; decalage_repli_stations_par_cote = stations d'approche avant / après le pont",
+      "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
+      "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
+      "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement",
+      "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain ; mesuré aux mêmes seuils, non bloquant (README §4 bis.7, 2026-11-01) : un échec est rapporté sans refuser l'incrément",
+      "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
+      "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun"
+    ],
+    "private_present": true,
+    "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc)",
+    "revision_banc": null,
+    "rules_fingerprint": "1ce10c8f145ca2eabeebf80277091dda4f7cd49b175f1abd4778f79a02e20fab",
+    "rules_version": "2026.10.10",
+    "serie": "tenue_a_l_ecart",
+    "type": "jugement"
+  },
+  "cas": [
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 45425.0,
+        "E1.max_abs_m": 19.0,
+        "E1.offset_baro_moins_service_m": 6.69,
+        "E1.part_au_dela_de_10m": 0.0014,
+        "E1.plage_10m_debut_d_m": 45425.0,
+        "E1.plage_10m_fin_d_m": 45505.0,
+        "E1.plage_10m_longueur_m": 80.0,
+        "avertissements": {
+          "structure_uncorrected": 1
+        },
+        "masque_m": 0.0,
+        "part_comparee": 0.9801,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 2728,
+        "stations": 13769,
+        "stations_comparees": 13495,
+        "status": "complete",
+        "summary_gain_m": 1064.09,
+        "summary_length_m": 68837.64,
+        "terrain_m": {
+          "ign_lidar_hd": 68837.64
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 58254.8,
+              "d_fin_m": 58268.4,
+              "longueur_plage_m": 13.6,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 44596.8,
+              "d_fin_m": 44601.4,
+              "longueur_plage_m": 4.6,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 44874.9,
+              "d_fin_m": 44875.1,
+              "longueur_plage_m": 0.2,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 6817.6,
+              "d_fin_m": 6817.7,
+              "longueur_plage_m": 0.1,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 6766.5,
+              "d_fin_m": 6766.5,
+              "longueur_plage_m": 0.1,
+              "source_service": "inferred_highway"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "dplus",
+      "id": "perso-12",
+      "metriques": {
+        "E1.p95_m": 3.619,
+        "E1.rmse_m": 1.707,
+        "E2.dplus_baro_m": 984.5,
+        "E2.dplus_mnt_brut_m": 1042.2,
+        "E2.dplus_service_m": 1036.6,
+        "E2.ratio": 1.053,
+        "E2.ratio_mnt_brut": 1.0586,
+        "E2b.dplus_baro_dem_m": 977.5,
+        "E2b.ratio": 1.0605,
+        "E2b.ratio_mnt_brut": 1.0662
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 0.9997,
+        "R3.accord_classe_hors_inconnu": 0.9997,
+        "R3.accord_revetu_non_revetu": 0.9997,
+        "compare_m": 68121.9
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 15595.0,
+        "E1.max_abs_m": 6.94,
+        "E1.offset_baro_moins_service_m": -3.9,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 3025.0,
+        "part_comparee": 0.9661,
+        "passages_masques": [
+          "nv-02",
+          "nv-24",
+          "nv-41"
+        ],
+        "passages_non_retrouves": [
+          "nv-02"
+        ],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 4142,
+        "stations": 19946,
+        "stations_comparees": 19270,
+        "status": "complete",
+        "summary_gain_m": 1574.49,
+        "summary_length_m": 99724.26,
+        "terrain_m": {
+          "ign_lidar_hd": 99724.26
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 22778.1,
+              "d_fin_m": 24648.8,
+              "longueur_plage_m": 1870.7,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 83015.5,
+              "d_fin_m": 84000.1,
+              "longueur_plage_m": 984.6,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 486.1,
+              "d_fin_m": 1123.3,
+              "longueur_plage_m": 637.2,
+              "source_service": "inferred_tracktype"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 21038.2,
+              "d_fin_m": 21618.0,
+              "longueur_plage_m": 579.8,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 85139.9,
+              "d_fin_m": 85549.3,
+              "longueur_plage_m": 409.4,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 86145.4,
+              "d_fin_m": 86375.1,
+              "longueur_plage_m": 229.7,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 62126.1,
+              "d_fin_m": 62318.9,
+              "longueur_plage_m": 192.7,
+              "source_service": "inferred_tracktype"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 18058.4,
+              "d_fin_m": 18127.9,
+              "longueur_plage_m": 69.5,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 7529.4,
+              "d_fin_m": 7588.9,
+              "longueur_plage_m": 59.4,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 48360.9,
+              "d_fin_m": 48411.1,
+              "longueur_plage_m": 50.2,
+              "source_service": "inferred_highway"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "dplus",
+      "id": "perso-13.s1",
+      "metriques": {
+        "E1.p95_m": 2.064,
+        "E1.rmse_m": 1.036,
+        "E2.dplus_baro_m": 1547.1,
+        "E2.dplus_mnt_brut_m": 1521.8,
+        "E2.dplus_service_m": 1517.3,
+        "E2.ratio": 0.9807,
+        "E2.ratio_mnt_brut": 0.9836,
+        "E2b.dplus_baro_dem_m": 1507.5,
+        "E2b.ratio": 1.0065,
+        "E2b.ratio_mnt_brut": 1.0095
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 0.9483,
+        "R3.accord_classe_hors_inconnu": 0.9483,
+        "R3.accord_revetu_non_revetu": 0.9483,
+        "compare_m": 99249.3
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 3570.0,
+        "E1.max_abs_m": 17.71,
+        "E1.offset_baro_moins_service_m": 32.53,
+        "E1.part_au_dela_de_10m": 0.0003,
+        "E1.plage_10m_debut_d_m": 3565.0,
+        "E1.plage_10m_fin_d_m": 3570.0,
+        "E1.plage_10m_longueur_m": 5.0,
+        "avertissements": {
+          "structure_uncorrected": 1,
+          "unmatched_range": 4
+        },
+        "masque_m": 1960.0,
+        "part_comparee": 0.9517,
+        "passages_masques": [
+          "nv-02",
+          "nv-24",
+          "nv-41"
+        ],
+        "passages_non_retrouves": [
+          "nv-24",
+          "nv-41"
+        ],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 2674,
+        "stations": 11613,
+        "stations_comparees": 11052,
+        "status": "complete",
+        "summary_gain_m": 923.17,
+        "summary_length_m": 58057.52,
+        "terrain_m": {
+          "ign_lidar_hd": 58057.52
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [
+            {
+              "d_debut_m": 3087.5,
+              "d_fin_m": 3172.5,
+              "longueur_plage_m": 85.0
+            }
+          ],
+          "M1.plages_non_appariees": [
+            {
+              "d_debut_m": 43790.0,
+              "d_fin_m": 43925.0,
+              "longueur_plage_m": 135.0
+            },
+            {
+              "d_debut_m": 52718.8,
+              "d_fin_m": 52798.5,
+              "longueur_plage_m": 79.7
+            },
+            {
+              "d_debut_m": 844.9,
+              "d_fin_m": 865.0,
+              "longueur_plage_m": 20.1
+            }
+          ],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 2696.2,
+              "d_fin_m": 2841.8,
+              "longueur_plage_m": 145.5,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 98.1,
+              "d_fin_m": 186.8,
+              "longueur_plage_m": 88.7,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 2593.0,
+              "d_fin_m": 2660.0,
+              "longueur_plage_m": 67.0,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 52798.5,
+              "d_fin_m": 52831.1,
+              "longueur_plage_m": 32.6,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 8773.5,
+              "d_fin_m": 8798.1,
+              "longueur_plage_m": 24.6,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 253.9,
+              "d_fin_m": 273.0,
+              "longueur_plage_m": 19.1,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 49004.1,
+              "d_fin_m": 49023.0,
+              "longueur_plage_m": 18.9,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 50527.5,
+              "d_fin_m": 50542.6,
+              "longueur_plage_m": 15.2,
+              "source_service": "inferred_tracktype"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 38171.5,
+              "d_fin_m": 38180.2,
+              "longueur_plage_m": 8.7,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 600.0,
+              "d_fin_m": 600.8,
+              "longueur_plage_m": 0.8,
+              "source_service": "inferred_highway"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "dplus",
+      "id": "perso-13.s2",
+      "metriques": {
+        "E1.p95_m": 2.246,
+        "E1.rmse_m": 1.152,
+        "E2.dplus_baro_m": 900.1,
+        "E2.dplus_mnt_brut_m": 938.2,
+        "E2.dplus_service_m": 882.3,
+        "E2.ratio": 0.9801,
+        "E2.ratio_mnt_brut": 1.0422,
+        "E2b.dplus_baro_dem_m": 863.0,
+        "E2b.ratio": 1.0223,
+        "E2b.ratio_mnt_brut": 1.0871
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 85.0,
+        "M1.non_apparie": 0.0041,
+        "M1.unknown": 0.0041,
+        "R3.accord_classe": 0.9908,
+        "R3.accord_classe_hors_inconnu": 0.9908,
+        "R3.accord_revetu_non_revetu": 0.9925,
+        "compare_m": 56985.9
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 95830.0,
+        "E1.max_abs_m": 13.15,
+        "E1.offset_baro_moins_service_m": -16.07,
+        "E1.part_au_dela_de_10m": 0.001,
+        "E1.plage_10m_debut_d_m": 80000.0,
+        "E1.plage_10m_fin_d_m": 80030.0,
+        "E1.plage_10m_longueur_m": 30.0,
+        "avertissements": {},
+        "masque_m": 0.0,
+        "part_comparee": 0.9967,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3749,
+        "stations": 21853,
+        "stations_comparees": 21781,
+        "status": "complete",
+        "summary_gain_m": 2996.48,
+        "summary_length_m": 109258.19,
+        "terrain_m": {
+          "ign_lidar_hd": 109258.19
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 47848.4,
+              "d_fin_m": 47848.5,
+              "longueur_plage_m": 0.1,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 80529.6,
+              "d_fin_m": 80529.7,
+              "longueur_plage_m": 0.1,
+              "source_service": "inferred_tracktype"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 51714.8,
+              "d_fin_m": 51714.9,
+              "longueur_plage_m": 0.0,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 108580.1,
+              "d_fin_m": 108580.1,
+              "longueur_plage_m": 0.0,
+              "source_service": "inferred_tracktype"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 81194.3,
+              "d_fin_m": 81194.3,
+              "longueur_plage_m": 0.0,
+              "source_service": "inferred_highway"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "dplus",
+      "id": "perso-14",
+      "metriques": {
+        "E1.p95_m": 4.333,
+        "E1.rmse_m": 2.13,
+        "E2.dplus_baro_m": 3037.9,
+        "E2.dplus_mnt_brut_m": 2996.7,
+        "E2.dplus_service_m": 2995.6,
+        "E2.ratio": 0.9861,
+        "E2.ratio_mnt_brut": 0.9864,
+        "E2b.dplus_baro_dem_m": 2903.2,
+        "E2b.ratio": 1.0318,
+        "E2b.ratio_mnt_brut": 1.0322
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 1.0,
+        "R3.accord_classe_hors_inconnu": 1.0,
+        "R3.accord_revetu_non_revetu": 1.0,
+        "compare_m": 109258.2
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 12145.0,
+        "E1.max_abs_m": 26.66,
+        "E1.offset_baro_moins_service_m": -0.08,
+        "E1.part_au_dela_de_10m": 0.0066,
+        "E1.plage_10m_debut_d_m": 11850.0,
+        "E1.plage_10m_fin_d_m": 12680.0,
+        "E1.plage_10m_longueur_m": 830.0,
+        "avertissements": {},
+        "masque_m": 1130.0,
+        "part_comparee": 0.9906,
+        "passages_masques": [
+          "nv-12"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3579,
+        "stations": 24693,
+        "stations_comparees": 24461,
+        "status": "complete",
+        "summary_gain_m": 2639.03,
+        "summary_length_m": 123458.46,
+        "terrain_m": {
+          "ign_lidar_hd": 123458.46
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 237.6,
+              "d_fin_m": 577.2,
+              "longueur_plage_m": 339.6,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 577.2,
+              "d_fin_m": 846.2,
+              "longueur_plage_m": 269.0,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 215.8,
+              "d_fin_m": 227.3,
+              "longueur_plage_m": 11.5,
+              "source_service": "tagged"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "dplus",
+      "id": "perso-15",
+      "metriques": {
+        "E1.p95_m": 2.167,
+        "E1.rmse_m": 1.815,
+        "E2.dplus_baro_m": 2621.1,
+        "E2.dplus_mnt_brut_m": 2637.4,
+        "E2.dplus_service_m": 2620.2,
+        "E2.ratio": 0.9997,
+        "E2.ratio_mnt_brut": 1.0062,
+        "E2b.dplus_baro_dem_m": 2599.6,
+        "E2b.ratio": 1.0079,
+        "E2b.ratio_mnt_brut": 1.0145
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 0.995,
+        "R3.accord_classe_hors_inconnu": 0.995,
+        "R3.accord_revetu_non_revetu": 0.995,
+        "compare_m": 123458.5
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 78095.0,
+        "E1.max_abs_m": 5.03,
+        "E1.offset_baro_moins_service_m": 0.31,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {
+          "structure_uncorrected": 1,
+          "unmatched_range": 19
+        },
+        "masque_m": 18555.0,
+        "part_comparee": 0.8602,
+        "passages_masques": [
+          "chevire",
+          "chevire-dessous",
+          "nantes-anne-de-bretagne",
+          "nantes-pirmil",
+          "reze-ponts-successifs",
+          "nv-28",
+          "nv-50"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 7831,
+        "stations": 30029,
+        "stations_comparees": 25832,
+        "status": "complete",
+        "summary_gain_m": 750.99,
+        "summary_length_m": 150138.65,
+        "terrain_m": {
+          "ign_lidar_hd": 150138.65
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [
+            {
+              "d_debut_m": 5437.5,
+              "d_fin_m": 5442.5,
+              "longueur_plage_m": 5.0
+            },
+            {
+              "d_debut_m": 6632.5,
+              "d_fin_m": 6637.5,
+              "longueur_plage_m": 5.0
+            }
+          ],
+          "M1.plages_non_appariees": [
+            {
+              "d_debut_m": 81225.6,
+              "d_fin_m": 82550.0,
+              "longueur_plage_m": 1324.3
+            },
+            {
+              "d_debut_m": 78884.3,
+              "d_fin_m": 79632.4,
+              "longueur_plage_m": 748.1
+            },
+            {
+              "d_debut_m": 7956.0,
+              "d_fin_m": 8698.0,
+              "longueur_plage_m": 742.0
+            },
+            {
+              "d_debut_m": 77954.0,
+              "d_fin_m": 78390.0,
+              "longueur_plage_m": 436.0
+            },
+            {
+              "d_debut_m": 7486.6,
+              "d_fin_m": 7861.0,
+              "longueur_plage_m": 374.4
+            },
+            {
+              "d_debut_m": 79724.7,
+              "d_fin_m": 79969.7,
+              "longueur_plage_m": 245.0
+            },
+            {
+              "d_debut_m": 5630.0,
+              "d_fin_m": 5840.0,
+              "longueur_plage_m": 210.0
+            },
+            {
+              "d_debut_m": 5950.0,
+              "d_fin_m": 6159.9,
+              "longueur_plage_m": 209.9
+            },
+            {
+              "d_debut_m": 5069.4,
+              "d_fin_m": 5235.0,
+              "longueur_plage_m": 165.6
+            },
+            {
+              "d_debut_m": 10645.0,
+              "d_fin_m": 10770.0,
+              "longueur_plage_m": 125.0
+            }
+          ],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 104568.8,
+              "d_fin_m": 104938.2,
+              "longueur_plage_m": 369.4,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 104182.6,
+              "d_fin_m": 104540.9,
+              "longueur_plage_m": 358.3,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 116950.2,
+              "d_fin_m": 117255.1,
+              "longueur_plage_m": 304.9,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 149617.4,
+              "d_fin_m": 149805.5,
+              "longueur_plage_m": 188.1,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 147917.6,
+              "d_fin_m": 148034.3,
+              "longueur_plage_m": 116.7,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 53013.7,
+              "d_fin_m": 53031.1,
+              "longueur_plage_m": 17.4,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 90031.9,
+              "d_fin_m": 90045.3,
+              "longueur_plage_m": 13.4,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 53294.9,
+              "d_fin_m": 53307.9,
+              "longueur_plage_m": 13.0,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 80871.8,
+              "d_fin_m": 80881.8,
+              "longueur_plage_m": 10.0,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 149483.9,
+              "d_fin_m": 149492.9,
+              "longueur_plage_m": 9.0,
+              "source_service": "inferred_highway"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "ouvrage",
+      "id": "perso-23",
+      "metriques": {
+        "E1.p95_m": 0.777,
+        "E1.rmse_m": 0.453,
+        "E2.dplus_baro_m": 634.9,
+        "E2.dplus_mnt_brut_m": 676.8,
+        "E2.dplus_service_m": 635.9,
+        "E2.ratio": 1.0015,
+        "E2.ratio_mnt_brut": 1.0659,
+        "E2b.dplus_baro_dem_m": 584.7,
+        "E2b.ratio": 1.0876,
+        "E2b.ratio_mnt_brut": 1.1575
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 10.0,
+        "M1.non_apparie": 0.0338,
+        "M1.unknown": 0.0338,
+        "R3.accord_classe": 0.9812,
+        "R3.accord_classe_hors_inconnu": 0.9812,
+        "R3.accord_revetu_non_revetu": 0.9902,
+        "compare_m": 145605.3
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 35025.0,
+        "E1.max_abs_m": 4.39,
+        "E1.offset_baro_moins_service_m": -0.74,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {
+          "structure_uncorrected": 1
+        },
+        "masque_m": 4840.0,
+        "part_comparee": 0.9512,
+        "passages_masques": [
+          "nantes-pirmil",
+          "nantes-audibert",
+          "nv-16"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 5116,
+        "stations": 20491,
+        "stations_comparees": 19491,
+        "status": "complete",
+        "summary_gain_m": 898.28,
+        "summary_length_m": 102446.57,
+        "terrain_m": {
+          "ign_lidar_hd": 102446.57
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 24933.0,
+              "d_fin_m": 24964.8,
+              "longueur_plage_m": 31.8,
+              "source_service": "tagged"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "ouvrage",
+      "id": "perso-26",
+      "metriques": {
+        "E1.p95_m": 0.978,
+        "E1.rmse_m": 0.479,
+        "E2.dplus_baro_m": 883.5,
+        "E2.dplus_mnt_brut_m": 916.6,
+        "E2.dplus_service_m": 872.1,
+        "E2.ratio": 0.9871,
+        "E2.ratio_mnt_brut": 1.0375,
+        "E2b.dplus_baro_dem_m": 848.6,
+        "E2b.ratio": 1.0277,
+        "E2b.ratio_mnt_brut": 1.0801
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 0.9997,
+        "R3.accord_classe_hors_inconnu": 0.9997,
+        "R3.accord_revetu_non_revetu": 0.9997,
+        "compare_m": 102368.4
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 6140.0,
+        "E1.max_abs_m": 5.72,
+        "E1.offset_baro_moins_service_m": -2.84,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 2270.0,
+        "part_comparee": 0.974,
+        "passages_masques": [
+          "nv-10",
+          "nv-28"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3444,
+        "stations": 21213,
+        "stations_comparees": 20661,
+        "status": "complete",
+        "summary_gain_m": 741.34,
+        "summary_length_m": 106055.83,
+        "terrain_m": {
+          "ign_lidar_hd": 106055.83
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "plaine",
+      "id": "perso-31",
+      "metriques": {
+        "E1.p95_m": 1.406,
+        "E1.rmse_m": 0.696,
+        "E2.dplus_baro_m": 738.1,
+        "E2.dplus_mnt_brut_m": 718.2,
+        "E2.dplus_service_m": 714.1,
+        "E2.ratio": 0.9675,
+        "E2.ratio_mnt_brut": 0.9731,
+        "E2b.dplus_baro_dem_m": 680.9,
+        "E2b.ratio": 1.0488,
+        "E2b.ratio_mnt_brut": 1.0549
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 1.0,
+        "R3.accord_classe_hors_inconnu": 1.0,
+        "R3.accord_revetu_non_revetu": 1.0,
+        "compare_m": 106055.8
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 43385.0,
+        "E1.max_abs_m": 6.43,
+        "E1.offset_baro_moins_service_m": -3.32,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {
+          "structure_slope_implausible": 2,
+          "structure_uncorrected": 1,
+          "unmatched_range": 1
+        },
+        "masque_m": 0.0,
+        "part_comparee": 0.9712,
+        "passages_masques": [],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3926,
+        "stations": 16710,
+        "stations_comparees": 16229,
+        "status": "complete",
+        "summary_gain_m": 1400.62,
+        "summary_length_m": 83544.21,
+        "terrain_m": {
+          "ign_lidar_hd": 83544.21
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [
+            {
+              "d_debut_m": 54977.5,
+              "d_fin_m": 55182.5,
+              "longueur_plage_m": 205.0
+            }
+          ],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 79280.6,
+              "d_fin_m": 79524.7,
+              "longueur_plage_m": 244.1,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 62555.9,
+              "d_fin_m": 62590.7,
+              "longueur_plage_m": 34.8,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 46966.8,
+              "d_fin_m": 46986.6,
+              "longueur_plage_m": 19.8,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 74160.7,
+              "d_fin_m": 74178.7,
+              "longueur_plage_m": 18.0,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 9019.8,
+              "d_fin_m": 9035.6,
+              "longueur_plage_m": 15.8,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 11054.1,
+              "d_fin_m": 11069.1,
+              "longueur_plage_m": 15.0,
+              "source_service": "tagged"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 46996.8,
+              "d_fin_m": 47010.8,
+              "longueur_plage_m": 14.0,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 73960.2,
+              "d_fin_m": 73972.0,
+              "longueur_plage_m": 11.8,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 20363.7,
+              "d_fin_m": 20374.8,
+              "longueur_plage_m": 11.0,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 11647.9,
+              "d_fin_m": 11658.2,
+              "longueur_plage_m": 10.3,
+              "source_service": "tagged"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "plaine",
+      "id": "perso-35",
+      "metriques": {
+        "E1.p95_m": 2.564,
+        "E1.rmse_m": 1.288,
+        "E2.dplus_baro_m": 1334.3,
+        "E2.dplus_mnt_brut_m": 1358.4,
+        "E2.dplus_service_m": 1348.9,
+        "E2.ratio": 1.011,
+        "E2.ratio_mnt_brut": 1.018,
+        "E2b.dplus_baro_dem_m": 1277.9,
+        "E2b.ratio": 1.0556,
+        "E2b.ratio_mnt_brut": 1.063
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 205.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 0.9947,
+        "R3.accord_classe_hors_inconnu": 0.9947,
+        "R3.accord_revetu_non_revetu": 0.9947,
+        "compare_m": 83083.5
+      }
+    },
+    {
+      "cache": "disque",
+      "diagnostics": {
+        "E1.max_abs_d_m": 78210.0,
+        "E1.max_abs_m": 4.25,
+        "E1.offset_baro_moins_service_m": -0.55,
+        "E1.part_au_dela_de_10m": 0.0,
+        "E1.plage_10m_debut_d_m": null,
+        "E1.plage_10m_fin_d_m": null,
+        "E1.plage_10m_longueur_m": null,
+        "avertissements": {},
+        "masque_m": 3850.0,
+        "part_comparee": 0.9689,
+        "passages_masques": [
+          "nv-17",
+          "nv-39",
+          "nv-44"
+        ],
+        "passages_non_retrouves": [],
+        "plages_glo30_adaptees": 0,
+        "points_envoyes": 3434,
+        "stations": 25662,
+        "stations_comparees": 24863,
+        "status": "complete",
+        "summary_gain_m": 922.59,
+        "summary_length_m": 128301.4,
+        "terrain_m": {
+          "ign_lidar_hd": 128301.4
+        },
+        "troncons": 1,
+        "typologie": {
+          "M1.plages_hors_reseau": [],
+          "M1.plages_non_appariees": [],
+          "R3.desaccords_revetu": [
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 77170.2,
+              "d_fin_m": 77170.4,
+              "longueur_plage_m": 0.2,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "paved",
+              "classe_stadia": "unpaved",
+              "d_debut_m": 49422.7,
+              "d_fin_m": 49422.9,
+              "longueur_plage_m": 0.2,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 76151.9,
+              "d_fin_m": 76152.1,
+              "longueur_plage_m": 0.2,
+              "source_service": "inferred_highway"
+            },
+            {
+              "classe_service": "unpaved",
+              "classe_stadia": "paved",
+              "d_debut_m": 49536.2,
+              "d_fin_m": 49536.2,
+              "longueur_plage_m": 0.0,
+              "source_service": "tagged"
+            }
+          ],
+          "raccords_troncons_d_m": []
+        }
+      },
+      "groupe": "plaine",
+      "id": "perso-36",
+      "metriques": {
+        "E1.p95_m": 0.964,
+        "E1.rmse_m": 0.447,
+        "E2.dplus_baro_m": 899.3,
+        "E2.dplus_mnt_brut_m": 888.0,
+        "E2.dplus_service_m": 877.4,
+        "E2.ratio": 0.9757,
+        "E2.ratio_mnt_brut": 0.9874,
+        "E2b.dplus_baro_dem_m": 869.5,
+        "E2b.ratio": 1.0091,
+        "E2b.ratio_mnt_brut": 1.0212
+      },
+      "mode": "distance",
+      "serie": "tenue_a_l_ecart",
+      "typologie": {
+        "M1.hors_reseau_m": 0.0,
+        "M1.non_apparie": -0.0,
+        "M1.unknown": -0.0,
+        "R3.accord_classe": 1.0,
+        "R3.accord_classe_hors_inconnu": 1.0,
+        "R3.accord_revetu_non_revetu": 1.0,
+        "compare_m": 128242.3
+      }
+    }
+  ],
+  "cas_sautes": [],
+  "diagnostics": {
+    "cache": {
+      "octets": 1411838356,
+      "tuiles": 9448
+    }
+  },
+  "input_with_breakpoints": {
+    "agregats": {
+      "E1": {
+        "dplus.p95_m_max": 4.304,
+        "dplus.p95_m_mediane": 2.204,
+        "dplus.rmse_m_max": 2.114,
+        "dplus.rmse_m_mediane": 1.719,
+        "ouvrage.p95_m_max": 1.006,
+        "ouvrage.p95_m_mediane": 0.894,
+        "ouvrage.rmse_m_max": 0.488,
+        "ouvrage.rmse_m_mediane": 0.471,
+        "plaine.p95_m_max": 2.578,
+        "plaine.p95_m_mediane": 1.411,
+        "plaine.rmse_m_max": 1.284,
+        "plaine.rmse_m_mediane": 0.692
+      },
+      "E2": {
+        "dplus.ratio_mediane": 0.9854,
+        "dplus.ratio_mnt_brut_mediane": 1.0057,
+        "ouvrage.ratio_mediane": 0.9877,
+        "ouvrage.ratio_mnt_brut_mediane": 1.0242,
+        "plaine.ratio_mediane": 0.976,
+        "plaine.ratio_mnt_brut_mediane": 0.9814
+      },
+      "E2b": {
+        "dplus": {
+          "mediane_ecart_log_mnt_brut": 0.03092,
+          "mediane_ecart_log_service": 0.02264,
+          "verdict": "pass"
+        },
+        "ouvrage": {
+          "mediane_ecart_log_mnt_brut": 0.08525,
+          "mediane_ecart_log_service": 0.04899,
+          "verdict": "pass"
+        },
+        "plaine": {
+          "mediane_ecart_log_mnt_brut": 0.04898,
+          "mediane_ecart_log_service": 0.04536,
+          "verdict": "pass"
+        }
+      },
+      "ouvrages": {
+        "E3": {
+          "par_pont": [
+            {
+              "ecart_max_mediane_m": 0.29,
+              "ecart_milieu_mediane_m": -0.14,
+              "ouvrage": "nv-01",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.26,
+              "ecart_milieu_mediane_m": 0.24,
+              "ouvrage": "nv-03",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.93,
+              "ecart_milieu_mediane_m": 0.89,
+              "ouvrage": "nv-05",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 1.01,
+              "ecart_milieu_mediane_m": -0.43,
+              "ouvrage": "nv-06",
+              "pass": true,
+              "passages": 2
+            },
+            {
+              "ecart_max_mediane_m": 2.53,
+              "ecart_milieu_mediane_m": -1.49,
+              "ouvrage": "nv-07",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.52,
+              "ecart_milieu_mediane_m": 0.32,
+              "ouvrage": "nv-08",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 1.34,
+              "ecart_milieu_mediane_m": 1.02,
+              "ouvrage": "nv-15",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.69,
+              "ecart_milieu_mediane_m": 0.39,
+              "ouvrage": "nv-19",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.84,
+              "ecart_milieu_mediane_m": -0.64,
+              "ouvrage": "nv-23",
+              "pass": true,
+              "passages": 2
+            },
+            {
+              "ecart_max_mediane_m": 1.06,
+              "ecart_milieu_mediane_m": -0.08,
+              "ouvrage": "nv-27",
+              "pass": true,
+              "passages": 3
+            },
+            {
+              "ecart_max_mediane_m": 0.78,
+              "ecart_milieu_mediane_m": 0.72,
+              "ouvrage": "nv-31",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.87,
+              "ecart_milieu_mediane_m": 0.77,
+              "ouvrage": "nv-38",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 1.06,
+              "ecart_milieu_mediane_m": -0.68,
+              "ouvrage": "nv-40",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.65,
+              "ecart_milieu_mediane_m": -0.57,
+              "ouvrage": "nv-43",
+              "pass": true,
+              "passages": 1
+            },
+            {
+              "ecart_max_mediane_m": 0.7,
+              "ecart_milieu_mediane_m": 0.14,
+              "ouvrage": "nv-47",
+              "pass": true,
+              "passages": 1
+            }
+          ],
+          "part": 1.0,
+          "ponts": 15,
+          "ponts_ok": 15,
+          "references_incertaines": [
+            {
+              "S1.rappel": 0.9167,
+              "cas": "perso-09",
+              "decalage_approches_m": [
+                2.76,
+                -1.11
+              ],
+              "decalage_local_m": 0.29,
+              "ecart_max_m": 1.62,
+              "ecart_milieu_m": -1.23,
+              "extrait_tenu_a_l_ecart": true,
+              "metrique": "E3",
+              "niveau_non_discriminant": true,
+              "ouvrage": "nv-18",
+              "reference": "baro_corrige_local",
+              "reference_incertaine": true
+            },
+            {
+              "S1.rappel": 0.9231,
+              "cas": "perso-28",
+              "decalage_approches_m": [
+                -9.2,
+                -6.61
+              ],
+              "decalage_local_m": -7.74,
+              "ecart_max_m": 0.69,
+              "ecart_milieu_m": -0.42,
+              "extrait_tenu_a_l_ecart": true,
+              "metrique": "E3",
+              "niveau_non_discriminant": true,
+              "ouvrage": "nv-51",
+              "reference": "baro_corrige_local",
+              "reference_incertaine": true
+            },
+            {
+              "S1.rappel": 0.5789,
+              "cas": "perso-29",
+              "decalage_approches_m": [
+                -2.93,
+                -6.61
+              ],
+              "decalage_local_m": -4.24,
+              "ecart_max_m": 0.75,
+              "ecart_milieu_m": 0.26,
+              "extrait_tenu_a_l_ecart": true,
+              "metrique": "E3",
+              "niveau_non_discriminant": true,
+              "ouvrage": "nv-40",
+              "reference": "baro_corrige_local",
+              "reference_incertaine": true
+            },
+            {
+              "S1.rappel": 0.8462,
+              "cas": "perso-29",
+              "decalage_approches_m": [
+                -3.49,
+                -1.44
+              ],
+              "decalage_local_m": -2.12,
+              "ecart_max_m": 2.23,
+              "ecart_milieu_m": 1.85,
+              "extrait_tenu_a_l_ecart": true,
+              "metrique": "E3",
+              "niveau_non_discriminant": true,
+              "ouvrage": "nv-31",
+              "reference": "baro_corrige_local",
+              "reference_incertaine": true
+            }
+          ],
+          "seuil": 0.9
+        },
+        "E3_hors_france": [
+          {
+            "S1.emprise_m": 105.0,
+            "S1.rappel": 1.0,
+            "S1.type_m": 105.0,
+            "cas": "perso-37",
+            "decalage_approches_m": [
+              12.71,
+              16.12
+            ],
+            "decalage_local_m": 14.19,
+            "ecart_max_m": 1.74,
+            "ecart_milieu_m": -1.42,
+            "extrait_tenu_a_l_ecart": true,
+            "longueur_m": 105.0,
+            "metrique": "E3_hors_france",
+            "niveau_non_discriminant": true,
+            "ouvrage": "donostia-zurriola",
+            "reference": "baro_corrige_local",
+            "reference_incertaine": true
+          }
+        ],
+        "E3_non_couverts": [],
+        "E4": {
+          "part": 1.0,
+          "reference_ambigue": [],
+          "reference_indisponible": [],
+          "seuil": 0.857,
+          "tunnels": 1,
+          "tunnels_ok": 1
+        },
+        "E4_non_couverts": [],
+        "E5": {
+          "croisements": 0,
+          "ok": 0
+        },
+        "S1": {
+          "emprise_m": 2955.0,
+          "rappel": 0.9474,
+          "seuil": 0.95,
+          "type_m": 2799.48
+        },
+        "S2": {
+          "faux_positif_m": 0.0,
+          "longueur_m": 0.0,
+          "ouvrages_fictifs": 0,
+          "part": -0.0
+        },
+        "S3": [],
+        "hors_graphe_velo": {
+          "controle_ok": 0,
+          "detail": [],
+          "ouvrages": 0
+        },
+        "limite_donnees": [
+          {
+            "S1.rappel": 0.0,
+            "bande_remplacee": {
+              "entree": {
+                "altitude_m": 1645.05,
+                "bandes_sautees": 0,
+                "remplacee": false
+              },
+              "sortie": {
+                "altitude_m": 1659.8,
+                "bandes_sautees": 0,
+                "remplacee": false
+              }
+            },
+            "cas": "perso-10",
+            "dplus_fictif_m": -4.42,
+            "ecart_max_m": 7.45,
+            "extrait_tenu_a_l_ecart": true,
+            "limite_donnees": "shortbread sans avalanche_protector",
+            "metrique": "E4",
+            "ouvrage": "nv-29",
+            "pente_implicite_portails": 0.1283,
+            "reference": "droite_portails_mnt_median_10_30m",
+            "reference_ambigue": false,
+            "sensibilite_portail_m": {
+              "10": false,
+              "20": false,
+              "30": false,
+              "5": false
+            }
+          }
+        ],
+        "passages_retires_niveau": []
+      },
+      "typologie": {
+        "M1.hors_reseau_m": {
+          "perso-12": 0.0,
+          "perso-13.s1": 0.0,
+          "perso-13.s2": 85.0,
+          "perso-14": 0.0,
+          "perso-15": 0.0,
+          "perso-23": 10.0,
+          "perso-26": 0.0,
+          "perso-31": 0.0,
+          "perso-35": 205.0,
+          "perso-36": 0.0
+        },
+        "dplus": {
+          "M1.non_apparie.max": 0.0041,
+          "M1.non_apparie.mediane": -0.0,
+          "M1.non_apparie.min": -0.0,
+          "M1.unknown.max": 0.0041,
+          "M1.unknown.mediane": -0.0,
+          "M1.unknown.min": -0.0,
+          "R3.accord_classe.max": 1.0,
+          "R3.accord_classe.mediane": 0.995,
+          "R3.accord_classe.min": 0.9483,
+          "R3.accord_classe_hors_inconnu.max": 1.0,
+          "R3.accord_classe_hors_inconnu.mediane": 0.995,
+          "R3.accord_classe_hors_inconnu.min": 0.9483,
+          "R3.accord_revetu_non_revetu.max": 1.0,
+          "R3.accord_revetu_non_revetu.mediane": 0.995,
+          "R3.accord_revetu_non_revetu.min": 0.9483,
+          "cas": 5
+        },
+        "ouvrage": {
+          "M1.non_apparie.max": 0.0338,
+          "M1.non_apparie.mediane": 0.0169,
+          "M1.non_apparie.min": -0.0,
+          "M1.unknown.max": 0.0338,
+          "M1.unknown.mediane": 0.0169,
+          "M1.unknown.min": -0.0,
+          "R3.accord_classe.max": 0.9997,
+          "R3.accord_classe.mediane": 0.9905,
+          "R3.accord_classe.min": 0.9812,
+          "R3.accord_classe_hors_inconnu.max": 0.9997,
+          "R3.accord_classe_hors_inconnu.mediane": 0.9905,
+          "R3.accord_classe_hors_inconnu.min": 0.9812,
+          "R3.accord_revetu_non_revetu.max": 0.9997,
+          "R3.accord_revetu_non_revetu.mediane": 0.995,
+          "R3.accord_revetu_non_revetu.min": 0.9902,
+          "cas": 2
+        },
+        "plaine": {
+          "M1.non_apparie.max": -0.0,
+          "M1.non_apparie.mediane": -0.0,
+          "M1.non_apparie.min": -0.0,
+          "M1.unknown.max": -0.0,
+          "M1.unknown.mediane": -0.0,
+          "M1.unknown.min": -0.0,
+          "R3.accord_classe.max": 1.0,
+          "R3.accord_classe.mediane": 1.0,
+          "R3.accord_classe.min": 0.9947,
+          "R3.accord_classe_hors_inconnu.max": 1.0,
+          "R3.accord_classe_hors_inconnu.mediane": 1.0,
+          "R3.accord_classe_hors_inconnu.min": 0.9947,
+          "R3.accord_revetu_non_revetu.max": 1.0,
+          "R3.accord_revetu_non_revetu.mediane": 1.0,
+          "R3.accord_revetu_non_revetu.min": 0.9947,
+          "cas": 3
+        }
+      },
+      "typologie_a_chaud": {
+        "parcours": [],
+        "profil": "release",
+        "seuil_ms": 160.0,
+        "total_km": -0.0,
+        "total_ms": -0.0
+      }
+    },
+    "cas": [
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 45425.0,
+          "E1.max_abs_m": 18.94,
+          "E1.offset_baro_moins_service_m": 6.65,
+          "E1.part_au_dela_de_10m": 0.0017,
+          "E1.plage_10m_debut_d_m": 45425.0,
+          "E1.plage_10m_fin_d_m": 45525.0,
+          "E1.plage_10m_longueur_m": 100.0,
+          "avertissements": {
+            "structure_uncorrected": 1
+          },
+          "masque_m": 0.0,
+          "part_comparee": 0.9801,
+          "passages_masques": [],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 2728,
+          "stations": 13769,
+          "stations_comparees": 13495,
+          "status": "complete",
+          "summary_gain_m": 1064.09,
+          "summary_length_m": 68837.64,
+          "terrain_m": {
+            "ign_lidar_hd": 68837.64
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 58254.8,
+                "d_fin_m": 58268.4,
+                "longueur_plage_m": 13.6,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 44596.8,
+                "d_fin_m": 44601.4,
+                "longueur_plage_m": 4.6,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 44874.9,
+                "d_fin_m": 44875.1,
+                "longueur_plage_m": 0.2,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 6817.6,
+                "d_fin_m": 6817.7,
+                "longueur_plage_m": 0.1,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 6766.5,
+                "d_fin_m": 6766.5,
+                "longueur_plage_m": 0.1,
+                "source_service": "inferred_highway"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "dplus",
+        "id": "perso-12",
+        "metriques": {
+          "E1.p95_m": 3.604,
+          "E1.rmse_m": 1.719,
+          "E2.dplus_baro_m": 984.5,
+          "E2.dplus_mnt_brut_m": 1040.9,
+          "E2.dplus_service_m": 1036.0,
+          "E2.ratio": 1.0523,
+          "E2.ratio_mnt_brut": 1.0573,
+          "E2b.dplus_baro_dem_m": 977.5,
+          "E2b.ratio": 1.0599,
+          "E2b.ratio_mnt_brut": 1.0649
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.24,
+          "longueur_km": 137.675,
+          "max_sur_un_km": 6,
+          "points_entree": 5456,
+          "points_inseres": 33,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 0.9997,
+          "R3.accord_classe_hors_inconnu": 0.9997,
+          "R3.accord_revetu_non_revetu": 0.9997,
+          "compare_m": 68121.9
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 16740.0,
+          "E1.max_abs_m": 5.97,
+          "E1.offset_baro_moins_service_m": -3.9,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {},
+          "masque_m": 3025.0,
+          "part_comparee": 0.9661,
+          "passages_masques": [
+            "nv-02",
+            "nv-24",
+            "nv-41"
+          ],
+          "passages_non_retrouves": [
+            "nv-02"
+          ],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 4142,
+          "stations": 19946,
+          "stations_comparees": 19270,
+          "status": "complete",
+          "summary_gain_m": 1574.49,
+          "summary_length_m": 99724.26,
+          "terrain_m": {
+            "ign_lidar_hd": 99724.26
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 22778.1,
+                "d_fin_m": 24648.8,
+                "longueur_plage_m": 1870.7,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 83015.5,
+                "d_fin_m": 84000.1,
+                "longueur_plage_m": 984.6,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 486.1,
+                "d_fin_m": 1123.3,
+                "longueur_plage_m": 637.2,
+                "source_service": "inferred_tracktype"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 21038.2,
+                "d_fin_m": 21618.0,
+                "longueur_plage_m": 579.8,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 85139.9,
+                "d_fin_m": 85549.3,
+                "longueur_plage_m": 409.4,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 86145.4,
+                "d_fin_m": 86375.1,
+                "longueur_plage_m": 229.7,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 62126.1,
+                "d_fin_m": 62318.9,
+                "longueur_plage_m": 192.7,
+                "source_service": "inferred_tracktype"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 18058.4,
+                "d_fin_m": 18127.9,
+                "longueur_plage_m": 69.5,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 7529.4,
+                "d_fin_m": 7588.9,
+                "longueur_plage_m": 59.4,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 48360.9,
+                "d_fin_m": 48411.1,
+                "longueur_plage_m": 50.2,
+                "source_service": "inferred_highway"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "dplus",
+        "id": "perso-13.s1",
+        "metriques": {
+          "E1.p95_m": 2.024,
+          "E1.rmse_m": 1.022,
+          "E2.dplus_baro_m": 1547.1,
+          "E2.dplus_mnt_brut_m": 1520.9,
+          "E2.dplus_service_m": 1517.4,
+          "E2.ratio": 0.9808,
+          "E2.ratio_mnt_brut": 0.9831,
+          "E2b.dplus_baro_dem_m": 1507.5,
+          "E2b.ratio": 1.0065,
+          "E2b.ratio_mnt_brut": 1.0089
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.547,
+          "longueur_km": 199.449,
+          "max_sur_un_km": 4,
+          "points_entree": 8284,
+          "points_inseres": 109,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 0.9483,
+          "R3.accord_classe_hors_inconnu": 0.9483,
+          "R3.accord_revetu_non_revetu": 0.9483,
+          "compare_m": 99249.3
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 3570.0,
+          "E1.max_abs_m": 17.74,
+          "E1.offset_baro_moins_service_m": 32.57,
+          "E1.part_au_dela_de_10m": 0.0004,
+          "E1.plage_10m_debut_d_m": 3565.0,
+          "E1.plage_10m_fin_d_m": 3575.0,
+          "E1.plage_10m_longueur_m": 10.0,
+          "avertissements": {
+            "structure_uncorrected": 1,
+            "unmatched_range": 4
+          },
+          "masque_m": 1960.0,
+          "part_comparee": 0.9517,
+          "passages_masques": [
+            "nv-02",
+            "nv-24",
+            "nv-41"
+          ],
+          "passages_non_retrouves": [
+            "nv-24",
+            "nv-41"
+          ],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 2674,
+          "stations": 11613,
+          "stations_comparees": 11052,
+          "status": "complete",
+          "summary_gain_m": 923.17,
+          "summary_length_m": 58057.52,
+          "terrain_m": {
+            "ign_lidar_hd": 58057.52
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [
+              {
+                "d_debut_m": 3087.5,
+                "d_fin_m": 3172.5,
+                "longueur_plage_m": 85.0
+              }
+            ],
+            "M1.plages_non_appariees": [
+              {
+                "d_debut_m": 43790.0,
+                "d_fin_m": 43925.0,
+                "longueur_plage_m": 135.0
+              },
+              {
+                "d_debut_m": 52718.8,
+                "d_fin_m": 52798.5,
+                "longueur_plage_m": 79.7
+              },
+              {
+                "d_debut_m": 844.9,
+                "d_fin_m": 865.0,
+                "longueur_plage_m": 20.1
+              }
+            ],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 2696.2,
+                "d_fin_m": 2841.8,
+                "longueur_plage_m": 145.5,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 98.1,
+                "d_fin_m": 186.8,
+                "longueur_plage_m": 88.7,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 2593.0,
+                "d_fin_m": 2660.0,
+                "longueur_plage_m": 67.0,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 52798.5,
+                "d_fin_m": 52831.1,
+                "longueur_plage_m": 32.6,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 8773.5,
+                "d_fin_m": 8798.1,
+                "longueur_plage_m": 24.6,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 253.9,
+                "d_fin_m": 273.0,
+                "longueur_plage_m": 19.1,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 49004.1,
+                "d_fin_m": 49023.0,
+                "longueur_plage_m": 18.9,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 50527.5,
+                "d_fin_m": 50542.6,
+                "longueur_plage_m": 15.2,
+                "source_service": "inferred_tracktype"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 38171.5,
+                "d_fin_m": 38180.2,
+                "longueur_plage_m": 8.7,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 600.0,
+                "d_fin_m": 600.8,
+                "longueur_plage_m": 0.8,
+                "source_service": "inferred_highway"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "dplus",
+        "id": "perso-13.s2",
+        "metriques": {
+          "E1.p95_m": 2.204,
+          "E1.rmse_m": 1.137,
+          "E2.dplus_baro_m": 900.1,
+          "E2.dplus_mnt_brut_m": 955.0,
+          "E2.dplus_service_m": 882.7,
+          "E2.ratio": 0.9807,
+          "E2.ratio_mnt_brut": 1.061,
+          "E2b.dplus_baro_dem_m": 863.0,
+          "E2b.ratio": 1.0229,
+          "E2b.ratio_mnt_brut": 1.1066
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.784,
+          "longueur_km": 116.115,
+          "max_sur_un_km": 11,
+          "points_entree": 5344,
+          "points_inseres": 91,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 85.0,
+          "M1.non_apparie": 0.0041,
+          "M1.unknown": 0.0041,
+          "R3.accord_classe": 0.9908,
+          "R3.accord_classe_hors_inconnu": 0.9908,
+          "R3.accord_revetu_non_revetu": 0.9925,
+          "compare_m": 56985.9
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 95830.0,
+          "E1.max_abs_m": 13.26,
+          "E1.offset_baro_moins_service_m": -16.05,
+          "E1.part_au_dela_de_10m": 0.0009,
+          "E1.plage_10m_debut_d_m": 80000.0,
+          "E1.plage_10m_fin_d_m": 80030.0,
+          "E1.plage_10m_longueur_m": 30.0,
+          "avertissements": {},
+          "masque_m": 0.0,
+          "part_comparee": 0.9967,
+          "passages_masques": [],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 3749,
+          "stations": 21853,
+          "stations_comparees": 21781,
+          "status": "complete",
+          "summary_gain_m": 2996.48,
+          "summary_length_m": 109258.19,
+          "terrain_m": {
+            "ign_lidar_hd": 109258.19
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 47848.4,
+                "d_fin_m": 47848.5,
+                "longueur_plage_m": 0.1,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 80529.6,
+                "d_fin_m": 80529.7,
+                "longueur_plage_m": 0.1,
+                "source_service": "inferred_tracktype"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 51714.8,
+                "d_fin_m": 51714.9,
+                "longueur_plage_m": 0.0,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 108580.1,
+                "d_fin_m": 108580.1,
+                "longueur_plage_m": 0.0,
+                "source_service": "inferred_tracktype"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 81194.3,
+                "d_fin_m": 81194.3,
+                "longueur_plage_m": 0.0,
+                "source_service": "inferred_highway"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "dplus",
+        "id": "perso-14",
+        "metriques": {
+          "E1.p95_m": 4.304,
+          "E1.rmse_m": 2.114,
+          "E2.dplus_baro_m": 3037.9,
+          "E2.dplus_mnt_brut_m": 2994.5,
+          "E2.dplus_service_m": 2993.5,
+          "E2.ratio": 0.9854,
+          "E2.ratio_mnt_brut": 0.9857,
+          "E2b.dplus_baro_dem_m": 2903.2,
+          "E2b.ratio": 1.0311,
+          "E2b.ratio_mnt_brut": 1.0314
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.439,
+          "longueur_km": 218.516,
+          "max_sur_un_km": 3,
+          "points_entree": 7498,
+          "points_inseres": 96,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 1.0,
+          "R3.accord_classe_hors_inconnu": 1.0,
+          "R3.accord_revetu_non_revetu": 1.0,
+          "compare_m": 109258.2
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 12155.0,
+          "E1.max_abs_m": 26.36,
+          "E1.offset_baro_moins_service_m": -0.08,
+          "E1.part_au_dela_de_10m": 0.0064,
+          "E1.plage_10m_debut_d_m": 11850.0,
+          "E1.plage_10m_fin_d_m": 12685.0,
+          "E1.plage_10m_longueur_m": 835.0,
+          "avertissements": {},
+          "masque_m": 1130.0,
+          "part_comparee": 0.9906,
+          "passages_masques": [
+            "nv-12"
+          ],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 3579,
+          "stations": 24693,
+          "stations_comparees": 24461,
+          "status": "complete",
+          "summary_gain_m": 2639.03,
+          "summary_length_m": 123458.46,
+          "terrain_m": {
+            "ign_lidar_hd": 123458.46
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 237.6,
+                "d_fin_m": 577.2,
+                "longueur_plage_m": 339.6,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 577.2,
+                "d_fin_m": 846.2,
+                "longueur_plage_m": 269.0,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 215.8,
+                "d_fin_m": 227.3,
+                "longueur_plage_m": 11.5,
+                "source_service": "tagged"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "dplus",
+        "id": "perso-15",
+        "metriques": {
+          "E1.p95_m": 2.182,
+          "E1.rmse_m": 1.788,
+          "E2.dplus_baro_m": 2621.1,
+          "E2.dplus_mnt_brut_m": 2636.1,
+          "E2.dplus_service_m": 2619.3,
+          "E2.ratio": 0.9993,
+          "E2.ratio_mnt_brut": 1.0057,
+          "E2b.dplus_baro_dem_m": 2599.6,
+          "E2b.ratio": 1.0076,
+          "E2b.ratio_mnt_brut": 1.014
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.498,
+          "longueur_km": 246.917,
+          "max_sur_un_km": 4,
+          "points_entree": 7158,
+          "points_inseres": 123,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 0.995,
+          "R3.accord_classe_hors_inconnu": 0.995,
+          "R3.accord_revetu_non_revetu": 0.995,
+          "compare_m": 123458.5
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 78110.0,
+          "E1.max_abs_m": 4.93,
+          "E1.offset_baro_moins_service_m": 0.31,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {
+            "structure_uncorrected": 1,
+            "unmatched_range": 19
+          },
+          "masque_m": 18555.0,
+          "part_comparee": 0.8602,
+          "passages_masques": [
+            "chevire",
+            "chevire-dessous",
+            "nantes-anne-de-bretagne",
+            "nantes-pirmil",
+            "reze-ponts-successifs",
+            "nv-28",
+            "nv-50"
+          ],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 7831,
+          "stations": 30029,
+          "stations_comparees": 25832,
+          "status": "complete",
+          "summary_gain_m": 750.99,
+          "summary_length_m": 150138.65,
+          "terrain_m": {
+            "ign_lidar_hd": 150138.65
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [
+              {
+                "d_debut_m": 5437.5,
+                "d_fin_m": 5442.5,
+                "longueur_plage_m": 5.0
+              },
+              {
+                "d_debut_m": 6632.5,
+                "d_fin_m": 6637.5,
+                "longueur_plage_m": 5.0
+              }
+            ],
+            "M1.plages_non_appariees": [
+              {
+                "d_debut_m": 81225.6,
+                "d_fin_m": 82550.0,
+                "longueur_plage_m": 1324.3
+              },
+              {
+                "d_debut_m": 78884.3,
+                "d_fin_m": 79632.4,
+                "longueur_plage_m": 748.1
+              },
+              {
+                "d_debut_m": 7956.0,
+                "d_fin_m": 8698.0,
+                "longueur_plage_m": 742.0
+              },
+              {
+                "d_debut_m": 77954.0,
+                "d_fin_m": 78390.0,
+                "longueur_plage_m": 436.0
+              },
+              {
+                "d_debut_m": 7486.6,
+                "d_fin_m": 7861.0,
+                "longueur_plage_m": 374.4
+              },
+              {
+                "d_debut_m": 79724.7,
+                "d_fin_m": 79969.7,
+                "longueur_plage_m": 245.0
+              },
+              {
+                "d_debut_m": 5630.0,
+                "d_fin_m": 5840.0,
+                "longueur_plage_m": 210.0
+              },
+              {
+                "d_debut_m": 5950.0,
+                "d_fin_m": 6159.9,
+                "longueur_plage_m": 209.9
+              },
+              {
+                "d_debut_m": 5069.4,
+                "d_fin_m": 5235.0,
+                "longueur_plage_m": 165.6
+              },
+              {
+                "d_debut_m": 10645.0,
+                "d_fin_m": 10770.0,
+                "longueur_plage_m": 125.0
+              }
+            ],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 104568.8,
+                "d_fin_m": 104938.2,
+                "longueur_plage_m": 369.4,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 104182.6,
+                "d_fin_m": 104540.9,
+                "longueur_plage_m": 358.3,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 116950.2,
+                "d_fin_m": 117255.1,
+                "longueur_plage_m": 304.9,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 149617.4,
+                "d_fin_m": 149805.5,
+                "longueur_plage_m": 188.1,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 147917.6,
+                "d_fin_m": 148034.3,
+                "longueur_plage_m": 116.7,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 53013.7,
+                "d_fin_m": 53031.1,
+                "longueur_plage_m": 17.4,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 90031.9,
+                "d_fin_m": 90045.3,
+                "longueur_plage_m": 13.4,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 53294.9,
+                "d_fin_m": 53307.9,
+                "longueur_plage_m": 13.0,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 80871.8,
+                "d_fin_m": 80881.8,
+                "longueur_plage_m": 10.0,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 149483.9,
+                "d_fin_m": 149492.9,
+                "longueur_plage_m": 9.0,
+                "source_service": "inferred_highway"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "ouvrage",
+        "id": "perso-23",
+        "metriques": {
+          "E1.p95_m": 0.781,
+          "E1.rmse_m": 0.454,
+          "E2.dplus_baro_m": 634.9,
+          "E2.dplus_mnt_brut_m": 652.2,
+          "E2.dplus_service_m": 627.4,
+          "E2.ratio": 0.9882,
+          "E2.ratio_mnt_brut": 1.0271,
+          "E2b.dplus_baro_dem_m": 584.7,
+          "E2b.ratio": 1.0731,
+          "E2b.ratio_mnt_brut": 1.1154
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.626,
+          "longueur_km": 300.277,
+          "max_sur_un_km": 8,
+          "points_entree": 15662,
+          "points_inseres": 188,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 10.0,
+          "M1.non_apparie": 0.0338,
+          "M1.unknown": 0.0338,
+          "R3.accord_classe": 0.9812,
+          "R3.accord_classe_hors_inconnu": 0.9812,
+          "R3.accord_revetu_non_revetu": 0.9902,
+          "compare_m": 145605.3
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 44885.0,
+          "E1.max_abs_m": 3.52,
+          "E1.offset_baro_moins_service_m": -0.74,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {
+            "structure_uncorrected": 1
+          },
+          "masque_m": 4840.0,
+          "part_comparee": 0.9512,
+          "passages_masques": [
+            "nantes-pirmil",
+            "nantes-audibert",
+            "nv-16"
+          ],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 5116,
+          "stations": 20491,
+          "stations_comparees": 19491,
+          "status": "complete",
+          "summary_gain_m": 898.28,
+          "summary_length_m": 102446.57,
+          "terrain_m": {
+            "ign_lidar_hd": 102446.57
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 24933.0,
+                "d_fin_m": 24964.8,
+                "longueur_plage_m": 31.8,
+                "source_service": "tagged"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "ouvrage",
+        "id": "perso-26",
+        "metriques": {
+          "E1.p95_m": 1.006,
+          "E1.rmse_m": 0.488,
+          "E2.dplus_baro_m": 883.5,
+          "E2.dplus_mnt_brut_m": 902.2,
+          "E2.dplus_service_m": 872.2,
+          "E2.ratio": 0.9872,
+          "E2.ratio_mnt_brut": 1.0212,
+          "E2b.dplus_baro_dem_m": 848.6,
+          "E2b.ratio": 1.0278,
+          "E2b.ratio_mnt_brut": 1.0632
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.61,
+          "longueur_km": 204.893,
+          "max_sur_un_km": 4,
+          "points_entree": 10232,
+          "points_inseres": 125,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 0.9997,
+          "R3.accord_classe_hors_inconnu": 0.9997,
+          "R3.accord_revetu_non_revetu": 0.9997,
+          "compare_m": 102368.4
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 6140.0,
+          "E1.max_abs_m": 5.33,
+          "E1.offset_baro_moins_service_m": -2.84,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {},
+          "masque_m": 2270.0,
+          "part_comparee": 0.974,
+          "passages_masques": [
+            "nv-10",
+            "nv-28"
+          ],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 3444,
+          "stations": 21213,
+          "stations_comparees": 20661,
+          "status": "complete",
+          "summary_gain_m": 741.34,
+          "summary_length_m": 106055.83,
+          "terrain_m": {
+            "ign_lidar_hd": 106055.83
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "plaine",
+        "id": "perso-31",
+        "metriques": {
+          "E1.p95_m": 1.411,
+          "E1.rmse_m": 0.692,
+          "E2.dplus_baro_m": 738.1,
+          "E2.dplus_mnt_brut_m": 715.0,
+          "E2.dplus_service_m": 712.4,
+          "E2.ratio": 0.9652,
+          "E2.ratio_mnt_brut": 0.9687,
+          "E2b.dplus_baro_dem_m": 680.9,
+          "E2b.ratio": 1.0464,
+          "E2b.ratio_mnt_brut": 1.0502
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.613,
+          "longueur_km": 212.112,
+          "max_sur_un_km": 4,
+          "points_entree": 6888,
+          "points_inseres": 130,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 1.0,
+          "R3.accord_classe_hors_inconnu": 1.0,
+          "R3.accord_revetu_non_revetu": 1.0,
+          "compare_m": 106055.8
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 43385.0,
+          "E1.max_abs_m": 6.26,
+          "E1.offset_baro_moins_service_m": -3.26,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {
+            "structure_slope_implausible": 2,
+            "structure_uncorrected": 1,
+            "unmatched_range": 1
+          },
+          "masque_m": 0.0,
+          "part_comparee": 0.9712,
+          "passages_masques": [],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 3926,
+          "stations": 16710,
+          "stations_comparees": 16229,
+          "status": "complete",
+          "summary_gain_m": 1400.62,
+          "summary_length_m": 83544.21,
+          "terrain_m": {
+            "ign_lidar_hd": 83544.21
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [
+              {
+                "d_debut_m": 54977.5,
+                "d_fin_m": 55182.5,
+                "longueur_plage_m": 205.0
+              }
+            ],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 79280.6,
+                "d_fin_m": 79524.7,
+                "longueur_plage_m": 244.1,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 62555.9,
+                "d_fin_m": 62590.7,
+                "longueur_plage_m": 34.8,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 46966.8,
+                "d_fin_m": 46986.6,
+                "longueur_plage_m": 19.8,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 74160.7,
+                "d_fin_m": 74178.7,
+                "longueur_plage_m": 18.0,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 9019.8,
+                "d_fin_m": 9035.6,
+                "longueur_plage_m": 15.8,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 11054.1,
+                "d_fin_m": 11069.1,
+                "longueur_plage_m": 15.0,
+                "source_service": "tagged"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 46996.8,
+                "d_fin_m": 47010.8,
+                "longueur_plage_m": 14.0,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 73960.2,
+                "d_fin_m": 73972.0,
+                "longueur_plage_m": 11.8,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 20363.7,
+                "d_fin_m": 20374.8,
+                "longueur_plage_m": 11.0,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 11647.9,
+                "d_fin_m": 11658.2,
+                "longueur_plage_m": 10.3,
+                "source_service": "tagged"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "plaine",
+        "id": "perso-35",
+        "metriques": {
+          "E1.p95_m": 2.578,
+          "E1.rmse_m": 1.284,
+          "E2.dplus_baro_m": 1334.3,
+          "E2.dplus_mnt_brut_m": 1344.7,
+          "E2.dplus_service_m": 1344.4,
+          "E2.ratio": 1.0076,
+          "E2.ratio_mnt_brut": 1.0078,
+          "E2b.dplus_baro_dem_m": 1277.9,
+          "E2b.ratio": 1.0521,
+          "E2b.ratio_mnt_brut": 1.0523
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 1.041,
+          "longueur_km": 167.088,
+          "max_sur_un_km": 4,
+          "points_entree": 7852,
+          "points_inseres": 174,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 205.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 0.9947,
+          "R3.accord_classe_hors_inconnu": 0.9947,
+          "R3.accord_revetu_non_revetu": 0.9947,
+          "compare_m": 83083.5
+        }
+      },
+      {
+        "cache": "disque",
+        "diagnostics": {
+          "E1.max_abs_d_m": 78210.0,
+          "E1.max_abs_m": 4.2,
+          "E1.offset_baro_moins_service_m": -0.51,
+          "E1.part_au_dela_de_10m": 0.0,
+          "E1.plage_10m_debut_d_m": null,
+          "E1.plage_10m_fin_d_m": null,
+          "E1.plage_10m_longueur_m": null,
+          "avertissements": {},
+          "masque_m": 3850.0,
+          "part_comparee": 0.9689,
+          "passages_masques": [
+            "nv-17",
+            "nv-39",
+            "nv-44"
+          ],
+          "passages_non_retrouves": [],
+          "plages_glo30_adaptees": 0,
+          "points_envoyes": 3434,
+          "stations": 25662,
+          "stations_comparees": 24863,
+          "status": "complete",
+          "summary_gain_m": 922.59,
+          "summary_length_m": 128301.4,
+          "terrain_m": {
+            "ign_lidar_hd": 128301.4
+          },
+          "troncons": 1,
+          "typologie": {
+            "M1.plages_hors_reseau": [],
+            "M1.plages_non_appariees": [],
+            "R3.desaccords_revetu": [
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 77170.2,
+                "d_fin_m": 77170.4,
+                "longueur_plage_m": 0.2,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "paved",
+                "classe_stadia": "unpaved",
+                "d_debut_m": 49422.7,
+                "d_fin_m": 49422.9,
+                "longueur_plage_m": 0.2,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 76151.9,
+                "d_fin_m": 76152.1,
+                "longueur_plage_m": 0.2,
+                "source_service": "inferred_highway"
+              },
+              {
+                "classe_service": "unpaved",
+                "classe_stadia": "paved",
+                "d_debut_m": 49536.2,
+                "d_fin_m": 49536.2,
+                "longueur_plage_m": 0.0,
+                "source_service": "tagged"
+              }
+            ],
+            "raccords_troncons_d_m": []
+          }
+        },
+        "groupe": "plaine",
+        "id": "perso-36",
+        "metriques": {
+          "E1.p95_m": 1.185,
+          "E1.rmse_m": 0.55,
+          "E2.dplus_baro_m": 899.3,
+          "E2.dplus_mnt_brut_m": 882.6,
+          "E2.dplus_service_m": 877.7,
+          "E2.ratio": 0.976,
+          "E2.ratio_mnt_brut": 0.9814,
+          "E2b.dplus_baro_dem_m": 869.5,
+          "E2b.ratio": 1.0094,
+          "E2b.ratio_mnt_brut": 1.015
+        },
+        "mode": "input_with_breakpoints",
+        "points_inseres": {
+          "inseres_par_km": 0.752,
+          "longueur_km": 256.603,
+          "max_sur_un_km": 3,
+          "points_entree": 6868,
+          "points_inseres": 193,
+          "requetes": 2
+        },
+        "serie": "tenue_a_l_ecart",
+        "typologie": {
+          "M1.hors_reseau_m": 0.0,
+          "M1.non_apparie": -0.0,
+          "M1.unknown": -0.0,
+          "R3.accord_classe": 1.0,
+          "R3.accord_classe_hors_inconnu": 1.0,
+          "R3.accord_revetu_non_revetu": 1.0,
+          "compare_m": 128242.3
+        }
+      }
+    ],
+    "cas_sautes": [],
+    "mode": "input_with_breakpoints",
+    "ouvrages": [
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-15",
+        "d_milieu_m": 61315.0,
+        "decalage_approches_m": [
+          3.25,
+          4.52
+        ],
+        "decalage_local_m": 4.06,
+        "ecart_max_d_m": 61405.0,
+        "ecart_max_m": 1.34,
+        "ecart_milieu_m": 1.02,
+        "metrique": "E3",
+        "ouvrage": "nv-15",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9,
+        "bande_remplacee": {
+          "entree": {
+            "altitude_m": 772.81,
+            "bandes_sautees": 0,
+            "remplacee": false
+          },
+          "sortie": {
+            "altitude_m": 769.75,
+            "bandes_sautees": 0,
+            "remplacee": false
+          }
+        },
+        "cas": "perso-02",
+        "dplus_fictif_m": 0.0,
+        "ecart_max_m": 0.72,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E4",
+        "ouvrage": "nv-42",
+        "pass": true,
+        "pente_implicite_portails": 0.0322,
+        "reference": "droite_portails_mnt_median_10_30m",
+        "reference_ambigue": false,
+        "sensibilite_portail_m": {
+          "10": true,
+          "20": true,
+          "30": true,
+          "5": true
+        }
+      },
+      {
+        "S1.rappel": 0.9913,
+        "cas": "perso-06",
+        "decalage_approches_m": [
+          1.15,
+          1.97
+        ],
+        "decalage_local_m": 1.82,
+        "ecart_max_m": 0.69,
+        "ecart_milieu_m": 0.23,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-06",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-06",
+        "decalage_approches_m": [
+          -56.59,
+          -56.07
+        ],
+        "decalage_local_m": -56.4,
+        "ecart_max_m": 0.65,
+        "ecart_milieu_m": -0.57,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-43",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9167,
+        "cas": "perso-09",
+        "decalage_approches_m": [
+          2.76,
+          -1.11
+        ],
+        "decalage_local_m": 0.29,
+        "ecart_max_m": 1.62,
+        "ecart_milieu_m": -1.23,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-18",
+        "reference": "baro_corrige_local",
+        "reference_incertaine": true
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-09",
+        "decalage_approches_m": [
+          -1.3,
+          -2.84
+        ],
+        "decalage_local_m": -1.76,
+        "ecart_max_m": 2.53,
+        "ecart_milieu_m": -1.49,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "ouvrage": "nv-07",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.0,
+        "bande_remplacee": {
+          "entree": {
+            "altitude_m": 1645.05,
+            "bandes_sautees": 0,
+            "remplacee": false
+          },
+          "sortie": {
+            "altitude_m": 1659.8,
+            "bandes_sautees": 0,
+            "remplacee": false
+          }
+        },
+        "cas": "perso-10",
+        "dplus_fictif_m": -4.42,
+        "ecart_max_m": 7.45,
+        "extrait_tenu_a_l_ecart": true,
+        "limite_donnees": "shortbread sans avalanche_protector",
+        "metrique": "E4",
+        "ouvrage": "nv-29",
+        "pass": false,
+        "pente_implicite_portails": 0.1283,
+        "reference": "droite_portails_mnt_median_10_30m",
+        "reference_ambigue": false,
+        "sensibilite_portail_m": {
+          "10": false,
+          "20": false,
+          "30": false,
+          "5": false
+        }
+      },
+      {
+        "S1.rappel": 0.9333,
+        "cas": "perso-19",
+        "decalage_approches_m": [
+          -0.47,
+          -0.36
+        ],
+        "decalage_local_m": -0.44,
+        "ecart_max_m": 1.47,
+        "ecart_milieu_m": -1.41,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-23",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9375,
+        "cas": "perso-21",
+        "decalage_approches_m": [
+          -0.08,
+          -0.22
+        ],
+        "decalage_local_m": -0.2,
+        "ecart_max_m": 0.29,
+        "ecart_milieu_m": -0.14,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-01",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9286,
+        "cas": "perso-21",
+        "decalage_approches_m": [
+          -0.31,
+          -0.38
+        ],
+        "decalage_local_m": -0.31,
+        "ecart_max_m": 0.87,
+        "ecart_milieu_m": 0.77,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-38",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-25",
+        "decalage_approches_m": [
+          -0.15,
+          -0.51
+        ],
+        "decalage_local_m": -0.19,
+        "ecart_max_m": 0.93,
+        "ecart_milieu_m": 0.89,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-05",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-25",
+        "decalage_approches_m": [
+          0.78,
+          0.55
+        ],
+        "decalage_local_m": 0.66,
+        "ecart_max_m": 0.52,
+        "ecart_milieu_m": 0.32,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-08",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.8462,
+        "cas": "perso-27",
+        "decalage_approches_m": [
+          -0.26,
+          0.15
+        ],
+        "decalage_local_m": 0.07,
+        "ecart_max_m": 0.78,
+        "ecart_milieu_m": 0.72,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-31",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9545,
+        "cas": "perso-27",
+        "decalage_approches_m": [
+          1.52,
+          1.54
+        ],
+        "decalage_local_m": 1.54,
+        "ecart_max_m": 0.7,
+        "ecart_milieu_m": 0.14,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-47",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9286,
+        "cas": "perso-28",
+        "decalage_approches_m": [
+          -5.6,
+          -4.65
+        ],
+        "decalage_local_m": -4.95,
+        "ecart_max_m": 0.69,
+        "ecart_milieu_m": 0.39,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-19",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9167,
+        "cas": "perso-28",
+        "decalage_approches_m": [
+          -6.29,
+          -6.85
+        ],
+        "decalage_local_m": -6.68,
+        "ecart_max_m": 0.26,
+        "ecart_milieu_m": 0.24,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-03",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9231,
+        "cas": "perso-28",
+        "decalage_approches_m": [
+          -9.2,
+          -6.61
+        ],
+        "decalage_local_m": -7.74,
+        "ecart_max_m": 0.69,
+        "ecart_milieu_m": -0.42,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-51",
+        "reference": "baro_corrige_local",
+        "reference_incertaine": true
+      },
+      {
+        "S1.rappel": 0.5789,
+        "cas": "perso-29",
+        "decalage_approches_m": [
+          -2.93,
+          -6.61
+        ],
+        "decalage_local_m": -4.24,
+        "ecart_max_m": 0.75,
+        "ecart_milieu_m": 0.26,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-40",
+        "reference": "baro_corrige_local",
+        "reference_incertaine": true
+      },
+      {
+        "S1.rappel": 0.8462,
+        "cas": "perso-29",
+        "decalage_approches_m": [
+          -3.49,
+          -1.44
+        ],
+        "decalage_local_m": -2.12,
+        "ecart_max_m": 2.23,
+        "ecart_milieu_m": 1.85,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-31",
+        "reference": "baro_corrige_local",
+        "reference_incertaine": true
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-30",
+        "decalage_approches_m": [
+          0.16,
+          -0.66
+        ],
+        "decalage_local_m": 0.05,
+        "ecart_max_m": 1.06,
+        "ecart_milieu_m": 0.48,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-27",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.5789,
+        "cas": "perso-30",
+        "decalage_approches_m": [
+          -3.61,
+          -2.95
+        ],
+        "decalage_local_m": -3.41,
+        "ecart_max_m": 1.06,
+        "ecart_milieu_m": -0.68,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-40",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-32",
+        "decalage_approches_m": [
+          -2.69,
+          -2.65
+        ],
+        "decalage_local_m": -2.67,
+        "ecart_max_m": 0.6,
+        "ecart_milieu_m": -0.08,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-27",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9913,
+        "cas": "perso-32",
+        "decalage_approches_m": [
+          -3.1,
+          -2.38
+        ],
+        "decalage_local_m": -2.99,
+        "ecart_max_m": 1.33,
+        "ecart_milieu_m": -1.09,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-06",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 0.9333,
+        "cas": "perso-32",
+        "decalage_approches_m": [
+          -1.87,
+          -2.2
+        ],
+        "decalage_local_m": -1.96,
+        "ecart_max_m": 0.2,
+        "ecart_milieu_m": 0.13,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-23",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.rappel": 1.0,
+        "cas": "perso-34",
+        "decalage_approches_m": [
+          -5.31,
+          -5.69
+        ],
+        "decalage_local_m": -5.46,
+        "ecart_max_m": 1.77,
+        "ecart_milieu_m": -1.07,
+        "extrait_tenu_a_l_ecart": true,
+        "metrique": "E3",
+        "niveau_non_discriminant": true,
+        "ouvrage": "nv-27",
+        "reference": "baro_corrige_local"
+      },
+      {
+        "S1.emprise_m": 105.0,
+        "S1.rappel": 1.0,
+        "S1.type_m": 105.0,
+        "cas": "perso-37",
+        "decalage_approches_m": [
+          12.71,
+          16.12
+        ],
+        "decalage_local_m": 14.19,
+        "ecart_max_m": 1.74,
+        "ecart_milieu_m": -1.42,
+        "extrait_tenu_a_l_ecart": true,
+        "longueur_m": 105.0,
+        "metrique": "E3_hors_france",
+        "niveau_non_discriminant": true,
+        "ouvrage": "donostia-zurriola",
+        "reference": "baro_corrige_local",
+        "reference_incertaine": true
+      }
+    ],
+    "points_inseres": {
+      "inseres_par_km": 0.613,
+      "longueur_km": 2059.645,
+      "max_sur_un_km": 11,
+      "points_inseres": 1262
+    },
+    "verdicts": {
+      "E1": "pass",
+      "E1_echecs": [],
+      "E2": "reported",
+      "E2_indicatif": [
+        {
+          "groupe": "dplus",
+          "mediane": 0.9854,
+          "mediane_dans_bornes": true,
+          "traces_hors_bornes": []
+        },
+        {
+          "groupe": "ouvrage",
+          "mediane": 0.9877,
+          "mediane_dans_bornes": true,
+          "traces_hors_bornes": []
+        },
+        {
+          "groupe": "plaine",
+          "mediane": 0.976,
+          "mediane_dans_bornes": true,
+          "traces_hors_bornes": []
+        }
+      ],
+      "E2b": "pass",
+      "E2b_groupes_en_echec": [],
+      "E3": "pass",
+      "E3_echecs": [],
+      "E3_hors_france": "reported",
+      "E4": "pass",
+      "E4_echecs": [],
+      "E5": "skipped",
+      "E5_echecs": [],
+      "M1": "fail",
+      "M1_echecs": [
+        "perso-23"
+      ],
+      "Q1": "pass",
+      "R1_R2": "skipped",
+      "R1_R2_echecs": [],
+      "R3": "fail",
+      "R3_echecs": [
+        "perso-13.s1"
+      ],
+      "S1": "fail",
+      "S2": "skipped",
+      "S3": "skipped",
+      "hors_graphe_velo": "skipped"
+    }
+  },
+  "ouvrages": [
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-15",
+      "d_milieu_m": 61315.0,
+      "decalage_approches_m": [
+        3.25,
+        4.52
+      ],
+      "decalage_local_m": 4.06,
+      "ecart_max_d_m": 61405.0,
+      "ecart_max_m": 0.91,
+      "ecart_milieu_m": 0.81,
+      "metrique": "E3",
+      "ouvrage": "nv-15",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9,
+      "bande_remplacee": {
+        "entree": {
+          "altitude_m": 772.81,
+          "bandes_sautees": 0,
+          "remplacee": false
+        },
+        "sortie": {
+          "altitude_m": 769.75,
+          "bandes_sautees": 0,
+          "remplacee": false
+        }
+      },
+      "cas": "perso-02",
+      "dplus_fictif_m": 0.0,
+      "ecart_max_m": 0.73,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E4",
+      "ouvrage": "nv-42",
+      "pass": true,
+      "pente_implicite_portails": 0.0322,
+      "reference": "droite_portails_mnt_median_10_30m",
+      "reference_ambigue": false,
+      "sensibilite_portail_m": {
+        "10": true,
+        "20": true,
+        "30": true,
+        "5": true
+      }
+    },
+    {
+      "S1.rappel": 0.9913,
+      "cas": "perso-06",
+      "decalage_approches_m": [
+        1.15,
+        1.97
+      ],
+      "decalage_local_m": 1.82,
+      "ecart_max_m": 0.9,
+      "ecart_milieu_m": 0.53,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-06",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-06",
+      "decalage_approches_m": [
+        -56.59,
+        -56.07
+      ],
+      "decalage_local_m": -56.4,
+      "ecart_max_m": 0.66,
+      "ecart_milieu_m": -0.22,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-43",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9167,
+      "cas": "perso-09",
+      "decalage_approches_m": [
+        2.76,
+        -1.11
+      ],
+      "decalage_local_m": 0.29,
+      "ecart_max_m": 1.91,
+      "ecart_milieu_m": -1.47,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-18",
+      "reference": "baro_corrige_local",
+      "reference_incertaine": true
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-09",
+      "decalage_approches_m": [
+        -1.3,
+        -2.84
+      ],
+      "decalage_local_m": -1.76,
+      "ecart_max_m": 2.53,
+      "ecart_milieu_m": -1.49,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "ouvrage": "nv-07",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.0,
+      "bande_remplacee": {
+        "entree": {
+          "altitude_m": 1645.05,
+          "bandes_sautees": 0,
+          "remplacee": false
+        },
+        "sortie": {
+          "altitude_m": 1659.8,
+          "bandes_sautees": 0,
+          "remplacee": false
+        }
+      },
+      "cas": "perso-10",
+      "dplus_fictif_m": -3.7,
+      "ecart_max_m": 7.54,
+      "extrait_tenu_a_l_ecart": true,
+      "limite_donnees": "shortbread sans avalanche_protector",
+      "metrique": "E4",
+      "ouvrage": "nv-29",
+      "pass": false,
+      "pente_implicite_portails": 0.1283,
+      "reference": "droite_portails_mnt_median_10_30m",
+      "reference_ambigue": false,
+      "sensibilite_portail_m": {
+        "10": false,
+        "20": false,
+        "30": false,
+        "5": false
+      }
+    },
+    {
+      "S1.rappel": 0.9333,
+      "cas": "perso-19",
+      "decalage_approches_m": [
+        -0.47,
+        -0.36
+      ],
+      "decalage_local_m": -0.44,
+      "ecart_max_m": 1.57,
+      "ecart_milieu_m": -1.44,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-23",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9375,
+      "cas": "perso-21",
+      "decalage_approches_m": [
+        -0.08,
+        -0.22
+      ],
+      "decalage_local_m": -0.2,
+      "ecart_max_m": 0.29,
+      "ecart_milieu_m": -0.14,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-01",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9286,
+      "cas": "perso-21",
+      "decalage_approches_m": [
+        -0.31,
+        -0.38
+      ],
+      "decalage_local_m": -0.31,
+      "ecart_max_m": 0.91,
+      "ecart_milieu_m": 0.77,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-38",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-25",
+      "decalage_approches_m": [
+        -0.15,
+        -0.51
+      ],
+      "decalage_local_m": -0.19,
+      "ecart_max_m": 0.96,
+      "ecart_milieu_m": 0.91,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-05",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-25",
+      "decalage_approches_m": [
+        0.78,
+        0.55
+      ],
+      "decalage_local_m": 0.66,
+      "ecart_max_m": 0.55,
+      "ecart_milieu_m": 0.4,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-08",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.8462,
+      "cas": "perso-27",
+      "decalage_approches_m": [
+        -0.26,
+        0.15
+      ],
+      "decalage_local_m": 0.07,
+      "ecart_max_m": 0.78,
+      "ecart_milieu_m": 0.74,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-31",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9545,
+      "cas": "perso-27",
+      "decalage_approches_m": [
+        1.52,
+        1.54
+      ],
+      "decalage_local_m": 1.54,
+      "ecart_max_m": 0.93,
+      "ecart_milieu_m": 0.66,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-47",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9286,
+      "cas": "perso-28",
+      "decalage_approches_m": [
+        -5.6,
+        -4.65
+      ],
+      "decalage_local_m": -4.95,
+      "ecart_max_m": 0.66,
+      "ecart_milieu_m": 0.45,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-19",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9167,
+      "cas": "perso-28",
+      "decalage_approches_m": [
+        -6.29,
+        -6.85
+      ],
+      "decalage_local_m": -6.68,
+      "ecart_max_m": 0.3,
+      "ecart_milieu_m": 0.25,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-03",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9231,
+      "cas": "perso-28",
+      "decalage_approches_m": [
+        -9.2,
+        -6.61
+      ],
+      "decalage_local_m": -7.74,
+      "ecart_max_m": 0.65,
+      "ecart_milieu_m": -0.39,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-51",
+      "reference": "baro_corrige_local",
+      "reference_incertaine": true
+    },
+    {
+      "S1.rappel": 0.5789,
+      "cas": "perso-29",
+      "decalage_approches_m": [
+        -2.93,
+        -6.61
+      ],
+      "decalage_local_m": -4.24,
+      "ecart_max_m": 0.67,
+      "ecart_milieu_m": 0.53,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-40",
+      "reference": "baro_corrige_local",
+      "reference_incertaine": true
+    },
+    {
+      "S1.rappel": 0.8462,
+      "cas": "perso-29",
+      "decalage_approches_m": [
+        -3.49,
+        -1.44
+      ],
+      "decalage_local_m": -2.12,
+      "ecart_max_m": 2.23,
+      "ecart_milieu_m": 1.87,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-31",
+      "reference": "baro_corrige_local",
+      "reference_incertaine": true
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-30",
+      "decalage_approches_m": [
+        0.16,
+        -0.66
+      ],
+      "decalage_local_m": 0.05,
+      "ecart_max_m": 0.78,
+      "ecart_milieu_m": -0.02,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-27",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.5789,
+      "cas": "perso-30",
+      "decalage_approches_m": [
+        -3.61,
+        -2.95
+      ],
+      "decalage_local_m": -3.41,
+      "ecart_max_m": 0.87,
+      "ecart_milieu_m": -0.4,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-40",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-32",
+      "decalage_approches_m": [
+        -2.69,
+        -2.65
+      ],
+      "decalage_local_m": -2.67,
+      "ecart_max_m": 0.74,
+      "ecart_milieu_m": -0.58,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-27",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9913,
+      "cas": "perso-32",
+      "decalage_approches_m": [
+        -3.1,
+        -2.38
+      ],
+      "decalage_local_m": -2.99,
+      "ecart_max_m": 1.19,
+      "ecart_milieu_m": -0.79,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-06",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 0.9333,
+      "cas": "perso-32",
+      "decalage_approches_m": [
+        -1.87,
+        -2.2
+      ],
+      "decalage_local_m": -1.96,
+      "ecart_max_m": 0.23,
+      "ecart_milieu_m": 0.13,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-23",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.rappel": 1.0,
+      "cas": "perso-34",
+      "decalage_approches_m": [
+        -5.31,
+        -5.69
+      ],
+      "decalage_local_m": -5.46,
+      "ecart_max_m": 1.91,
+      "ecart_milieu_m": -1.57,
+      "extrait_tenu_a_l_ecart": true,
+      "metrique": "E3",
+      "niveau_non_discriminant": true,
+      "ouvrage": "nv-27",
+      "reference": "baro_corrige_local"
+    },
+    {
+      "S1.emprise_m": 105.0,
+      "S1.rappel": 1.0,
+      "S1.type_m": 105.0,
+      "cas": "perso-37",
+      "decalage_approches_m": [
+        12.71,
+        16.12
+      ],
+      "decalage_local_m": 14.19,
+      "ecart_max_m": 1.74,
+      "ecart_milieu_m": -1.42,
+      "extrait_tenu_a_l_ecart": true,
+      "longueur_m": 105.0,
+      "metrique": "E3_hors_france",
+      "niveau_non_discriminant": true,
+      "ouvrage": "donostia-zurriola",
+      "reference": "baro_corrige_local",
+      "reference_incertaine": true
+    }
+  ],
+  "schema": 1,
+  "verdicts": {
+    "E1": "pass",
+    "E1_echecs": [],
+    "E2": "reported",
+    "E2_indicatif": [
+      {
+        "groupe": "dplus",
+        "mediane": 0.9861,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      },
+      {
+        "groupe": "ouvrage",
+        "mediane": 0.9943,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      },
+      {
+        "groupe": "plaine",
+        "mediane": 0.9757,
+        "mediane_dans_bornes": true,
+        "traces_hors_bornes": []
+      }
+    ],
+    "E2b": "pass",
+    "E2b_groupes_en_echec": [],
+    "E3": "pass",
+    "E3_echecs": [],
+    "E3_hors_france": "reported",
+    "E4": "pass",
+    "E4_echecs": [],
+    "E5": "skipped",
+    "E5_echecs": [],
+    "M1": "fail",
+    "M1_echecs": [
+      "perso-23"
+    ],
+    "Q1": "pass",
+    "R1_R2": "skipped",
+    "R1_R2_echecs": [],
+    "R3": "fail",
+    "R3_echecs": [
+      "perso-13.s1"
+    ],
+    "S1": "fail",
+    "S2": "skipped",
+    "S3": "skipped",
+    "hors_graphe_velo": "skipped"
+  }
+}
