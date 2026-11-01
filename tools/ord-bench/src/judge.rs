@@ -652,6 +652,7 @@ mod tests {
             dist_km: None,
             gain_baro_m: None,
             gain_mnt_m: None,
+            noise_m: None,
         };
         let m = Manifest {
             sha256: String::new(),

@@ -194,6 +194,8 @@ mod tests {
             id: "perso-99".into(),
             groupe: "dplus".into(),
             serie: Serie::Calibration,
+            baro_fiable: true,
+            baro_noise_m: None,
             parts: vec![pts],
             s_ref,
             baro_z: baro_s.iter().map(|s| 100.0 + s / 100.0).collect(),

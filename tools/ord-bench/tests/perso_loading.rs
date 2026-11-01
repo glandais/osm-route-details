@@ -19,6 +19,7 @@ fn trace(id: &str) -> Trace {
         dist_km: None,
         gain_baro_m: None,
         gain_mnt_m: None,
+        noise_m: None,
     }
 }
 

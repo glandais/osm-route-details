@@ -50,7 +50,9 @@ pub fn measure(
     let e1: Vec<&Value> = cases
         .iter()
         .filter(|c| {
-            matches!(groupe(c).as_str(), "dplus" | "plaine") && num(&c["metriques"]["E1.rmse_m"]).is_finite()
+            matches!(groupe(c).as_str(), "dplus" | "plaine")
+                && num(&c["metriques"]["E1.rmse_m"]).is_finite()
+                && !crate::campaign::e1_uncertain(c)
         })
         .collect();
     let mut e2b: BTreeMap<String, usize> = BTreeMap::new();

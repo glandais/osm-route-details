@@ -136,6 +136,59 @@ pub struct TemoinV1 {
     pub nature: String,
     pub serie: Serie,
     pub ends: Option<[LatLon; 2]>,
+    /// Ouvrages réels sur la voie du témoin (README §4 ter.6 ; `temoins-v1-tags.json`, 57e9d95) :
+    /// plages taguées `covered`, `avalanche_protector`, `bridge` ou `tunnel` de la base OSM V1.
+    pub real: Vec<RealRange>,
+    /// Longueur du témoin lue par `tools/temoins_v1_tags.py` (part d'une plage).
+    pub length_m: Option<f64>,
+}
+
+/// Plage d'ouvrage réel sur la voie d'un témoin V1 (extrémités projetées sur le cas par ord-bench).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RealRange {
+    pub tag: String,
+    pub ends: [LatLon; 2],
+    pub length_m: f64,
+}
+
+/// Plages d'ouvrages réels d'un témoin et sa longueur.
+type TemoinTags = (Vec<RealRange>, Option<f64>);
+
+/// Ouvrages réels des témoins V1 (README §4 ter.6, 57e9d95) : hors git, empreinte figée ici (le
+/// fichier n'est pas au manifest).
+pub const TEMOINS_TAGS: (&str, &str) =
+    ("private/v1/temoins-v1-tags.json", "0bc3c1c04a594874f0f5382cef9d16f83f9c42ec0d6a9afdb1fe28de3db9b014");
+
+/// Plages d'ouvrages réels des témoins de la série `target` ; les entrées de l'autre série sont
+/// retirées à la lecture, avant tout calcul.
+fn real_ranges(paths: &BenchPaths, target: Serie) -> anyhow::Result<BTreeMap<String, TemoinTags>> {
+    // Fichier absent (banc sans la sortie de `temoins_v1_tags.py`) : aucune plage ; présent, son
+    // empreinte est vérifiée.
+    if !paths.resolve(TEMOINS_TAGS.0).exists() {
+        return Ok(BTreeMap::new());
+    }
+    let text = read_verified(paths, &(TEMOINS_TAGS.0.to_owned(), TEMOINS_TAGS.1.to_owned()))?;
+    let v: Value = serde_json::from_str(&text).context("temoins-v1-tags.json")?;
+    let mut out = BTreeMap::new();
+    for (id, t) in v.as_object().into_iter().flatten() {
+        if t["serie"].as_str().and_then(|s| Serie::parse(s).ok()) != Some(target) {
+            continue;
+        }
+        let ranges = t["plages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| {
+                Some(RealRange {
+                    tag: p["tag"].as_str()?.to_owned(),
+                    ends: [point(&p["debut"])?, point(&p["fin"])?],
+                    length_m: p["longueur_m"].as_f64()?,
+                })
+            })
+            .collect();
+        out.insert(id.clone(), (ranges, t["longueur_temoin_m"].as_f64()));
+    }
+    Ok(out)
 }
 
 fn point(v: &Value) -> Option<LatLon> {
@@ -145,6 +198,7 @@ fn point(v: &Value) -> Option<LatLon> {
 /// Témoins V1 de la série `target` ; les autres sont retirés à la lecture de l'index.
 pub fn temoins(paths: &BenchPaths, v1: &PersoV1, target: Serie) -> anyhow::Result<Vec<TemoinV1>> {
     let v: Value = serde_json::from_str(&read_verified(paths, &v1.temoins)?).context("temoins-v1.json")?;
+    let mut real = real_ranges(paths, target)?;
     Ok(v.as_array()
         .into_iter()
         .flatten()
@@ -157,7 +211,16 @@ pub fn temoins(paths: &BenchPaths, v1: &PersoV1, target: Serie) -> anyhow::Resul
                 nature: t["nature"].as_str().unwrap_or_default().to_owned(),
                 serie,
                 ends: point(&t["debut"]).zip(point(&t["fin"])).map(|(a, b)| [a, b]),
+                real: Vec::new(),
+                length_m: None,
             })
+        })
+        .map(|mut t: TemoinV1| {
+            if let Some((r, l)) = real.remove(&t.id) {
+                t.real = r;
+                t.length_m = l;
+            }
+            t
         })
         .collect())
 }
@@ -298,6 +361,8 @@ pub fn load_planned(paths: &BenchPaths, p: &Planned, serie: Serie) -> Result<Per
         id: p.id.clone(),
         groupe: format!("planifie_{}", p.role),
         serie,
+        baro_fiable: false,
+        baro_noise_m: None,
         parts: vec![pts.iter().map(|q| Pt { lat: q.lat, lon: q.lon }).collect()],
         s_ref: s,
         baro_s: Vec::new(),

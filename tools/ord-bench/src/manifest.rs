@@ -70,6 +70,9 @@ pub struct Trace {
     pub dist_km: Option<f64>,
     pub gain_baro_m: Option<f64>,
     pub gain_mnt_m: Option<f64>,
+    /// Bruit baro de `qualify_baro.py` (`noise_m`) : E1 plaine incertaine au-delà de 1,0 m
+    /// (README §4 ter.8).
+    pub noise_m: Option<f64>,
 }
 
 /// Itinéraire planifié de la série V1 (`perso_v1.planifies`) : sans donnée perso, hors git
@@ -156,6 +159,7 @@ fn parse_traces(section: Option<&Value>, name: &str) -> anyhow::Result<Vec<Trace
                 dist_km: f(it, "dist_km"),
                 gain_baro_m: q.and_then(|q| f(q, "gain_baro_m")),
                 gain_mnt_m: q.and_then(|q| f(q, "gain_mnt_m")),
+                noise_m: q.and_then(|q| f(q, "noise_m")),
                 id,
             });
         }

@@ -286,6 +286,8 @@ mod tests {
             id: "perso-99".into(),
             groupe: "plaine".into(),
             serie: Serie::Calibration,
+            baro_fiable: true,
+            baro_noise_m: None,
             parts: vec![pts],
             s_ref: (0..=200).map(|k| k as f64 * 10.0).collect(),
             baro_s: Vec::new(),

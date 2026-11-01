@@ -104,6 +104,11 @@ pub struct PersoCase {
     pub id: String,
     pub groupe: String,
     pub serie: Serie,
+    /// Trace perso fiable (verdict `fiable` de `qualify_baro.py`) : référence baro d'E5
+    /// (README §4 ter.7).
+    pub baro_fiable: bool,
+    /// Bruit baro de `qualify_baro.py` (`noise_m`, E1 plaine, README §4 ter.8).
+    pub baro_noise_m: Option<f64>,
     /// Requêtes envoyées, une par tronçon (`.partN` : bornes d'entrée de 200 km) ; le tronçon
     /// N+1 repart du dernier point du tronçon N.
     pub parts: Vec<Vec<Pt>>,
@@ -352,6 +357,8 @@ fn build_case(
         id,
         groupe: trace.groupe.clone(),
         serie: trace.serie,
+        baro_fiable: trace.verdict.as_deref() == Some("fiable"),
+        baro_noise_m: trace.noise_m,
         parts,
         s_ref,
         baro_s,
@@ -635,6 +642,8 @@ pub fn held_out_extracts(
             id: format!("{}#extrait{k}", case.id),
             groupe: case.groupe.clone(),
             serie: case.serie,
+            baro_fiable: case.baro_fiable,
+            baro_noise_m: case.baro_noise_m,
             parts: vec![pts[first..=last].to_vec()],
             s_ref: case.s_ref[first..=last].iter().map(|x| x - s0).collect(),
             baro_s,
@@ -1100,6 +1109,7 @@ pub async fn measure_case(
         "id": case.id,
         "serie": case.serie,
         "groupe": case.groupe,
+        "bruit_baro_m": case.baro_noise_m,
         "mode": "distance",
         "cache": "disque",
         "metriques": {
@@ -1185,6 +1195,7 @@ pub async fn measure_case(
         structure_segs: &p.structure_segs,
         raw_gps: Some(&raw_gps),
         tiles: Some(&tiles),
+        baro_fiable: case.baro_fiable,
     };
     let mut items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     // Témoins négatifs V1 portés par ce cas (README §4 ter.4–6) ; plages hors graphe vélo en
@@ -1201,7 +1212,7 @@ pub async fn measure_case(
             eval.window.as_ref(),
             rules.passage_tol_m,
         ) {
-            items.push(it);
+            items.extend(it);
         }
     }
     Ok((case_json, r["meta"]["data_versions"].clone(), items))
@@ -1285,6 +1296,14 @@ fn e1_thresholds(groupe: &str) -> Option<(f64, f64)> {
 
 /// Bornes indicatives d'E2 (`criteria.yaml`) : par trace, et médiane du groupe.
 const E2_TRACE: (f64, f64) = (0.90, 1.20);
+/// E1 plaine (README §4 ter.8, criteria `reference_incertaine_si`) : bruit baro de
+/// `qualify_baro.py` au-delà duquel la référence est incertaine, rapportée, non jugée.
+const E1_PLAINE_NOISE_MAX_M: f64 = 1.0;
+
+/// Référence E1 incertaine : trace `plaine` au bruit baro > 1,0 m (README §4 ter.8).
+pub fn e1_uncertain(c: &Value) -> bool {
+    c["groupe"] == "plaine" && c["bruit_baro_m"].as_f64().is_some_and(|b| b > E1_PLAINE_NOISE_MAX_M)
+}
 const E2_GROUP_MEDIAN: (f64, f64) = (0.95, 1.12);
 /// Groupes jugés « France » pour E2 et E2b (`criteria.yaml`, `terrain: france`).
 const E2_GROUPS: [&str; 3] = ["dplus", "plaine", "ouvrage"];
@@ -1306,6 +1325,7 @@ fn judge(cases: &[Value]) -> (Value, Value) {
     let mut agg_e2b = serde_json::Map::new();
     let mut e1_fail = Vec::new();
     let mut e1_judged = 0usize;
+    let mut e1_uncertain_list = Vec::new();
     let mut e2b_fail = Vec::new();
     let mut e2b_judged = 0usize;
     let mut e2b_neutral = 0usize;
@@ -1325,8 +1345,15 @@ fn judge(cases: &[Value]) -> (Value, Value) {
             .insert(format!("{g}.p95_m_max"), json!(round(p95.iter().copied().fold(f64::NAN, f64::max), 3)));
         if let Some((rmse_max, p95_max)) = e1_thresholds(g) {
             for c in list {
-                e1_judged += 1;
                 let (r, q) = (metric(c, "E1.rmse_m"), metric(c, "E1.p95_m"));
+                if e1_uncertain(c) {
+                    // Rapportée, non jugée (README §4 ter.8).
+                    e1_uncertain_list
+                        .push(json!({"id": c["id"], "groupe": g, "bruit_baro_m": c["bruit_baro_m"],
+                        "rmse_m": r, "p95_m": q, "pass_indicatif": r <= rmse_max && q <= p95_max}));
+                    continue;
+                }
+                e1_judged += 1;
                 if !(r <= rmse_max && q <= p95_max) {
                     e1_fail.push(json!({"id": c["id"], "groupe": g, "rmse_m": r, "p95_m": q}));
                 }
@@ -1385,6 +1412,7 @@ fn judge(cases: &[Value]) -> (Value, Value) {
     let verdicts = json!({
         "E1": verdict(e1_judged, e1_fail.len()),
         "E1_echecs": e1_fail,
+        "E1_references_incertaines": e1_uncertain_list,
         "E2": if e2_out.is_empty() { "skipped" } else { "reported" },
         "E2_indicatif": e2_out,
         "E2b": match (e2b_judged, e2b_neutral) {
@@ -1993,7 +2021,9 @@ pub async fn run_series(
                 "hors_graphe_velo : contrôle satisfait si la portion est non appariée avec unmatched_range (controle_par = non_apparie) ou appariée sur toute sa longueur à une voie du graphe vélo, nécessairement distincte de la voie de l'ouvrage exclue du graphe (controle_par = voie_parallele_du_graphe) ; ecart_max_m = altitude rendue contre la référence (baro corrigé local pour les traces perso, vérité T de vcyclist) sur les stations non appariées, ou sur toute la portion sur une voie parallèle ; null avec raison_ecart sans référence",
                 "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S ; V1 (README §3) : detecte = station du milieu typée pont ou tunnel par le service (stn-acces-nord), part_typee_ouvrage = part des stations de l'emprise (balcons : stations S) typées pont ou tunnel, rapportées sans seuil",
-                "E5 : |service − MNT brut| au milieu des passages dessous (perso) et sur les stations O des témoins négatifs",
+                "E5 : |service − référence| au croisement des passages dessous (perso, itinéraires) ; max sur les stations O des témoins négatifs. Référence (README §4 ter.7, 800d4e0), sans le service, dans l'ordre : retiré (e5_trace_sur_ouvrage, agregats.ouvrages.E5.trace_sur_ouvrage) si une ligne bridge ou tunnel de la couche streets (tuile du point de croisement et ses 8 voisines, toutes classes) passe à ≤ 10 m du point de croisement en faisant < 20° avec la trace (direction = stations à ± 10 m du croisement) ; sinon baro corrigé localement si la trace est perso au verdict fiable (qualify_baro.py) et que son baro existe à la station du croisement (interpolation sur la grille de 5 m sans pas brut > 100 m) : baro − médiane (baro − MNT) des stations à 200–1 500 m de part et d'autre (sans station de décalage : MNT) ; sinon MNT LiDAR (sortie sans correction du mode distance), indisponible (e5_reference_indisponible) si une station à ≤ 10 m est sans MNT ou hors IGN LiDAR HD (mnt_sans_donnee), si MNT(croisement) − moyenne des médianes du MNT à 20–50 m de part et d'autre le long de la trace > 2,0 m (mnt_lit_le_tablier), ou si un côté n'a pas de station à 20–50 m (approche_sans_mnt, lecture du banc) ; témoins négatifs vcyclist : croisement = station du milieu de la plage O, référence MNT (lecture du banc) ; bosse_mnt_m et ecart_mnt_m rapportés",
+                "E1 plaine (README §4 ter.8, 4423741) : trace plaine dont le bruit baro de qualify_baro.py (noise_m du manifest) dépasse 1,0 m = référence incertaine, rapportée (verdicts.E1_references_incertaines, avec un verdict indicatif), non jugée et hors couverture E1 ; dplus et E2b inchangés",
+                "Témoins S2 V1, ouvrages réels sur leur voie (README §4 ter.6, 57e9d95) : private/v1/temoins-v1-tags.json (empreinte vérifiée dans le code, fichier hors manifest ; absent : aucune plage), entrées de la série mesurée seulement ; extrémités de chaque plage projetées sur la station la plus proche du tronçon du témoin (≤ 40 m, sinon non_retrouvee) ; plage ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel, longueur et part du témoin lues dans le fichier ; avalanche_protector et covered : limite_donnees, erreur d'altitude non mesurée) ; témoin sorti (S2_temoin_sorti) si une plage dépasse la moitié de longueur_temoin_m",
                 "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; plages hors graphe vélo du témoin (règle de M1 resserrée, README §4 ter.5, 09dcda0) retirées des ouvrages fictifs, de la longueur typée et de la longueur totale, hors_graphe_velo_m par témoin ; ouvrage réel sur la voie même d'un témoin (README §4 ter.6, 32f6867, précisé en eb4c4cc : suites de stations dont la way, colonne way des fichiers de stations, plages X et O comprises, porte à la base OSM du témoin bridge, tunnel, dont avalanche_protector = galerie, ou covered=yes ; tags lus par Overpass daté dans le cache de banc, temoins-tags/) : plage A–B ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel ; galerie : limite_donnees, mesurée comme un tunnel entre ses portails) ; témoin sorti de S2 (S2_temoin_sorti) si sa catégorie nomme la nature de l'ouvrage (galerie : « galler… », sinon « tunnel », « bridge ») ou si un ouvrage couvre à lui seul plus de la moitié de sa longueur ; objet = catégorie vcyclist nommant la nature d'un ouvrage emprunté (galler…, tunnel, bridge, viaduc…, sans under/above/beside/over avant le nom) ; covered : limite_donnees (shortbread sans covered), non mesuré ; tags absents du cache : S2 du témoin sauté ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
                 "Passage en hauteur sur un pont (README §2.1, passage_pont.niveau) : MNH au milieu du corpus (médiane MNS 25 m − MNT LiDAR) ≥ 10 m : passage compté seulement si la médiane (baro corrigé − MNT) à ± 12,5 m du milieu (≥ 3 stations) atteint ½ MNH, sinon rapporté en passage_retire_niveau et retiré de E3, S1 et hors_graphe_velo ; MNH < 10 m : niveau_non_discriminant ; moins de 3 stations : niveau_sans_baro",
@@ -2417,6 +2447,8 @@ mod tests {
             id: "perso-99".into(),
             groupe: "ouvrage".into(),
             serie: Serie::TenueALEcart,
+            baro_fiable: true,
+            baro_noise_m: None,
             parts: vec![pts],
             baro_s: s_ref.clone(),
             baro_z: vec![10.0; s_ref.len()],
@@ -2492,5 +2524,30 @@ mod tests {
             json!({"ouvrage": "pont", "cas": "perso-99", "metrique": "E3", "ecart_milieu_m": 0.5,
                 "extrait_tenu_a_l_ecart": true})
         );
+    }
+}
+
+#[cfg(test)]
+mod e1_tests {
+    use super::*;
+
+    fn case(id: &str, groupe: &str, noise: f64, rmse: f64) -> Value {
+        json!({"id": id, "groupe": groupe, "bruit_baro_m": noise,
+            "metriques": {"E1.rmse_m": rmse, "E1.p95_m": 2.0, "E2.ratio": 1.0, "E2.ratio_mnt_brut": 1.0,
+                "E2b.ratio": 1.0, "E2b.ratio_mnt_brut": 1.0, "E2.dplus_service_m": 1.0, "E2.dplus_mnt_brut_m": 1.0}})
+    }
+
+    /// README §4 ter.8 : trace plaine au bruit baro > 1,0 m, référence incertaine, non jugée ; dplus
+    /// non concerné.
+    #[test]
+    fn a_noisy_plain_baro_is_an_uncertain_e1_reference() {
+        let cases =
+            [case("a", "plaine", 1.44, 1.77), case("b", "plaine", 0.6, 0.5), case("c", "dplus", 1.4, 3.5)];
+        let (_, v) = judge(&cases);
+        assert_eq!(v["E1_echecs"].as_array().unwrap().len(), 1, "{v}");
+        assert_eq!(v["E1_echecs"][0]["id"], "c");
+        assert_eq!(v["E1_references_incertaines"][0]["id"], "a");
+        let (_, v) = judge(&cases[..2]);
+        assert_eq!(v["E1"], "pass", "{v}");
     }
 }

@@ -389,6 +389,8 @@ pub struct CaseProfile<'a> {
     pub raw_gps: Option<&'a dyn Fn(f64, f64) -> Vec<LatLon>>,
     /// Tuiles de la campagne autour des ouvrages (attribution d'un passage).
     pub tiles: Option<&'a Tiles>,
+    /// Trace perso fiable : le baro corrigé localement est la référence d'E5 (README §4 ter.7).
+    pub baro_fiable: bool,
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -777,7 +779,7 @@ pub fn temoin_v1_item(
     closed: &[std::ops::Range<f64>],
     window: Option<&std::ops::Range<f64>>,
     tol: f64,
-) -> Option<Value> {
+) -> Option<Vec<Value>> {
     let n = d.len();
     if n < 2 {
         return None;
@@ -802,18 +804,61 @@ pub fn temoin_v1_item(
         real.get(k).is_some_and(|v| *v <= x + TEMOIN_ABORDS_M)
     };
     let in_closed = |x: f64| closed.iter().any(|c| c.contains(&x));
+    // Ouvrages réels sur la voie du témoin (README §4 ter.6, `temoins-v1-tags.json`) : extrémités
+    // projetées sur le tronçon du témoin (station la plus proche, à `tol` au plus) ; plage A–B
+    // ± 35 m retirée de S2 et rapportée ; galerie et `covered` (absents du schéma) en limite des
+    // données ; témoin sorti si une plage couvre plus de la moitié de sa longueur.
+    let mut out = Vec::new();
+    let mut real: Vec<(f64, f64)> = Vec::new();
+    let mut sorti: Option<String> = None;
+    for (k, r) in t.real.iter().enumerate() {
+        let near = |p: LatLon| nearest(d, pts, p, d[i0] - tol, d[i1] + tol).filter(|x| x.1 <= tol);
+        let limit = match r.tag.as_str() {
+            "avalanche_protector" => Some(GALLERY_NOTE),
+            "covered" => Some(COVERED_NOTE),
+            _ => None,
+        };
+        let share = t.length_m.filter(|l| *l > 0.0).map(|l| r.length_m / l);
+        let mut item = json!({"ouvrage": format!("{}#reel{k}", t.id), "cas": t.id, "temoin": t.id,
+            "metrique": "S2_ouvrage_reel", "nature": r.tag, "longueur_m": r.length_m, "marge_m": REAL_STRUCTURE_MARGIN_M,
+            "part_du_temoin": share.map_or(Value::Null, |s| json!(r4(s))),
+            "limite_donnees": limit.map_or(Value::Null, |n| json!(n))});
+        match (near(r.ends[0]), near(r.ends[1])) {
+            (Some((a, _)), Some((b, _))) => real.push((d[a].min(d[b]), d[a].max(d[b]))),
+            _ => item["non_retrouvee"] = json!(true),
+        }
+        if share.is_some_and(|s| s > 0.5) && sorti.is_none() {
+            sorti =
+                Some(format!("ouvrage réel ({}) sur {:.0} % du témoin", r.tag, 100.0 * share.unwrap_or(0.0)));
+        }
+        out.push(item);
+    }
+    if let Some(raison) = sorti {
+        for it in &mut out {
+            it["temoin_sorti"] = json!(true);
+        }
+        out.push(json!({"cas": t.id, "temoin": t.id, "metrique": "S2_temoin_sorti", "raison": raison}));
+        return Some(out);
+    }
+    let in_real = |x: f64| {
+        real.iter().any(|r| x >= r.0 - REAL_STRUCTURE_MARGIN_M && x <= r.1 + REAL_STRUCTURE_MARGIN_M)
+    };
     let (mut total, mut fp, mut fictifs, mut closed_m, mut abords_m) = (0.0, 0.0, 0usize, 0.0, 0.0);
+    let mut real_m = 0.0;
     let mut in_run = false;
     for i in i0..=i1 {
         let step = if i > i0 { d[i] - d[i - 1] } else { 0.0 };
         let off_graph = in_closed(d[i]);
+        let masked_real = in_real(d[i]);
         let abords = near_real(d[i]);
         if off_graph {
             closed_m += step;
+        } else if masked_real {
+            real_m += step;
         } else if abords {
             abords_m += step;
         }
-        if off_graph || abords {
+        if off_graph || masked_real || abords {
             in_run = false;
             continue;
         }
@@ -828,9 +873,10 @@ pub fn temoin_v1_item(
             in_run = false;
         }
     }
-    Some(json!({"cas": t.id, "temoin": t.id, "trace": t.trace, "metrique": "S2", "nature": t.nature,
+    out.push(json!({"cas": t.id, "temoin": t.id, "trace": t.trace, "metrique": "S2", "nature": t.nature,
         "longueur_m": r2(total), "faux_positif_m": r2(fp), "ouvrages_fictifs": fictifs,
-        "hors_graphe_velo_m": r2(closed_m), "abords_ouvrages_m": r2(abords_m)}))
+        "hors_graphe_velo_m": r2(closed_m), "ouvrage_reel_masque_m": r2(real_m), "abords_ouvrages_m": r2(abords_m)}));
+    Some(out)
 }
 
 /// Mesures d'ouvrage sur les passages d'un cas perso.
@@ -1114,16 +1160,68 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     }
                 }
                 Kind::Under => {
-                    let e = (p.svc[im] - p.raw[im]).abs();
-                    item.insert("metrique".into(), json!("E5"));
-                    item.insert("ecart_croisement_m".into(), r2(e));
-                    item.insert("pass".into(), json!(e <= 1.0));
+                    // Référence au croisement (README §4 ter.7) : trace et données, jamais le service.
+                    let input = E5Input {
+                        d: p.d,
+                        pts: p.pts,
+                        raw: p.raw,
+                        ign: Some(p.ign),
+                        baro: p.baro_fiable.then_some(p.baro),
+                        tiles: p.tiles,
+                        at: o.pts[1],
+                        im,
+                    };
+                    let bump = e5_bump(p.d, p.raw, im);
+                    match e5_item(&o.id, case, e5_reference(&input), p.svc[im], p.raw[im], bump) {
+                        Ok(fields) => item.extend(fields),
+                        Err(v) => {
+                            out.push(v);
+                            continue;
+                        }
+                    }
                 }
             }
             out.push(Value::Object(item));
         }
     }
     out
+}
+
+/// Champs d'un passage E5 compté (`Ok`), ou item rapporté non compté (`Err`) : retiré
+/// (`e5_trace_sur_ouvrage`) ou référence indisponible (`e5_reference_indisponible`).
+fn e5_item(
+    id: &str,
+    case: &str,
+    reference: E5Reference,
+    svc: f64,
+    mnt: f64,
+    bump: Option<f64>,
+) -> Result<serde_json::Map<String, Value>, Value> {
+    let bump_v = bump.map_or(Value::Null, r2);
+    let (z, name, offset) = match reference {
+        E5Reference::Retire { distance_m, angle_deg } => {
+            return Err(json!({"ouvrage": id, "cas": case, "metrique": "e5_trace_sur_ouvrage",
+                "distance_ouvrage_m": r2(distance_m), "angle_deg": r2(angle_deg)}));
+        }
+        E5Reference::Indisponible { raison } => {
+            return Err(json!({"ouvrage": id, "cas": case, "metrique": "e5_reference_indisponible",
+                "raison": raison, "bosse_mnt_m": bump_v}));
+        }
+        E5Reference::Baro { z, offset_m } => (z, "baro_corrige_local", Some(offset_m)),
+        E5Reference::Mnt { z } => (z, "mnt", None),
+    };
+    let e = (svc - z).abs();
+    let mut m = serde_json::Map::new();
+    m.insert("metrique".into(), json!("E5"));
+    m.insert("reference".into(), json!(name));
+    m.insert("ecart_croisement_m".into(), r2(e));
+    m.insert("ecart_mnt_m".into(), r2((svc - mnt).abs()));
+    m.insert("bosse_mnt_m".into(), bump_v);
+    if let Some(o) = offset {
+        m.insert("decalage_local_m".into(), r2(o));
+    }
+    m.insert("pass".into(), json!(e <= 1.0));
+    Ok(m)
 }
 
 /// Réponse du service point par point (mode `input`, morceaux de 15 000 points).
@@ -1690,6 +1788,41 @@ impl Tiles {
             .collect()
     }
 
+    /// Trace elle-même sur un ouvrage au croisement d'E5 (README §4 ter.7) : voie `bridge` ou
+    /// `tunnel` de la couche `streets` (tuile du point et ses 8 voisines) à `max_m` au plus de
+    /// `at`, faisant moins de `max_deg` avec la direction `dir` de la trace (unités globales).
+    /// Renvoie la distance (m) et l'angle (°) du segment le plus proche qui convient.
+    pub fn structure_along(&self, at: LatLon, dir: [f64; 2], max_m: f64, max_deg: f64) -> Option<(f64, f64)> {
+        let grid = Shortbread::GRID;
+        let u = grid.to_units(at);
+        let mpu = grid.metres_per_unit(at.lat);
+        let k = grid.tile_of(u);
+        let mut best: Option<(f64, f64)> = None;
+        for dx in -1i64..=1 {
+            for dy in -1i64..=1 {
+                let tk = TileKey { z: k.z, x: (k.x as i64 + dx) as u32, y: (k.y as i64 + dy) as u32 };
+                let Some(Some(t)) = self.tiles.get(&tk) else { continue };
+                for l in &t.lines {
+                    let a = &t.attrs[l.attr as usize];
+                    if !matches!(a.structure, StructureTag::Bridge | StructureTag::Tunnel) {
+                        continue;
+                    }
+                    for w in l.points.windows(2) {
+                        let d = dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu;
+                        if d > max_m {
+                            continue;
+                        }
+                        let angle = axis_angle_deg(dir, [w[1][0] - w[0][0], w[1][1] - w[0][1]]);
+                        if angle < max_deg && best.is_none_or(|b| d < b.0) {
+                            best = Some((d, angle));
+                        }
+                    }
+                }
+            }
+        }
+        best
+    }
+
     /// Les ouvrages (`tunnel` ou pont) à moins de 15 m de `p` sont-ils dans le graphe vélo ?
     /// `None` : aucun ouvrage trouvé (tuile absente ou ouvrage non tagué).
     fn routable(&self, p: LatLon, tunnel: bool) -> Option<bool> {
@@ -1717,6 +1850,115 @@ impl Tiles {
             }
         }
         found
+    }
+}
+
+/// Angle non orienté entre deux directions, dans `[0°, 90°]` ; 0 si l'une est nulle.
+fn axis_angle_deg(r: [f64; 2], q: [f64; 2]) -> f64 {
+    let (nr, nq) = (r[0].hypot(r[1]), q[0].hypot(q[1]));
+    if nr == 0.0 || nq == 0.0 {
+        return 0.0;
+    }
+    ((r[0] * q[0] + r[1] * q[1]) / (nr * nq)).abs().min(1.0).acos().to_degrees()
+}
+
+/// Référence d'E5 au croisement (README §4 ter.7, criteria `E5.reference`) : bornes du README.
+const E5_ON_STRUCTURE_M: f64 = 10.0;
+const E5_ON_STRUCTURE_DEG: f64 = 20.0;
+/// Décalage du baro corrigé localement : médiane baro − MNT de 200 à 1 500 m de part et d'autre.
+const E5_BARO_RING_M: (f64, f64) = (200.0, 1_500.0);
+/// MNT sans donnée à 10 m au plus du croisement : référence indisponible.
+const E5_NODATA_M: f64 = 10.0;
+/// « Le MNT lit le tablier » : MNT au croisement − moyenne des médianes des approches 20–50 m.
+const E5_APPROACH_M: (f64, f64) = (20.0, 50.0);
+const E5_DECK_BUMP_M: f64 = 2.0;
+/// Demi-fenêtre de la direction de la trace au croisement (test « trace sur un ouvrage »).
+const E5_DIRECTION_HALF_M: f64 = 10.0;
+
+/// Ce que dit la règle de référence d'E5 pour un croisement.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum E5Reference {
+    /// Trace sur un ouvrage des tuiles au croisement (`e5_trace_sur_ouvrage`) : distance, angle.
+    Retire { distance_m: f64, angle_deg: f64 },
+    /// Baro corrigé localement au croisement : altitude et décalage.
+    Baro { z: f64, offset_m: f64 },
+    /// MNT LiDAR au croisement.
+    Mnt { z: f64 },
+    /// `e5_reference_indisponible`, avec sa raison.
+    Indisponible { raison: &'static str },
+}
+
+/// Profil lu par la règle de référence d'E5, sur la grille du cas.
+#[allow(missing_debug_implementations)]
+#[derive(Clone, Copy)]
+pub struct E5Input<'a> {
+    pub d: &'a [f64],
+    pub pts: &'a [LatLon],
+    /// MNT (sortie sans correction du mode `distance`, README §2.2.3).
+    pub raw: &'a [f64],
+    /// Station sur terrain IGN LiDAR HD (`None` : non lu, seul le MNT absent compte).
+    pub ign: Option<&'a [bool]>,
+    /// Baro transporté d'une trace perso fiable (`None` sinon).
+    pub baro: Option<&'a [f64]>,
+    pub tiles: Option<&'a Tiles>,
+    /// Point de croisement et station la plus proche.
+    pub at: LatLon,
+    pub im: usize,
+}
+
+/// Bosse du MNT au croisement : MNT(croisement) − moyenne des médianes du MNT entre 20 et 50 m
+/// de part et d'autre, le long de la trace (qui suit la voie du dessous). `None` : MNT absent au
+/// croisement ou côté sans station.
+pub fn e5_bump(d: &[f64], raw: &[f64], im: usize) -> Option<f64> {
+    let side = |dir: f64| -> Option<f64> {
+        let v: Vec<f64> = (0..d.len())
+            .filter(|&k| (E5_APPROACH_M.0..=E5_APPROACH_M.1).contains(&(dir * (d[k] - d[im]))))
+            .map(|k| raw[k])
+            .filter(|z| z.is_finite())
+            .collect();
+        (!v.is_empty()).then(|| median(&v))
+    };
+    let (a, b) = (side(-1.0)?, side(1.0)?);
+    raw[im].is_finite().then(|| raw[im] - 0.5 * (a + b))
+}
+
+/// Règle de référence d'E5 (README §4 ter.7), dans l'ordre : retiré, baro, MNT. Jamais le service.
+pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
+    let (d, im) = (x.d, x.im);
+    let near: Vec<usize> = (0..d.len()).filter(|&k| (d[k] - d[im]).abs() <= E5_DIRECTION_HALF_M).collect();
+    if let (Some(tiles), Some(&a), Some(&b)) = (x.tiles, near.first(), near.last()) {
+        let grid = Shortbread::GRID;
+        let (ua, ub) = (grid.to_units(x.pts[a]), grid.to_units(x.pts[b]));
+        let dir = [ub[0] - ua[0], ub[1] - ua[1]];
+        if a < b {
+            if let Some((distance_m, angle_deg)) =
+                tiles.structure_along(x.at, dir, E5_ON_STRUCTURE_M, E5_ON_STRUCTURE_DEG)
+            {
+                return E5Reference::Retire { distance_m, angle_deg };
+            }
+        }
+    }
+    if let Some(baro) = x.baro.filter(|b| b[im].is_finite()) {
+        let ring: Vec<f64> = (0..d.len())
+            .filter(|&k| (E5_BARO_RING_M.0..=E5_BARO_RING_M.1).contains(&(d[k] - d[im]).abs()))
+            .map(|k| baro[k] - x.raw[k])
+            .filter(|v| v.is_finite())
+            .collect();
+        if !ring.is_empty() {
+            let offset_m = median(&ring);
+            return E5Reference::Baro { z: baro[im] - offset_m, offset_m };
+        }
+    }
+    let nodata = (0..d.len())
+        .filter(|&k| (d[k] - d[im]).abs() <= E5_NODATA_M)
+        .any(|k| !x.raw[k].is_finite() || x.ign.is_some_and(|g| !g[k]));
+    if nodata {
+        return E5Reference::Indisponible { raison: "mnt_sans_donnee" };
+    }
+    match e5_bump(d, x.raw, im) {
+        Some(b) if b > E5_DECK_BUMP_M => E5Reference::Indisponible { raison: "mnt_lit_le_tablier" },
+        Some(_) => E5Reference::Mnt { z: x.raw[im] },
+        None => E5Reference::Indisponible { raison: "approche_sans_mnt" },
     }
 }
 
@@ -2069,9 +2311,35 @@ pub async fn vc_items(
                         "S1.emprise_m": r2(r.d[i1] - r.d[i0]), "S1.type_m": r2(span_typed(i0, i1))}));
                 }
             } else if kind == "O" && negative {
-                // La trace du négatif reste dans E5 même hors graphe (§4 bis.1).
-                let e = (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
-                out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "E5", "ecart_croisement_m": r2(e), "pass": e <= 1.0}));
+                // La trace du négatif reste dans E5 même hors graphe (§4 bis.1). Référence au
+                // croisement (README §4 ter.7) lue à la station du milieu de la plage `O` ; témoin
+                // sans baro : MNT, ou retiré / indisponible. Écart : max sur la plage.
+                let im = (i0 + i1) / 2;
+                let pts: Vec<LatLon> = (0..r.s.pts.len()).map(|i| ll(r, i)).collect();
+                let input = E5Input {
+                    d: &r.d,
+                    pts: &pts,
+                    raw: &r.raw.ele,
+                    ign: None,
+                    baro: None,
+                    tiles: Some(tiles),
+                    at: pts[im],
+                    im,
+                };
+                let bump = e5_bump(&r.d, &r.raw.ele, im);
+                match e5_reference(&input) {
+                    reference @ (E5Reference::Retire { .. } | E5Reference::Indisponible { .. }) => {
+                        if let Err(v) = e5_item(&id, &r.id, reference, f64::NAN, f64::NAN, bump) {
+                            out.push(v);
+                        }
+                    }
+                    _ => {
+                        let e =
+                            (i0..=i1).map(|i| (r.svc.ele[i] - r.raw.ele[i]).abs()).fold(f64::NAN, f64::max);
+                        out.push(json!({"ouvrage": id, "cas": r.id, "metrique": "E5", "reference": "mnt",
+                            "ecart_croisement_m": r2(e), "bosse_mnt_m": bump.map_or(Value::Null, r2), "pass": e <= 1.0}));
+                    }
+                }
             }
         }
         if negative {
@@ -2307,7 +2575,13 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "E4_non_couverts": not_covered("E4_non_couvert"),
         "limite_donnees": limits,
         "E5": {"croisements": e5_n, "ok": e5_ok,
-            "passages_dessus": by("E5_passage_dessus").into_iter().map(strip_private).collect::<Vec<_>>()},
+            "par_reference": {
+                "baro_corrige_local": by("E5").into_iter().filter(|i| i["reference"] == "baro_corrige_local").count(),
+                "mnt": by("E5").into_iter().filter(|i| i["reference"] == "mnt").count()},
+            "passages_dessus": by("E5_passage_dessus").into_iter().map(strip_private).collect::<Vec<_>>(),
+            // README §4 ter.7 : rapportés, non comptés.
+            "trace_sur_ouvrage": by("e5_trace_sur_ouvrage").into_iter().map(strip_private).collect::<Vec<_>>(),
+            "references_indisponibles": by("e5_reference_indisponible").into_iter().map(strip_private).collect::<Vec<_>>()},
         "S1": {"emprise_m": r2(s1_ref), "type_m": r2(s1_typed), "rappel": r4(s1), "seuil": 0.95},
         "S2": {"longueur_m": r2(s2_len), "faux_positif_m": r2(s2_fp), "part": r4(s2_share), "ouvrages_fictifs": s2_fict},
         "S3": by("S3").into_iter().map(strip_private).collect::<Vec<_>>(),
@@ -2523,7 +2797,7 @@ mod tests {
         assert_eq!(typed_overlap(&[(161.0, 200.0)], 100.0, 160.0), 0.0);
     }
 
-    fn tiles_of(lines: Vec<(WayAttrsT, f64)>, mid: LatLon) -> (Tiles, [f64; 2]) {
+    pub(super) fn tiles_of(lines: Vec<(WayAttrsT, f64)>, mid: LatLon) -> (Tiles, [f64; 2]) {
         let grid = Shortbread::GRID;
         let u = grid.to_units(mid);
         let key = grid.tile_of(u);
@@ -2539,9 +2813,9 @@ mod tests {
         (Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]), bridges: BTreeMap::new() }, u)
     }
 
-    type WayAttrsT = ord_domain::street::WayAttrs;
+    pub(super) type WayAttrsT = ord_domain::street::WayAttrs;
 
-    fn way_attrs(kind: &str, structure: StructureTag) -> WayAttrsT {
+    pub(super) fn way_attrs(kind: &str, structure: StructureTag) -> WayAttrsT {
         WayAttrsT {
             highway: Arc::from(kind),
             surface: ord_domain::street::SurfaceTag::Absent,
@@ -2685,6 +2959,7 @@ mod tests {
             structure_segs: &segs,
             raw_gps: Some(&footbridge),
             tiles: Some(&tiles),
+            baro_fiable: true,
         };
         let items = perso_items("c", &p, std::slice::from_ref(&o), 40.0);
         assert_eq!(items.len(), 1);
@@ -2754,7 +3029,7 @@ mod tests {
                     Some(*acc)
                 })
                 .collect();
-            let (z, flags) = (vec![0.0; n], vec![false; n]);
+            let (z, flags, yes) = (vec![0.0; n], vec![false; n], vec![true; n]);
             let p = CaseProfile {
                 d: &d,
                 pts: &pts,
@@ -2763,7 +3038,7 @@ mod tests {
                 ref_svc: &z,
                 baro: &z,
                 on_structure: &flags,
-                ign: &flags,
+                ign: &yes,
                 matched: &flags,
                 unmatched_warn: &flags,
                 tile_structure: &flags,
@@ -2771,6 +3046,7 @@ mod tests {
                 structure_segs: &[],
                 raw_gps: None,
                 tiles: Some(&tiles),
+                baro_fiable: true,
             };
             perso_items("c", &p, std::slice::from_ref(&o), 40.0)
         };
@@ -2801,9 +3077,11 @@ mod tests {
             nature: "digue".into(),
             serie: crate::manifest::Serie::Calibration,
             ends: None,
+            real: Vec::new(),
+            length_m: None,
         };
         let closed = [750.0..800.0];
-        let it = temoin_v1_item(&t, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap();
+        let it = temoin_v1_item(&t, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap().pop().unwrap();
         assert_eq!(it["ouvrages_fictifs"], 1, "{it}");
         assert_eq!(it["faux_positif_m"], 20.0, "{it}");
         assert_eq!(it["hors_graphe_velo_m"], 50.0, "{it}");
@@ -2811,8 +3089,22 @@ mod tests {
         assert_eq!(it["nature"], "digue");
         // Témoin de sortie : tronçon entre ses extrémités ; extrémités introuvables : None.
         let s = crate::v1::TemoinV1 { planifie: false, ends: Some([pts[90], pts[110]]), ..t.clone() };
-        let it = temoin_v1_item(&s, &d, &pts, &on, &tile, &[], None, 40.0).unwrap();
+        let it = temoin_v1_item(&s, &d, &pts, &on, &tile, &[], None, 40.0).unwrap().pop().unwrap();
         assert_eq!(it["longueur_m"], 100.0, "{it}");
+        // Ouvrage réel sur la voie (README §4 ter.6) : l'ouvrage fictif des stations 100–103 est
+        // un pont tagué, plage ± 35 m masquée et rapportée.
+        let real = crate::v1::RealRange { tag: "bridge".into(), ends: [pts[100], pts[103]], length_m: 15.0 };
+        let r = crate::v1::TemoinV1 { real: vec![real.clone()], length_m: Some(1_000.0), ..t.clone() };
+        let items = temoin_v1_item(&r, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap();
+        assert_eq!(items[0]["metrique"], "S2_ouvrage_reel", "{items:?}");
+        let it = items.last().unwrap();
+        assert_eq!(it["ouvrages_fictifs"], 0, "{it}");
+        assert_eq!(it["ouvrage_reel_masque_m"], 90.0, "{it}");
+        // Plus de la moitié du témoin : témoin sorti de S2.
+        let big = crate::v1::TemoinV1 { real: vec![real], length_m: Some(20.0), ..t.clone() };
+        let items = temoin_v1_item(&big, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap();
+        assert_eq!(items.last().unwrap()["metrique"], "S2_temoin_sorti", "{items:?}");
+        assert!(items.iter().all(|i| i["metrique"] != "S2"));
         let far = crate::v1::TemoinV1 { ends: Some([LatLon::new(46.0, 5.0), pts[110]]), ..s };
         assert!(temoin_v1_item(&far, &d, &pts, &on, &tile, &[], None, 40.0).is_none());
     }
@@ -2945,6 +3237,7 @@ mod tests {
                 structure_segs: &[],
                 raw_gps: None,
                 tiles: None,
+                baro_fiable: true,
             };
             approach_offset(&p, 100, 120, others)
         };
@@ -3028,6 +3321,7 @@ mod tests {
                 structure_segs: &[],
                 raw_gps: None,
                 tiles: None,
+                baro_fiable: true,
             };
             perso_items("c", &p, &[o(mnh)], 40.0)
         };
@@ -3102,6 +3396,7 @@ mod tests {
                 structure_segs: &[],
                 raw_gps: None,
                 tiles: None,
+                baro_fiable: true,
             };
             perso_items("c", &p, &os, 40.0)
         };
@@ -3209,5 +3504,117 @@ mod tests {
         let t = tunnel_item("t", "c", &d, &svc, &raw, &ALL, &[false; 41], 10, 30);
         assert_eq!(t["pass"], true);
         assert_eq!(t["reference_ambigue"], true, "le portail à 5 m fait basculer le verdict");
+    }
+}
+
+#[cfg(test)]
+mod e5_tests {
+    use super::*;
+
+    /// Trace de 400 m au pas de 5 m, croisement au milieu (station 40), le long de l'est (`east`)
+    /// ou du nord.
+    fn line(mid: LatLon, east: bool) -> (Vec<f64>, Vec<LatLon>) {
+        let m_lat = 111_320.0;
+        let m_lon = m_lat * mid.lat.to_radians().cos();
+        let d: Vec<f64> = (0..=80).map(|k| k as f64 * 5.0).collect();
+        let pts = d
+            .iter()
+            .map(|&x| {
+                let s = x - 200.0;
+                if east {
+                    LatLon::new(mid.lat, mid.lon + s / m_lon)
+                } else {
+                    LatLon::new(mid.lat + s / m_lat, mid.lon)
+                }
+            })
+            .collect();
+        (d, pts)
+    }
+
+    fn input<'a>(
+        d: &'a [f64],
+        pts: &'a [LatLon],
+        raw: &'a [f64],
+        baro: Option<&'a [f64]>,
+        tiles: Option<&'a Tiles>,
+    ) -> E5Input<'a> {
+        E5Input { d, pts, raw, ign: None, baro, tiles, at: pts[40], im: 40 }
+    }
+
+    /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.
+    fn dtm(d: &[f64], h: f64) -> Vec<f64> {
+        d.iter().map(|&x| if (x - 200.0).abs() <= 10.0 { 100.0 + h } else { 100.0 }).collect()
+    }
+
+    #[test]
+    fn the_dtm_reads_the_deck_beyond_two_metres_only() {
+        let mid = LatLon::new(47.2, -1.5);
+        let (d, pts) = line(mid, false);
+        let bump = dtm(&d, 4.0);
+        assert!((e5_bump(&d, &bump, 40).unwrap() - 4.0).abs() < 1e-9);
+        assert_eq!(
+            e5_reference(&input(&d, &pts, &bump, None, None)),
+            E5Reference::Indisponible { raison: "mnt_lit_le_tablier" }
+        );
+        // Bosse de 1,9 m : référence MNT. Cuvette : référence MNT (les passages dessous creusent).
+        for h in [1.9, -3.0] {
+            let z = dtm(&d, h);
+            assert_eq!(e5_reference(&input(&d, &pts, &z, None, None)), E5Reference::Mnt { z: 100.0 + h });
+        }
+        // MNT sans donnée à ≤ 10 m.
+        let mut hole = dtm(&d, 0.0);
+        hole[42] = f64::NAN;
+        assert_eq!(
+            e5_reference(&input(&d, &pts, &hole, None, None)),
+            E5Reference::Indisponible { raison: "mnt_sans_donnee" }
+        );
+    }
+
+    #[test]
+    fn a_reliable_baro_is_the_reference_with_its_local_offset() {
+        let mid = LatLon::new(47.2, -1.5);
+        let m_lat = 111_320.0;
+        // Trace de 4 km pour lire le décalage de 200 à 1 500 m.
+        let d: Vec<f64> = (0..=800).map(|k| k as f64 * 5.0).collect();
+        let pts: Vec<LatLon> =
+            d.iter().map(|&x| LatLon::new(mid.lat + (x - 2_000.0) / m_lat, mid.lon)).collect();
+        let raw: Vec<f64> =
+            d.iter().map(|&x| if (x - 2_000.0).abs() <= 10.0 { 106.0 } else { 100.0 }).collect();
+        let baro: Vec<f64> = d.iter().map(|_| 103.0).collect();
+        let x = E5Input {
+            d: &d,
+            pts: &pts,
+            raw: &raw,
+            ign: None,
+            baro: Some(&baro),
+            tiles: None,
+            at: pts[400],
+            im: 400,
+        };
+        assert_eq!(e5_reference(&x), E5Reference::Baro { z: 100.0, offset_m: 3.0 });
+        // Baro absent au croisement (pas brut de plus de 100 m) : MNT, ici indisponible.
+        let mut gap = baro.clone();
+        gap[400] = f64::NAN;
+        let x = E5Input { baro: Some(&gap), ..x };
+        assert_eq!(e5_reference(&x), E5Reference::Indisponible { raison: "mnt_lit_le_tablier" });
+    }
+
+    #[test]
+    fn a_trace_on_a_structure_of_the_tiles_is_withdrawn() {
+        let mid = LatLon::new(47.2, -1.5);
+        // Pont est-ouest sur le croisement.
+        let (tiles, _) = super::tests::tiles_of(
+            vec![(super::tests::way_attrs("primary", StructureTag::Bridge), 0.0)],
+            mid,
+        );
+        let (d, along) = line(mid, true);
+        let z = dtm(&d, 0.0);
+        assert!(matches!(
+            e5_reference(&input(&d, &along, &z, None, Some(&tiles))),
+            E5Reference::Retire { angle_deg, .. } if angle_deg < 1.0
+        ));
+        // Trace nord-sud, sous le pont : croisement à 90°, compté.
+        let (d, across) = line(mid, false);
+        assert_eq!(e5_reference(&input(&d, &across, &z, None, Some(&tiles))), E5Reference::Mnt { z: 100.0 });
     }
 }
