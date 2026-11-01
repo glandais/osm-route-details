@@ -114,6 +114,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Recalage et références de revêtement (R3, R1/R2 des parcours planifiés) par le Valhalla public de la FOSSGIS, 1 req/s, en séquence ; toutes les traces recalées par cette source (perso-01..39 comprises) ; données du serveur 2026-11-01T13:01Z"
   - id: e5_reference   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E5 : passage retiré si la trace est elle-même sur un ouvrage des tuiles (≤ 10 m, < 20°) ; référence = baro corrigé localement sur les traces perso fiables ; sinon MNT, indisponible s'il est sans donnée ou lit le tablier (bosse > 2 m vs approches 20–50 m)"
+  - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
+    decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -226,7 +228,7 @@ criteres:
     terrain: france
     agregation: par_trace
     seuils:
-      - {strate: plaine, rmse_m_max: 1.5, p95_m_max: 4.0}
+      - {strate: plaine, rmse_m_max: 1.5, p95_m_max: 4.0, reference_incertaine_si: {noise_m_baro_min_exclu: 1.0, source: qualify_baro.py, rapporte: true, juge: false}}   # README §4 ter.8, 2026-11-01
       - {strate: dplus, rmse_m_max: 3.0, p95_m_max: 8.0}
     passe_si: toutes_les_traces
     bloquant: true

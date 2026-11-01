@@ -801,6 +801,15 @@ inchangés.
    le service y lit aussi le tablier. Échec restant au MNT seul : `nv-416` (bosse 1,7 m, sous le
    seuil). Série tenue à l'écart (MNT par l'API IGN, tuiles V1, sans le service) : 105 croisements,
    78 gardent une référence (tous au baro), au-dessus du minimum (8) et de la cible (10).
+8. **Référence incertaine en E1 plaine** (décision de l'utilisateur, 2026-11-01, après la
+   calibration 2026.11.5-bench1). Une trace du groupe `plaine` dont le bruit baro mesuré par
+   `qualify_baro.py` (`noise_m`, 1,4826 × MAD du résidu baro − MNT après retrait de tendance)
+   dépasse **1,0 m** a une référence incertaine en E1 : rapportée, non jugée. Motif : le seuil
+   plaine (RMSE ≤ 1,5 m) est du même ordre que ce bruit, qui passe dans l'erreur mesurée
+   (`perso-58`, bruit 1,44 m → RMSE 1,77 m ; `perso-76`, 1,05 m → 1,22 m), alors que le critère
+   « fiable » du corpus admet jusqu'à 2,5 m. Le groupe `dplus` (seuil 3,0 m) n'est pas concerné ;
+   E2b non plus. Effet : 2 traces plaine de calibration V1, 2 du MVP ; série tenue à l'écart V1 :
+   2 sur 8, il reste 28 traces fiables et 3 083 km pour E1 (minimum 8 / 800, cible 10 / 1 000).
 
 ---
 
