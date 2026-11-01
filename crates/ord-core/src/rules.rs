@@ -29,7 +29,9 @@ use serde::Serialize;
 // 2026.11.3 : rampe d'un pont OSM reprise par le tablier détecté qui le prolonge.
 // 2026.11.4 : détecteur de galeries couvertes (plateau bas du MNT, MNS ≈ MNT), ouvrages
 // `heuristic` de nature tunnel.
-pub const RULES_VERSION: &str = "2026.11.4";
+// 2026.11.5 : couvertures lues dans le MNT corrigées en altitude seule (`gap_filled`,
+// `elevation_cover_corrected`), sans ouvrage ; passages OSM prioritaires.
+pub const RULES_VERSION: &str = "2026.11.5";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -185,7 +187,8 @@ pub struct ElevationRules {
     pub deck_detector: crate::elevation::heuristics::DeckDetectorOptions,
     /// Détecteur de tunnel (profil MNT, T04 §4.2), `TunnelDetectorOptions.DEFAULT` de vcyclist.
     pub tunnel_detector: crate::elevation::heuristics::TunnelDetectorOptions,
-    /// Détecteur de galeries couvertes (plateau bas du MNT, MNS ≈ MNT, T04 §4.2 bis).
+    /// Détecteur de couvertures (galeries, passages inférieurs lus dans le MNT : plateau bas du
+    /// MNT, MNS ≈ MNT, T04 §4.2 bis), altitude seule.
     pub gallery_detector: crate::elevation::heuristics::GalleryDetectorOptions,
     pub gain: GainRules,
     pub structures: CorrectionRules,
@@ -405,6 +408,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.4", "acee8b80a8bff571".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.5", "acee8b80a8bff571".to_owned()));
     }
 }

@@ -26,7 +26,7 @@ de T01 §5.1).
 | `ord-core::elevation::grid` | Chaîne élévation | Pur : grille de stations |
 | `ord-pipeline::elevation` (`sample_raw`) | Chaîne élévation | **Seul module async** : lecture MNT/MNS par `TerrainReader`, plages de terrain |
 | `ord-core::elevation::fusion::{osm, deck, tunnel, merge, gaps}` | Fusion du profil | Pur |
-| `ord-core::elevation::heuristics::{deck_detector, tunnel_detector, gallery_detector}` | Détecteurs heuristiques (V1) | Pur ; tablier et tunnel portés de vcyclist, galerie propre au service (§4.2 bis) |
+| `ord-core::elevation::heuristics::{deck_detector, tunnel_detector, gallery_detector}` | Détecteurs heuristiques (V1) | Pur ; tablier et tunnel portés de vcyclist, couverture (galerie) propre au service (§4.2 bis) |
 | `ord-core::elevation::derive::{smooth, gain, grade}` | Fusion du profil (dérivés) | Pur |
 | `ord-core::elevation::breakpoints` | Sélection des points de rupture | Pur |
 | `ord-core::elevation::rules` (`ElevationRules`, dans `Rules`, T01 §9) | — | Paramètres versionnés, sérialisables (`serde`) |
@@ -271,7 +271,7 @@ pub struct CorrectionPatch { pub target: GroupRef, pub from_m: f64, pub to_m: f6
 - Les heuristiques ne tournent que si `structure_correction = true` et là où la typologie a été lue
   (ni panne ni `typology_missing`, doc 01 §6 : « élévation non corrigée »).
 
-### 4.2 bis Détecteur de galerie couverte (règles 2026.11.4)
+### 4.2 bis Détecteur de couverture (galerie, règles 2026.11.4 ; altitude seule depuis 2026.11.5)
 
 - **Pourquoi.** Les galeries pare-avalanche ou pare-pierres (`tunnel=avalanche_protector`) sont
   absentes du schéma Shortbread des tuiles : la typologie les lit comme des routes à l'air libre.
@@ -310,16 +310,31 @@ pub struct CorrectionPatch { pub target: GroupRef, pub from_m: f64, pub to_m: f6
   un toit) ; MNS − MNT ≤ 2 m, moitié de la hauteur minimale (garde-corps, arbustes ; un bâtiment,
   une forêt ou un tablier sur le plateau l'excèdent) ; longueur ≥ 3 pas pour que deux stations
   lisent le toit, ≤ 1 km pour borner l'appariement.
-- **Garde-fous** (fusion) : une galerie qui touche un pont OSM ou un tablier détecté, approches de
-  20 m comprises (plateau entre deux ponts : une levée), ou qui recouvre un tunnel détecté (le
-  tunnel prime), ou qui touche une plage sans typologie, est écartée. Remblai, rampe, crête,
+- **Garde-fous** (fusion) : une couverture qui touche un passage OSM (pont ou tunnel : l'ouvrage
+  OSM prime) ou un tablier détecté, approches de 20 m comprises (plateau entre deux ponts : une
+  levée), ou qui recouvre un tunnel détecté (le tunnel prime), ou qui touche une plage sans
+  typologie, est écartée. Remblai, rampe, crête,
   tranchée lue de biais : pas de marche verticale ou toit non parallèle ; bâtiment, forêt :
   MNS ≫ MNT ; pont emprunté : la route passe sous la droite.
-- **Écriture** : détection de nature tunnel passée à `reconcile` (confirmation d'un tunnel OSM,
-  sinon ouvrage `heuristic`), corrigée en droite entre sondes à `abutment_probe_min_m` au-delà
-  des portails, avertissement `structure_untagged` (§4.3 bis).
-- Mesuré en calibration (prototype puis service, 2026-11-01) : `arly-galerie` (22 m) et `nv-37`
-  (122 m) détectées, `nv-30` (256 m) non (pas de marche nette à la sortie : le toit y redescend
+- **Écriture : altitude seule** (décision de l'utilisateur, 2026-11-01, règles 2026.11.5). Hors
+  OSM, aucun critère général ne distingue une galerie d'un passage inférieur ou d'une couverture
+  non cartographiée lus dans le MNT : toutes les détections sont donc corrigées **en altitude
+  seule**, jamais rendues comme ouvrage. Droite entre les stations à `abutment_probe_min_m`
+  au-delà des portails (sondes restées `dem`), sur les stations restées `dem`, après tous les
+  ouvrages (`fusion::heuristic::correct_covers`) ; méthode `gap_filled` ; avertissement
+  `elevation_cover_corrected` (api 1.2) sur la plage. Ni `reconcile`, ni verdict, ni entrée de
+  `summary.structures[]` : `structure` et `structure_source` des segments ne changent pas. Une
+  galerie taguée dans OSM et lue dans les tuiles reste un tunnel OSM (§3).
+- **Couvertures voisines fusionnées** (accepté par l'utilisateur, 2026-11-01) : deux couvertures
+  séparées par moins de 20 m de route (l'approche exigée) ne donnent pas deux portails : si le
+  plateau qui les réunit passe les critères (la route à l'air libre entre elles compte comme
+  stations basses, ≤ 20 %), une seule droite les couvre, tronçon intermédiaire compris (la route
+  y est sur la droite à quelques décimètres près).
+- **Limite** : un toit qui redescend progressivement à une sortie (pas de marche nette) n'est pas
+  détecté ; la marche n'est pas assouplie (décision de l'utilisateur, 2026-11-01). Cas : `nv-30`,
+  qui reste en limite des données au banc.
+- Mesuré en calibration (prototype puis service, 2026-11-01, rapport 2026.11.4) : `arly-galerie`
+  (22 m) et `nv-37` (122 m) détectées, `nv-30` (256 m) non (pas de marche nette à la sortie : le toit y redescend
   sur 25 m) ; la galerie de `tn12-arly-galleries` détectée (témoin sorti de S2, README §4 ter.6) ;
   aucun autre témoin négatif touché. Sur les traces perso de calibration, d'autres plateaux de
   25 à 120 m sont détectés hors de tout ouvrage connu ; là où le baro existe, il ne voit pas la
@@ -356,8 +371,8 @@ Invariant 8 : deux détections de passages différents à moins de 20 m partout 
   profil **brut** ; MNS `NaN` hors IGN mesuré sans repli (invariant 10). Détections qui touchent
   une plage `TypologyCoverage` écartées. Tunnel gardé si toutes les stations à ± 100 m de chaque
   portail sont mesurées (`ign_lidar_hd`, `mapterhorn_measured`) et s'il ne contient ni pont OSM ni
-  tablier détecté. Galerie gardée hors de tout tablier (approches comprises) et de tout tunnel
-  détecté (§4.2 bis, règles 2026.11.4).
+  tablier détecté. Couverture gardée hors de tout passage OSM et de tout tablier (approches
+  comprises) et de tout tunnel détecté, corrigée en altitude seule (§4.2 bis, règles 2026.11.5).
 - `reconcile` (T03 §7.1) : confirmation `osm_heuristic` à 50 % ; nature opposée écartée ; parts
   d'une détection hors des passages OSM qu'elle touche gardées au-delà de 40 m
   (`UNTAGGED_MIN_M`), détection sans passage OSM gardée entière : verdicts `heuristic`.

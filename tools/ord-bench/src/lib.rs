@@ -120,6 +120,9 @@ impl BenchPaths {
 /// graphe vélo resserrée (routes motorisées, plages ≥ 50 m, rails exclus), S2 sans les plages hors
 /// graphe vélo des témoins, attribution « un tablier, un ouvrage » (couche `bridges` des tuiles).
 /// Remise à `None` avec les règles 2026.11.4 (galeries couvertes détectées sur le MNT).
+/// Reste à `None` avec les règles 2026.11.5 (couvertures en altitude
+/// seule) ; README §4 ter.6 précisé en eb4c4cc (`covered=yes` lu sur la voie des stations du témoin)
+/// appliqué dans la même révision.
 pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

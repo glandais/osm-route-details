@@ -118,7 +118,7 @@ les résultats en face de son parcours sans recalcul géométrique.
 | `lat`, `lon` | Sur un point inséré et en mode `distance`. Jamais sur un point d'entrée, qui n'est pas déplacé. |
 | `ele` | Altitude **après correction des ouvrages**, non lissée. `null` si l'altitude est absente. |
 | `ele_smoothed` | Présent seulement si un lissage est demandé. |
-| `ele_method` | `dem` (MNT), `dsm_deck` (tablier de pont lu dans le MNS LiDAR), `interpolated_structure` (droite entre culées ou portails : tunnel, ou pont sans MNS exploitable), `gap_filled`, `none` (altitude absente). |
+| `ele_method` | `dem` (MNT), `dsm_deck` (tablier de pont lu dans le MNS LiDAR), `interpolated_structure` (droite entre culées ou portails : tunnel, ou pont sans MNS exploitable), `gap_filled` (droite sur un trou court du MNT ; depuis l'api 1.2, aussi sur une couverture lue dans le MNT au-dessus de la route, avec `elevation_cover_corrected`), `none` (altitude absente). |
 
 L'origine du terrain n'est pas répétée à chaque point : elle est donnée par plages dans
 `quality.terrain` (§4.5).
@@ -189,7 +189,10 @@ D+ adapté), `outside_primary_zone` (plage hors France : Mapterhorn seul, mode d
 `typology_unavailable` / `elevation_unavailable` (seulement avec `accept_partial`). En V1 :
 `structure_untagged` (ouvrage détecté par heuristique hors de tout way OSM, corrigé) et, depuis
 l'api 1.1, `bicycle_forbidden` (le parcours suit une voie fermée au vélo : typologie de cette voie
-rendue, portion non appariée au réseau vélo, ouvrages non corrigés).
+rendue, portion non appariée au réseau vélo, ouvrages non corrigés) ; depuis l'api 1.2,
+`elevation_cover_corrected` (le MNT lit une couverture au-dessus de la route, galerie ou passage
+inférieur hors de tout ouvrage OSM : altitude rendue en droite entre ses extrémités, `gap_filled`,
+sans ouvrage ni changement de `structure`).
 
 Aucun référentiel vertical n'est déclaré ni signalé : les écarts entre référentiels nationaux sont
 jugés négligeables pour l'usage (doc 01 §2.2). Les altitudes sont des altitudes au-dessus du niveau
@@ -205,7 +208,7 @@ pas être calibré sans vérité terrain. La confiance se lit dans les facteurs 
 ```json
 {
   "meta": {
-    "api_version": "1.1",
+    "api_version": "1.2",
     "rules_version": "2026.11.1",
     "data_versions": {
       "typology": {"source": "versatiles-shortbread", "date": "2026-10-27"},
@@ -382,7 +385,9 @@ dans la clé. Pour toute source lue en ligne (tuiles distantes en dev, IGN dans 
 n'est qu'indicatif (doc 01 §8.3) : deux réponses peuvent différer si l'IGN publie de nouvelles zones.
 
 Historique : `1.1` (2026-11-01) ajoute l'avertissement `bicycle_forbidden` et la typologie d'une
-portion qui suit une voie fermée au vélo (§4.3, §5.3), sans changer les champs existants.
+portion qui suit une voie fermée au vélo (§4.3, §5.3), sans changer les champs existants. `1.2`
+(2026-11-01) ajoute l'avertissement `elevation_cover_corrected` (couverture lue dans le MNT,
+altitude corrigée seule, `ele_method: gap_filled`), sans changer les champs existants.
 
 Règles d'évolution à l'intérieur de la v1 :
 

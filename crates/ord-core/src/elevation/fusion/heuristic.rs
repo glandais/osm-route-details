@@ -1,8 +1,10 @@
-//! Heuristiques V1 dans la fusion (T04 §4) : détecteurs de tablier (LiDAR), de tunnel (MNT) et de
-//! galerie couverte (MNT et MNS) sur les stations uniformes du profil **brut**, détections passées
-//! à `reconcile` (T03 §7.1), puis correction des ouvrages `heuristic` (hors de tout ouvrage OSM) :
-//! tablier lu dans le MNS par le constructeur de T04 §3.2 (sinon droite entre sondes), tunnel et
-//! galerie en droite entre portails.
+//! Heuristiques V1 dans la fusion (T04 §4) : détecteurs de tablier (LiDAR) et de tunnel (MNT) sur
+//! les stations uniformes du profil **brut**, détections passées à `reconcile` (T03 §7.1), puis
+//! correction des ouvrages `heuristic` (hors de tout ouvrage OSM) : tablier lu dans le MNS par le
+//! constructeur de T04 §3.2 (sinon droite entre sondes), tunnel en droite entre portails. Le
+//! détecteur de couverture (plateau bas du MNT, MNS ≈ MNT, T04 §4.2 bis) corrige l'altitude seule :
+//! droite entre ses extrémités, méthode `gap_filled`, avertissement `elevation_cover_corrected`,
+//! sans ouvrage ni changement de nature du segment.
 //!
 //! Choix simples, notés :
 //! - stations uniformes = stations du parcours à `k × station_step_m` (à 1 cm près) ;
@@ -13,9 +15,9 @@
 //! - un tunnel détecté n'est gardé que si toutes les stations de `[portail − 100 m, portail +
 //!   100 m]` sont sur terrain mesuré (`tunnelScope = measured-terrain`), et s'il ne contient aucun
 //!   tablier (pont OSM ou détecté) ;
-//! - une galerie détectée (nature tunnel) n'est gardée que si ses approches sont sur terrain IGN
-//!   LiDAR HD (MNS lu, le détecteur l'exige), si elle ne touche ni tablier (pont OSM ou détecté,
-//!   approches comprises) ni tunnel détecté (le tunnel prime) ;
+//! - une couverture détectée n'est gardée que si ses approches sont sur terrain IGN LiDAR HD (MNS
+//!   lu, le détecteur l'exige), si elle ne touche, approches comprises, aucun passage OSM (pont ou
+//!   tunnel : l'ouvrage OSM prime) ni tablier détecté, et ne recouvre aucun tunnel détecté ;
 //! - sondes d'un ouvrage heuristique : stations du parcours à `abutment_probe_min_m` au-delà de
 //!   chaque extrémité, lues sur le profil déjà corrigé des ouvrages OSM (continuité au raccord d'un
 //!   ouvrage OSM prolongé) ; un ouvrage sans sonde ou sans altitude de sonde, ou un tablier sans
@@ -69,14 +71,14 @@ pub fn detect(
     dsm: Option<&[DsmSample]>,
     typo: &TypologyOutput,
     rules: &Rules,
-) -> Vec<DetectedStructure> {
+) -> Detections {
     let r = &rules.elevation;
     if !r.heuristics {
-        return Vec::new();
+        return Detections::default();
     }
-    let Some(u) = uniform_stations(route, r.station_step_m) else { return Vec::new() };
+    let Some(u) = uniform_stations(route, r.station_step_m) else { return Detections::default() };
     if u.len() < 3 {
-        return Vec::new();
+        return Detections::default();
     }
     let d: Vec<f64> = u.iter().map(|&i| route.samples[i].d_m).collect();
     let mnt: Vec<f64> = u.iter().map(|&i| terrain[i].ele.map_or(f64::NAN, f64::from)).collect();
@@ -130,24 +132,83 @@ pub fn detect(
         }
         out.push(DetectedStructure { id: out.len() as u32, kind: StructureKind::Tunnel, from_m: a, to_m: b });
     }
-    // Galeries couvertes (T04 §4.2 bis) : nature tunnel, droite entre portails. Écartées si elles ou
-    // leurs approches touchent un tablier (le plateau entre deux ponts est une levée, pas un toit)
-    // ou si elles recouvrent un tunnel détecté.
+    // Couvertures (T04 §4.2 bis) : altitude seule, jamais un ouvrage. Hors OSM, rien ne distingue
+    // une galerie d'un passage inférieur ou d'une couverture non cartographiée lus dans le MNT.
+    // Écartées si elles ou leurs approches touchent un passage OSM (l'ouvrage OSM prime ; le
+    // plateau entre deux ponts est une levée) ou un tablier détecté, ou si elles recouvrent un
+    // tunnel détecté.
     let reach = r.gallery_detector.approach_m;
     let tunnels: Vec<(f64, f64)> =
         out.iter().filter(|x| x.kind == StructureKind::Tunnel).map(|x| (x.from_m, x.to_m)).collect();
+    let osm: Vec<(f64, f64)> = typo.passages.iter().map(|p| (p.from_m, p.to_m)).collect();
+    let mut covers = Vec::new();
     for g in detect_galleries(&mnt, &mns, &r.gallery_detector) {
         let (a, b) = (d[g.first], d[g.last]);
         if touches_gap(a, b)
-            || deck_spans.iter().any(|s| s.1 > a - reach && s.0 < b + reach)
+            || deck_spans.iter().chain(&osm).any(|s| s.1 > a - reach && s.0 < b + reach)
             || tunnels.iter().any(|t| t.1 > a && t.0 < b)
         {
             continue;
         }
-        out.push(DetectedStructure { id: out.len() as u32, kind: StructureKind::Tunnel, from_m: a, to_m: b });
+        covers.push((a, b));
     }
     out.sort_by(|x, y| x.from_m.total_cmp(&y.from_m));
-    out
+    Detections { structures: out, covers }
+}
+
+/// Détections des heuristiques : ouvrages (passés à `reconcile`) et couvertures (altitude seule).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Detections {
+    pub structures: Vec<DetectedStructure>,
+    /// Plages `(de, à)` des couvertures lues dans le MNT, en distance de parcours.
+    pub covers: Vec<(f64, f64)>,
+}
+
+/// Couvertures lues dans le MNT (T04 §4.2 bis) : droite entre les stations à
+/// `abutment_probe_min_m` au-delà de chaque extrémité, sur les seules stations restées `dem`,
+/// méthode `gap_filled`, avertissement `elevation_cover_corrected`. Ni ouvrage ni verdict : la
+/// nature des segments ne change pas. Sans sonde ou sans altitude de sonde, rien n'est corrigé.
+pub fn correct_covers(
+    covers: &[(f64, f64)],
+    route: &PreparedRoute,
+    rules: &Rules,
+    ele: &mut [f64],
+    method: &mut [EleMethod],
+    warnings: &mut Vec<Warning>,
+) {
+    let probe_m = rules.elevation.structures.abutment_probe_min_m;
+    let step = rules.elevation.station_step_m;
+    for &(a, b) in covers {
+        let (Some(pa), Some(pb)) =
+            (station_at(route, a - probe_m, step), station_at(route, b + probe_m, step))
+        else {
+            continue;
+        };
+        let (za, zb) = (ele[pa], ele[pb]);
+        if za.is_nan()
+            || zb.is_nan()
+            || pb <= pa + 1
+            || method[pa] != EleMethod::Dem
+            || method[pb] != EleMethod::Dem
+        {
+            continue;
+        }
+        let line = [(route.samples[pa].d_m, za), (route.samples[pb].d_m, zb)];
+        let inner: Vec<usize> = (pa + 1..pb).filter(|&i| method[i] == EleMethod::Dem).collect();
+        if inner.is_empty() {
+            continue;
+        }
+        for i in inner {
+            ele[i] = interp(&line, route.samples[i].d_m);
+            method[i] = EleMethod::GapFilled;
+        }
+        warnings.push(Warning {
+            code: WarningCode::ElevationCoverCorrected,
+            message: "terrain model reads a cover above the road; elevation set to the line between its ends"
+                .into(),
+            range: Some(a..b),
+        });
+    }
 }
 
 /// Interpolation linéaire de `(x, z)` triés, bornée aux extrémités.
@@ -468,6 +529,33 @@ mod tests {
             }
         }
         assert_eq!(outcomes[0].method, OutcomeMethod::DsmDeck);
+    }
+
+    #[test]
+    fn a_cover_is_corrected_in_elevation_only() {
+        // Route à 1 % sur 600 m, plateau de 7 m entre 250 et 350 m (MNT lu sur un toit).
+        let route = line(600.0);
+        let d: Vec<f64> = route.samples.iter().map(|s| s.d_m).collect();
+        let road = |x: f64| 100.0 + 0.01 * x;
+        let mut ele: Vec<f64> =
+            d.iter().map(|&x| road(x) + if (255.0..=345.0).contains(&x) { 7.0 } else { 0.0 }).collect();
+        let mut method = vec![EleMethod::Dem; d.len()];
+        // Une station d'un ouvrage OSM n'est jamais réécrite.
+        let osm = d.iter().position(|&x| (x - 300.0).abs() < 1e-6).unwrap();
+        method[osm] = EleMethod::InterpolatedStructure;
+        let mut warnings = Vec::new();
+        correct_covers(&[(250.0, 350.0)], &route, &Rules::default(), &mut ele, &mut method, &mut warnings);
+        for (i, &x) in d.iter().enumerate() {
+            if i != osm && (245.0..=355.0).contains(&x) {
+                assert!((ele[i] - road(x)).abs() < 0.05, "{x} : {}", ele[i]);
+            }
+        }
+        let mid = d.iter().position(|&x| (x - 280.0).abs() < 1e-6).unwrap();
+        assert_eq!(method[mid], EleMethod::GapFilled);
+        assert_eq!(method[osm], EleMethod::InterpolatedStructure);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code, WarningCode::ElevationCoverCorrected);
+        assert_eq!(warnings[0].range, Some(250.0..350.0));
     }
 
     #[test]

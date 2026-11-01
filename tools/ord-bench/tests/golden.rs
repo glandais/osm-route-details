@@ -261,9 +261,10 @@ async fn golden_heuristic_junction() {
     assert!(out.is_empty(), "{id} : {out:#?}");
 }
 
-/// Galerie pare-avalanche absente du schéma des tuiles (règles 2026.11.4, T04 §4.2 bis) :
-/// `arly-galerie`, témoin `tt08-arly-cliets` de vcyclist (calibration). Le plateau du MNT est
-/// détecté : ouvrage `heuristic` de nature tunnel, `structure_untagged`, droite entre portails.
+/// Galerie pare-avalanche absente du schéma des tuiles (T04 §4.2 bis) : `arly-galerie`, témoin
+/// `tt08-arly-cliets` de vcyclist (calibration). Le plateau du MNT est détecté et corrigé en
+/// altitude seule (règles 2026.11.5) : droite entre portails, `gap_filled`,
+/// `elevation_cover_corrected`, sans ouvrage.
 #[tokio::test]
 #[ignore = "cache de banc requis (ord-bench fill-cache)"]
 async fn golden_gallery() {
@@ -281,16 +282,13 @@ async fn golden_gallery() {
             m.remove("lon");
         }
     }
+    // Altitude seule (règles 2026.11.5) : aucun ouvrage, segments au sol.
     let entries = r["summary"]["structures"].as_array().expect("structures").clone();
-    assert_eq!(entries.len(), 1, "{entries:?}");
-    let e = &entries[0];
-    assert_eq!(
-        (e["kind"].as_str(), e["structure_source"].as_str()),
-        (Some("tunnel"), Some("heuristic")),
-        "{e}"
-    );
-    assert_eq!(e["method"], "interpolated_structure");
-    assert!(codes(&r).contains(&"structure_untagged"), "{:?}", codes(&r));
+    assert!(entries.is_empty(), "{entries:?}");
+    assert!(r["segments"].as_array().unwrap().iter().all(|g| g["structure"] == "ground"));
+    assert!(codes(&r).contains(&"elevation_cover_corrected"), "{:?}", codes(&r));
+    assert!(!codes(&r).contains(&"structure_untagged"), "{:?}", codes(&r));
+    assert!(r["points"].as_array().unwrap().iter().any(|p| p["ele_method"] == "gap_filled"));
     // Profil : aucune marche dans la galerie, pente de route (≤ 15 %) d'un point au suivant.
     let pts: Vec<(f64, f64)> = r["points"]
         .as_array()

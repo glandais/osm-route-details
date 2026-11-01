@@ -34,8 +34,8 @@ pub const HEURISTIC_SCENARIO: &str = "test1-raccord-acces-nord";
 
 /// Scénario des galeries couvertes (règles 2026.11.4, T04 §4.2 bis) : témoin `tt08-arly-cliets` de
 /// vcyclist (calibration) de 150 à 390 m, à travers la galerie pare-avalanche `arly-galerie`
-/// (`tunnel=avalanche_protector`, absente du schéma des tuiles) : détectée sur le MNT, rendue en
-/// droite entre ses portails. Snapshot sans coordonnées.
+/// (`tunnel=avalanche_protector`, absente du schéma des tuiles) : détectée sur le MNT, altitude
+/// rendue en droite entre ses portails, sans ouvrage (règles 2026.11.5). Snapshot sans coordonnées.
 pub const GALLERY_SCENARIO: &str = "arly-galerie-detectee";
 
 /// Scénario de la série de tunnels (règles 2026.10.10, T04 §3.1) : `test4` de vcyclist de 4,8 à

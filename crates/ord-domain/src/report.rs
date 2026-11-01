@@ -24,10 +24,12 @@ pub enum WarningCode {
     StructureUntagged,
     // V1 (api 1.1) : route fermée au vélo suivie, typologie rendue (état « hors graphe »).
     BicycleForbidden,
+    // V1 (api 1.2) : couverture lue dans le MNT au-dessus de la route, altitude corrigée seule.
+    ElevationCoverCorrected,
 }
 
 impl WarningCode {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::UnmatchedRange,
         Self::StructureUncorrected,
         Self::StructureSlopeImplausible,
@@ -42,6 +44,7 @@ impl WarningCode {
         Self::ElevationUnavailable,
         Self::StructureUntagged,
         Self::BicycleForbidden,
+        Self::ElevationCoverCorrected,
     ];
 }
 

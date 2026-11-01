@@ -359,7 +359,7 @@ pub fn correct(
 ) -> Correction {
     // Heuristiques V1 (T04 §4) : détections sur le profil brut, réconciliées avec les passages OSM.
     let detected = heuristic::detect(route, raw, dsm, typo, rules);
-    let verdicts = reconcile(&typo.passages, &typo.structures, &detected);
+    let verdicts = reconcile(&typo.passages, &typo.structures, &detected.structures);
     let source_of = |pid: u32| {
         verdicts.iter().find(|v| v.passage == Some(pid)).map_or(StructureSource::Osm, |v| v.source)
     };
@@ -497,6 +497,8 @@ pub fn correct(
         &mut outcomes,
         &mut warnings,
     );
+    // Couvertures lues dans le MNT : altitude seule, après tous les ouvrages (T04 §4.2 bis).
+    heuristic::correct_covers(&detected.covers, route, rules, ele, method, &mut warnings);
     outcomes.sort_by(|a, b| a.from_m.total_cmp(&b.from_m).then(a.kind.cmp(&b.kind)));
     Correction { outcomes, verdicts, warnings }
 }

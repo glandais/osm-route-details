@@ -54,6 +54,7 @@ Un seul producteur par code :
 | `outside_primary_zone` | assemble | `CoverageRanges::outside_primary_zone` (zone France : T02 §7.2) |
 | `elevation_missing`, `elevation_unavailable` | `fuse` (T04 §5.1) | stations `none` restées après comblement, selon `Missing::{NoData, Failed}` |
 | `elevation_gap_filled` | `fuse` (T04 §5.1) | trous comblés |
+| `elevation_cover_corrected` (api 1.2) | `fuse` (`fusion::heuristic::correct_covers`, T04 §4.2 bis) | couverture lue dans le MNT, entre ses extrémités (altitude seule, `gap_filled`) |
 | `terrain_fallback` | `fuse` | `TerrainRange` avec `fallback_after_error` |
 | `dsm_unavailable`, `structure_uncorrected`, `structure_slope_implausible` | `fuse` (T04 §3) | plage de l'ouvrage |
 | `dsm_source` | `fuse` (T04 §5.4) | plages `adapted[]` |

@@ -4,7 +4,7 @@
     "url": "/v1/attribution"
   },
   "meta": {
-    "api_version": "1.1",
+    "api_version": "1.2",
     "data_versions": {
       "elevation": [
         {
@@ -28,7 +28,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.4"
+    "rules_version": "2026.11.5"
   },
   "points": [
     {
@@ -124,31 +124,31 @@
     {
       "d_m": 150.0,
       "ele": 679.37,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "index": 30
     },
     {
       "d_m": 160.0,
       "ele": 678.76,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "index": 32
     },
     {
       "d_m": 170.0,
       "ele": 678.15,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "index": 34
     },
     {
       "d_m": 180.0,
       "ele": 677.54,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "index": 36
     },
     {
       "d_m": 190.0,
       "ele": 676.93,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "index": 38
     },
     {
@@ -188,13 +188,9 @@
     "matched_ratio": 1.0,
     "structure_correction": {
       "bridges": "none_found",
-      "counts": {
-        "interpolated_structure": 1
-      },
-      "counts_by_source": {
-        "heuristic": 1
-      },
-      "tunnels": "applied"
+      "counts": {},
+      "counts_by_source": {},
+      "tunnels": "none_found"
     },
     "terrain": [
       {
@@ -207,41 +203,23 @@
     ],
     "warnings": [
       {
-        "code": "structure_untagged",
+        "code": "elevation_cover_corrected",
         "from_m": 155.0,
-        "message": "structure detected from terrain data, not tagged in OSM; corrected",
+        "message": "terrain model reads a cover above the road; elevation set to the line between its ends",
         "to_m": 185.0
       }
     ]
   },
   "segments": [
     {
-      "ele_end": 679.07,
+      "ele_end": 678.93,
       "ele_method": "dem",
       "ele_start": 687.43,
       "from_index": 0,
       "from_m": 0.0,
-      "grade_pct": -5.39,
+      "grade_pct": -5.4,
       "matched": true,
       "structure": "ground",
-      "surface": {
-        "class": "paved",
-        "source": "tagged"
-      },
-      "to_index": 32,
-      "to_m": 155.0,
-      "way_kind": "major_road"
-    },
-    {
-      "ele_end": 678.93,
-      "ele_method": "interpolated_structure",
-      "ele_start": 679.07,
-      "from_index": 31,
-      "from_m": 155.0,
-      "grade_pct": -6.1,
-      "matched": true,
-      "structure": "tunnel",
-      "structure_source": "heuristic",
       "surface": {
         "class": "paved",
         "source": "tagged"
@@ -252,14 +230,13 @@
     },
     {
       "ele_end": 677.61,
-      "ele_method": "interpolated_structure",
+      "ele_method": "gap_filled",
       "ele_start": 678.93,
       "from_index": 31,
       "from_m": 157.3,
       "grade_pct": -6.1,
       "matched": true,
-      "structure": "tunnel",
-      "structure_source": "heuristic",
+      "structure": "ground",
       "surface": {
         "class": "paved",
         "source": "inferred_highway"
@@ -269,30 +246,12 @@
       "way_kind": "major_road"
     },
     {
-      "ele_end": 677.24,
-      "ele_method": "interpolated_structure",
+      "ele_end": 674.0,
+      "ele_method": "dem",
       "ele_start": 677.61,
       "from_index": 35,
       "from_m": 178.92,
-      "grade_pct": -6.1,
-      "matched": true,
-      "structure": "tunnel",
-      "structure_source": "heuristic",
-      "surface": {
-        "class": "paved",
-        "source": "tagged"
-      },
-      "to_index": 38,
-      "to_m": 185.0,
-      "way_kind": "major_road"
-    },
-    {
-      "ele_end": 674.0,
-      "ele_method": "dem",
-      "ele_start": 677.24,
-      "from_index": 37,
-      "from_m": 185.0,
-      "grade_pct": -5.9,
+      "grade_pct": -5.92,
       "matched": true,
       "structure": "ground",
       "surface": {
@@ -307,8 +266,7 @@
   "status": "complete",
   "summary": {
     "by_structure_m": {
-      "ground": 209.86,
-      "tunnel": 30.0
+      "ground": 239.86
     },
     "by_surface_class_m": {
       "paved": 239.86
@@ -332,16 +290,7 @@
     },
     "length_m": 239.86,
     "loss_m": 12.16,
-    "structures": [
-      {
-        "from_m": 155.0,
-        "kind": "tunnel",
-        "length_m": 30.0,
-        "method": "interpolated_structure",
-        "structure_source": "heuristic",
-        "to_m": 185.0
-      }
-    ],
+    "structures": [],
     "terrain_m": {
       "ign_lidar_hd": 239.86
     },
