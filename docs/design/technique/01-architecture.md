@@ -487,7 +487,12 @@ une URL WMS contient une emprise : ni l'une ni l'autre n'est journalisée, à au
 source, hôte, statut et `Retry-After`, jamais l'URL (même choix chez vcyclist,
 `VC/api/.../StatusPagesConfig.kt:24-25`). Les erreurs client donnent un pointeur, jamais la valeur.
 Le corps n'est jamais journalisé. Test : un parcours sentinelle traverse le pipeline sous un
-collecteur de logs ; aucune ligne ne doit contenir ses chiffres.
+collecteur de logs ; aucune ligne ne doit contenir ses chiffres. Mise en œuvre (incrément 6) :
+`crates/ord-server/tests/observability_sentinel.rs`, logs JSON avec spans (`trace` pour les crates
+du service, `debug` pour les dépendances) et exporteur Prometheus ; parcours qui traverse un pont,
+un repli IGN → Mapterhorn, une réponse partielle, un 503 et un 400 ; fragments interdits : chaque
+coordonnée de 2 à 9 décimales (et sa partie décimale seule dès 5), les tuiles `z/x/y` aux zooms 12,
+14 et 15, les bords d'emprise WMS à 4 décimales.
 
 ## 9. Versions, déterminisme, idempotence
 
