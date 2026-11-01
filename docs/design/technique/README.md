@@ -61,7 +61,7 @@ vérifié par `ord-bench check` avant toute campagne.
 - **V1** : heuristiques (`ElevationRules::heuristics = true`, `DsmScope::LidarHull`, détecteurs,
   `reconcile` non vide, `structure_untagged`). Acceptées sur **S3** (ouvrage non tagué détecté :
   `stn-acces-nord`), **S1**, **S2** et **E3**/**E4**, jugés sur une **nouvelle** série tenue à
-  l'écart (bench §2.3, §6), et sur le coût à froid du MNS partout, mesuré sous le budget de 90 s
+  l'écart (bench README §2, point 3, et §6), et sur le coût à froid du MNS partout, mesuré sous le budget de 90 s
   (T02 §10).
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en

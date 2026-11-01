@@ -312,10 +312,10 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
   manifest, sans règle propre.
 - `ORD_JUDGE=1 ord-bench judge --increment MVP` ne lit que la série tenue à l'écart. Il vérifie que
   `manifest_sha256`, `criteria_sha256` et `bench_rules_sha256` sont ceux du commit de gel, juge
-  **une fois** et ajoute le résultat à `bench/judgements.md` (date, commit, `rules_version`,
-  `data_versions`, empreinte du manifest : bench §2.3). Il refuse un incrément déjà présent dans ce
+  **une fois** et ajoute le résultat à `bench/judgements.md` (date, commit du code mesuré et HEAD au
+  jugement, `rules_version`, `data_versions`, empreinte du manifest : bench README §2, point 3). Il refuse un incrément déjà présent dans ce
   fichier. Après jugement, la série devient calibration, et une nouvelle série doit être constituée
-  pour l'incrément suivant, par une règle écrite (bench §2.3, §6).
+  pour l'incrément suivant, par une règle écrite (bench README §2, point 3, et §6).
   Mise en œuvre (incrément 6, `tools/ord-bench/src/judge.rs`) : le gel est un fichier
   `bench/gel/<incrément>.json` (`increment`, `manifest_sha256`, `criteria_sha256`,
   `bench_rules_sha256`, tel qu'`ord-bench gel` l'affiche) commité dans le commit de gel, passé par

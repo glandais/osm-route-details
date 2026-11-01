@@ -1,4 +1,4 @@
-//! Jugement unique de la série tenue à l'écart (T05 §3.3, bench §2.3) :
+//! Jugement unique de la série tenue à l'écart (T05 §3.3, bench README §2, point 3) :
 //! `ORD_JUDGE=1 ord-bench judge --increment MVP --gel <commit>`.
 //!
 //! Avant toute lecture : `ORD_JUDGE=1` exigé ; incrément absent de `bench/judgements.md` et sans
@@ -154,8 +154,92 @@ pub fn skipped_cases(results: &Value) -> Vec<String> {
         .collect()
 }
 
-fn verdict_cell(v: &Value) -> String {
-    v.as_str().map_or_else(|| v.to_string(), str::to_owned)
+/// Chemins du code mesuré : service, banc et manifeste Cargo (`Cargo.toml`, `Cargo.lock`).
+const CODE_PATHS: [&str; 3] = ["crates", "tools/ord-bench", ":(glob)Cargo.*"];
+
+/// Dernier commit qui touche le code mesuré (`crates/`, `tools/ord-bench/`, `Cargo.*`), suffixé
+/// `-dirty` si ces chemins ont des modifications non commitées ; `inconnu` hors dépôt git.
+pub fn code_commit(repo: &Path) -> String {
+    let run = |args: &[&str]| {
+        git(repo, args)
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    let mut log = vec!["log", "-1", "--format=%h", "--"];
+    log.extend(CODE_PATHS);
+    let Some(commit) = run(&log).filter(|c| !c.is_empty()) else {
+        return "inconnu".into();
+    };
+    let mut status = vec!["status", "--porcelain", "--untracked-files=no", "--"];
+    status.extend(CODE_PATHS);
+    if run(&status).is_some_and(|s| !s.is_empty()) {
+        format!("{commit}-dirty")
+    } else {
+        commit
+    }
+}
+
+/// Verdict d'un critère : une chaîne (`pass`, `fail`, `skipped`, `reported`).
+fn verdict_cell(v: Option<&Value>) -> String {
+    v.and_then(Value::as_str).unwrap_or("—").to_owned()
+}
+
+/// Nombre décimal à la française, `digits` décimales.
+fn fr(x: f64, digits: usize) -> String {
+    format!("{x:.digits$}").replace('.', ",")
+}
+
+/// Résumé lisible d'une valeur annexe d'un critère (`<id>_echecs`, `E2_indicatif`…) : ids en
+/// échec, ou médianes par groupe pour une liste d'objets ; jamais de JSON brut. `None` si vide.
+fn aux_summary(key: &str, v: &Value) -> Option<String> {
+    let items = v.as_array()?;
+    if items.is_empty() {
+        return None;
+    }
+    if items.iter().all(Value::is_string) {
+        let ids: Vec<&str> = items.iter().filter_map(Value::as_str).collect();
+        return Some(ids.join(", "));
+    }
+    let groups: Vec<String> = items
+        .iter()
+        .map(|g| {
+            let name = g["groupe"].as_str().unwrap_or("?");
+            let mut cell = match g["mediane"].as_f64() {
+                Some(m) => format!("{name} {}", fr(m, 3)),
+                None => name.to_owned(),
+            };
+            if g["mediane_dans_bornes"] == false {
+                cell.push_str(" (médiane hors bornes)");
+            }
+            let out: Vec<&str> =
+                g["traces_hors_bornes"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+            if !out.is_empty() {
+                cell.push_str(&format!(" (hors bornes : {})", out.join(", ")));
+            }
+            cell
+        })
+        .collect();
+    let label = key.split_once('_').map_or(key, |(_, rest)| rest).replace('_', " ");
+    Some(format!("{label} : {}", groups.join(" ; ")))
+}
+
+/// Critère auquel se rattache une clé annexe : le plus long id de critère `c` tel que la clé
+/// commence par `c_` (`R1_R2_echecs` → `R1_R2`, `E2_indicatif` → `E2`).
+fn owner<'a>(key: &str, criteria: &'a [String]) -> Option<&'a String> {
+    criteria
+        .iter()
+        .filter(|c| key.len() > c.len() + 1 && key.starts_with(c.as_str()) && key[c.len()..].starts_with('_'))
+        .max_by_key(|c| c.len())
+}
+
+/// Commits de l'entrée : code mesuré et `HEAD` au jugement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Commits<'a> {
+    /// Dernier commit qui touche le code mesuré (`code_commit`).
+    pub code: &'a str,
+    /// Commit de gel (`bench/gel/<incrément>.json`).
+    pub gel: &'a str,
 }
 
 /// Critères bloquants de `criteria.yaml` (`criteres[].bloquant: true`) : un échec de l'un d'eux
@@ -181,12 +265,13 @@ fn is_blocking(id: &str, blocking: &BTreeSet<String>) -> bool {
     }
 }
 
-/// Entrée Markdown de `judgements.md` : identification de la campagne et verdicts par id, deux
-/// modes. Aucune valeur mesurée ni coordonnée : les valeurs sont dans `results.json`. Seul un
+/// Entrée Markdown de `judgements.md` : identification de la campagne (une seule liste) puis un
+/// tableau d'une ligne par critère, deux modes, avec les ids en échec. Aucune valeur mesurée ni
+/// coordonnée, hors le résumé d'`E2_indicatif` : les valeurs sont dans `results.json`. Seul un
 /// critère bloquant (`blocking`) en échec ou sauté refuse l'incrément ; les autres sont rapportés.
 pub fn entry(
     increment: &str,
-    gel_commit: &str,
+    commits: &Commits<'_>,
     report_rel: &str,
     results: &Value,
     blocking: &BTreeSet<String>,
@@ -195,21 +280,28 @@ pub fn entry(
     let s = |k: &str| c[k].as_str().unwrap_or("?").to_owned();
     let main = results["verdicts"].as_object().cloned().unwrap_or_default();
     let bp = results["input_with_breakpoints"]["verdicts"].as_object().cloned().unwrap_or_default();
-    let mut ids: Vec<&String> = main.keys().chain(bp.keys()).collect();
-    ids.sort();
-    ids.dedup();
-    let failed = |id: &&&String| {
-        [main.get(**id), bp.get(**id)]
+    // Critères : clés dont la valeur est un verdict (chaîne) dans l'un des modes ; les autres
+    // clés sont des annexes rattachées à leur critère.
+    let mut criteria: Vec<String> =
+        main.iter().chain(bp.iter()).filter(|(_, v)| v.is_string()).map(|(k, _)| k.clone()).collect();
+    criteria.sort();
+    criteria.dedup();
+    let failed = |id: &String| {
+        [main.get(id), bp.get(id)]
             .into_iter()
             .flatten()
             .any(|v| matches!(v.as_str(), Some("fail" | "skipped")))
     };
     let reported: Vec<&str> =
-        ids.iter().filter(|id| !is_blocking(id, blocking)).filter(failed).map(|id| id.as_str()).collect();
+        criteria.iter().filter(|id| !is_blocking(id, blocking) && failed(id)).map(String::as_str).collect();
     let failing: Vec<&str> =
-        ids.iter().filter(|id| is_blocking(id, blocking)).filter(failed).map(|id| id.as_str()).collect();
+        criteria.iter().filter(|id| is_blocking(id, blocking) && failed(id)).map(String::as_str).collect();
     let mut out = format!("{}({})\n\n", heading(increment), s("date"));
-    out.push_str(&format!("- Commit du service : `{}` ; commit de gel : `{gel_commit}`\n", s("commit")));
+    out.push_str(&format!(
+        "- Commit du code mesuré (`crates/`, `tools/ord-bench/`, `Cargo.*`) : `{}`\n",
+        commits.code
+    ));
+    out.push_str(&format!("- HEAD au jugement : `{}` ; commit de gel : `{}`\n", s("commit"), commits.gel));
     out.push_str(&format!(
         "- `rules_version` : {} ; `api_version` : {}\n",
         s("rules_version"),
@@ -229,7 +321,7 @@ pub fn entry(
     ));
     out.push_str(&format!("- Rapport : `{report_rel}`\n"));
     out.push_str(&format!(
-        "- Résultat : **{}**{}\n\n",
+        "- Résultat : **{}**{}\n",
         if failing.is_empty() { "accepté" } else { "refusé" },
         if failing.is_empty() {
             String::new()
@@ -239,16 +331,43 @@ pub fn entry(
     ));
     if !reported.is_empty() {
         out.push_str(&format!(
-            "- Non bloquants en échec ou sautés, rapportés sans refuser : {}\n\n",
+            "- Non bloquants en échec ou sautés, rapportés sans refuser : {}\n",
             reported.join(", ")
         ));
     }
-    out.push_str("| Id | bloquant | distance | input_with_breakpoints |\n|---|---|---|---|\n");
-    for id in ids {
-        let cell =
-            |m: &serde_json::Map<String, Value>| m.get(id).map_or_else(|| "—".to_owned(), verdict_cell);
+    out.push_str(
+        "\n| Critère | bloquant | distance | input_with_breakpoints | ids en échec |\n|---|---|---|---|---|\n",
+    );
+    for id in &criteria {
+        // Annexes du critère, résumées par mode ; une seule fois si les deux modes concordent.
+        let mut keys: Vec<&String> = main
+            .keys()
+            .chain(bp.keys())
+            .filter(|k| !criteria.contains(k) && owner(k, &criteria) == Some(id))
+            .collect();
+        keys.sort();
+        keys.dedup();
+        let mut notes = Vec::new();
+        for k in keys {
+            let a = main.get(k).and_then(|v| aux_summary(k, v));
+            let b = bp.get(k).and_then(|v| aux_summary(k, v));
+            match (a, b) {
+                (None, None) => {}
+                (a, b) if a == b => notes.extend(a),
+                (a, b) => notes.push(format!(
+                    "distance : {} ; input_with_breakpoints : {}",
+                    a.unwrap_or_else(|| "—".into()),
+                    b.unwrap_or_else(|| "—".into())
+                )),
+            }
+        }
+        let ids = if notes.is_empty() { "—".to_owned() } else { notes.join(" ; ") };
         let b = if is_blocking(id, blocking) { "oui" } else { "non" };
-        out.push_str(&format!("| {id} | {b} | {} | {} |\n", cell(&main), cell(&bp)));
+        out.push_str(&format!(
+            "| {id} | {b} | {} | {} | {ids} |\n",
+            verdict_cell(main.get(id)),
+            verdict_cell(bp.get(id))
+        ));
     }
     out.push_str("\nL1 et L2 (latences) sont mesurés à part (`ord-bench latency`).\n\n");
     out
@@ -292,10 +411,11 @@ where
     let path = bench.join("judgements.md");
     let mut text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
         "# Jugements de la série tenue à l'écart\n\nUn jugement par incrément, consigné qu'il passe ou \
-         non (bench §2.3, T05 §3.3).\n\n"
+         non (bench README §2, point 3 ; T05 §3.3).\n\n"
             .to_owned()
     });
-    text.push_str(&entry(increment, gel_commit, &rel, &results, &blocking));
+    let code = code_commit(repo);
+    text.push_str(&entry(increment, &Commits { code: &code, gel: gel_commit }, &rel, &results, &blocking));
     std::fs::write(&path, text)?;
     Ok(out)
 }
@@ -494,11 +614,107 @@ mod tests {
         );
     }
 
+    const COMMITS: Commits<'static> = Commits { code: "c0de", gel: "g" };
+
+    #[test]
+    fn entry_names_the_measured_code_and_head_separately() {
+        let text = entry("MVP", &COMMITS, "x", &results(json!([])), &BTreeSet::new());
+        assert!(
+            text.contains("- Commit du code mesuré (`crates/`, `tools/ord-bench/`, `Cargo.*`) : `c0de`\n"),
+            "{text}"
+        );
+        assert!(text.contains("- HEAD au jugement : `abc` ; commit de gel : `g`\n"), "{text}");
+        assert!(!text.contains("Commit du service"), "{text}");
+    }
+
+    #[test]
+    fn entry_is_one_list_then_one_row_per_criterion() {
+        let mut r = results(json!([]));
+        let indicatif = |m: f64| {
+            json!([{"groupe": "dplus", "mediane": m, "mediane_dans_bornes": true, "traces_hors_bornes": []},
+                {"groupe": "plaine", "mediane": 0.9757, "mediane_dans_bornes": false, "traces_hors_bornes": ["perso-99"]}])
+        };
+        r["verdicts"] = json!({"E1": "pass", "E1_echecs": [], "E2": "reported", "E2_indicatif": indicatif(0.9861),
+            "M1": "fail", "M1_echecs": ["perso-23"], "R1_R2": "skipped", "R1_R2_echecs": [], "R3": "fail",
+            "R3_echecs": ["perso-13.s1"], "E3_hors_france": "reported"});
+        r["input_with_breakpoints"]["verdicts"] = json!({"E1": "pass", "E1_echecs": [], "E2": "reported",
+            "E2_indicatif": indicatif(0.9854), "M1": "fail", "M1_echecs": ["perso-23"], "R3": "fail", "R3_echecs": []});
+        let blocking: BTreeSet<String> = ["E1", "M1", "R1", "R2"].map(String::from).into();
+        let text = entry("MVP", &COMMITS, "x", &r, &blocking);
+        // Une seule liste : aucune ligne vide entre deux éléments.
+        let list: Vec<&str> = text.lines().skip(2).take_while(|l| !l.is_empty()).collect();
+        assert!(list.iter().all(|l| l.starts_with("- ")), "{text}");
+        assert!(
+            list.iter().any(|l| l.starts_with("- Résultat : **refusé** (en échec ou sautés : M1, R1_R2)")),
+            "{text}"
+        );
+        assert!(list.iter().any(|l| l.starts_with("- Non bloquants en échec ou sautés")), "{text}");
+        // Tableau : une ligne par critère, sans ligne d'annexe ni JSON brut.
+        assert!(
+            text.contains("| Critère | bloquant | distance | input_with_breakpoints | ids en échec |"),
+            "{text}"
+        );
+        assert!(!text.contains("_echecs |") && !text.contains("| E2_indicatif"), "{text}");
+        let table = &text[text.find("| Critère").unwrap()..];
+        assert!(!table.contains('{') && !table.contains('['), "{text}");
+        assert!(text.contains("| M1 | oui | fail | fail | perso-23 |"), "{text}");
+        assert!(text.contains("| E1 | oui | pass | pass | — |"), "{text}");
+        assert!(text.contains("| R1_R2 | oui | skipped | — | — |"), "{text}");
+        assert!(text.contains("| E3_hors_france | non | reported | — | — |"), "{text}");
+        assert!(
+            text.contains("| R3 | non | fail | fail | distance : perso-13.s1 ; input_with_breakpoints : — |"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "| E2 | non | reported | reported | distance : indicatif : dplus 0,986 ; plaine 0,976 (médiane hors \
+                 bornes) (hors bornes : perso-99) ; input_with_breakpoints : indicatif : dplus 0,985 ; plaine \
+                 0,976 (médiane hors bornes) (hors bornes : perso-99) |"
+            ),
+            "{text}"
+        );
+        let rows = text.lines().filter(|l| l.starts_with("| ") && !l.starts_with("| Critère")).count();
+        assert_eq!(rows, 6, "E1, E2, E3_hors_france, M1, R1_R2, R3 : {text}");
+    }
+
+    #[test]
+    fn aux_keys_attach_to_the_longest_criterion_prefix() {
+        let c: Vec<String> = ["E2", "E2b", "R1_R2", "E3", "E3_hors_france"].map(String::from).into();
+        assert_eq!(owner("E2b_groupes_en_echec", &c).map(String::as_str), Some("E2b"));
+        assert_eq!(owner("E2_indicatif", &c).map(String::as_str), Some("E2"));
+        assert_eq!(owner("R1_R2_echecs", &c).map(String::as_str), Some("R1_R2"));
+        assert_eq!(owner("E3_echecs", &c).map(String::as_str), Some("E3"));
+        assert_eq!(owner("S9_x", &c), None);
+    }
+
+    #[test]
+    fn code_commit_follows_code_paths_only() {
+        let (dir, _, _) = repo();
+        let r = dir.path();
+        std::fs::create_dir_all(r.join("crates/x")).unwrap();
+        std::fs::write(r.join("crates/x/lib.rs"), "// 1\n").unwrap();
+        run(r, &["add", "."]);
+        run(r, &["commit", "-q", "-m", "code"]);
+        let code = String::from_utf8(git(r, &["rev-parse", "--short", "HEAD"]).unwrap().stdout).unwrap();
+        // Un commit sous bench/ ne change pas le code mesuré.
+        std::fs::write(r.join("bench/judgements.md"), "x\n").unwrap();
+        run(r, &["add", "."]);
+        run(r, &["commit", "-q", "-m", "banc"]);
+        assert_eq!(code_commit(r), code.trim());
+        std::fs::write(r.join("Cargo.toml"), "[workspace]\n").unwrap();
+        run(r, &["add", "."]);
+        run(r, &["commit", "-q", "-m", "cargo"]);
+        let cargo = String::from_utf8(git(r, &["rev-parse", "--short", "HEAD"]).unwrap().stdout).unwrap();
+        assert_eq!(code_commit(r), cargo.trim());
+        std::fs::write(r.join("crates/x/lib.rs"), "// 2\n").unwrap();
+        assert_eq!(code_commit(r), format!("{}-dirty", cargo.trim()));
+    }
+
     #[test]
     fn entry_without_bench_revision_says_so() {
         let mut r = results(json!([]));
         r["campagne"]["revision_banc"] = Value::Null;
-        assert!(entry("MVP", "g", "x", &r, &BTreeSet::new())
+        assert!(entry("MVP", &COMMITS, "x", &r, &BTreeSet::new())
             .contains("Révision du banc (`revision_banc`) : aucune"));
     }
 
@@ -509,12 +725,14 @@ mod tests {
         r["verdicts"] = json!({"E1": "pass", "R3": "fail", "R1_R2": "pass", "E3_hors_france": "skipped"});
         r["input_with_breakpoints"]["verdicts"] = json!({"E1": "pass", "R3": "fail"});
         let blocking: BTreeSet<String> = ["E1", "R1", "R2"].map(String::from).into();
-        let text = entry("MVP", "g", "x", &r, &blocking);
+        let text = entry("MVP", &COMMITS, "x", &r, &blocking);
         assert!(text.contains("**accepté**"), "{text}");
         assert!(text.contains("rapportés sans refuser : E3_hors_france, R3"), "{text}");
-        assert!(text.contains("| R1_R2 | oui | pass | — |"), "{text}");
+        assert!(text.contains("| R1_R2 | oui | pass | — | — |"), "{text}");
         r["verdicts"]["R1_R2"] = json!("fail");
-        assert!(entry("MVP", "g", "x", &r, &blocking).contains("**refusé** (en échec ou sautés : R1_R2)"));
+        assert!(
+            entry("MVP", &COMMITS, "x", &r, &blocking).contains("**refusé** (en échec ou sautés : R1_R2)")
+        );
     }
 
     #[tokio::test]
