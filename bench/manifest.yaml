@@ -672,3 +672,41 @@ perso:
       sha256: de72c71ceb3bc1c444b30e8a924930886ac7660aedd6b192aa6d62ffba88b67d
       sha256_trim1km: 8dc93fc2039e93204affa0006078b680d1155dc4a5f9837962de548dce02ec51
       qualification: {verdict: hors_ign, offset_m: -2.09, drift_m: 49.5, noise_m: 9.63, p95_abs_m: 24.6, gain_baro_m: 6315, gain_mnt_m: 5013}
+
+# Série tenue à l'écart V1 (README §4 ter.4) : contrôle de couverture sans le service et tirage
+# figé le 2026-11-01. Comptes seulement ; cas, géométries et identifiants dans private/v1/ (hors git),
+# vérifiables par leur empreinte. Outils : tools/couverture_v1.py, planifier_v1.py, tuiles_v1.py (494e5a8).
+serie_v1:
+  date_tirage: "2026-11-01"
+  sel: "osm-route-details:v1:"
+  regles: [ec72f13, 09dcda0, 0b590ff, 13e0ed1, 930f6e8, 305abd7, 32f6867, eb4c4cc, 64b7067, 00e500f]
+  sources:
+    strava: {telechargees: 136, fiables_nouvelles: 90, km_fiables: 8178, negatifs_q1: 3, periode_defectueuse_exclue: true}
+    planifies: {routeur: "BRouter (brouter.de)", e4: 3, s2: 5, r1_r2: 5, retires: 1}   # aucune donnée perso
+    tuiles_v1: {source: "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}", z: 14, espace_cache: versatiles-shortbread-z14-d2e31ed09602913b,
+                emprise: 10182, telechargees_2026_11_01: 9535, ecrites_par_le_service_2026_10_31: 647, ttl_jours: 7}
+    stadia_r1_r2: a_demander   # même semaine que les tuiles (avant 2026-11-07)
+  exclusions_candidats:
+    ponts: {deja_vu_calibration: 128, pas_un_tablier: 28, hors_graphe_velo: 18, passage_retire_niveau: 4, passage_sur_ouvrage_parallele: 3, absent_des_donnees: 2, hors_lidar: 1}
+    tunnels: {deja_vu_calibration: 6, hors_graphe_velo: 3, limite_donnees: 2, absent_des_donnees: 2, passage_sur_ouvrage_parallele: 1}
+  couverture:   # tenue à l'écart : atteint / cible (minimum + 25 %, 64b7067) / minimum de jugement
+    E4: {atteint: {tunnels: 9, plus_de_300m: 3}, cible: {tunnels: 9, plus_de_300m: 3}, minimum: {tunnels: 7, plus_de_300m: 2}, cas_de_la_strate: 33}
+    E5: {atteint: {croisements: 43}, cible: {croisements: 10}, minimum: {croisements: 8}, cas_de_la_strate: 213}
+    S2: {atteint: {temoins: 15, km: 52.2, natures: 4}, cible: {temoins: 5, km: 50, natures: 4}, minimum: {temoins: 4, km: 40, natures: 3}, cas_de_la_strate: 17}
+    R1_R2: {atteint: {parcours: 5, km: 542, part_non_revetu_osm: 0.246}, cible: {parcours: 5, km: 500, part_non_revetu: 0.125}, minimum: {parcours: 4, km: 400, part_non_revetu: 0.10}, cas_de_la_strate: 5}
+    E3: {atteint: {ponts: 45, mnh_10m: 6, plus_de_150m: 4}, cible: {ponts: 15, mnh_10m: 4, plus_de_150m: 4}, minimum: {ponts: 12, mnh_10m: 3, plus_de_150m: 3}, cas_de_la_strate: 153}
+    Q1: {atteint: {traces: 3}, cible: {traces: 3}, minimum: {traces: 2}, cas_de_la_strate: 3}
+    reste: {atteint: {traces: 30, km: 3309, dplus: 4, plaine: 8, ouvrage: 18}, cible: {traces: 10, km: 1000, par_groupe: 4}, minimum: {traces: 8, km: 800, par_groupe: 3}, cas_de_la_strate: 90}
+    S1: {ouvrages: 54, emprise_m: 7760}   # minimum 15 / 2 000 m
+    E1: {traces: 30, km: 3309}
+    M1: {traces: 43, km: 3943}
+    non_controle: [bandes_de_portail_E4, reference_incertaine]   # la campagne peut encore exclure
+  empreintes:   # fichiers de bench/private/
+    v1/tirage.json: f6486e8f53585e7b1dc20c52e4ebc9a8d5e49d68bbe98f4ca08b398c4b7d5907
+    v1/couverture-cas.json: c9bd32dc1e86cb2e45dcc226338bd05a42fcae28039e58a1c88f280ba7530401
+    v1/couverture-resume.json: e050d1dba80fa03921e8acf18e9b8f79394877424554f279111f8635b7899795
+    v1/selection.json: 9a9f9c2abd5a551a94a4f7f70925b912bd53e3db53ff89b7a1ff0551e1ebbda0
+    v1/planifies/specs.json: a8062de48530ffd5c4ff51f4872a631bdb07b3674d3790872822acd73d318fd5
+    v1/planifies/resume.json: 291f79d4d455aa836bb5c8907c4ae03996bccd2571619848b4c701a9b4b56b94
+    strava/qualif_v1.csv: a6dd2e7c590d9d83d969b81a049d881881154a82e8903d62f69913414513f7ec
+    strava/qualif_q1.csv: 183a0ad6fe23457c56921ec214f8ee492e155291844597d8b1675af73bcb468e
