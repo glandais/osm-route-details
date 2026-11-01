@@ -1,7 +1,5 @@
-//! `ord-bench` : `check`, `fill-cache`, `run --offline`, `diagnose`, `diagnose-structures`,
-//! `latency` (L1 à froid) (T05 §5.1). Les
-//! autres sous-commandes (`judge`, `compare`, `dsm-placement`) arrivent avec les incréments
-//! suivants.
+//! `ord-bench` : `check`, `fill-cache`, `run --offline`, `judge`, `gel`, `diagnose`,
+//! `diagnose-structures`, `latency` (T05 §5.1). `dsm-placement` arrive en V1.x.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -10,6 +8,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use ord_bench::campaign::{default_report_dir, fill_cache, latency_cold, run};
 use ord_bench::check::check;
+use ord_bench::manifest::Serie;
 use ord_bench::BenchPaths;
 
 #[derive(Debug, Parser)]
@@ -53,6 +52,10 @@ enum Command {
         /// GPX supplémentaires.
         #[arg(long)]
         gpx: Vec<PathBuf>,
+        /// Série à remplir : `calibration` (défaut) ou `tenue_a_l_ecart` (avant `judge` seulement :
+        /// traces entières de la série et extraits des traces de calibration ; aucune mesure).
+        #[arg(long, default_value = "calibration")]
+        serie: String,
     },
     /// Campagne de calibration sur le cache de banc, sans réseau.
     Run {
@@ -66,6 +69,22 @@ enum Command {
         /// Fichier de sortie (défaut : bench/reports/<date>-<rules_version>/results.json, T05 §5.2).
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+    /// Jugement unique de la série tenue à l'écart (T05 §3.3) : exige `ORD_JUDGE=1`, un commit
+    /// de gel (`bench/gel/<incrément>.json`) aux empreintes courantes, un incrément absent de
+    /// `bench/judgements.md` et un cache complet ; ajoute le résultat à `bench/judgements.md`.
+    Judge {
+        #[arg(long)]
+        increment: String,
+        /// Commit qui a ajouté `bench/gel/<incrément>.json`.
+        #[arg(long)]
+        gel: String,
+    },
+    /// Affiche (sans rien écrire) le fichier de gel `bench/gel/<incrément>.json` attendu par
+    /// `judge` : empreintes courantes du manifest, des critères et des `BenchRules`.
+    Gel {
+        #[arg(long, default_value = "MVP")]
+        increment: String,
     },
     /// Causes des plages non appariées et des désaccords de revêtement d'un cas (tuiles du cache).
     Diagnose {
@@ -126,8 +145,14 @@ async fn main_inner() -> anyhow::Result<bool> {
             );
             Ok(r.ok())
         }
-        Command::FillCache { cas, groupes, coherence, golden, hors_git, gpx } => {
-            let lock = fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &golden, &gpx).await?;
+        Command::FillCache { cas, groupes, coherence, golden, hors_git, gpx, serie } => {
+            let target = match serie.as_str() {
+                "calibration" => Serie::Calibration,
+                "tenue_a_l_ecart" => Serie::TenueALEcart,
+                other => anyhow::bail!("série inconnue : {other}"),
+            };
+            let lock =
+                fill_cache(&paths, &groupes, &cas, &coherence, &hors_git, &golden, &gpx, target).await?;
             println!("{}", serde_json::to_string_pretty(&lock)?);
             Ok(true)
         }
@@ -162,6 +187,17 @@ async fn main_inner() -> anyhow::Result<bool> {
                 );
             }
             println!("écrit : {}", out.display());
+            Ok(true)
+        }
+        Command::Judge { increment, gel } => {
+            let out = ord_bench::judge::judge(&paths, &increment, &gel).await?;
+            println!("jugement consigné : bench/judgements.md ; résultats : {}", out.display());
+            Ok(true)
+        }
+        Command::Gel { increment } => {
+            let gel = ord_bench::judge::current_gel(&paths, &increment)?;
+            println!("{}", serde_json::to_string_pretty(&gel)?);
+            eprintln!("à commiter tel quel dans {}", ord_bench::judge::gel_rel_path(&increment));
             Ok(true)
         }
         Command::Diagnose { cas } => {

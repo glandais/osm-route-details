@@ -19,6 +19,7 @@ pub mod golden;
 pub mod gpx;
 pub mod hash;
 pub mod inserted;
+pub mod judge;
 pub mod manifest;
 pub mod metrics;
 pub mod osm_surface;

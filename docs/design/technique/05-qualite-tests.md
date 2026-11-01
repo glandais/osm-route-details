@@ -316,6 +316,21 @@ de `structure_slope_implausible`, tuiles et octets lus par source, latence « ch
   `data_versions`, empreinte du manifest : bench §2.3). Il refuse un incrément déjà présent dans ce
   fichier. Après jugement, la série devient calibration, et une nouvelle série doit être constituée
   pour l'incrément suivant, par une règle écrite (bench §2.3, §6).
+  Mise en œuvre (incrément 6, `tools/ord-bench/src/judge.rs`) : le gel est un fichier
+  `bench/gel/<incrément>.json` (`increment`, `manifest_sha256`, `criteria_sha256`,
+  `bench_rules_sha256`, tel qu'`ord-bench gel` l'affiche) commité dans le commit de gel, passé par
+  `--gel <commit>`. Avant toute lecture, `judge` exige `ORD_JUDGE=1`, l'incrément absent de
+  `judgements.md` (titre `## Jugement <incrément> (<date>)`), le commit ancêtre de `HEAD`, le fichier
+  de gel présent à ce commit, `manifest.yaml`, `criteria.yaml` et le fichier de gel inchangés depuis,
+  et les empreintes courantes égales à celles du gel. La campagne (`campaign::run_series`, série
+  tenue à l'écart) est la même que celle de calibration, séries inversées : traces tenues à l'écart
+  entières (fenêtres des ouvrages de calibration masquées), ouvrages de `ouvrages_tenus`, extraits de
+  ± 500 m des traces de calibration autour de ces ouvrages ; ni vcyclist ni osm-surface (« déjà
+  vu »). Un seul cas sauté interrompt le jugement sans rien consigner ; sinon `results.json` va dans
+  `bench/reports/<date>-<rules_version>-jugement-<incrément>/` et l'entrée (versions, empreintes,
+  verdicts par identifiant et par mode, accepté ou refusé) est ajoutée à `judgements.md`. Le cache de
+  banc doit d'abord couvrir la série : `ord-bench fill-cache --serie tenue_a_l_ecart` (live, IGN à
+  20 req/s, aucune mesure).
 - Les séries `p09..p17`, `th*` et `hn*` de vcyclist sont **consommées** : pour nous, elles servent à la
   calibration (bench §1.1, piège 2). Une version précédente de ce fichier les gardait tenues à
   l'écart ; c'est le banc qui fait foi.

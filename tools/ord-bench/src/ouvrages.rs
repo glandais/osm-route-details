@@ -218,6 +218,16 @@ pub fn calibration_ouvrages(
     paths: &crate::BenchPaths,
     held_out: &BTreeSet<String>,
 ) -> anyhow::Result<Vec<Ouvrage>> {
+    series_ouvrages(paths, held_out, crate::manifest::Serie::Calibration)
+}
+
+/// Ouvrages d'une série : ceux de `ouvrages_tenus` (ou marqués `tenue_a_l_ecart`) pour la série
+/// tenue à l'écart, les autres pour la calibration. Les autres ne sont jamais lus.
+pub fn series_ouvrages(
+    paths: &crate::BenchPaths,
+    held_out: &BTreeSet<String>,
+    target: crate::manifest::Serie,
+) -> anyhow::Result<Vec<Ouvrage>> {
     let mut out = Vec::new();
     // MNH au milieu des ouvrages publics : `reference.valeurs` d'`ouvrages.yaml`.
     let public_mnh: BTreeMap<String, f64> = std::fs::read_to_string(paths.bench.join("data/ouvrages.yaml"))
@@ -241,7 +251,8 @@ pub fn calibration_ouvrages(
         let v: Value = serde_json::from_str(&text).context("géométrie des ouvrages")?;
         for o in v.as_array().into_iter().flatten() {
             let Some(id) = o["id"].as_str() else { continue };
-            if held_out.contains(id) || o["serie"].as_str() == Some("tenue_a_l_ecart") {
+            let is_held_out = held_out.contains(id) || o["serie"].as_str() == Some("tenue_a_l_ecart");
+            if is_held_out != (target == crate::manifest::Serie::TenueALEcart) {
                 continue;
             }
             let p = |k: &str| -> Option<LatLon> {

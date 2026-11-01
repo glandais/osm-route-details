@@ -29,14 +29,27 @@ use crate::typology::{
 };
 use crate::{gpx, BenchPaths, BenchRules};
 
-/// Sélection des cas : la série tenue à l'écart est exclue ici, avant toute lecture.
+/// Sélection des cas : l'autre série est exclue ici, avant toute lecture. En calibration,
+/// `excluded_held_out` liste les traces tenues à l'écart ; au jugement (`judge`), les traces de
+/// calibration.
 #[derive(Clone, Debug)]
 pub struct Selection<'a> {
     pub cases: Vec<&'a Trace>,
     pub excluded_held_out: Vec<String>,
 }
 
+/// Sélection de la calibration.
 pub fn select<'a>(manifest: &'a Manifest, groupes: &[String], ids: &[String]) -> Selection<'a> {
+    select_series(manifest, groupes, ids, Serie::Calibration)
+}
+
+/// Sélection des traces de la série `target` ; les traces de l'autre série sont seulement listées.
+pub fn select_series<'a>(
+    manifest: &'a Manifest,
+    groupes: &[String],
+    ids: &[String],
+    target: Serie,
+) -> Selection<'a> {
     let wanted = |t: &Trace| {
         (ids.is_empty() || ids.contains(&t.id))
             && (groupes.is_empty() || groupes.contains(&t.groupe))
@@ -45,10 +58,10 @@ pub fn select<'a>(manifest: &'a Manifest, groupes: &[String], ids: &[String]) ->
     let mut cases = Vec::new();
     let mut excluded_held_out = Vec::new();
     for t in manifest.traces.iter().filter(|t| wanted(t)) {
-        if t.serie == Serie::TenueALEcart {
-            excluded_held_out.push(t.id.clone());
-        } else {
+        if t.serie == target {
             cases.push(t);
+        } else {
+            excluded_held_out.push(t.id.clone());
         }
     }
     Selection { cases, excluded_held_out }
@@ -1236,6 +1249,8 @@ struct PassCtx<'a> {
     tiles: &'a crate::ouvrages::Tiles,
     groupes: &'a [String],
     ids: &'a [String],
+    /// Série mesurée : calibration (`run`) ou tenue à l'écart (`judge`).
+    target: Serie,
 }
 
 /// Bilan des points insérés d'un cas (sans position) : points par km et densité maximale.
@@ -1255,7 +1270,7 @@ fn inserted_stats(stats: &[crate::service::InsertedStats]) -> Value {
 /// Une passe : traces perso, extraits tenus à l'écart, parcours d'osm-surface, ouvrages des
 /// parcours vcyclist et témoins, lus dans le mode du service.
 async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pass> {
-    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids } = *ctx;
+    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids, target } = *ctx;
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let structures_wanted = ids.is_empty();
@@ -1310,8 +1325,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             }
         }
     }
-    // Traces tenues à l'écart : passages de leurs ouvrages de calibration seulement, sur des
-    // extraits (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
+    // Traces de l'autre série (tenues à l'écart en calibration, de calibration au jugement) :
+    // passages des ouvrages de la série mesurée seulement (`passages_masques`), sur des extraits
+    // (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
     let mut held_out_measured = Vec::new();
     for t in manifest.traces.iter().filter(|t| {
         selection.excluded_held_out.contains(&t.id)
@@ -1353,7 +1369,7 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     };
     let mut os_cases = Vec::new();
     let mut warm = Vec::new();
-    for entry in manifest.osm_surface.iter().filter(|e| os_wanted(&e.id) && e.serie == Serie::Calibration) {
+    for entry in manifest.osm_surface.iter().filter(|e| os_wanted(&e.id) && e.serie == target) {
         let route = crate::osm_surface::load(&paths.bench, entry)?;
         match crate::osm_surface::measure(service, &route).await {
             Ok(c) => {
@@ -1367,8 +1383,8 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             Err(e) => skipped.push(json!({"id": route.id, "raison": e.to_string()})),
         }
     }
-    // Ouvrages : parcours `test1..4` de vcyclist et témoins (calibration).
-    if structures_wanted {
+    // Ouvrages : parcours `test1..4` de vcyclist et témoins (toujours calibration : « déjà vu »).
+    if structures_wanted && target == Serie::Calibration {
         items.extend(crate::ouvrages::vc_items(service, &paths.bench, tiles, ouvrages, &mut skipped).await?);
     }
     items.extend(crate::ouvrages::perimeter_items(ouvrages));
@@ -1417,21 +1433,33 @@ fn judge_pass(pass: Pass, limits: &[(String, String)]) -> (Vec<Value>, Vec<Value
 
 /// `run --offline` : campagne de calibration ; renvoie le contenu de `results.json`.
 pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyhow::Result<Value> {
+    run_series(paths, groupes, ids, Serie::Calibration).await
+}
+
+/// Campagne sur la série `target` : calibration (`run`) ou tenue à l'écart (`judge`, seul appelant
+/// de cette série). L'autre série est exclue avant toute lecture ; ses traces ne servent qu'aux
+/// extraits de ± 500 m autour des ouvrages de la série mesurée.
+pub async fn run_series(
+    paths: &BenchPaths,
+    groupes: &[String],
+    ids: &[String],
+    target: Serie,
+) -> anyhow::Result<Value> {
     let report = check(paths)?;
     ensure_check(&report)?;
     let manifest = Manifest::load(&paths.bench)?;
-    let selection = select(&manifest, groupes, ids);
+    let selection = select_series(&manifest, groupes, ids, target);
     eprintln!(
-        "cas retenus : {} ; exclus (série tenue à l'écart) avant toute lecture : {}",
+        "cas retenus : {} ; exclus (autre série) avant toute lecture : {}",
         selection.cases.len(),
         selection.excluded_held_out.len()
     );
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let refs = ouvrage_refs(paths)?;
-    let mut ouvrages = crate::ouvrages::calibration_ouvrages(paths, &manifest.ouvrages_tenus)?;
+    let mut ouvrages = crate::ouvrages::series_ouvrages(paths, &manifest.ouvrages_tenus, target)?;
     // Tuiles de rues du cache : périmètre vélo des ouvrages du corpus (§4 bis.1) et spans vcyclist.
-    let structures_wanted = ids.is_empty();
+    let structures_wanted = ids.is_empty() && target == Serie::Calibration;
     let geoms = crate::ouvrages::way_geometries(&paths.bench);
     let mut tile_points: Vec<LatLon> =
         ouvrages.iter().flat_map(|o| crate::ouvrages::perimeter_stations(o, &geoms)).collect();
@@ -1451,6 +1479,7 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
         tiles: &tiles,
         groupes,
         ids,
+        target,
     };
     // Deux passes (README §2.2, étape 2) : `distance` au pas de la grille, puis le mode par défaut
     // `input_with_breakpoints`, rééchantillonné sur la même grille (étape 3).
@@ -1469,13 +1498,19 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
     let fingerprint = cache_fingerprint(&paths.cache).context("empreinte du cache de banc")?;
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
+    // Traces de l'autre série : exclues (et lues en extraits autour des ouvrages mesurés).
+    let (exclus_key, extraits_key) = match target {
+        Serie::Calibration => ("exclus_serie_tenue_a_l_ecart", "extraits_tenus_a_l_ecart"),
+        Serie::TenueALEcart => ("exclus_serie_calibration", "extraits_calibration"),
+    };
     let results = json!({
         "schema": 1,
         "campagne": {
             "date": today_utc(),
-            "type": "calibration",
+            "type": if target == Serie::Calibration { "calibration" } else { "jugement" },
+            "serie": target,
             "increment": "MVP",
-            "increment_plan": 5,
+            "increment_plan": 6,
             "modes": ["distance", "input_with_breakpoints"],
             "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956)",
             "revision_banc": crate::BENCH_REVISION,
@@ -1491,8 +1526,8 @@ pub async fn run(paths: &BenchPaths, groupes: &[String], ids: &[String]) -> anyh
             "bench_rules": rules,
             "private_present": paths.private_present(),
             "groupes": groupes,
-            "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out,
-            "extraits_tenus_a_l_ecart": held_out_measured,
+            exclus_key: selection.excluded_held_out,
+            extraits_key: held_out_measured,
             "baro_points_inseres": inserted_report,
             "notes": [
                 "Deux modes (README §2.2, étape 2) : cas, ouvrages, agrégats et verdicts de premier niveau en sampling.mode = distance au pas de 5 m (les mesures point par point des témoins et des parcours vcyclist en mode input) ; clé input_with_breakpoints : mêmes requêtes envoyées dans le mode par défaut, sortie rééchantillonnée sur la même grille de 5 m (étape 3 ; altitude interpolée linéairement entre points consécutifs, null si l'un est sans altitude ; position des points d'entrée = position envoyée ; méthode de la station = none si l'un des deux points est none, sinon dsm_deck ou interpolated_structure si l'un des deux la porte, sinon celle du plus proche), et réduite aux points d'entrée pour les mesures point par point ; références des ouvrages (MNT des approches E3, test de niveau, E5, bandes de portail E4, repli 1–3 km du décalage local) et positions des passages toujours lues en mode distance, seule la sortie testée venant du mode input_with_breakpoints ; E2b de ce mode compare ses sorties corrigée et non corrigée ; points_inseres = bilan des points insérés par cas de calibration (sans position), jamais pour les extraits tenus à l'écart ; typologie à chaud mesurée dans la première passe seulement",
@@ -1555,11 +1590,22 @@ pub async fn fill_cache(
     hors_git: &[String],
     goldens: &[String],
     extra_gpx: &[PathBuf],
+    target: Serie,
 ) -> anyhow::Result<Value> {
     let report = check(paths)?;
     ensure_check(&report)?;
     let manifest = Manifest::load(&paths.bench)?;
-    let selection = select(&manifest, groupes, ids);
+    let selection = select_series(&manifest, groupes, ids, target);
+    // Série tenue à l'écart (avant `judge`) : ses traces entières et les extraits des traces de
+    // calibration autour de ses ouvrages ; rien d'autre (cohérences, golden, témoins : calibration).
+    let calibration = target == Serie::Calibration;
+    let none: [String; 0] = [];
+    let (coherence_routes, hors_git, goldens, extra_gpx): (&[String], &[String], &[String], &[PathBuf]) =
+        if calibration {
+            (coherence_routes, hors_git, goldens, extra_gpx)
+        } else {
+            (&none, &none, &none, &[])
+        };
     let rules = BenchRules::default();
     let service = Service::start(&paths.cache, false, Variant::DEFAULT).await?;
     let mapterhorn = Service::start(&paths.cache, false, Variant::MAPTERHORN).await?;
@@ -1579,7 +1625,7 @@ pub async fn fill_cache(
             }
         }
     }
-    // Traces tenues à l'écart : tuiles des seuls extraits autour de leurs ouvrages de calibration
+    // Traces de l'autre série : tuiles des seuls extraits autour des ouvrages de la série remplie
     // (fenêtre ± 1 km, README §2), jamais de la trace entière.
     if paths.private_present() {
         let refs = ouvrage_refs(paths)?;
@@ -1613,7 +1659,7 @@ pub async fn fill_cache(
         }
     }
     for entry in manifest.osm_surface.iter().filter(|e| {
-        e.serie == Serie::Calibration
+        e.serie == target
             && ((ids.is_empty() && groupes.iter().any(|g| g == "osm_surface")) || ids.contains(&e.id))
     }) {
         let route = crate::osm_surface::load(&paths.bench, entry)?;
@@ -1643,7 +1689,7 @@ pub async fn fill_cache(
             None => eprintln!("{id} : sauté (bench/private/ absent)"),
         }
     }
-    if ids.is_empty() {
+    if ids.is_empty() && calibration {
         for (dir, id, _) in crate::ouvrages::controls(&paths.bench)? {
             let pts = crate::ouvrages::control_points(&paths.bench, &dir, &id)?;
             for sc in [true, false] {
@@ -1653,12 +1699,12 @@ pub async fn fill_cache(
             filled.push(id);
         }
     }
-    for id in crate::golden::STRUCTURE_SCENARIOS {
+    for id in crate::golden::STRUCTURE_SCENARIOS.iter().filter(|_| calibration) {
         let scenario = crate::golden::structure_scenario(paths, &manifest, id)?;
         crate::golden::response_with(&service, &scenario, crate::golden::structure_options()).await?;
         filled.push(format!("golden-{id}"));
     }
-    {
+    if calibration {
         let id = crate::golden::MODES_SCENARIO;
         let scenario = crate::golden::structure_scenario(paths, &manifest, id)?;
         crate::golden::modes_response(&service, &scenario).await?;
@@ -1683,7 +1729,8 @@ pub async fn fill_cache(
         "tuiles": fingerprint.tiles,
         "octets": fingerprint.bytes,
         "cas": filled,
-        "exclus_serie_tenue_a_l_ecart": selection.excluded_held_out
+        "serie": target,
+        "exclus_autre_serie": selection.excluded_held_out
     });
     crate::privacy::assert_report_clean(&lock, &crate::privacy::private_names(paths))?;
     std::fs::create_dir_all(&paths.cache)?;
