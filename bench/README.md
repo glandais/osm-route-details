@@ -681,6 +681,14 @@ inchangés.
      Q1, puis le reste. Dans chaque strate, tri par sha256(`osm-route-details:v1:` + id) ; le cas va
      à la série tenue à l'écart jusqu'au minimum et jusqu'à au moins 1/3 de la strate. Un cas
      affecté par une strate précédente garde son affectation.
+     **Marge du tirage** (décision de l'utilisateur, 2026-11-01) : la strate est remplie jusqu'à son
+     minimum **majoré de 25 %**, arrondi à l'entier supérieur sur chaque composante du minimum
+     (nombre de cas, km, sous-comptes comme « dont > 300 m » ou « dont > 150 m », part non revêtue,
+     nombre de natures), ou jusqu'à la strate entière si elle est plus petite ; la règle du tiers
+     s'applique aussi quand elle donne plus. Le seuil de **jugement** reste le minimum de la table
+     ci-dessus. Motif : remplie jusqu'au minimum exact, une strate s'arrête juste au-dessus
+     (S2 à 40,3 km pour 40 au contrôle du 2026-11-01), et une seule exclusion découverte à la
+     campagne la ferait passer dessous, ce qui vaut refus.
    - **Contrôle de couverture sans le service** (corpus, tuiles, MNT), écrit dans le manifest. Un
      minimum non atteint impose de collecter d'autres cas, jamais de changer le sel.
    - **Au jugement**, un critère sous son minimum (exclusions découvertes à la campagne) vaut refus,
