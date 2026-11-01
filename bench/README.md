@@ -803,6 +803,20 @@ inchangés.
      calibration 2026.11.6, sans le service : 3 des 29 passages au MNT deviennent incertains
      (`nv-361` sur `perso-06`, bosse 1,9 m ; `nv-461`, 1,8 m ; `n05-canal-midi-platanes#1`, 1,5 m),
      dont les 2 échecs au MNT.
+   Lecture de la règle (précisions de rédaction, 2026-11-01) :
+   - « trace perso fiable » = verdict `fiable` de `qualify_baro.py` ; une trace en plusieurs parties
+     se lit partie par partie ;
+   - « trace sur un ouvrage » : couche `streets` de la tuile du croisement et de ses 8 voisines
+     (voisinage du §4 bis.6), lignes `bridge` ou `tunnel` ; la couche `bridges` (polygones) n'y
+     entre pas ;
+   - « MNT sans donnée » : no-data ou hors de la couverture IGN LiDAR HD, sans repli sur une
+     autre source ;
+   - une approche (20–50 m d'un côté) sans aucune station de MNT : bosse non mesurable, référence
+     indisponible ;
+   - plages `O` des témoins vcyclist (sans point de croisement, sans baro) : croisement au milieu de
+     la plage, référence MNT, écart retenu = écart max sur la plage. Les approches 20–50 m du milieu
+     tombent en partie dans la plage quand elle dépasse 40 m (25 à 80 m sur ces témoins) : point
+     ouvert, à trancher par l'utilisateur.
    Le « trou comblé » du MNT (gap_filled du service) n'est pas lisible dans la donnée : le MNT
    LiDAR HD de l'IGN est déjà interpolé sous les tabliers (aucun no-data sur 218 croisements de
    calibration) ; c'est la bosse qui le trahit. Vérification sur la calibration 2026.11.5-bench1
