@@ -31,6 +31,7 @@
 # sauté ou sous le minimum = refus). Seuils inchangés ; avant toute nouvelle mesure.
 # Après la première calibration V1 (règles 2026.11.2 ; décisions de l'utilisateur, 2026-11-01) :
 # M1 hors graphe vélo resserrée aux routes motorisées fermées au vélo, plages ≥ 50 m (README §4 ter.3).
+# S2 sans les plages hors graphe vélo des témoins (README §4 ter.5).
 # Le gel du MVP (gel/MVP.json) garde les empreintes jugées ; ce fichier sera gelé à nouveau pour V1.
 # Un critère `bloquant: true` qui échoue sur la série tenue à l'écart refuse l'incrément ;
 # `bloquant: false` est rapporté sans refuser. À partir de V1, un critère bloquant sauté ou sous son
@@ -93,6 +94,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "M1 : station recalée dont la voie streets la plus proche (≤ 30 m, tuiles de la campagne) est fermée au vélo par la règle de tags du service sort de M1, rapportée (hors_graphe_velo_m), contrôle matched=false + unmatched_range ; tags des tuiles seulement ; risque de circularité accepté"
   - id: m1_hors_graphe_motorise   # 2026-11-01, V1, après la calibration 2026.11.2
     decision: "M1 hors graphe vélo resserrée : seulement les routes motorisées fermées au vélo (motorway, trunk, route bicycle=no), plages continues ≥ 50 m ; piétonnes, trottoirs/sentiers bicycle=no, busways, escaliers, traversées restent dans M1 ; voie la plus proche hors rails (T03 §5.3)"
+  - id: s2_hors_graphe_velo   # 2026-11-01, V1, après la calibration 2026.11.2
+    decision: "S2 : les plages où la trace suit une voie fermée au vélo (plages hors graphe de M1, §4 ter.3 resserrée) sortent de S2 et sont rapportées par témoin ; le service y rend les ponts OSM réels (bicycle_forbidden), pas des ouvrages fictifs ; E5 inchangé"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
 
@@ -104,7 +107,7 @@ perimetre:   # README §4 bis.1
       passe_si_un_de: [{matched: false, avertissement: unmatched_range}, apparie_a_une_voie_du_graphe_velo_distincte_de_l_ouvrage]
       erreur_altitude: rapportee_si_reference_sinon_null_avec_raison
     seuils: []
-    note: "Ne concerne que l'ouvrage dont la propre voie est hors graphe ; une trace hors graphe (n04, n08, n09) reste dans S2/E5"
+    note: "Ne concerne que l'ouvrage dont la propre voie est hors graphe ; une trace hors graphe (n04, n08, n09) reste dans E5 ; à partir de V1, ses plages hors graphe sortent de S2 (README §4 ter.5)"
     source_tags: {donnees: campagne.data_versions, couche: streets, attributs: [kind, bicycle, bridge, tunnel], pas: corpus_overpass}
   absent_des_donnees:
     regle: "géométrie de l'ouvrage du corpus sans équivalent dans les tuiles de la campagne"
@@ -301,6 +304,11 @@ criteres:
     metrique: "Faux positifs d'ouvrage"
     cas: {manifest: [vcyclist_temoins_negatifs, perso]}
     agregation: longueur_totale
+    hors_graphe_velo:   # README §4 ter.5, V1, 2026-11-01
+      plages: M1.hors_graphe_velo   # même règle : route motorisée fermée au vélo, plage continue ≥ 50 m, tuiles seulement
+      exclues_de: [ouvrages_fictifs, longueur_typee, longueur_totale]
+      rapporte: {cle: hors_graphe_velo_m, par: temoin, mesure: longueur_m}
+      ne_touche_pas: [E5]
     seuils:
       - {ouvrages_fictifs_max: 0, part_longueur_max: 0.005}
     passe_si: tous

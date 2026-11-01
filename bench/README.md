@@ -455,7 +455,7 @@ nouvelle mesure) : limite des données hors décompte (point 4), plages hors ré
    l'ouvrage (trace qui longe l'ouvrage sur une piste parallèle, cas `nv-49`). L'erreur d'altitude
    est rapportée quand une référence existe, sinon `null` avec sa raison. Les négatifs dont c'est la **trace** qui emprunte une voie hors graphe (`n04`, `n08`,
    `n09`) restent dans S2 et E5 : y inventer un ouvrage, en accrochant une voie qui croise, est un
-   défaut du service.
+   défaut du service. (À partir de V1, leurs portions hors graphe sortent de S2 : §4 ter.5.)
 2. **Tunnels.**
    - E4 se mesure **par tunnel OSM**, chacun entre ses propres portails. Une série de tunnels séparés
      par des balcons non tagués (Petits Goulets, Combe Laval), qu'un span vcyclist réunit en un seul
@@ -657,6 +657,16 @@ inchangés.
    - **R1 / R2** : référence Stadia Maps `trace_attributes` des parcours planifiés (aucune donnée
      perso), demandée la même semaine que la date des tuiles de la campagne, pour limiter l'écart
      de version qui a rendu R3 non bloquant. Réponses hors git, régénérables (conditions de Stadia).
+5. **S2 hors graphe vélo** (décision de l'utilisateur, 2026-11-01, après la première calibration
+   V1, règles 2026.11.2). Les portions d'un témoin négatif où la trace suit une voie fermée au vélo
+   ne comptent pas dans S2 (ni ouvrage fictif, ni longueur typée, ni longueur totale) : ce sont les
+   plages hors graphe vélo de M1 (point 3, version resserrée : route motorisée fermée au vélo, plage
+   continue ≥ 50 m, tuiles de la campagne qui juge la trace, jamais la réponse du service). Elles
+   sont rapportées à part par témoin (`hors_graphe_velo_m`). E5 ne change pas : c'est la voie du
+   passage dessous qui compte (§4 bis.1). Motif : en V1, sur une voie fermée au vélo, le service rend
+   les ponts OSM réels de cette voie (avertissement `bicycle_forbidden`, T03 §5.3 étape 6) ; ce ne
+   sont pas des ouvrages fictifs. Cas déclencheurs : `n08-nantes-centre` (1 ouvrage, 30 m) et
+   `n09-peage-lancon` (2 ouvrages, 45 m), S2 en échec au rapport 2026.11.2.
 
 ---
 
