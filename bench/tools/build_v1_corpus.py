@@ -142,10 +142,10 @@ def main(B):
                        (e in own or all(near_track(track, p, TOL_M) for p in pts)))
         r["masques"] = masks
         series_rows.append({"id": r["pseudo"], "type": "trace", "groupe": r["groupe"], "serie": r["serie"], "passages_masques": " ".join(masks)})
+    tir = json.load(open(f"{B}/v1/tirage.json"))["serie"]
     for i, t in sorted(planifies.items()):
-        s = "tenue_a_l_ecart" if i in json.load(open(f"{B}/v1/tirage.json"))["serie"] and \
-            json.load(open(f"{B}/v1/tirage.json"))["serie"][i] == "tenue_a_l_ecart" else None
-        series_rows.append({"id": i, "type": "planifie", "groupe": t["role"], "serie": s or "par_cas", "passages_masques": ""})
+        # cas du tirage (R1/R2, témoin S2) : sa série ; itinéraire E4 : chaque tunnel porte la sienne
+        series_rows.append({"id": i, "type": "planifie", "groupe": t["role"], "serie": tir.get(i, "par_cas"), "passages_masques": ""})
     for o in ouv:
         series_rows.append({"id": o["id"], "type": "ouvrage", "groupe": o["groupe_tirage"] and nv.get(o["groupe_tirage"], o["groupe_tirage"]),
                             "serie": o["serie"], "passages_masques": ""})
