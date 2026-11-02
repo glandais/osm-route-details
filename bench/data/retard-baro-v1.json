@@ -1,0 +1,820 @@
+{
+ "source": {
+  "rapport": "reports/2026-11-02-2026.11.6-bench3/results.json",
+  "sha256": "68cd223a3a0f29066ca9800cd24eb3cffd47f331647db56e6df5abb80112b41f",
+  "commit": "62c9ff3",
+  "revision_banc": "bench3",
+  "criteria_sha256": "c3f51d31c2bb6445eda148f14e6b995baf60341a6d0b743f5a4de3f7cfe66627",
+  "manifest_sha256": "16314ca1e1329d0a617249d2f9032cca3d4add25aef1ca9445d06f812c2b98e5"
+ },
+ "cas": {
+  "perso-01": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 1.019,
+   "ecart_robuste_min_m": 0.793,
+   "stations": 22146,
+   "non_estimable": null
+  },
+  "perso-02": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.823,
+   "ecart_robuste_min_m": 0.666,
+   "stations": 19432,
+   "non_estimable": null
+  },
+  "perso-03": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.609,
+   "ecart_robuste_min_m": 0.522,
+   "stations": 18218,
+   "non_estimable": null
+  },
+  "perso-04": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.963,
+   "ecart_robuste_min_m": 0.856,
+   "stations": 14483,
+   "non_estimable": null
+  },
+  "perso-05": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.535,
+   "ecart_robuste_min_m": 0.522,
+   "stations": 27901,
+   "non_estimable": null
+  },
+  "perso-06": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.73,
+   "ecart_robuste_min_m": 0.524,
+   "stations": 38637,
+   "non_estimable": null
+  },
+  "perso-07": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 1.164,
+   "ecart_robuste_min_m": 0.893,
+   "stations": 21626,
+   "non_estimable": null
+  },
+  "perso-08": {
+   "retard_m": 50.0,
+   "minimum_m": 50.0,
+   "ecart_robuste_0_m": 1.165,
+   "ecart_robuste_min_m": 0.983,
+   "stations": 23462,
+   "non_estimable": null
+  },
+  "perso-09": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 0.969,
+   "ecart_robuste_min_m": 0.831,
+   "stations": 18149,
+   "non_estimable": null
+  },
+  "perso-10": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 1.049,
+   "ecart_robuste_min_m": 0.953,
+   "stations": 13317,
+   "non_estimable": null
+  },
+  "perso-100": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.268,
+   "ecart_robuste_min_m": 0.268,
+   "stations": 19191,
+   "non_estimable": null
+  },
+  "perso-102": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.272,
+   "ecart_robuste_min_m": 0.272,
+   "stations": 20166,
+   "non_estimable": null
+  },
+  "perso-103": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.298,
+   "ecart_robuste_min_m": 0.283,
+   "stations": 6362,
+   "non_estimable": null
+  },
+  "perso-104": {
+   "retard_m": -5.0,
+   "minimum_m": -5.0,
+   "ecart_robuste_0_m": 0.28,
+   "ecart_robuste_min_m": 0.279,
+   "stations": 8227,
+   "non_estimable": null
+  },
+  "perso-105": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.563,
+   "ecart_robuste_min_m": 0.563,
+   "stations": 7134,
+   "non_estimable": null
+  },
+  "perso-106": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.686,
+   "ecart_robuste_min_m": 0.683,
+   "stations": 6875,
+   "non_estimable": null
+  },
+  "perso-107": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.367,
+   "ecart_robuste_min_m": 0.359,
+   "stations": 8654,
+   "non_estimable": null
+  },
+  "perso-108": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.347,
+   "ecart_robuste_min_m": 0.347,
+   "stations": 64649,
+   "non_estimable": null
+  },
+  "perso-109": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.351,
+   "ecart_robuste_min_m": 0.351,
+   "stations": 9200,
+   "non_estimable": null
+  },
+  "perso-11": {
+   "retard_m": 30.0,
+   "minimum_m": 30.0,
+   "ecart_robuste_0_m": 1.324,
+   "ecart_robuste_min_m": 0.963,
+   "stations": 23393,
+   "non_estimable": null
+  },
+  "perso-110": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.5,
+   "ecart_robuste_min_m": 0.476,
+   "stations": 13700,
+   "non_estimable": null
+  },
+  "perso-112": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.295,
+   "ecart_robuste_min_m": 0.295,
+   "stations": 10922,
+   "non_estimable": null
+  },
+  "perso-113": {
+   "retard_m": -5.0,
+   "minimum_m": -5.0,
+   "ecart_robuste_0_m": 0.349,
+   "ecart_robuste_min_m": 0.342,
+   "stations": 19418,
+   "non_estimable": null
+  },
+  "perso-114": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 0.702,
+   "ecart_robuste_min_m": 0.688,
+   "stations": 6576,
+   "non_estimable": null
+  },
+  "perso-115": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.573,
+   "ecart_robuste_min_m": 0.56,
+   "stations": 7212,
+   "non_estimable": null
+  },
+  "perso-116": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.353,
+   "ecart_robuste_min_m": 0.35,
+   "stations": 8667,
+   "non_estimable": null
+  },
+  "perso-117": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.238,
+   "ecart_robuste_min_m": 0.238,
+   "stations": 11857,
+   "non_estimable": null
+  },
+  "perso-118": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.349,
+   "ecart_robuste_min_m": 0.349,
+   "stations": 4602,
+   "non_estimable": null
+  },
+  "perso-12": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 0.848,
+   "ecart_robuste_min_m": 0.551,
+   "stations": 13498,
+   "non_estimable": null
+  },
+  "perso-121": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.322,
+   "ecart_robuste_min_m": 0.322,
+   "stations": 12176,
+   "non_estimable": null
+  },
+  "perso-122": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.401,
+   "ecart_robuste_min_m": 0.39,
+   "stations": 6896,
+   "non_estimable": null
+  },
+  "perso-123": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.427,
+   "ecart_robuste_min_m": 0.372,
+   "stations": 17071,
+   "non_estimable": null
+  },
+  "perso-125": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.446,
+   "ecart_robuste_min_m": 0.437,
+   "stations": 17651,
+   "non_estimable": null
+  },
+  "perso-127": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.373,
+   "ecart_robuste_min_m": 0.295,
+   "stations": 16994,
+   "non_estimable": null
+  },
+  "perso-129": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.372,
+   "ecart_robuste_min_m": 0.314,
+   "stations": 11996,
+   "non_estimable": null
+  },
+  "perso-13.s1": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.863,
+   "ecart_robuste_min_m": 0.726,
+   "stations": 19871,
+   "non_estimable": null
+  },
+  "perso-13.s2": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.947,
+   "ecart_robuste_min_m": 0.768,
+   "stations": 11306,
+   "non_estimable": null
+  },
+  "perso-14": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 1.735,
+   "ecart_robuste_min_m": 1.564,
+   "stations": 21781,
+   "non_estimable": null
+  },
+  "perso-15": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.668,
+   "ecart_robuste_min_m": 0.668,
+   "stations": 24687,
+   "non_estimable": null
+  },
+  "perso-16": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.59,
+   "ecart_robuste_min_m": 0.59,
+   "stations": 13902,
+   "non_estimable": null
+  },
+  "perso-17": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.653,
+   "ecart_robuste_min_m": 0.601,
+   "stations": 10180,
+   "non_estimable": null
+  },
+  "perso-18": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 1.375,
+   "ecart_robuste_min_m": 1.375,
+   "stations": 9073,
+   "non_estimable": null
+  },
+  "perso-19": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 1.042,
+   "ecart_robuste_min_m": 0.504,
+   "stations": 21153,
+   "non_estimable": null
+  },
+  "perso-20": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.249,
+   "ecart_robuste_min_m": 0.249,
+   "stations": 25521,
+   "non_estimable": null
+  },
+  "perso-21": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.325,
+   "ecart_robuste_min_m": 0.325,
+   "stations": 28686,
+   "non_estimable": null
+  },
+  "perso-22": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.294,
+   "ecart_robuste_min_m": 0.294,
+   "stations": 21969,
+   "non_estimable": null
+  },
+  "perso-23": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.269,
+   "ecart_robuste_min_m": 0.269,
+   "stations": 27689,
+   "non_estimable": null
+  },
+  "perso-24": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.442,
+   "ecart_robuste_min_m": 0.392,
+   "stations": 12395,
+   "non_estimable": null
+  },
+  "perso-25": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.379,
+   "ecart_robuste_min_m": 0.376,
+   "stations": 20051,
+   "non_estimable": null
+  },
+  "perso-26": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.321,
+   "ecart_robuste_min_m": 0.321,
+   "stations": 20458,
+   "non_estimable": null
+  },
+  "perso-27": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.271,
+   "ecart_robuste_min_m": 0.271,
+   "stations": 19476,
+   "non_estimable": null
+  },
+  "perso-28": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.692,
+   "ecart_robuste_min_m": 0.654,
+   "stations": 21466,
+   "non_estimable": null
+  },
+  "perso-29": {
+   "retard_m": 105.0,
+   "minimum_m": 105.0,
+   "ecart_robuste_0_m": 1.119,
+   "ecart_robuste_min_m": 0.417,
+   "stations": 23180,
+   "non_estimable": null
+  },
+  "perso-30": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.482,
+   "ecart_robuste_min_m": 0.407,
+   "stations": 17406,
+   "non_estimable": null
+  },
+  "perso-31": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.556,
+   "ecart_robuste_min_m": 0.519,
+   "stations": 20458,
+   "non_estimable": null
+  },
+  "perso-32": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.476,
+   "ecart_robuste_min_m": 0.43,
+   "stations": 22081,
+   "non_estimable": null
+  },
+  "perso-33": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.643,
+   "ecart_robuste_min_m": 0.596,
+   "stations": 20830,
+   "non_estimable": null
+  },
+  "perso-34": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.855,
+   "ecart_robuste_min_m": 0.348,
+   "stations": 20475,
+   "non_estimable": null
+  },
+  "perso-35": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 1.158,
+   "ecart_robuste_min_m": 0.638,
+   "stations": 16152,
+   "non_estimable": null
+  },
+  "perso-36": {
+   "retard_m": -5.0,
+   "minimum_m": -5.0,
+   "ecart_robuste_0_m": 0.311,
+   "ecart_robuste_min_m": 0.304,
+   "stations": 25422,
+   "non_estimable": null
+  },
+  "perso-37": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 1.292,
+   "ecart_robuste_min_m": 0.931,
+   "stations": 18725,
+   "non_estimable": null
+  },
+  "perso-38": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 1.692,
+   "ecart_robuste_min_m": 1.692,
+   "stations": 21434,
+   "non_estimable": null
+  },
+  "perso-39": {
+   "retard_m": -5.0,
+   "minimum_m": -5.0,
+   "ecart_robuste_0_m": 1.458,
+   "ecart_robuste_min_m": 1.45,
+   "stations": 18736,
+   "non_estimable": null
+  },
+  "perso-40": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.793,
+   "ecart_robuste_min_m": 0.415,
+   "stations": 36872,
+   "non_estimable": null
+  },
+  "perso-41": {
+   "retard_m": 15.0,
+   "minimum_m": 15.0,
+   "ecart_robuste_0_m": 0.495,
+   "ecart_robuste_min_m": 0.491,
+   "stations": 14566,
+   "non_estimable": null
+  },
+  "perso-42": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.558,
+   "ecart_robuste_min_m": 0.429,
+   "stations": 19193,
+   "non_estimable": null
+  },
+  "perso-44": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 0.349,
+   "ecart_robuste_min_m": 0.323,
+   "stations": 5148,
+   "non_estimable": null
+  },
+  "perso-46": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 0.448,
+   "ecart_robuste_min_m": 0.438,
+   "stations": 4255,
+   "non_estimable": null
+  },
+  "perso-48": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 0.589,
+   "ecart_robuste_min_m": 0.326,
+   "stations": 8698,
+   "non_estimable": null
+  },
+  "perso-49": {
+   "retard_m": 50.0,
+   "minimum_m": 50.0,
+   "ecart_robuste_0_m": 1.352,
+   "ecart_robuste_min_m": 0.446,
+   "stations": 31745,
+   "non_estimable": null
+  },
+  "perso-50": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.454,
+   "ecart_robuste_min_m": 0.372,
+   "stations": 17952,
+   "non_estimable": null
+  },
+  "perso-51": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.798,
+   "ecart_robuste_min_m": 0.37,
+   "stations": 17826,
+   "non_estimable": null
+  },
+  "perso-52": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 0.734,
+   "ecart_robuste_min_m": 0.45,
+   "stations": 7673,
+   "non_estimable": null
+  },
+  "perso-56": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.568,
+   "ecart_robuste_min_m": 0.337,
+   "stations": 40419,
+   "non_estimable": null
+  },
+  "perso-57": {
+   "retard_m": 40.0,
+   "minimum_m": 40.0,
+   "ecart_robuste_0_m": 0.821,
+   "ecart_robuste_min_m": 0.399,
+   "stations": 11374,
+   "non_estimable": null
+  },
+  "perso-58": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 1.426,
+   "ecart_robuste_min_m": 0.58,
+   "stations": 13979,
+   "non_estimable": null
+  },
+  "perso-59": {
+   "retard_m": 30.0,
+   "minimum_m": 30.0,
+   "ecart_robuste_0_m": 0.514,
+   "ecart_robuste_min_m": 0.374,
+   "stations": 8966,
+   "non_estimable": null
+  },
+  "perso-61": {
+   "retard_m": 50.0,
+   "minimum_m": 50.0,
+   "ecart_robuste_0_m": 1.278,
+   "ecart_robuste_min_m": 0.44,
+   "stations": 15236,
+   "non_estimable": null
+  },
+  "perso-64": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.824,
+   "ecart_robuste_min_m": 0.456,
+   "stations": 8179,
+   "non_estimable": null
+  },
+  "perso-65": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 0.838,
+   "ecart_robuste_min_m": 0.521,
+   "stations": 31072,
+   "non_estimable": null
+  },
+  "perso-66": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 1.288,
+   "ecart_robuste_min_m": 0.954,
+   "stations": 14024,
+   "non_estimable": null
+  },
+  "perso-68": {
+   "retard_m": 75.0,
+   "minimum_m": 75.0,
+   "ecart_robuste_0_m": 1.007,
+   "ecart_robuste_min_m": 0.77,
+   "stations": 15935,
+   "non_estimable": null
+  },
+  "perso-70": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 0.837,
+   "ecart_robuste_min_m": 0.671,
+   "stations": 14034,
+   "non_estimable": null
+  },
+  "perso-71": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 0.924,
+   "ecart_robuste_min_m": 0.723,
+   "stations": 16690,
+   "non_estimable": null
+  },
+  "perso-73": {
+   "retard_m": 65.0,
+   "minimum_m": 65.0,
+   "ecart_robuste_0_m": 0.683,
+   "ecart_robuste_min_m": 0.541,
+   "stations": 6124,
+   "non_estimable": null
+  },
+  "perso-76": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.982,
+   "ecart_robuste_min_m": 0.517,
+   "stations": 19872,
+   "non_estimable": null
+  },
+  "perso-77.s1": {
+   "retard_m": 50.0,
+   "minimum_m": 50.0,
+   "ecart_robuste_0_m": 0.886,
+   "ecart_robuste_min_m": 0.644,
+   "stations": 20774,
+   "non_estimable": null
+  },
+  "perso-77.s2": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 0.651,
+   "ecart_robuste_min_m": 0.644,
+   "stations": 14718,
+   "non_estimable": null
+  },
+  "perso-81": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.563,
+   "ecart_robuste_min_m": 0.563,
+   "stations": 20751,
+   "non_estimable": null
+  },
+  "perso-82": {
+   "retard_m": -5.0,
+   "minimum_m": -5.0,
+   "ecart_robuste_0_m": 0.717,
+   "ecart_robuste_min_m": 0.711,
+   "stations": 20293,
+   "non_estimable": null
+  },
+  "perso-83": {
+   "retard_m": 5.0,
+   "minimum_m": 5.0,
+   "ecart_robuste_0_m": 0.51,
+   "ecart_robuste_min_m": 0.507,
+   "stations": 21682,
+   "non_estimable": null
+  },
+  "perso-84": {
+   "retard_m": 45.0,
+   "minimum_m": 45.0,
+   "ecart_robuste_0_m": 0.59,
+   "ecart_robuste_min_m": 0.301,
+   "stations": 9527,
+   "non_estimable": null
+  },
+  "perso-86": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.757,
+   "ecart_robuste_min_m": 0.757,
+   "stations": 2843,
+   "non_estimable": null
+  },
+  "perso-87": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.571,
+   "ecart_robuste_min_m": 0.565,
+   "stations": 6618,
+   "non_estimable": null
+  },
+  "perso-88": {
+   "retard_m": 10.0,
+   "minimum_m": 10.0,
+   "ecart_robuste_0_m": 0.534,
+   "ecart_robuste_min_m": 0.53,
+   "stations": 6792,
+   "non_estimable": null
+  },
+  "perso-92": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 0.734,
+   "ecart_robuste_min_m": 0.667,
+   "stations": 23312,
+   "non_estimable": null
+  },
+  "perso-95": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 0.966,
+   "ecart_robuste_min_m": 0.791,
+   "stations": 21069,
+   "non_estimable": null
+  },
+  "perso-96": {
+   "retard_m": 25.0,
+   "minimum_m": 25.0,
+   "ecart_robuste_0_m": 0.739,
+   "ecart_robuste_min_m": 0.61,
+   "stations": 16077,
+   "non_estimable": null
+  },
+  "perso-97": {
+   "retard_m": 20.0,
+   "minimum_m": 20.0,
+   "ecart_robuste_0_m": 1.32,
+   "ecart_robuste_min_m": 1.141,
+   "stations": 14255,
+   "non_estimable": null
+  },
+  "perso-98": {
+   "retard_m": 35.0,
+   "minimum_m": 35.0,
+   "ecart_robuste_0_m": 1.602,
+   "ecart_robuste_min_m": 1.111,
+   "stations": 17452,
+   "non_estimable": null
+  },
+  "perso-99": {
+   "retard_m": 0.0,
+   "minimum_m": 0.0,
+   "ecart_robuste_0_m": 0.285,
+   "ecart_robuste_min_m": 0.285,
+   "stations": 9182,
+   "non_estimable": null
+  }
+ }
+}
