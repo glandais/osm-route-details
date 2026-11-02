@@ -783,7 +783,7 @@ inchangés.
    - **référence = baro corrigé localement** (décalage = médiane baro − MNT de 200 à 1 500 m de part
      et d'autre, comme au §2.1) au croisement, interpolé sur la grille de 5 m, si la trace est une
      trace perso fiable dont le baro existe des deux côtés du croisement sans pas brut de plus de
-     100 m (`baro_gap_max_m`). Tolérance **2 m** avec cette référence, comme E3 (décision de
+     100 m (`baro_gap_max_m`), baro corrigé de son retard (§4 ter.9). Tolérance **2 m** avec cette référence, comme E3 (décision de
      l'utilisateur, 2026-11-01, après la calibration 2026.11.6) ; référence **incertaine**
      (rapportée `e5_reference_incertaine`, non comptée) si les deux décalages, médiane baro − MNT
      de 200 à 1 500 m de chaque côté pris à part, diffèrent de plus de **2 m**, ou si l'un des côtés
@@ -858,6 +858,35 @@ inchangés.
    « fiable » du corpus admet jusqu'à 2,5 m. Le groupe `dplus` (seuil 3,0 m) n'est pas concerné ;
    E2b non plus. Effet : 2 traces plaine de calibration V1, 2 du MVP ; série tenue à l'écart V1 :
    2 sur 8, il reste 28 traces fiables et 3 083 km pour E1 (minimum 8 / 800, cible 10 / 1 000).
+9. **Retard du baro, estimé par trace et corrigé** (décision de l'utilisateur, 2026-11-02, après la
+   calibration 2026.11.6-bench1 ; modalités rédigées par le banc). Le baromètre suit le relief avec
+   retard : sur une pente, ce retard passe dans la référence. Diagnostic d'ord-bench sur les échecs
+   E5 restants : un décalage de 40 m (`perso-84`) et de 65 m (`perso-71`) divise par 3 l'écart
+   robuste du résidu et ramène l'écart au croisement à 1,1 et 0,9 m.
+   - **Estimation**, une valeur δ par trace, sur toute la trace (toute la trace recousue pour les
+     tronçons `.partN` ; chaque segment `.sN` à part) : stations de la grille de 5 m de la géométrie
+     recalée, résidu baro(s + δ) − MNT(s), le MNT lu comme au §2.2 (mode `distance`, sans
+     correction), hors points insérés écartés (§2.1), fenêtres masquées et stations sans baro (pas
+     brut de plus de 100 m) ; dérive lente retirée par médiane glissante de 5 km ; δ minimise
+     l'écart robuste du résidu (1,4826 × MAD). Recherche de **−50 à +200 m** par pas de 5 m ;
+     à écart égal, le plus petit |δ|. Un δ négatif est admis (abscisse du recalage décalée).
+   - **Correction** : baro corrigé(s) = baro(s + δ), avant tout calcul de décalage. Elle s'applique
+     à toutes les références baro : **E5** (décalages de part et d'autre, baro au croisement),
+     **E3** (décalage d'approche, milieu, max ; test de niveau du §4 bis.3) et **E1**. Motif : le
+     retard est une propriété du capteur et de la trace, pas d'une métrique ; corriger E5 seul
+     laisserait deux baros pour une même trace et une erreur connue de la référence en E1 et E3.
+     E2 et E2b ne changent pas (le D+ ne dépend pas d'un décalage d'abscisse) ; ni les verdicts
+     de `qualify_baro.py` ni le tirage figé V1 ne sont recalculés.
+   - **Retard non estimable** : moins de 400 stations utilisables (2 km), ou minimum atteint à une
+     borne de la recherche (−50 ou +200 m). La trace garde alors son baro brut, avec la mention
+     `retard_non_estimable`, rapportée, sans autre effet.
+   - Le δ estimé, l'écart robuste à δ = 0 et au minimum et le nombre de stations sont rapportés
+     par trace.
+   Vérification sur la calibration, sans le service (MNT du cache, toutes stations, blocs de 5 km) :
+   91 des 94 traces perso estimées, 3 non estimables faute de MNT (hors IGN) ; δ de −10 à +105 m,
+   médiane 10 m, aucun à une borne ; `perso-84` 40 m (écart robuste 0,63 → 0,36 m), `perso-71`
+   45 m sur toute la trace (1,36 → 1,12 m ; 65 m chez ord-bench sur ± 1,5 km). Profils en V nets :
+   le δ est bien identifié.
 
 ---
 

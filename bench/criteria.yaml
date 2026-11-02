@@ -122,6 +122,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : plages O des témoins vcyclist, approches 20–50 m mesurées depuis les bouts de la plage ; référence baro incertaine, rapportée, non comptée, si un côté compte moins de 3 points de baro entre 200 et 1 500 m"
   - id: e5_lectures_2026_11_02   # 2026-11-02, après la calibration 2026.11.6-bench1
     decision: "E5 : tronçons .partN recousus par abscisse, segments .sN lus un par un ; bosse MNT de 1,0 m ou 2,0 m exactement = incertaine ; côté sans baro (< 3 points) = incertaine sans repli sur le MNT"
+  - id: retard_baro   # 2026-11-02, après la calibration 2026.11.6-bench1
+    decision: "Retard du baro estimé par trace sur toute la trace (δ de −50 à +200 m minimisant l'écart robuste de baro(s + δ) − MNT) et corrigé avant le calcul des références baro d'E5, E3 et E1 ; non estimable = baro brut, rapporté"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -222,6 +224,15 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de)", debit_max: "1 req/s, en séquence", donnees_serveur: "2026-11-01T13:01Z", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx", toutes_les_traces: true}   # décision de l'utilisateur, 2026-11-01 (Stadia Maps jusqu'au MVP)
   decoupage: {max_km: 200, max_points: 16000, cas: [perso-06]}
+  retard_baro:   # README §4 ter.9, décision de l'utilisateur, 2026-11-02 ; modalités rédigées par le banc
+    estimation: {par: trace, partN: trace_recousue, sN: segment, grille_m: 5, residu: "baro(s + δ) − MNT(s)", mnt: "mode distance sans correction (§2.2)",
+                 exclus: [points_inseres_ecartes, fenetres_masquees, stations_sans_baro], derive: {mediane_glissante_m: 5000},
+                 critere: "min 1,4826 × MAD du résidu", recherche_m: [-50, 200], pas_m: 5, egalite: plus_petit_abs}
+    correction: "baro corrigé(s) = baro(s + δ), avant tout décalage"
+    s_applique_a: [E1, E3, E3_test_de_niveau, E5]
+    sans_effet_sur: [E2, E2b, qualify_baro, tirage_v1]
+    non_estimable: {si: [{stations_min: 400}, minimum_a_une_borne], alors: baro_brut, marque: retard_non_estimable, rapporte: true}
+    rapporte: [retard_m, ecart_robuste_0_m, ecart_robuste_min_m, stations]
   baro_points_inseres:   # README §2.1, étape 3
     colonne: insere   # <id>.baro.csv, 1 = point d'origine inséré par fill_jumps
     garde_si: {distance_voie_m_max: 30.0, couche: streets, tuiles: [point, 8_voisines]}
