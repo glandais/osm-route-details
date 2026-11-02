@@ -186,8 +186,11 @@ impl BenchPaths {
 /// `serie_v11` ; 7b1a4e9, 22dbba7) : en calibration, aucun cas V1.1 ouvert, ses éléments masqués
 /// sur les cas de calibration ; au jugement V1.1, cas jugés entiers sans masque ni extrait, E3 non
 /// bloquant, minimum E2b sur `dplus` et `plaine` ; instantané OSM de R1, R2 et R3 choisi par la
-/// date du recalage de chaque cas.
-pub const BENCH_REVISION: Option<&str> = Some("bench1");
+/// date du recalage de chaque cas. `bench2` (règles 2026.11.10 inchangées, après la campagne
+/// `2026-11-02-2026.11.10-bench1` ; README §4 ter.6, affc041) : un témoin S2 à extrémités (`debut`,
+/// `fin`) se mesure entre elles, même sur un itinéraire planifié (`pl-e4-cajarc-s0`, `-s1`) ; seul
+/// un témoin sans extrémités couvre tout l'itinéraire.
+pub const BENCH_REVISION: Option<&str> = Some("bench2");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

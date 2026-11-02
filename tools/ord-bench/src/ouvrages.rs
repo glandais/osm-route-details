@@ -776,8 +776,8 @@ fn is_crossing(o: &Ouvrage) -> bool {
 pub const TEMOIN_ABORDS_M: f64 = 100.0;
 
 /// S2 d'un témoin négatif V1 (README §4 ter.4–6) sur le profil d'un cas : tronçon entre les
-/// stations les plus proches de ses extrémités (à 40 m au plus), ou cas entier (itinéraire
-/// planifié). Sont retirés de la longueur comptée, des ouvrages fictifs et de la longueur typée :
+/// stations les plus proches de ses extrémités (à 40 m au plus), sur une sortie comme sur un
+/// itinéraire planifié, ou cas entier (témoin planifié sans extrémités ; affc041). Sont retirés de la longueur comptée, des ouvrages fictifs et de la longueur typée :
 /// les plages hors graphe vélo (§4 ter.5, `closed`, abscisses de `d`) et les abords (100 m) de
 /// tout pont ou tunnel des tuiles de la campagne (`tile_structure`) : un ouvrage réel tagué n'est
 /// jamais fictif (§4 ter.6). Ouvrage fictif = suite de stations typées pont ou tunnel par le
@@ -800,7 +800,9 @@ pub fn temoin_v1_item(
         return None;
     }
     let (i0, i1) = match t.ends {
-        Some([a, b]) if !t.planifie => {
+        // Témoin à extrémités, de sortie comme d'itinéraire planifié (README §4 ter.6, affc041) :
+        // entre ses extrémités ; seul un témoin sans extrémités couvre tout l'itinéraire.
+        Some([a, b]) => {
             let (ia, da) = nearest(d, pts, a, f64::NEG_INFINITY, f64::INFINITY)?;
             let (ib, db) = nearest(d, pts, b, f64::NEG_INFINITY, f64::INFINITY)?;
             if da > tol || db > tol || ia == ib {
@@ -3402,6 +3404,11 @@ mod tests {
         // Témoin de sortie : tronçon entre ses extrémités ; extrémités introuvables : None.
         let s = crate::v1::TemoinV1 { planifie: false, ends: Some([pts[90], pts[110]]), ..t.clone() };
         let it = temoin_v1_item(&s, &d, &pts, &on, &tile, &[], None, 40.0).unwrap().pop().unwrap();
+        assert_eq!(it["longueur_m"], 100.0, "{it}");
+        // Témoin à extrémités sur un itinéraire planifié (`pl-…-sN`, affc041) : entre ses
+        // extrémités, pas sur tout l'itinéraire.
+        let ps = crate::v1::TemoinV1 { id: "pl-x-s0".into(), planifie: true, ..s.clone() };
+        let it = temoin_v1_item(&ps, &d, &pts, &on, &tile, &[], None, 40.0).unwrap().pop().unwrap();
         assert_eq!(it["longueur_m"], 100.0, "{it}");
         // Ouvrage réel sur la voie (README §4 ter.6) : l'ouvrage fictif des stations 100–103 est
         // un pont tagué, plage ± 35 m masquée et rapportée.
