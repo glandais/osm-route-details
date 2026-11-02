@@ -140,6 +140,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
   - id: e1_marche_baro   # 2026-11-02, après la calibration 2026.11.10
     decision: "E1, toutes séries : marche brutale du baro sans marche du MNT (résidu baro(s + δ) − MNT : |Δ| > 10 m entre fenêtres de 200 m séparées de 200 m, confirmé sur 2 000 m, même signe ; MNT d'amplitude ≤ 30 m sur 600 m) = référence incertaine, rapportée, non jugée"
+  - id: m1_hors_graphe_voie_parallele   # 2026-11-02, après la calibration 2026.11.10
+    decision: "Contrôle M1 hors graphe vélo satisfait aussi si la plage est appariée à une voie du graphe vélo distincte de la route fermée (voie parallèle), comme pour les ouvrages ; appariée à la route fermée = échec"
   - id: serie_v11_e3_rapporte   # 2026-11-02, après le contrôle de couverture de V1.1
     decision: "Série tenue à l'écart V1.1 : E3 rapporté, non bloquant, seuils inchangés (échec ou minimum non atteint sans refus) ; minimum E2b sur les groupes dplus et plaine seulement, groupe ouvrage rapporté ; E3 reste calibré sur MVP + V1"
 
@@ -490,7 +492,7 @@ criteres:
       tuiles: {source: campagne_qui_juge_la_trace, couche: streets, voisinage: [point, 8_voisines], attributs: [kind, bicycle]}
       exclue_de: [non_apparie, longueur_totale, unknown]
       rapporte: {cle: hors_graphe_velo_m, par: trace, mesure: longueur_m}
-      controle: {attendu: {matched: false, avertissement: unmatched_range}, sinon: echec_M1}
+      controle: {passe_si_un_de: [{matched: false, avertissement: unmatched_range}, apparie_a_une_voie_du_graphe_velo_distincte_de_la_route_fermee], sinon: echec_M1}   # voie parallèle : 2026-11-02
       priorite: hors_reseau_d_abord
       risque_circularite: accepte   # décision de l'utilisateur, 2026-11-01
     seuils:

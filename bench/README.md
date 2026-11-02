@@ -690,6 +690,11 @@ inchangés.
    `streets` qui ne sont pas des rails. Motif : la règle précédente contredisait T03 §5.3, où le
    matcher apparie volontairement ces portions non motorisées à la voie cyclable voisine, et faisait
    échouer M1 sur 16 traces de calibration, souvent sur un carrefour.
+   **Contrôle sur voie parallèle** (décision de l'utilisateur, 2026-11-02, après la calibration
+   2026.11.10) : le contrôle de la plage est aussi satisfait quand le service l'apparie à une voie
+   du graphe vélo **distincte de la route fermée** (piste ou voie parallèle), comme le contrôle des
+   ouvrages hors graphe (§4 bis, point 1, cas `nv-49`, campagne 2026.10.6-bench2). Une station de la
+   plage appariée à la route fermée elle-même reste un échec de M1. Cas : `perso-62`, 60 m.
 4. **Couverture de la série tenue à l'écart V1.** Constat au jugement du MVP : 1 seul tunnel E4
    compté, 15 ponts E3, aucun croisement E5, aucun témoin négatif S2, aucun parcours R1/R2. Les deux
    derniers étaient structurels : la règle 2 de `tools/series_groups.py` met d'office en
