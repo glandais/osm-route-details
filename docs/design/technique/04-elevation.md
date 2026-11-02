@@ -558,6 +558,7 @@ l'une des deux est `none`.
 | `structure_start` / `structure_end` | Bornes de chaque ouvrage (`StructureOutcome`, sans les marges), coupées au parcours. Deux ponts contigus gardent leur borne commune. | A (fait) |
 | `elevation_gap_start` / `_end` | Bornes de `MissingRange` après comblement, portées par la dernière (première) station lue qui les encadre, pour que le point ait une altitude (incrément 5) | A |
 | `terrain_source_change` | Bornes des `TerrainRange` (changement d'`origin`) et des plages GLO-30 retenues (§5.4) | A |
+| `overpass_crossing` | Croisement d'un pont qui enjambe la trace au sol (§3.4 : angle ≥ 20°, plus de 1 m d'une culée, trace au sol hors ouvrage), avec ou sans correction de la bosse et avec ou sans `structure_correction`, si le profil a une altitude au croisement. Le point porte l'altitude du profil en ce point, celle du mode `distance`, au lieu de la droite entre les points d'entrée qui l'encadrent (décision de l'utilisateur du 2026-11-02, échec E5 de `nv-423` : 1,30 m ; règles 2026.11.8, api 1.4) | A |
 | `surface_change` | Frontière où `surface.class` change entre deux segments | B |
 | `local_max` / `local_min` | Points de retournement confirmés par l'accumulateur de D+ (§5.4), recalés sur l'argmax ou l'argmin de `ele` non lissé à ±`smoothing` du preset | C, poids = amplitude de la jambe |
 | `grade_change` | Voir ci-dessous | C, poids = \|Δpente\| |
@@ -577,7 +578,8 @@ corde qui ne remplit pas ces conditions arrête la recherche sur sa plage (incr�
 ### 6.2 Déduplication et densité
 
 1. **Fusion** : événements à moins de `merge_m = 5 m` [cal] → un point, union des raisons, position
-   de l'événement prioritaire (structure > trou > terrain > revêtement > extremum > pente ; puis plus
+   de l'événement prioritaire (structure > trou > terrain > pont au-dessus > revêtement > extremum >
+   pente ; puis plus
    petite distance).
 2. **Rattachement** : à moins de `snap_m = 5 m` [cal] d'un point d'entrée (le plus proche, le
    précédent en cas d'égalité), l'événement lui donne ses raisons sans créer de point ; le point

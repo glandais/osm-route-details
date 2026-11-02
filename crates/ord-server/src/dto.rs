@@ -205,6 +205,8 @@ pub enum BreakpointReasonV1 {
     TerrainSourceChange,
     ElevationGapStart,
     ElevationGapEnd,
+    /// A bridge crossing above the route (api 1.4).
+    OverpassCrossing,
 }
 
 impl From<BreakpointReason> for BreakpointReasonV1 {
@@ -219,6 +221,7 @@ impl From<BreakpointReason> for BreakpointReasonV1 {
             BreakpointReason::TerrainSourceChange => Self::TerrainSourceChange,
             BreakpointReason::ElevationGapStart => Self::ElevationGapStart,
             BreakpointReason::ElevationGapEnd => Self::ElevationGapEnd,
+            BreakpointReason::OverpassCrossing => Self::OverpassCrossing,
         }
     }
 }

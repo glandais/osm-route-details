@@ -127,6 +127,9 @@ pub struct ElevationProfile {
     pub structures: Vec<StructureOutcome>,
     pub verdicts: Vec<StructureVerdict>,
     pub correction: StructureCorrectionReport,
+    /// Distances des croisements des ponts qui enjambent la trace au sol (T04 §3.4), triées :
+    /// points de rupture `overpass_crossing` (T04 §6.1, règles 2026.11.8).
+    pub overpass_crossings: Vec<f64>,
 }
 
 impl fmt::Debug for ElevationProfile {
@@ -474,6 +477,10 @@ pub fn fuse(
     });
     let report =
         StructureCorrectionReport::new(&correction.outcomes, !opts.structure_correction, unavailable);
+    // Lus avec ou sans correction des ouvrages : le point de rupture tient à la géométrie.
+    let overpass_crossings: Vec<f64> = typo
+        .map(|t| fusion::overpass::crossings_below(t, rules).map(|o| o.d_m).collect())
+        .unwrap_or_default();
     Ok(ElevationProfile {
         d,
         ele,
@@ -488,6 +495,7 @@ pub fn fuse(
         structures: correction.outcomes,
         verdicts: correction.verdicts,
         correction: report,
+        overpass_crossings,
     })
 }
 

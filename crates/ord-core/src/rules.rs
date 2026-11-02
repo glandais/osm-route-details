@@ -37,7 +37,9 @@ use serde::Serialize;
 // `elevation_overpass_corrected`, api 1.3).
 // 2026.11.7 : garde-fou de plausibilité des valeurs IGN (MNT et MNS) : plancher −50 m et pixels
 // mêlés de no-data par le WMS lus comme du no-data, repli comme sur un vrai no-data.
-pub const RULES_VERSION: &str = "2026.11.7";
+// 2026.11.8 : point de rupture `overpass_crossing` au croisement d'un pont qui enjambe la trace
+// au sol (mode `input_with_breakpoints`, api 1.4).
+pub const RULES_VERSION: &str = "2026.11.8";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -482,6 +484,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.7", "de489f8f85618f6c".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.8", "de489f8f85618f6c".to_owned()));
     }
 }

@@ -114,7 +114,7 @@ les résultats en face de son parcours sans recalcul géométrique.
 | `d_m` | Distance curviligne cumulée depuis le début. |
 | `index` | Indice du point d'entrée pour un point d'entrée ; sinon, indice du dernier point d'entrée qui précède (point inséré, mode `distance` ; même convention que `from_index`). |
 | `origin` | `input` (point du client) ou `inserted` (point ajouté par le service). Mode `input_with_breakpoints` ; vaut toujours `input` en mode `input`, absent en mode `distance`. |
-| `reasons[]` | Raisons d'insertion, codes stables, liste extensible : `local_max`, `local_min`, `grade_change`, `structure_start`, `structure_end`, `surface_change`, `terrain_source_change`, `elevation_gap_start`, `elevation_gap_end`. Obligatoire sur un point inséré ; présent sur un point d'entrée seulement si une rupture tombe dessus. |
+| `reasons[]` | Raisons d'insertion, codes stables, liste extensible : `local_max`, `local_min`, `grade_change`, `structure_start`, `structure_end`, `surface_change`, `terrain_source_change`, `elevation_gap_start`, `elevation_gap_end`, `overpass_crossing` (depuis l'api 1.4 : croisement d'un pont qui enjambe la route). Obligatoire sur un point inséré ; présent sur un point d'entrée seulement si une rupture tombe dessus. |
 | `lat`, `lon` | Sur un point inséré et en mode `distance`. Jamais sur un point d'entrée, qui n'est pas déplacé. |
 | `ele` | Altitude **après correction des ouvrages**, non lissée. `null` si l'altitude est absente. |
 | `ele_smoothed` | Présent seulement si un lissage est demandé. |
@@ -211,7 +211,7 @@ pas être calibré sans vérité terrain. La confiance se lit dans les facteurs 
 ```json
 {
   "meta": {
-    "api_version": "1.3",
+    "api_version": "1.4",
     "rules_version": "2026.11.1",
     "data_versions": {
       "typology": {"source": "versatiles-shortbread", "date": "2026-10-27"},
@@ -393,6 +393,8 @@ portion qui suit une voie fermée au vélo (§4.3, §5.3), sans changer les cham
 altitude corrigée seule, `ele_method: gap_filled`), sans changer les champs existants. `1.3`
 (2026-11-01) ajoute l'avertissement `elevation_overpass_corrected` (bosse du MNT sous un pont qui
 enjambe la route, altitude corrigée seule, `ele_method: gap_filled`), sans changer les champs
+existants. `1.4` (2026-11-02) ajoute la raison d'insertion `overpass_crossing` (point de rupture au
+croisement d'un pont qui enjambe la route, mode `input_with_breakpoints`), sans changer les champs
 existants.
 
 Règles d'évolution à l'intérieur de la v1 :

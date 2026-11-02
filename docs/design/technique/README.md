@@ -76,6 +76,12 @@ vérifié par `ord-bench check` avant toute campagne.
       signature d'un pixel mêlé de no-data par le rééchantillonnage du WMS (échec E1 de `perso-53` :
       −944 m rendus en `dem`, D+ gonflé d'environ 325 m). Règles 2026.11.7, T02 §6.2. Le repli se
       lit dans `quality.terrain`, sans ajout au contrat ;
+    - en mode `input_with_breakpoints`, un point de rupture est inséré au croisement de chaque pont
+      qui enjambe la trace au sol (critères de T04 §3.4), à l'altitude que rend le mode `distance`
+      en ce point (échec E5 de `nv-423` : altitude interpolée entre deux points d'entrée, à 1,30 m
+      de la référence). Nouvelle raison `overpass_crossing`, classe A (jamais retirée par le
+      plafond) ; la liste des raisons est ouverte : ajout au contrat, api 1.4, règles 2026.11.8,
+      T04 §6.1.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

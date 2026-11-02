@@ -2,7 +2,8 @@
 //! d'entrée, jamais déplacés, plus des points insérés aux événements du profil corrigé et des
 //! segments typés, chacun avec ses raisons (doc 02 §4.2).
 //!
-//! Événements candidats (§6.1) : classe A (bornes d'ouvrage, de trou, de terrain), B (changement
+//! Événements candidats (§6.1) : classe A (bornes d'ouvrage, de trou, de terrain, croisement d'un
+//! pont qui enjambe la trace), B (changement
 //! de revêtement), C (extrema confirmés par l'accumulateur du D+, ruptures de pente). Puis (§6.2) :
 //! fusion à `merge_m`, rattachement à un point d'entrée à `snap_m`, espacement des C à
 //! `min_spacing_m`, plafond par km glissant et total (seuls des C sont retirés).
@@ -32,10 +33,12 @@ pub enum BreakpointReason {
     TerrainSourceChange,
     ElevationGapStart,
     ElevationGapEnd,
+    /// Croisement d'un pont qui enjambe la trace au sol (règles 2026.11.8, api 1.4).
+    OverpassCrossing,
 }
 
 impl BreakpointReason {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::LocalMax,
         Self::LocalMin,
         Self::GradeChange,
@@ -45,6 +48,7 @@ impl BreakpointReason {
         Self::TerrainSourceChange,
         Self::ElevationGapStart,
         Self::ElevationGapEnd,
+        Self::OverpassCrossing,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -58,27 +62,29 @@ impl BreakpointReason {
             Self::TerrainSourceChange => "terrain_source_change",
             Self::ElevationGapStart => "elevation_gap_start",
             Self::ElevationGapEnd => "elevation_gap_end",
+            Self::OverpassCrossing => "overpass_crossing",
         }
     }
 
-    /// Priorité de position dans une fusion (§6.2) : ouvrage > trou > terrain > revêtement >
-    /// extremum > pente.
+    /// Priorité de position dans une fusion (§6.2) : ouvrage > trou > terrain > pont au-dessus >
+    /// revêtement > extremum > pente.
     fn priority(self) -> u8 {
         match self {
             Self::StructureStart | Self::StructureEnd => 0,
             Self::ElevationGapStart | Self::ElevationGapEnd => 1,
             Self::TerrainSourceChange => 2,
-            Self::SurfaceChange => 3,
-            Self::LocalMax | Self::LocalMin => 4,
-            Self::GradeChange => 5,
+            Self::OverpassCrossing => 3,
+            Self::SurfaceChange => 4,
+            Self::LocalMax | Self::LocalMin => 5,
+            Self::GradeChange => 6,
         }
     }
 
-    /// A : fait (ouvrage, trou, terrain) ; B : revêtement ; C : extremum, pente.
+    /// A : fait (ouvrage, trou, terrain, pont au-dessus) ; B : revêtement ; C : extremum, pente.
     fn class(self) -> Class {
         match self.priority() {
-            0..=2 => Class::A,
-            3 => Class::B,
+            0..=3 => Class::A,
+            4 => Class::B,
             _ => Class::C,
         }
     }
@@ -171,6 +177,14 @@ fn events(
             if d > 0.0 && d < length {
                 push(d, BreakpointReason::TerrainSourceChange, 0.0);
             }
+        }
+    }
+    // A : croisement d'un pont qui enjambe la trace au sol (règles 2026.11.8) : le point porte
+    // l'altitude du profil à cet endroit, celle du mode `distance`, au lieu de la droite entre les
+    // points d'entrée qui l'encadrent. Sans altitude au croisement, aucun point.
+    for &d in &p.overpass_crossings {
+        if p.at(d).ele.is_some() {
+            push(d, BreakpointReason::OverpassCrossing, 0.0);
         }
     }
     // B : changement de classe de revêtement entre deux segments.

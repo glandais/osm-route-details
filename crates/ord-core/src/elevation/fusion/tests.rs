@@ -535,3 +535,70 @@ fn the_overpass_correction_needs_the_lidar_dtm() {
     );
     assert_eq!(overpass_codes(&r), 0);
 }
+
+/// Points `input_with_breakpoints` d'un passage, au croisement d'un pont qui enjambe la trace.
+fn crossing_points(r: &Run) -> Vec<crate::elevation::OutputPoint> {
+    use crate::elevation::{select_breakpoints, BreakpointReason};
+    select_breakpoints(&r.route, &r.profile, &[], &Rules::default().elevation.breakpoints)
+        .into_iter()
+        .filter(|q| q.reasons.contains(&BreakpointReason::OverpassCrossing))
+        .collect()
+}
+
+#[test]
+fn a_breakpoint_carries_the_distance_mode_altitude_where_a_bridge_crosses_above() {
+    use crate::elevation::{sample_output, PointOrigin};
+    use ord_domain::request::Sampling;
+    // Bosse de 0,8 m gardée (sous `min_bump_m`), sous la tolérance des ruptures de pente et
+    // l'hystérésis des extrema : seul le croisement l'insère. Les points d'entrée en sont à 300 m.
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: small_bump },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert_eq!(r.profile.overpass_crossings.len(), 1);
+    let pts = crossing_points(&r);
+    assert_eq!(pts.len(), 1, "{pts:?}");
+    let q = &pts[0];
+    assert_eq!(q.origin, Some(PointOrigin::Inserted));
+    assert!((q.d_m - 300.0).abs() < 1.0, "{}", q.d_m);
+    // Altitude du mode `distance` au même endroit.
+    let distance = sample_output(
+        &r.route,
+        &r.profile,
+        &Sampling::Distance { step_m: q.d_m },
+        &[],
+        &Rules::default().elevation.breakpoints,
+    );
+    assert!((distance[1].d_m - q.d_m).abs() < 1e-9);
+    assert_eq!((q.ele, q.ele_method), (distance[1].ele, distance[1].ele_method));
+    assert!((q.ele.unwrap() - 100.8).abs() < 0.1, "{:?}", q.ele);
+    // Bosse corrigée : le point porte la droite entre les approches.
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    let pts = crossing_points(&r);
+    assert_eq!(pts.len(), 1);
+    assert!((pts[0].ele.unwrap() - 100.0).abs() < 0.01 && pts[0].ele_method == EleMethod::GapFilled);
+    // Trace sur le pont : aucun croisement par-dessous.
+    let r = run(overpass(), &[(-300.0, 0.0), (300.0, 0.0)]);
+    assert!(r.profile.overpass_crossings.is_empty() && crossing_points(&r).is_empty());
+    // Correction désactivée : le point reste, au MNT brut.
+    let opts = RequestOptions { structure_correction: false, ..RequestOptions::default() };
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &opts,
+        |_| {},
+    );
+    let pts = crossing_points(&r);
+    assert_eq!(pts.len(), 1);
+    assert!((pts[0].ele.unwrap() - 106.0).abs() < 0.5, "{:?}", pts[0].ele);
+}

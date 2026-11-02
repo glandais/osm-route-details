@@ -29,7 +29,7 @@ use ord_domain::route::PreparedRoute;
 use crate::classification::LevelKind;
 use crate::elevation::EleMethod;
 use crate::rules::Rules;
-use crate::typology::{RunMatch, TypologyOutput};
+use crate::typology::{Overpass, RunMatch, TypologyOutput};
 
 /// La trace est-elle au sol, hors élément d'ouvrage, à la distance `d` ?
 fn on_ground(typo: &TypologyOutput, d: f64) -> bool {
@@ -39,6 +39,16 @@ fn on_ground(typo: &TypologyOutput, d: f64) -> bool {
         _ => return false,
     };
     typo.classes.get(class as usize).is_some_and(|c| c.classified.level.kind == LevelKind::Ground)
+}
+
+/// Ponts des tuiles qui enjambent la trace au sol : angle d'au moins `min_angle_deg`, croisement
+/// à plus de `end_clearance_m` d'une culée, trace au sol hors élément d'ouvrage au croisement.
+/// Lu par la correction (ci-dessous) et par les points de rupture (`overpass_crossing`, T04 §6.1).
+pub fn crossings_below<'a>(typo: &'a TypologyOutput, rules: &Rules) -> impl Iterator<Item = &'a Overpass> {
+    let r = rules.elevation.structures.overpass.clone();
+    typo.overpasses.iter().filter(move |o| {
+        o.angle_deg >= r.min_angle_deg && o.end_m > r.end_clearance_m && on_ground(typo, o.d_m)
+    })
 }
 
 /// Station du parcours la plus proche de `x`, à moins de `tol`.
@@ -68,11 +78,7 @@ pub fn correct_overpasses(
     let step = rules.elevation.station_step_m;
     // Fenêtres des croisements retenus, réunies quand elles se touchent.
     let mut windows: Vec<(f64, f64)> = Vec::new();
-    for o in &typo.overpasses {
-        let kept = o.angle_deg >= r.min_angle_deg && o.end_m > r.end_clearance_m;
-        if !kept || !on_ground(typo, o.d_m) {
-            continue;
-        }
+    for o in crossings_below(typo, rules) {
         let half = r.deck_half_width_m / o.angle_deg.to_radians().sin() + probe;
         let (lo, hi) = (o.d_m - half, o.d_m + half);
         match windows.last_mut() {
