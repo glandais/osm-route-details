@@ -901,6 +901,11 @@ inchangés.
      ces traces sont des cas entiers et leur δ est estimé normalement.
    - Le δ estimé, l'écart robuste à δ = 0 et au minimum et le nombre de stations sont rapportés
      par trace.
+   - **Extraits au jugement** : chaque extrait d'une trace de calibration reçoit le δ de sa trace
+     entière, celui de la calibration gelée (`cas.retard_baro` de 2026.11.6-bench3), sans
+     réestimation au jugement : le retard est une propriété de la trace, et la référence ne dépend
+     pas des données jugées (décision de l'utilisateur, 2026-11-02, après la calibration
+     2026.11.6-bench3).
    Vérification sur la calibration, sans le service (MNT du cache, toutes stations, blocs de 5 km) :
    91 des 94 traces perso estimées, 3 non estimables faute de MNT (hors IGN) ; δ de −10 à +105 m,
    médiane 10 m, aucun à une borne ; `perso-84` 40 m (écart robuste 0,63 → 0,36 m), `perso-71`

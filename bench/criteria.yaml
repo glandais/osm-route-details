@@ -128,6 +128,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : les points de baro d'un côté (minimum 3) sont les points bruts de baro.csv, hors points insérés écartés et fenêtres masquées, pas les stations de la grille de 5 m"
   - id: e5_points_baro_abscisse_corrigee   # 2026-11-02, après la calibration 2026.11.6-bench2
     decision: "E5 : les points bruts d'un côté se comptent à leur abscisse corrigée du retard (s_p − δ, §4 ter.9), celle où ils entrent dans le décalage du côté"
+  - id: retard_baro_extraits_jugement   # 2026-11-02, après la calibration 2026.11.6-bench3
+    decision: "Au jugement, chaque extrait d'une trace de calibration reçoit le δ de sa trace entière, celui de la calibration gelée (cas.retard_baro de 2026.11.6-bench3), sans réestimation au jugement"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -237,6 +239,7 @@ preparation:
     sans_effet_sur: [E2, E2b, qualify_baro, tirage_v1]
     non_estimable: {si: [{stations_min: 400}, minimum_a_une_borne], alors: baro_brut, marque: retard_non_estimable, rapporte: true}
     rapporte: [retard_m, ecart_robuste_0_m, ecart_robuste_min_m, stations]
+    extraits_au_jugement: {delta: trace_entiere_calibration_gelee, source: "cas.retard_baro de 2026.11.6-bench3", reestimation: false}   # 2026-11-02
   baro_points_inseres:   # README §2.1, étape 3
     colonne: insere   # <id>.baro.csv, 1 = point d'origine inséré par fill_jumps
     garde_si: {distance_voie_m_max: 30.0, couche: streets, tuiles: [point, 8_voisines]}
