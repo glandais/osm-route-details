@@ -239,7 +239,8 @@ pub fn calibration_ouvrages(
 /// Ouvrages d'une série : ceux de `ouvrages_tenus` (ou marqués `tenue_a_l_ecart`) pour la série
 /// tenue à l'écart, les autres pour la calibration. Les autres ne sont jamais lus. Après le
 /// jugement du MVP, ses ouvrages tenus à l'écart sont de la calibration (README §2, point 3) ;
-/// ouvrages et croisements V1 (`ouvrages-v1.json`, empreinte vérifiée) selon leur champ `serie`.
+/// ouvrages et croisements V1 et V1.1 (`ouvrages-v1.json`, `ouvrages-v11.json`, empreinte
+/// vérifiée) selon leur champ `serie`, de la calibration une fois leur série jugée.
 /// Un croisement V1 (`passage sous pont`, point `croisement` seul) a A = milieu = B.
 pub fn series_ouvrages(
     paths: &crate::BenchPaths,
@@ -261,28 +262,34 @@ pub fn series_ouvrages(
                 .collect()
         })
         .unwrap_or_default();
-    // (fichier, perso, V1)
-    let mut files = vec![(paths.bench.join("data/ouvrages-geom.json"), false, false)];
+    // (fichier, perso, section V1 ou V1.1 : (empreinte, jugée))
+    type Section = Option<(String, bool)>;
+    let mut files: Vec<(std::path::PathBuf, bool, Section)> =
+        vec![(paths.bench.join("data/ouvrages-geom.json"), false, None)];
     if paths.private_present() {
-        files.push((paths.private.join("ouvrages-perso.json"), true, false));
-        if let Some(v1) = &manifest.v1 {
-            files.push((paths.resolve(&v1.ouvrages.0), true, true));
+        files.push((paths.private.join("ouvrages-perso.json"), true, None));
+        for sec in manifest.sections() {
+            files.push((paths.resolve(&sec.ouvrages.0), true, Some((sec.ouvrages.1.clone(), sec.judged))));
         }
     }
-    for (f, perso, v1) in files {
+    for (f, perso, section) in files {
         let Ok(bytes) = std::fs::read(&f) else { continue };
-        if v1 && manifest.v1.as_ref().is_some_and(|x| crate::hash::sha256_bytes(&bytes) != x.ouvrages.1) {
-            anyhow::bail!("ouvrages-v1.json : empreinte différente de celle du manifest");
+        if section.as_ref().is_some_and(|(sum, _)| crate::hash::sha256_bytes(&bytes) != *sum) {
+            let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            anyhow::bail!("{name} : empreinte différente de celle du manifest");
         }
         let v: Value = serde_json::from_slice(&bytes).context("géométrie des ouvrages")?;
         for o in v.as_array().into_iter().flatten() {
             let Some(id) = o["id"].as_str() else { continue };
-            // Série V1 jugée (README §2, point 3) : ses ouvrages tenus à l'écart sont de la
-            // calibration.
-            let v1_judged = v1 && manifest.v1.as_ref().is_some_and(|x| x.judged);
-            let marked = o["serie"].as_str() == Some("tenue_a_l_ecart") && !v1_judged;
-            let is_held_out =
-                if v1 { marked } else { !manifest.mvp_judged && (held_out.contains(id) || marked) };
+            // Série V1 (ou V1.1) jugée (README §2, point 3) : ses ouvrages tenus à l'écart sont de
+            // la calibration.
+            let judged = section.as_ref().is_some_and(|(_, j)| *j);
+            let marked = o["serie"].as_str() == Some("tenue_a_l_ecart") && !judged;
+            let is_held_out = if section.is_some() {
+                marked
+            } else {
+                !manifest.mvp_judged && (held_out.contains(id) || marked)
+            };
             if is_held_out != (target == crate::manifest::Serie::TenueALEcart) {
                 continue;
             }

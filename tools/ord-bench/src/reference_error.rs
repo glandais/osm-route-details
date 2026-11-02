@@ -9,7 +9,8 @@
 //! longueur comparée) et est rapportée à part : longueur et part par cas.
 //!
 //! Instantané : `private/osm-tags/<date>.json` (`tools/osm_tags_reference.py`), empreinté au
-//! manifest (`perso_v1.osm_tags_reference`), lu sans réseau ; empreinte différente : refus ; voie
+//! manifest (`perso_v1.osm_tags_reference` ; V1.1 : `serie_v11.osm_tags_reference`), celui de la
+//! date du recalage du cas, lu sans réseau ; empreinte différente ou absent : refus ; voie
 //! absente : pas d'exclusion. Les identifiants de voies ne sortent jamais de ce module : seules des
 //! abscisses et des longueurs en sortent.
 
@@ -70,18 +71,37 @@ impl OsmTags {
         Ok(Self { date: date_key(date), hard })
     }
 
-    /// Instantané de la date des données du serveur Valhalla (`perso_v1.recalage.donnees_serveur`) :
-    /// entrée `perso_v1.osm_tags_reference` du manifest pour `private/osm-tags/<date>.json`, à la
-    /// même date, empreinte vérifiée. Aucun instantané à cette date : refus (le README n'en prévoit
-    /// pas d'autre source, et le banc ne lit pas le réseau).
+    /// Instantané de la date des données du serveur Valhalla de `perso_v1` (calibration) : voir
+    /// `load_for`.
     pub fn load(paths: &crate::BenchPaths, manifest: &crate::manifest::Manifest) -> anyhow::Result<Self> {
         let v1 = manifest.v1.as_ref().context("erreur de la référence R : section perso_v1 absente")?;
-        let date = v1
+        Self::load_for(paths, v1)
+    }
+
+    /// Instantané d'un cas : celui de la date de son propre recalage (section du cas,
+    /// `Manifest::recalage_section` ; V1.1 : `serie_v11.recalage`, `serie_v11.osm_tags_reference`).
+    pub fn load_case(
+        paths: &crate::BenchPaths,
+        manifest: &crate::manifest::Manifest,
+        id: &str,
+    ) -> anyhow::Result<Self> {
+        let sec = manifest
+            .recalage_section(id)
+            .context("erreur de la référence R : aucune section de recalage au manifest")?;
+        Self::load_for(paths, sec)
+    }
+
+    /// Instantané de la date des données du serveur Valhalla d'une section (`recalage.donnees_serveur`) :
+    /// entrée `osm_tags_reference` de la section pour `private/osm-tags/<date>.json`, à la même
+    /// date, empreinte vérifiée. Aucun instantané à cette date : refus (le README n'en prévoit pas
+    /// d'autre source, et le banc ne lit pas le réseau).
+    pub fn load_for(paths: &crate::BenchPaths, sec: &crate::manifest::PersoV1) -> anyhow::Result<Self> {
+        let date = sec
             .donnees_serveur
             .as_deref()
             .context("erreur de la référence R : date des données du serveur Valhalla absente du manifest")?;
         let fichier = snapshot_file(date);
-        let Some((f, sum, d)) = v1.osm_tags.as_ref().filter(|(f, _, _)| *f == fichier) else {
+        let Some((f, sum, d)) = sec.osm_tags.as_ref().filter(|(f, _, _)| *f == fichier) else {
             bail!(
                 "erreur de la référence R (README §4 bis.8) : aucun instantané des tags OSM au manifest \
                  pour la date des données du serveur Valhalla ({date}, {fichier} attendu)"
@@ -95,6 +115,11 @@ impl OsmTags {
             bail!("{f} : empreinte différente de celle du manifest");
         }
         Self::from_json(&bytes, date)
+    }
+
+    /// Date de l'instantané (à la minute).
+    pub fn date(&self) -> &str {
+        &self.date
     }
 
     fn is_hard(&self, way: u64) -> bool {

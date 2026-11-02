@@ -136,13 +136,25 @@ pub fn select_planned(
 ) -> PlannedSelection {
     let mut out = PlannedSelection::default();
     let Some(v1) = &manifest.v1 else { return out };
-    for p in v1.planifies.iter().filter(|p| ids.is_empty() || ids.contains(&p.id)) {
+    select_planned_in(v1, rows, ids, target, &mut out);
+    out
+}
+
+/// Itinéraires planifiés d'une section (`perso_v1`, `perso_v11`) ajoutés à `out` selon leur ligne
+/// de `rows` (index de la même section) ; absent de l'index : exclu, rien n'en est lu.
+pub fn select_planned_in(
+    section: &PersoV1,
+    rows: &[SeriesRow],
+    ids: &[String],
+    target: Serie,
+    out: &mut PlannedSelection,
+) {
+    for p in section.planifies.iter().filter(|p| ids.is_empty() || ids.contains(&p.id)) {
         match planned_serie(rows, &p.id) {
             Some(s) if s.in_series(target) => out.cases.push((p.clone(), s)),
             _ => out.excluded.push(p.id.clone()),
         }
     }
-    out
 }
 
 /// Témoin négatif V1 (`temoins-v1.json`) : tronçon d'une sortie entre `debut` et `fin`, ou
@@ -264,13 +276,16 @@ pub fn refs(paths: &BenchPaths, v1: &PersoV1) -> anyhow::Result<BTreeMap<String,
     Ok(out)
 }
 
-/// Identifiant d'un témoin V1 (`<trace>-sN`, trace `perso-NN` ou itinéraire `pl-…`) : sa fenêtre
-/// masquée couvre tout le tronçon, de son début à sa fin (± 500 m), pas seulement ses extrémités.
+/// Identifiant d'un témoin V1 ou V1.1 (`<trace>-sN`, trace `perso-NN` ou itinéraire `pl-…`,
+/// `pl11-…`) : sa fenêtre masquée couvre tout le tronçon, de son début à sa fin (± 500 m), pas
+/// seulement ses extrémités.
 pub fn is_temoin_id(id: &str) -> bool {
     let Some((head, n)) = id.rsplit_once("-s") else { return false };
-    !n.is_empty()
-        && n.chars().all(|c| c.is_ascii_digit())
-        && (head.starts_with("perso-") || head.starts_with("pl-"))
+    let planned = head
+        .strip_prefix("pl")
+        .and_then(|x| x.split_once('-'))
+        .is_some_and(|(digits, _)| digits.chars().all(|c| c.is_ascii_digit()));
+    !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) && (head.starts_with("perso-") || planned)
 }
 
 /// Grille grossière (≈ 100 m) des points d'un parcours, pour « tous les points à moins de 40 m ».
@@ -401,13 +416,13 @@ pub fn case_points(case: &PersoCase) -> Vec<LatLon> {
         .collect()
 }
 
-/// Contrôles de cohérence du manifest V1 sans fichier privé (`check`) : groupe E2b d'une trace
-/// nouvelle (README §4 ter.4, 13e0ed1 : `dplus` si et seulement si D+ MNT ≥ 11 m/km).
+/// Contrôles de cohérence du manifest V1 et V1.1 sans fichier privé (`check`) : groupe E2b d'une
+/// trace nouvelle (README §4 ter.4, 13e0ed1 : `dplus` si et seulement si D+ MNT ≥ 11 m/km).
 pub fn e2b_group_failures(manifest: &Manifest) -> Vec<String> {
     manifest
         .traces
         .iter()
-        .filter(|t| manifest.is_v1(&t.id) && t.groupe != "negatif")
+        .filter(|t| manifest.is_new_series(&t.id) && t.groupe != "negatif")
         .filter_map(|t| {
             let rate = t.gain_mnt_m? / t.dist_km?;
             ((t.groupe == "dplus") != (rate >= DPLUS_M_PER_KM)).then(|| {
@@ -440,6 +455,10 @@ mod tests {
     fn temoin_ids_are_recognised() {
         assert!(is_temoin_id("perso-56-s1"));
         assert!(is_temoin_id("pl-e4-cajarc-s0"));
+        assert!(is_temoin_id("pl11-s2-bray-s0"));
+        assert!(is_temoin_id("perso-143-s6"));
+        assert!(!is_temoin_id("plx-s2-bray-s0"));
+        assert!(!is_temoin_id("pl11-s2-bray"));
         assert!(!is_temoin_id("nv-231"));
         assert!(!is_temoin_id("pl-s2-tarn"));
         assert!(!is_temoin_id("combe-laval"));

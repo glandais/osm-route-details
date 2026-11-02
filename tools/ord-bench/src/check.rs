@@ -166,26 +166,37 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
         for e in &manifest.hors_git {
             verify(&mut report, &paths.resolve(&e.fichier), &e.sha256, &e.id);
         }
-        // Série V1 : index (deux séries, lus et vérifiés), puis itinéraires selon leur série.
-        if let Some(v1) = &manifest.v1 {
+        // Séries V1 et V1.1 : index (deux séries, lus et vérifiés), puis itinéraires selon leur
+        // série. L'instantané OSM d'une série nouvelle n'est ouvert qu'avec ses cas : toujours pour
+        // V1 (calibration), au jugement pour une série encore tenue à l'écart (V1.1).
+        for (name, v1) in manifest.named_sections() {
+            let suffix = if name == crate::manifest::SECTION_V1.name { "v1" } else { "v11" };
             for (label, (fichier, sum)) in
-                [("ouvrages_v1", &v1.ouvrages), ("temoins_v1", &v1.temoins), ("series_v1", &v1.series)]
+                [("ouvrages", &v1.ouvrages), ("temoins", &v1.temoins), ("series", &v1.series)]
             {
-                verify(&mut report, &paths.resolve(fichier), sum, label);
+                verify(&mut report, &paths.resolve(fichier), sum, &format!("{label}_{suffix}"));
             }
             if let Some((fichier, sum)) = &v1.temoins_tags {
-                verify(&mut report, &paths.resolve(fichier), sum, "temoins_v1_tags");
+                verify(&mut report, &paths.resolve(fichier), sum, &format!("temoins_{suffix}_tags"));
             }
             // Instantané des tags OSM des références Valhalla (README §4 bis.8, 562d729).
-            if let Some((fichier, sum, _)) = &v1.osm_tags {
-                verify(&mut report, &paths.resolve(fichier), sum, "osm_tags_reference");
+            let held = suffix != "v1" && !v1.judged;
+            match &v1.osm_tags {
+                Some((fichier, sum, _)) if !held || scope == Serie::TenueALEcart => {
+                    verify(&mut report, &paths.resolve(fichier), sum, &format!("osm_tags_reference ({name})"))
+                }
+                Some(_) => held_out += 1,
+                None if held && scope == Serie::TenueALEcart => report
+                    .failures
+                    .push(format!("osm_tags_reference ({name}) : instantané absent du manifest")),
+                None => {}
             }
             let rows = crate::v1::series_rows(paths, v1).unwrap_or_default();
             for p in &v1.planifies {
                 let opened = match crate::v1::planned_serie(&rows, &p.id) {
                     Some(s) => s.in_series(Serie::Calibration) || scope == Serie::TenueALEcart,
                     None => {
-                        report.failures.push(format!("{} : absent de series-v1.csv", p.id));
+                        report.failures.push(format!("{} : absent de series-{suffix}.csv", p.id));
                         false
                     }
                 };
@@ -252,7 +263,7 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
     // nouvelle n'en est un que si son défaut est attesté hors du qualificateur (README §4 ter.4).
     for t in manifest.traces.iter().filter(|t| t.groupe == "negatif") {
         let q1 = if t.serie == Serie::Calibration { &mut report.q1 } else { &mut report.q1_tenue };
-        if manifest.is_v1(&t.id) && !crate::v1::q1_attested(t.gain_baro_m, t.gain_mnt_m) {
+        if manifest.is_new_series(&t.id) && !crate::v1::q1_attested(t.gain_baro_m, t.gain_mnt_m) {
             q1.non_attestes.push(t.id.clone());
             continue;
         }

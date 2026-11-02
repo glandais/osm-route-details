@@ -31,6 +31,39 @@ pub fn minimums(bench: &Path) -> anyhow::Result<Value> {
     Ok(serde_json::to_value(m)?)
 }
 
+/// Clé de `criteria.yaml` (`serie_tenue_a_l_ecart.serie_<clé>`) des règles propres à la série
+/// d'un incrément : `V1.1` → `serie_v11`.
+pub fn increment_key(increment: &str) -> String {
+    format!("serie_{}", increment.to_lowercase().replace('.', ""))
+}
+
+/// Règles propres à la série d'un incrément (`serie_tenue_a_l_ecart.serie_v11` pour V1.1, README
+/// §4 ter.10, 7b1a4e9), en JSON ; `Null` si la série n'en a pas.
+pub fn series_rules(bench: &Path, increment: &str) -> anyhow::Result<Value> {
+    let text = std::fs::read_to_string(bench.join("criteria.yaml")).context("criteria.yaml")?;
+    let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).context("criteria.yaml illisible")?;
+    Ok(serde_json::to_value(&root["serie_tenue_a_l_ecart"][increment_key(increment).as_str()])?)
+}
+
+/// Minimums de jugement d'un incrément : ceux de `minimums`, groupes E2b exigés remplacés par
+/// `serie_<clé>.E2b.groupes_exiges` s'il existe (V1.1 : `dplus` et `plaine`, le groupe `ouvrage`
+/// rapporté sans minimum). Un critère non bloquant de la série (V1.1 : E3) garde son minimum :
+/// son verdict `sous_minimum` est rapporté sans refuser (`judge::blocking_criteria_for`).
+pub fn minimums_for(bench: &Path, increment: &str) -> anyhow::Result<Value> {
+    let mut m = minimums(bench)?;
+    apply_series_rules(&mut m, &series_rules(bench, increment)?);
+    Ok(m)
+}
+
+/// Groupes E2b exigés d'une série (`E2b.groupes_exiges`) reportés dans les minimums.
+pub fn apply_series_rules(minimums: &mut Value, rules: &Value) {
+    if let Some(groups) = rules["E2b"]["groupes_exiges"].as_array() {
+        if minimums["E2b"].is_object() {
+            minimums["E2b"]["groupes"] = Value::Array(groups.clone());
+        }
+    }
+}
+
 /// Couverture d'une passe : `cases` = traces perso mesurées, `routes` = parcours R1/R2, `items` =
 /// mesures d'ouvrage et de témoin (clés privées comprises, jamais rapportées ici), `q1` = négatifs
 /// de la série mesurée. Aucune coordonnée ni longueur d'ouvrage : des comptes et des sommes.
@@ -203,6 +236,33 @@ mod tests {
         for c in ["E3", "E2b", "M1"] {
             assert_eq!(results["input_with_breakpoints"]["verdicts"][c], "sous_minimum");
         }
+    }
+
+    /// V1.1 (README §4 ter.10, 7b1a4e9) : minimum E2b sur `dplus` et `plaine` seulement ; E3
+    /// garde son minimum (rapporté, non bloquant au jugement).
+    #[test]
+    fn series_rules_of_v11_drop_the_ouvrage_group() {
+        assert_eq!(increment_key("V1.1"), "serie_v11");
+        assert_eq!(increment_key("V1"), "serie_v1");
+        let mut m = mins();
+        let rules = json!({"E3": {"bloquant": false}, "E2b": {"groupes_exiges": ["dplus", "plaine"], "ouvrage": "rapporte"}});
+        apply_series_rules(&mut m, &rules);
+        assert_eq!(m["E2b"]["groupes"], json!(["dplus", "plaine"]));
+        assert_eq!(m["E3"]["ponts"], 12);
+        let cov = json!({"E2b": {"traces_par_groupe": {"dplus": 7, "plaine": 29, "ouvrage": 0}},
+            "E3": {"ponts": 1, "ponts_mnh_10m_min": 0, "ponts_plus_de_150m": 0}, "M1": {"km": 900.0}});
+        let s = shortfalls(&cov, &m);
+        assert!(!s.contains_key("E2b"), "{s:?}");
+        assert_eq!(s["E3"].len(), 3);
+        // Sans règle de série (V1) : inchangé.
+        let mut m1 = mins();
+        apply_series_rules(&mut m1, &Value::Null);
+        assert_eq!(m1, mins());
+        // Les règles du dépôt (criteria.yaml) sont celles-là.
+        let bench = crate::BenchPaths::repo_bench();
+        let m = minimums_for(&bench, "V1.1").unwrap();
+        assert_eq!(m["E2b"]["groupes"], json!(["dplus", "plaine"]));
+        assert_eq!(minimums_for(&bench, "V1").unwrap(), minimums(&bench).unwrap());
     }
 
     #[test]

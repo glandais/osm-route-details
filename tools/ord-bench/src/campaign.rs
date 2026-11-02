@@ -67,6 +67,25 @@ pub fn select_series<'a>(
     Selection { cases, excluded_held_out }
 }
 
+/// Traces de l'autre série lues en extraits autour des éléments de la série mesurée
+/// (`passages_masques`, README §2) : traces exclues de la sélection qui en ont. En calibration,
+/// jamais une trace d'une série nouvelle tenue à l'écart (V1, V1.1) : seul `judge` l'ouvre.
+pub fn extract_sources<'a>(
+    manifest: &'a Manifest,
+    selection: &Selection<'_>,
+    target: Serie,
+) -> Vec<&'a Trace> {
+    manifest
+        .traces
+        .iter()
+        .filter(|t| {
+            selection.excluded_held_out.contains(&t.id)
+                && !t.passages_masques.is_empty()
+                && !(target == Serie::Calibration && manifest.is_new_series(&t.id))
+        })
+        .collect()
+}
+
 /// Points de référence des ouvrages (publics, puis extension perso si présente).
 pub fn ouvrage_refs(paths: &BenchPaths) -> anyhow::Result<BTreeMap<String, Vec<LatLon>>> {
     let mut out = BTreeMap::new();
@@ -75,9 +94,11 @@ pub fn ouvrage_refs(paths: &BenchPaths) -> anyhow::Result<BTreeMap<String, Vec<L
         files.push(paths.private.join("ouvrages-perso.json"));
     }
     if paths.private_present() {
-        // Série V1 : ouvrages, croisements et extrémités des témoins des deux séries (masques).
-        if let Some(v1) = Manifest::load(&paths.bench)?.v1 {
-            out.extend(crate::v1::refs(paths, &v1)?);
+        // Séries V1 et V1.1 : ouvrages, croisements et extrémités des témoins des deux séries
+        // (masques), index seulement.
+        let manifest = Manifest::load(&paths.bench)?;
+        for sec in manifest.sections() {
+            out.extend(crate::v1::refs(paths, sec)?);
         }
     }
     for f in files {
@@ -1161,6 +1182,29 @@ pub(crate) async fn case_dump(
     })
 }
 
+/// Contrôle M1 hors graphe vélo (README §4 ter.3 ; criteria `controle.passe_si_un_de`, 62bd46e) :
+/// une station de la plage passe si le service l'apparie (`matched`) — la route fermée étant exclue
+/// du graphe vélo par la même règle de tags que le service, c'est une voie du graphe distincte de
+/// la route fermée (voie parallèle) —, ou si elle est non appariée sous un `unmatched_range`.
+/// Une station non appariée sans `unmatched_range` est un échec de M1 (une station appariée à la
+/// route fermée elle-même serait `matched = false`, avec `bicycle_forbidden`, api 1.1).
+pub fn closed_control(
+    closed_at: &[f64],
+    ours: &[crate::typology::Ours],
+    warn_ranges: &[(f64, f64)],
+) -> Value {
+    let matched = |st: f64| ours.iter().find(|o| o.from <= st && st < o.to).is_some_and(|o| o.matched);
+    let warned = |st: f64| warn_ranges.iter().any(|w| w.0 - 1e-6 <= st && st <= w.1 + 1e-6);
+    let parallel = closed_at.iter().filter(|&&st| matched(st)).count();
+    let unwarned = closed_at.iter().filter(|&&st| !matched(st) && !warned(st)).count();
+    json!({
+        "stations": closed_at.len(),
+        "appariees_voie_parallele": parallel,
+        "sans_unmatched_range": unwarned,
+        "ok": unwarned == 0,
+    })
+}
+
 /// Mesure E1 et E2 d'un cas (service appelé deux fois : corrections actives, puis MNT brut).
 #[allow(clippy::too_many_arguments)]
 pub async fn measure_case(
@@ -1258,6 +1302,16 @@ pub async fn measure_case(
     let svc_e1: Vec<f64> = (0..n).map(|i| keep_with(&baro_corr, &p.ele, i)).collect();
     let bar_e1: Vec<f64> = (0..n).map(|i| keep_with(&baro_corr, &baro_corr, i)).collect();
 
+    // Marche du baro (README §4 ter.11, 3f8a810) : après δ, avant le décalage et la tendance d'E1 ;
+    // résidu baro(s + δ) − MNT (mode distance sans correction), hors ouvrage, masque et sans baro
+    // en s comme en s + δ. Une marche rend la référence E1 incertaine (rapportée, non jugée).
+    let excluded_marche: Vec<bool> =
+        (0..n).map(|i| masked[i] || p.on_structure[i] || p.corrected[i]).collect();
+    let marche = crate::marche::find(
+        &p.d,
+        &crate::marche::residual(&p.d, &baro_corr, &ref_raw, &excluded_marche, shift),
+        &ref_raw,
+    );
     // E1 hors ouvrage (stations `ground`) : ni segment pont ou tunnel, ni altitude d'ouvrage
     // (tablier, interpolation, rampes jusqu'aux sondes).
     let off_structure = |v: &[f64]| -> Vec<f64> {
@@ -1348,14 +1402,6 @@ pub async fn measure_case(
                 .collect::<Vec<_>>()
         })
         .collect();
-    let closed_matched = closed_at
-        .iter()
-        .filter(|&&st| ours.iter().find(|o| o.from <= st && st < o.to).is_some_and(|o| o.matched))
-        .count();
-    let closed_unwarned = closed_at
-        .iter()
-        .filter(|&&st| !warn_ranges.iter().any(|w| w.0 - 1e-6 <= st && st <= w.1 + 1e-6))
-        .count();
     let ours_m1 = crate::typology::without(&ours, &crate::off_network::union(&off_network, &closed));
     let m1_agr =
         agreement(&ours_m1, &[Ref { from: f64::NEG_INFINITY, to: f64::INFINITY, class: Class::Unknown }]);
@@ -1371,12 +1417,7 @@ pub async fn measure_case(
     typo["M1.unknown"] = json!(round(m1_agr.unknown, 4));
     typo["M1.hors_reseau_m"] = json!(round(crate::off_network::length(&off_network), 1));
     typo["M1.hors_graphe_velo_m"] = json!(round(crate::off_network::length(&closed), 1));
-    typo["M1.hors_graphe_velo_controle"] = json!({
-        "stations": closed_at.len(),
-        "appariees": closed_matched,
-        "sans_unmatched_range": closed_unwarned,
-        "ok": closed_matched == 0 && closed_unwarned == 0,
-    });
+    typo["M1.hors_graphe_velo_controle"] = closed_control(&closed_at, &ours, &warn_ranges);
     let to_d = |s: f64| interp_one(&case.s_ref, &d_srv, s);
     let mut off_diag: Vec<&std::ops::Range<f64>> = off_network.iter().collect();
     off_diag.sort_by(|a, b| (b.end - b.start).total_cmp(&(a.end - a.start)));
@@ -1397,6 +1438,7 @@ pub async fn measure_case(
         "serie": case.serie,
         "groupe": case.groupe,
         "bruit_baro_m": case.baro_noise_m,
+        "marche_baro": marche.map(|m| m.to_json()),
         "retard_baro": retard.to_json(),
         "mode": "distance",
         "cache": "disque",
@@ -1593,9 +1635,11 @@ const E2_TRACE: (f64, f64) = (0.90, 1.20);
 /// `qualify_baro.py` au-delà duquel la référence est incertaine, rapportée, non jugée.
 const E1_PLAINE_NOISE_MAX_M: f64 = 1.0;
 
-/// Référence E1 incertaine : trace `plaine` au bruit baro > 1,0 m (README §4 ter.8).
+/// Référence E1 incertaine : trace `plaine` au bruit baro > 1,0 m (README §4 ter.8), ou trace de
+/// toute strate avec une marche du baro (`marche_baro`, README §4 ter.11, 3f8a810).
 pub fn e1_uncertain(c: &Value) -> bool {
-    c["groupe"] == "plaine" && c["bruit_baro_m"].as_f64().is_some_and(|b| b > E1_PLAINE_NOISE_MAX_M)
+    (c["groupe"] == "plaine" && c["bruit_baro_m"].as_f64().is_some_and(|b| b > E1_PLAINE_NOISE_MAX_M))
+        || c["marche_baro"].is_object()
 }
 const E2_GROUP_MEDIAN: (f64, f64) = (0.95, 1.12);
 /// Groupes jugés « France » pour E2 et E2b (`criteria.yaml`, `terrain: france`).
@@ -1641,9 +1685,11 @@ fn judge(cases: &[Value]) -> (Value, Value) {
                 let (r, q) = (metric(c, "E1.rmse_m"), metric(c, "E1.p95_m"));
                 if e1_uncertain(c) {
                     // Rapportée, non jugée (README §4 ter.8).
-                    e1_uncertain_list
-                        .push(json!({"id": c["id"], "groupe": g, "bruit_baro_m": c["bruit_baro_m"],
-                        "rmse_m": r, "p95_m": q, "pass_indicatif": r <= rmse_max && q <= p95_max}));
+                    e1_uncertain_list.push(
+                        json!({"id": c["id"], "groupe": g, "bruit_baro_m": c["bruit_baro_m"],
+                        "marche_baro": c["marche_baro"], "rmse_m": r, "p95_m": q,
+                        "pass_indicatif": r <= rmse_max && q <= p95_max}),
+                    );
                     continue;
                 }
                 e1_judged += 1;
@@ -1858,8 +1904,8 @@ struct Pass {
     planned: Vec<Value>,
 }
 
-/// Série V1 d'une campagne (manifest `perso_v1`) : séries par cas, témoins de la série mesurée,
-/// itinéraires planifiés retenus. Vide sans `bench/private/` ou sans section `perso_v1`.
+/// Séries V1 et V1.1 d'une campagne (manifest `perso_v1`, `perso_v11`) : séries par cas, témoins
+/// de la série mesurée, itinéraires planifiés retenus. Vide sans `bench/private/` ou sans section.
 #[derive(Clone, Debug, Default)]
 pub struct V1Ctx {
     pub rows: Vec<crate::v1::SeriesRow>,
@@ -1867,21 +1913,26 @@ pub struct V1Ctx {
     pub planned: crate::v1::PlannedSelection,
 }
 
-/// Contexte V1 d'une campagne de la série `target` : l'autre série est retirée des index ici,
-/// avant tout calcul.
+/// Contexte V1 et V1.1 d'une campagne de la série `target` : l'autre série est retirée des index
+/// ici, avant tout calcul ; chaque section est lue avec son propre index (`series-v1.csv`,
+/// `series-v11.csv`), empreinte vérifiée.
 pub fn v1_ctx(
     paths: &BenchPaths,
     manifest: &Manifest,
     ids: &[String],
     target: Serie,
 ) -> anyhow::Result<V1Ctx> {
-    let Some(v1) = manifest.v1.as_ref().filter(|_| paths.private_present()) else {
-        return Ok(V1Ctx::default());
-    };
-    let rows = crate::v1::series_rows(paths, v1)?;
-    let planned = crate::v1::select_planned(manifest, &rows, ids, target);
-    let temoins = crate::v1::temoins(paths, v1, target)?;
-    Ok(V1Ctx { rows, temoins, planned })
+    let mut ctx = V1Ctx::default();
+    if !paths.private_present() {
+        return Ok(ctx);
+    }
+    for sec in manifest.sections() {
+        let rows = crate::v1::series_rows(paths, sec)?;
+        crate::v1::select_planned_in(sec, &rows, ids, target, &mut ctx.planned);
+        ctx.temoins.extend(crate::v1::temoins(paths, sec, target)?);
+        ctx.rows.extend(rows);
+    }
+    Ok(ctx)
 }
 
 impl V1Ctx {
@@ -1889,6 +1940,18 @@ impl V1Ctx {
     pub fn temoins_on(&self, trace: &str) -> Vec<crate::v1::TemoinV1> {
         self.temoins.iter().filter(|t| t.trace == trace).cloned().collect()
     }
+}
+
+/// Cas V1.1 au jugement V1.1 (README §4 ter.10, 22dbba7) : jugé entier, sans aucun masque ; les
+/// fenêtres des éléments de calibration qu'il franchit ne sont ni masquées ni tirées en extraits
+/// (`fenetres_calibration` de `series-v11.csv` n'est jamais lue). En calibration, ses éléments
+/// restent masqués sur les traces de calibration.
+pub fn judged_whole(manifest: &Manifest, target: Serie, id: &str) -> bool {
+    target == Serie::TenueALEcart
+        && manifest
+            .v11
+            .as_ref()
+            .is_some_and(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
 }
 
 /// Masques ajoutés à un cas : éléments V1 de l'autre série sur son parcours (index seulement).
@@ -1908,6 +1971,32 @@ fn add_implicit_masks(
             case.masks.push(id.clone());
             case.implicit_masks.push(id);
         }
+    }
+}
+
+/// Instantanés des tags OSM lus pendant une passe, par date de recalage (README §4 bis.8).
+#[derive(Debug, Default)]
+pub struct SnapshotCache(BTreeMap<String, crate::reference_error::OsmTags>);
+
+impl SnapshotCache {
+    /// Instantané de la date du recalage du cas `id` (`Manifest::recalage_section`), lu et vérifié
+    /// une fois par date ; absent ou d'empreinte différente : refus de la campagne.
+    pub fn for_case(
+        &mut self,
+        paths: &BenchPaths,
+        manifest: &Manifest,
+        id: &str,
+    ) -> anyhow::Result<&crate::reference_error::OsmTags> {
+        let date = manifest
+            .recalage_section(id)
+            .and_then(|s| s.donnees_serveur.clone())
+            .map(|d| crate::reference_error::date_key(&d))
+            .unwrap_or_default();
+        if !self.0.contains_key(&date) {
+            let tags = crate::reference_error::OsmTags::load_case(paths, manifest, id)?;
+            self.0.insert(date.clone(), tags);
+        }
+        Ok(&self.0[&date])
     }
 }
 
@@ -1953,9 +2042,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     let mut items: Vec<Value> = Vec::new();
     let mut cases = Vec::new();
     let mut skipped = Vec::new();
-    // Instantané des tags OSM des références Valhalla (README §4 bis.8), lu au premier cas qui en a
-    // besoin.
-    let mut osm_tags: Option<crate::reference_error::OsmTags> = None;
+    // Instantanés des tags OSM des références Valhalla (README §4 bis.8), un par date de recalage,
+    // lus au premier cas qui en a besoin : chaque cas prend celui de la date de son recalage.
+    let mut osm_tags = SnapshotCache::default();
     let mut data_versions = Value::Null;
     let mut inserted_report: Vec<Value> = Vec::new();
     for t in &selection.cases {
@@ -1972,7 +2061,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
         };
         let temoins = v1.temoins_on(&t.id);
         for mut case in loaded {
-            add_implicit_masks(&mut case, refs, v1, target, &t.id);
+            if !judged_whole(manifest, target, &t.id) {
+                add_implicit_masks(&mut case, refs, v1, target, &t.id);
+            }
             service.take_stats();
             // Baro des points insérés (README §2.1, étape 3) : tuiles de la campagne.
             match crate::inserted::apply(&mut case, &paths.cache, None, &rules).await? {
@@ -1992,10 +2083,7 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             // instantané des tags OSM lu une fois, empreinte vérifiée.
             let csv = match csv {
                 Some(text) => {
-                    if osm_tags.is_none() {
-                        osm_tags = Some(crate::reference_error::OsmTags::load(paths, manifest)?);
-                    }
-                    let tags = osm_tags.as_ref().expect("instantané lu");
+                    let tags = osm_tags.for_case(paths, manifest, &t.id)?;
                     let cut = crate::reference_error::error_ranges(&text, tags);
                     Some(crate::reference_error::exclude(read_stadia_surface(&text), &cut))
                 }
@@ -2027,14 +2115,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     // passages des ouvrages de la série mesurée seulement (`passages_masques`), sur des extraits
     // (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
     let mut held_out_measured = Vec::new();
-    // Traces V1 tenues à l'écart : jamais ouvertes en calibration (seul `judge` les lit), leurs
-    // ouvrages de calibration perdent ces passages.
-    for t in manifest.traces.iter().filter(|t| {
-        selection.excluded_held_out.contains(&t.id)
-            && !t.passages_masques.is_empty()
-            && paths.private_present()
-            && !(target == Serie::Calibration && manifest.is_v1(&t.id))
-    }) {
+    // Traces V1 et V1.1 tenues à l'écart : jamais ouvertes en calibration (seul `judge` les lit),
+    // leurs ouvrages de calibration perdent ces passages.
+    for t in extract_sources(manifest, selection, target).into_iter().filter(|_| paths.private_present()) {
         let Ok(loaded) = load_perso(paths, t, &rules) else {
             skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
             continue;
@@ -2099,7 +2182,9 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 continue;
             }
         };
-        add_implicit_masks(&mut case, refs, v1, target, &pl.id);
+        if !judged_whole(manifest, target, &pl.id) {
+            add_implicit_masks(&mut case, refs, v1, target, &pl.id);
+        }
         let temoins = v1.temoins_on(&pl.id);
         let eval = OuvrageEval::whole(&paths.cache);
         match measure_case(service, &case, None, refs, ouvrages, &rules, &rules_core, &eval, &temoins).await {
@@ -2148,10 +2233,7 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     // Parcours planifiés R1/R2 (README §4 ter.4) : comme les parcours d'osm-surface, référence
     // Valhalla FOSSGIS au format osm-surface, entrée rééchantillonnée à 25 m.
     for (pl, _) in v1.planned.cases.iter().filter(|(pl, _)| pl.role == "R1_R2") {
-        if osm_tags.is_none() {
-            osm_tags = Some(crate::reference_error::OsmTags::load(paths, manifest)?);
-        }
-        let tags = osm_tags.as_ref().expect("instantané lu");
+        let tags = osm_tags.for_case(paths, manifest, &pl.id)?;
         let mut route = match crate::osm_surface::load_planned(paths, pl) {
             Ok(r) => r,
             Err(e) => {
@@ -2352,6 +2434,13 @@ pub async fn run_series(
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
     // Traces de l'autre série : exclues (et lues en extraits autour des ouvrages mesurés).
+    // Incrément : V1 en calibration ; au jugement, la série nouvelle tenue à l'écart (V1.1).
+    let increment = match target {
+        Serie::Calibration => "V1",
+        Serie::TenueALEcart => {
+            manifest.named_sections().filter(|(_, v)| !v.judged).map(|(n, _)| n).last().unwrap_or("V1")
+        }
+    };
     let (exclus_key, extraits_key) = match target {
         Serie::Calibration => ("exclus_serie_tenue_a_l_ecart", "extraits_tenus_a_l_ecart"),
         Serie::TenueALEcart => ("exclus_serie_calibration", "extraits_calibration"),
@@ -2362,7 +2451,7 @@ pub async fn run_series(
             "date": today_utc(),
             "type": if target == Serie::Calibration { "calibration" } else { "jugement" },
             "serie": target,
-            "increment": "V1",
+            "increment": increment,
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
             "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8) ; après le jugement V1 (décisions de l'utilisateur, 2026-11-02) : E5, approche sur un autre ouvrage (§4 ter.7 : f38b745, validé en 2e511e5), erreur de la référence Valhalla de R1, R2 et R3 hors décompte (§4 bis.8 : 562d729)",
@@ -2397,6 +2486,7 @@ pub async fn run_series(
                 "E5 : |service − référence| au croisement des passages dessous (perso, itinéraires) ; max sur les stations O des témoins négatifs. Référence (README §4 ter.7 : 800d4e0, f1bfda3, e477dd4, 504c800, e9430ac), sans le service, dans l'ordre : retiré (e5_trace_sur_ouvrage, agregats.ouvrages.E5.trace_sur_ouvrage) si une ligne bridge ou tunnel de la couche streets (tuile du point de croisement et ses 8 voisines, toutes classes) passe à ≤ 10 m du point de croisement en faisant < 20° avec la trace (direction = stations à ± 10 m du croisement) ; sinon baro corrigé localement (baro corrigé de son retard, README §4 ter.9, au croisement comme sur les côtés ; baro absent au croisement : MNT, 7dab276) si la trace est perso au verdict fiable (qualify_baro.py ; segments .sN = cas distincts, chacun avec son baro ; tronçons .partN recousus par abscisse, README §2.2) et que son baro existe à la station du croisement (interpolation sur la grille de 5 m sans pas brut > 100 m) : baro − médiane (baro − MNT) des stations à 200–1 500 m de part et d'autre réunies, tolérance 2 m ; incertaine (e5_reference_incertaine, agregats.ouvrages.E5.references_incertaines, non comptée, écart indicatif, jamais de repli sur le MNT) si un côté compte moins de 3 points bruts de baro.csv entre 200 et 1 500 m, hors points insérés écartés et fenêtres masquées, à leur abscisse corrigée du retard s_p − δ, fenêtres masquées lues à cette abscisse (points_baro_insuffisants ; 6bc77a5 : pas les stations de la grille ; 085d26e : abscisse corrigée), si un côté a ses 3 points mais aucune station avec baro et MNT (decalage_d_un_cote_absent, sans repli ; 7dab276) ou si les médianes (baro − MNT) des deux côtés pris à part diffèrent de plus de 2 m (decalages_des_cotes) ; décalages par côté rapportés (decalages_cotes_m, points_baro_cotes) ; sinon MNT LiDAR (sortie sans correction du mode distance), tolérance 1 m, indisponible (e5_reference_indisponible) si une station à ≤ 10 m est sans MNT ou hors IGN LiDAR HD (mnt_sans_donnee), si la bosse MNT(croisement) − moyenne des médianes du MNT à 20–50 m de part et d'autre le long de la trace dépasse 2,0 m (mnt_lit_le_tablier), ou si un côté n'a pas de station à 20–50 m (approche_sans_mnt) ; incertaine (approche_sur_ouvrage, testée après le MNT sans donnée et avant la bosse ; f38b745, 2e511e5) si une station d'une approche 20–50 m (depuis les bouts de la plage O pour les témoins) est à ≤ 10 m d'une ligne bridge ou tunnel de la couche streets (tuile de la station et ses 8 voisines, toutes classes) qui fait < 20° avec la trace (direction = stations à ± 10 m), hors voies de l'ouvrage du dessus (lignes bridge ou tunnel à ≤ 10 m d'une station de la plage ou du croisement et à ≥ 20° de la trace, et les morceaux du même élément qui les prolongent d'une tuile à l'autre) ; incertaine (bosse_mnt) si la bosse est entre 1,0 et 2,0 m inclus ; témoins négatifs vcyclist : croisement = station du milieu de la plage O, référence MNT, approches 20–50 m mesurées depuis les bouts de la plage, écart = max sur la plage ; bosse_mnt_m, ecart_mnt_m et seuil_m rapportés",
                 "Retard du baro (README §4 ter.9, b922ce4 ; criteria preparation.retard_baro) : par cas (tronçons .partN recousus, segments .sN chacun), δ de −50 à +200 m par pas de 5 m minimisant 1,4826 × MAD du résidu baro(s + δ) − MNT(s) sur la grille de 5 m, MNT = sortie sans correction du mode distance (IGN LiDAR HD, Mapterhorn hors IGN ; identique dans les deux modes), hors points insérés écartés, fenêtres masquées et stations sans baro (pas brut > 100 m), dérive retirée par médiane glissante de 5 km (pas de calcul 50 m, comme E1) ; à écart égal, le plus petit |δ| ; baro corrigé(s) = baro(s + δ) pour E1, E3 (décalage d'approche, milieu, max, test de niveau, repli 1–3 km), hors_graphe_velo et E5 ; E2, E2b, stations_comparees et couverture au baro brut ; non estimable (moins de 400 stations à δ = 0 : stations_insuffisantes ; minimum à −50 ou +200 m : minimum_a_une_borne ; extrait d'une trace de l'autre série, plus court que la fenêtre de la dérive : extrait_tenu_a_l_ecart) : baro brut, mention retard_non_estimable ; au jugement, traces de la série tenue à l'écart lues en cas entiers, δ estimé normalement (7dab276) ; au jugement, extraits des traces de calibration au δ gelé de leur cas (data/retard-baro-v1.json, cas.<id>.retard_m, manifest perso_v1.retard_baro_gele, empreinte vérifiée, fichier modifié refusé ; 30e8024, 48ca44a, 87b0ea8), sans réestimation : baro(s + δ) dans l'abscisse de la trace, avant tout décalage, pour le repli 1–3 km et toutes les références d'ouvrage de l'extrait ; cas absent du fichier ou retard_m null : baro brut, retard_non_estimable ; source et valeur rapportées par extrait (extraits_calibration[].extraits[].retard_baro) ; en calibration, δ calculé de chaque cas contrôlé contre le fichier gelé (agregats.retard_baro.controle_gele, sans effet) ; cas.retard_baro (retard_m, minimum_m, ecart_robuste_0_m, ecart_robuste_min_m, stations) et agregats.retard_baro",
                 "E1 plaine (README §4 ter.8, 4423741) : trace plaine dont le bruit baro de qualify_baro.py (noise_m du manifest) dépasse 1,0 m = référence incertaine, rapportée (verdicts.E1_references_incertaines, avec un verdict indicatif), non jugée et hors couverture E1 ; dplus et E2b inchangés",
+                "E1, marche du baro (README §4 ter.11, 3f8a810), toutes strates et séries : résidu r(s) = baro(s + δ) − MNT(s) sur la grille de 5 m (δ de la trace, MNT = sortie sans correction du mode distance), stations sur un ouvrage (segment pont ou tunnel, altitude d'ouvrage), masquées ou sans baro exclues en s comme en s + δ ; Δ court = médiane de r sur [s + 100, s + 300] − médiane sur [s − 300, s − 100], Δ long sur [s + 100, s + 2 100] et [s − 2 100, s − 100] bornées à la trace, au moins 20 stations par fenêtre ; marche si |Δ court| > 10 m et |Δ long| > 10 m de même signe et amplitude du MNT ≤ 30 m sur [s − 300, s + 300] ; plus grande |Δ court| rapportée (cas.marche_baro : abscisse_km, delta_court_m, delta_long_m, amplitude_mnt_m) ; référence E1 incertaine, rapportée dans verdicts.E1_references_incertaines avec un verdict indicatif, non jugée, hors couverture E1 ; E2 et E2b inchangés",
                 "Témoins S2 V1, ouvrages réels sur leur voie (README §4 ter.6, 57e9d95) : private/v1/temoins-v1-tags.json (perso_v1.temoins_v1_tags du manifest, 6ed1da7, empreinte vérifiée ; entrée absente du manifest : aucune plage), entrées de la série mesurée seulement ; extrémités de chaque plage projetées sur la station la plus proche du tronçon du témoin (≤ 40 m, sinon non_retrouvee) ; plage ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel, longueur et part du témoin lues dans le fichier ; avalanche_protector et covered : limite_donnees, erreur d'altitude non mesurée) ; témoin sorti (S2_temoin_sorti) si une plage dépasse la moitié de longueur_temoin_m",
                 "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; plages hors graphe vélo du témoin (règle de M1 resserrée, README §4 ter.5, 09dcda0) retirées des ouvrages fictifs, de la longueur typée et de la longueur totale, hors_graphe_velo_m par témoin ; ouvrage réel sur la voie même d'un témoin (README §4 ter.6, 32f6867, précisé en eb4c4cc : suites de stations dont la way, colonne way des fichiers de stations, plages X et O comprises, porte à la base OSM du témoin bridge, tunnel, dont avalanche_protector = galerie, ou covered=yes ; tags lus par Overpass daté dans le cache de banc, temoins-tags/) : plage A–B ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel ; galerie : limite_donnees, mesurée comme un tunnel entre ses portails) ; témoin sorti de S2 (S2_temoin_sorti) si sa catégorie nomme la nature de l'ouvrage (galerie : « galler… », sinon « tunnel », « bridge ») ou si un ouvrage couvre à lui seul plus de la moitié de sa longueur ; objet = catégorie vcyclist nommant la nature d'un ouvrage emprunté (galler…, tunnel, bridge, viaduc…, sans under/above/beside/over avant le nom) ; covered : limite_donnees (shortbread sans covered), non mesuré ; tags absents du cache : S2 du témoin sauté ; p06-normandie exclu (ouvrage tenu à l'écart)",
                 "Traces perso tenues à l'écart (README §2) : seuls des extraits sont envoyés, fenêtre de ± 500 m autour de chaque ouvrage de calibration franchi (passages_masques) ± 1 km de marge ; service, MNT et baro lus dans la fenêtre seulement ; mesures d'ouvrage des seuls ouvrages de calibration, sans distance curviligne (extrait_tenu_a_l_ecart) ; aucune métrique de trace, aucune sortie hors fenêtre",
@@ -2405,12 +2495,13 @@ pub async fn run_series(
                 "Attribution d'un passage (README §4 ter.2, V1) : trace brute = private/traces/<trace>.trim1km.gpx (points avec altitude, segments coupés aux sauts > 2 km et gardés dès 5 km, comme tools/stadia_match.py), points dont l'abscisse d'origine est entre celles de s_A et s_B (correspondance s_recale_m → s_origine_m de <id>.baro.csv, interpolée) ; médiane des distances de ces points à la voie de l'ouvrage (élément de la tuile qui suit le mieux la géométrie du corpus, §4 bis.1) et à chaque autre élément bridge/tunnel des tuiles de la campagne (tuile de chaque point, éléments = lignes d'attributs identiques) ; voies du même pont réunies à la voie de l'ouvrage (« un tablier, un ouvrage », 0b590ff, ponts seulement : points les plus proches du milieu dans un même polygone de la couche bridges des tuiles, morceaux recouvrants réunis ; deux polygones = deux ponts ; sinon, si l'une est hors de tout polygone, concurrente à ≤ 10 m de la voie de l'ouvrage sur 21 points de A à B ; médiane de l'ouvrage = la plus petite de ses voies) ; voie de l'ouvrage pas strictement la plus proche : passage_sur_ouvrage_parallele, rapporté, compté ni dans E3, E4, S1 ni dans hors_graphe_velo ; sans point brut ou sans voie de l'ouvrage dans ces tuiles : attribution_indeterminee, passage compté ; E5 non concerné",
                 "Passages d'ouvrage (traces perso) : un passage par traversée du disque de 40 m autour du milieu (suite de stations contiguës), A et B à moins de 40 m cherchés sur cette traversée seulement ; E3 sans référence (pas de baro transporté sur l'emprise) : écarts null avec raison_ecart, hors de la médiane du pont",
                 "R1/R2/R3 : classe Stadia ramenée à paved/unpaved/unknown (revêtu = paved_smooth, paved, paved_rough ; non revêtu = pire que paved_rough) ; R1 total et hors inconnu Stadia, R2 sur les mètres classables des deux côtés",
-                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement ; M1 hors graphe vélo (README §4 ter.3, V1, resserrée en ec72f13) : stations (même grille) dont la ligne la plus proche de la couche streets à ≤ 30 m (rails exclus) est une route motorisée fermée au vélo (motorway, trunk, route bicycle=no ; bicycle=* prime ; busway exclue), plages continues élargies d'un demi-pas et gardées à partir de 50 m, retirées de M1 et rapportées (M1.hors_graphe_velo_m par cas, agrégat typologie M1.hors_graphe_velo) ; contrôle M1.hors_graphe_velo_controle : à chaque station, segment du service matched = false et avertissement unmatched_range ; une station appariée ou sans unmatched_range = échec de M1",
+                "M1 : non apparié = longueur matched=false ; unknown = longueur surface.class=unknown ; parts de la longueur du service ; traces recalées (README §4 bis.6, 2026-11-01) : plages dont aucune station (pas de 5 m de la grille, sur la géométrie recalée) n'a de ligne de la couche streets à ≤ 30 m (tuile z14 et 8 voisines, cache de la campagne ; tuile absente à la source = sans voie ; tuile absente du cache : cas sauté), élargies d'un demi-pas de chaque côté, sans longueur minimale, retirées de M1 (non apparié, longueur totale, unknown) et rapportées à part (M1.hors_reseau_m par cas, agrégat typologie M1.hors_reseau_m) ; lues sur la trace et les tuiles seulement ; M1 hors graphe vélo (README §4 ter.3, V1, resserrée en ec72f13) : stations (même grille) dont la ligne la plus proche de la couche streets à ≤ 30 m (rails exclus) est une route motorisée fermée au vélo (motorway, trunk, route bicycle=no ; bicycle=* prime ; busway exclue), plages continues élargies d'un demi-pas et gardées à partir de 50 m, retirées de M1 et rapportées (M1.hors_graphe_velo_m par cas, agrégat typologie M1.hors_graphe_velo) ; contrôle M1.hors_graphe_velo_controle (62bd46e) : à chaque station, segment du service apparié à une voie du graphe vélo, distincte de la route fermée exclue du graphe (appariees_voie_parallele), ou matched = false sous un avertissement unmatched_range ; une station non appariée sans unmatched_range = échec de M1",
                 "Erreur de la référence (README §4 bis.8, 562d729) : sur R1/R2 des parcours planifiés et R3 des traces perso (référence Valhalla trace_attributes ; jamais osm-surface), plage de <id>.surface.csv où Valhalla rend compacted, dirt, gravel, path ou impassable et dont la voie porte, dans l'instantané OSM à la date des données du serveur (perso_v1.osm_tags_reference, empreinte vérifiée, sans réseau), surface = asphalt, concrete, concrete:lanes, concrete:plates ou paving_stones : retirée de la référence (ni accord, ni désaccord, ni longueur comparée), rapportée à part (typologie.<R1|R3>.erreur_reference_m et _part, agregats.typologie.erreur_reference) ; voie absente de l'instantané : pas d'exclusion ; parcours planifiés : plages ramenées à l'abscisse de l'itinéraire par <id>.baro.csv, contrôlées sur les plages non revêtues de la référence empreintée",
                 "R3 : accord entre deux dérivés d'OSM (VersaTiles vs Stadia), pas une vérité terrain ; mesuré aux mêmes seuils, non bloquant (README §4 bis.7, 2026-11-01) : un échec est rapporté sans refuser l'incrément",
                 "E2b : D+ baro au preset dem (3 m, 30 m ; criteria.yaml preset_baro: dem, README §4 bis.5), E2b.dplus_baro_dem_m et E2b.ratio* par cas ; E2 (E2.dplus_baro_m, E2.ratio) reste en barometric ; non_discriminant quand le service et sa référence structure_correction=false sont identiques sur tous les cas d'un groupe (ni réussite ni échec ; aucune correction d'ouvrage avant l'incrément 4)",
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun",
                 "Série V1 (README §4 ter.4) : série tenue à l'écart du MVP jugée (judgements.md), devenue calibration avec ses ouvrages, fenêtres masquées du MVP retirées ; traces perso_v1 selon leur série ; ouvrages et croisements de ouvrages-v1.json, témoins de temoins-v1.json et itinéraires de series-v1.csv (par_cas : cas de la calibration pour ses seuls éléments de calibration) ; index lus, vérifiés par empreinte et l'autre série retirée avant tout calcul ; fichiers des cas de l'autre série jamais ouverts en calibration (traces, recalages, itinéraires, références ; ni extraits des traces V1 tenues à l'écart) ; éléments V1 de l'autre série dont tous les points sont à ≤ 40 m d'un cas masqués comme les passages_masques (masques_v1_implicites) ; fenêtre d'un témoin = tout son tronçon ± 500 m",
+                "Série V1.1 (manifest perso_v11, serie_v11 ; README §4 ter.10, 7b1a4e9, 22dbba7), tenue à l'écart entière : en calibration, traces, itinéraires, témoins et extraits V1.1 jamais ouverts (index ouvrages-v11.json, temoins-v11.json, series-v11.csv lus, vérifiés par empreinte, la série retirée avant tout calcul) ; éléments V1.1 (nv-606 et suivants) dont tous les points sont à ≤ 40 m d'une trace ou d'un itinéraire de calibration masqués ; au jugement V1.1, traces et itinéraires V1.1 jugés entiers, sans aucun masque, sans extrait de calibration, E3 et E5 sur les seuls éléments V1.1 ; colonne fenetres_calibration jamais lue ; R1, R2 et R3 : instantané OSM de la date du recalage de chaque cas (perso_v1.osm_tags_reference pour MVP et V1, perso_v11 ou serie_v11.osm_tags_reference pour V1.1), empreinte vérifiée, absent ou faux = refus ; au jugement V1.1, E3 rapporté non bloquant et minimum E2b sur dplus et plaine seulement (criteria serie_tenue_a_l_ecart.serie_v11)",
                 "Itinéraires planifiés (README §4 ter.4) : GPX tel quel, sans baro ni recalage, rééchantillonné à 25 m ; E4 / S2 mesurés comme une trace sans baro (pas d'E1, E2, E2b ; M1 rapporté dans agregats.planifies, non jugé) ; trace brute de l'attribution = l'itinéraire ; R1/R2 comme les parcours d'osm-surface (référence Valhalla FOSSGIS au format osm-surface, ligne rééchantillonnée à 25 m), M1 jugé comme pour osm-surface",
                 "Croisements E5 V1 (point de croisement seul, voie du dessous lue dans les tuiles : périmètre et voie = voie au sol la plus proche, §4 bis.1) : passage = trace à ≤ 40 m du croisement ; compté seulement si, à ± 25 m du croisement, la trace suit la voie du dessous au moins aussi bien que tout pont ou tunnel des tuiles (même lecture que l'attribution, §4 ter.2), sinon E5_passage_dessus, rapporté (agregats.ouvrages.E5.passages_dessus), non compté ; voie ou tuile absente : attribution_indeterminee, compté",
                 "S2 des témoins V1 (README §4 ter.4–6, lecture du banc) : tronçon entre les stations les plus proches (≤ 40 m) de debut et fin, ou itinéraire planifié entier ; retirés de la longueur, des ouvrages fictifs et de la longueur typée : plages hors graphe vélo (§4 ter.5) et abords à 100 m de tout pont ou tunnel des tuiles de la campagne (ouvrage réel, jamais fictif) ; ouvrage fictif = suite de stations typées pont ou tunnel par le service hors de ces plages ; covered et avalanche_protector (absents du schéma des tuiles) non lus sur ces témoins ; témoin non retrouvé : cas_sautes",
@@ -2514,12 +2605,8 @@ pub async fn fill_cache(
     // (fenêtre ± 1 km, README §2), jamais de la trace entière.
     if paths.private_present() {
         let refs = ouvrage_refs(paths)?;
-        // Traces V1 tenues à l'écart : jamais ouvertes en calibration.
-        for t in manifest.traces.iter().filter(|t| {
-            selection.excluded_held_out.contains(&t.id)
-                && !t.passages_masques.is_empty()
-                && !(target == Serie::Calibration && manifest.is_v1(&t.id))
-        }) {
+        // Traces V1 et V1.1 tenues à l'écart : jamais ouvertes en calibration.
+        for t in extract_sources(&manifest, &selection, target) {
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
                 crate::inserted::fill(&case, &paths.cache, Some(&held_out_baro_ranges(&case, &refs, &rules)))
@@ -2844,6 +2931,7 @@ mod tests {
             ],
             hors_git: Vec::new(),
             v1: None,
+            v11: None,
             mvp_judged: false,
         };
         // Jugement : la trace tenue à l'écart est dans les cas mesurés en entier, pas dans la
@@ -3269,5 +3357,34 @@ mod e1_tests {
         assert_eq!(v["E1_references_incertaines"][0]["id"], "a");
         let (_, v) = judge(&cases[..2]);
         assert_eq!(v["E1"], "pass", "{v}");
+    }
+}
+
+#[cfg(test)]
+mod closed_control_tests {
+    use super::*;
+    use crate::typology::{Class, Ours, Source};
+
+    /// M1 hors graphe vélo (62bd46e) : station appariée (voie parallèle du graphe, distincte de la
+    /// route fermée) ou non appariée sous unmatched_range = contrôle satisfait ; non appariée sans
+    /// unmatched_range = échec.
+    #[test]
+    fn a_parallel_way_of_the_graph_satisfies_the_control() {
+        let seg = |from: f64, to: f64, matched: bool| Ours {
+            from,
+            to,
+            class: Class::Paved,
+            matched,
+            source: Source::of_service(""),
+        };
+        let ours = [seg(0.0, 100.0, true), seg(100.0, 200.0, false)];
+        let c = closed_control(&[10.0, 50.0, 120.0], &ours, &[(110.0, 150.0)]);
+        assert_eq!(
+            c,
+            json!({"stations": 3, "appariees_voie_parallele": 2, "sans_unmatched_range": 0, "ok": true})
+        );
+        let c = closed_control(&[10.0, 180.0], &ours, &[(110.0, 150.0)]);
+        assert_eq!(c["ok"], false);
+        assert_eq!(c["sans_unmatched_range"], 1);
     }
 }

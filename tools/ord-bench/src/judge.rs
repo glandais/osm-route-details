@@ -37,6 +37,7 @@ pub fn gel_rel_path(increment: &str) -> String {
 
 /// Empreintes courantes du banc : celles qu'il faudrait geler (`ord-bench gel`).
 pub fn current_gel(paths: &crate::BenchPaths, increment: &str) -> anyhow::Result<Gel> {
+    held_out_increment(paths, increment)?;
     let report = crate::check::check(paths)?;
     crate::campaign::ensure_check(&report)?;
     let rules = crate::BenchRules::default();
@@ -46,6 +47,16 @@ pub fn current_gel(paths: &crate::BenchPaths, increment: &str) -> anyhow::Result
         criteria_sha256: report.criteria_sha256,
         bench_rules_sha256: crate::hash::sha256_bytes(serde_json::to_string(&rules)?.as_bytes()),
     })
+}
+
+/// À partir de V1, l'incrément gelé ou jugé doit être la seule série nouvelle tenue à l'écart du
+/// manifest (`Manifest::held_out_increment`) : sa section présente, non jugée, aucune autre série
+/// tenue à l'écart. Le MVP (déjà jugé) n'a pas de section.
+fn held_out_increment(paths: &crate::BenchPaths, increment: &str) -> anyhow::Result<()> {
+    if increment != "MVP" {
+        crate::manifest::Manifest::load(&paths.bench)?.held_out_increment(increment)?;
+    }
+    Ok(())
 }
 
 /// Titre d'une entrée de `judgements.md`.
@@ -256,6 +267,21 @@ pub fn blocking_criteria(bench: &Path) -> anyhow::Result<BTreeSet<String>> {
         .collect())
 }
 
+/// Critères bloquants au jugement d'un incrément : ceux de `criteria.yaml`, moins ceux que les
+/// règles de sa série déclarent non bloquants (`serie_tenue_a_l_ecart.serie_v11.E3.bloquant:
+/// false`, README §4 ter.10, 7b1a4e9 : E3 rapporté sur V1.1, échec ou minimum non atteint sans
+/// refus).
+pub fn blocking_criteria_for(bench: &Path, increment: &str) -> anyhow::Result<BTreeSet<String>> {
+    let mut out = blocking_criteria(bench)?;
+    let rules = crate::coverage::series_rules(bench, increment)?;
+    for (crit, r) in rules.as_object().into_iter().flatten() {
+        if r["bloquant"] == false {
+            out.remove(crit);
+        }
+    }
+    Ok(out)
+}
+
 /// Un verdict de `results.json` porte-t-il un critère bloquant ? `R1_R2` réunit R1 et R2 ; un id
 /// absent de `criteria.yaml` (contrôle rapporté) ne l'est pas.
 fn is_blocking(id: &str, blocking: &BTreeSet<String>) -> bool {
@@ -391,7 +417,7 @@ where
     Fut: Future<Output = anyhow::Result<Value>>,
 {
     preflight(repo, bench, increment, gel_commit, current, armed)?;
-    let blocking = blocking_criteria(bench)?;
+    let blocking = blocking_criteria_for(bench, increment)?;
     let out = report_dir.join("results.json");
     ensure!(!out.exists(), "{} existe déjà : rapport non réécrit", out.display());
     let mut results = measure().await?;
@@ -408,7 +434,7 @@ where
     // Contrôle de couverture au jugement (README §2 point 3, §4 ter.4 ; à partir de V1) : un
     // critère sous son **minimum de jugement** (pas la cible majorée du tirage) vaut refus.
     if increment != "MVP" {
-        let minimums = crate::coverage::minimums(bench)?;
+        let minimums = crate::coverage::minimums_for(bench, increment)?;
         crate::coverage::apply_minimums(&mut results, &minimums);
         results["campagne"]["couverture_minimums"] = minimums;
     }
@@ -432,6 +458,7 @@ pub async fn judge(paths: &crate::BenchPaths, increment: &str, gel_commit: &str)
     let armed = std::env::var(JUDGE_ENV).is_ok_and(|v| v == "1");
     ensure!(armed, "jugement non armé : {JUDGE_ENV}=1 exigé (jugement unique et irréversible)");
     ensure!(paths.private_present(), "bench/private/ absent : la série tenue à l'écart n'est pas lisible");
+    held_out_increment(paths, increment)?;
     let repo = paths.bench.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let repo = if repo.as_os_str().is_empty() { PathBuf::from(".") } else { repo };
     let current = current_gel(paths, increment)?;
@@ -668,6 +695,7 @@ mod tests {
             ],
             hors_git: Vec::new(),
             v1: None,
+            v11: None,
             mvp_judged: false,
         };
         let held = crate::campaign::select_series(&m, &[], &[], Serie::TenueALEcart);

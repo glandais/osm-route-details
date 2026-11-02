@@ -96,8 +96,11 @@ pub struct Planned {
     pub retire: Option<String>,
 }
 
-/// Section `perso_v1` du manifest : index des ouvrages, témoins et séries V1 (hors git, par
-/// empreinte), itinéraires planifiés et identifiants des traces V1.
+/// Section d'une série nouvelle du manifest (`perso_v1` pour V1, `perso_v11` pour V1.1) : index
+/// des ouvrages, témoins et séries (hors git, par empreinte), itinéraires planifiés et
+/// identifiants des traces de la série. Le recalage et l'instantané OSM de ses références sont lus
+/// dans la section, sinon dans `serie_<clé>` (V1.1 : `serie_v11.recalage`,
+/// `serie_v11.osm_tags_reference`).
 #[derive(Clone, Debug, Default)]
 pub struct PersoV1 {
     pub ouvrages: (String, String),
@@ -136,6 +139,9 @@ pub struct Manifest {
     pub hors_git: Vec<HorsGitEntry>,
     /// Section `perso_v1` (série V1), absente avant sa constitution.
     pub v1: Option<PersoV1>,
+    /// Section `perso_v11` (série V1.1, tenue à l'écart entière ; décision de l'utilisateur,
+    /// 2026-11-02), absente avant sa constitution : ses cas ne sont alors jamais lus.
+    pub v11: Option<PersoV1>,
     /// Série tenue à l'écart du MVP jugée (`judgements.md`) : devenue calibration (README §2,
     /// point 3) ; ses traces, ses ouvrages et leurs fenêtres masquées le sont pour V1.
     pub mvp_judged: bool,
@@ -203,6 +209,92 @@ fn files(root: &Value, section: &str) -> anyhow::Result<Vec<FileEntry>> {
         .collect()
 }
 
+/// Clés du manifest d'une série nouvelle : section des cas, section de la série (tirage,
+/// recalage, instantané OSM), suffixe des index et incrément.
+#[derive(Debug)]
+pub struct SectionKeys {
+    pub perso: &'static str,
+    pub serie: &'static str,
+    pub suffix: &'static str,
+    pub name: &'static str,
+}
+
+pub const SECTION_V1: SectionKeys =
+    SectionKeys { perso: "perso_v1", serie: "serie_v1", suffix: "v1", name: "V1" };
+pub const SECTION_V11: SectionKeys =
+    SectionKeys { perso: "perso_v11", serie: "serie_v11", suffix: "v11", name: "V1.1" };
+
+/// Section d'une série nouvelle (`perso_v1`, `perso_v11`) ; ses traces sont ajoutées à `traces`.
+/// Absente : `None`, ses cas ne sont jamais lus.
+fn parse_section(
+    root: &Value,
+    keys: &SectionKeys,
+    traces: &mut Vec<Trace>,
+) -> anyhow::Result<Option<PersoV1>> {
+    // Section des cas : `perso_<clé>` ; à défaut, `serie_<clé>` si elle porte les index des cas.
+    let index = format!("ouvrages_{}", keys.suffix);
+    let Some(p) = root.get(keys.perso).or_else(|| root.get(keys.serie).filter(|x| x.get(&index).is_some()))
+    else {
+        return Ok(None);
+    };
+    let serie = root.get(keys.serie);
+    let section_traces = parse_traces(Some(p), keys.perso)?;
+    let suffixed = |base: &str| format!("{base}_{}", keys.suffix);
+    let pair_of = |e: &Value, key: &str| -> anyhow::Result<(String, String)> {
+        Ok((req(e, "fichier", key)?, req(e, "sha256", key)?))
+    };
+    let pair = |base: &str| -> anyhow::Result<(String, String)> {
+        let key = suffixed(base);
+        let e = p.get(&key).with_context(|| format!("{} : `{key}` manquant", keys.perso))?;
+        pair_of(e, &key)
+    };
+    let optional = |key: &str| -> anyhow::Result<Option<(String, String)>> {
+        p.get(key).map(|e| pair_of(e, key)).transpose()
+    };
+    // Recalage et instantané OSM : dans la section, sinon dans `serie_<clé>`.
+    let local = |key: &str| p.get(key).or_else(|| serie.and_then(|x| x.get(key)));
+    let planifies = match p.get("planifies") {
+        Some(Value::Sequence(items)) => items
+            .iter()
+            .map(|it| {
+                let id = req(it, "id", "planifies")?;
+                Ok(Planned {
+                    role: req(it, "role", &id)?,
+                    nature: s(it, "nature"),
+                    fichier: req(it, "fichier", &id)?,
+                    sha256: req(it, "sha256", &id)?,
+                    reference: s(it, "reference").zip(s(it, "sha256_reference")),
+                    sha256_surface: s(it, "sha256_surface"),
+                    sha256_baro: s(it, "sha256_baro"),
+                    retire: s(it, "retire"),
+                    id,
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        _ => Vec::new(),
+    };
+    let ids = section_traces.iter().map(|t| t.id.clone()).collect();
+    traces.extend(section_traces);
+    Ok(Some(PersoV1 {
+        ouvrages: pair("ouvrages")?,
+        temoins: pair("temoins")?,
+        temoins_tags: optional(&format!("temoins_{}_tags", keys.suffix))?,
+        series: pair("series")?,
+        retard_gele: p.get("retard_baro_gele").map(|e| pair_of(e, "retard_baro_gele")).transpose()?,
+        donnees_serveur: local("recalage").and_then(|r| s(r, "donnees_serveur")),
+        osm_tags: match local("osm_tags_reference") {
+            Some(e) => {
+                let (fichier, sum) = pair_of(e, "osm_tags_reference")?;
+                Some((fichier, sum, req(e, "date", "osm_tags_reference")?))
+            }
+            None => None,
+        },
+        planifies,
+        traces: ids,
+        judged: false,
+    }))
+}
+
 impl Manifest {
     pub fn parse(text: &str) -> anyhow::Result<Self> {
         let root: Value = serde_yaml_ng::from_str(text).context("manifest.yaml illisible")?;
@@ -229,56 +321,8 @@ impl Manifest {
         let ouvrages_perso =
             ouvrages.get("ouvrages_perso").and_then(|p| Some((s(p, "fichier")?, s(p, "sha256")?)));
         let mut traces = parse_traces(root.get("perso"), "perso")?;
-        let v1 = match root.get("perso_v1") {
-            Some(p) => {
-                let v1_traces = parse_traces(Some(p), "perso_v1")?;
-                let pair = |key: &str| -> anyhow::Result<(String, String)> {
-                    let e = p.get(key).with_context(|| format!("perso_v1 : `{key}` manquant"))?;
-                    Ok((req(e, "fichier", key)?, req(e, "sha256", key)?))
-                };
-                let planifies = match p.get("planifies") {
-                    Some(Value::Sequence(items)) => items
-                        .iter()
-                        .map(|it| {
-                            let id = req(it, "id", "planifies")?;
-                            Ok(Planned {
-                                role: req(it, "role", &id)?,
-                                nature: s(it, "nature"),
-                                fichier: req(it, "fichier", &id)?,
-                                sha256: req(it, "sha256", &id)?,
-                                reference: s(it, "reference").zip(s(it, "sha256_reference")),
-                                sha256_surface: s(it, "sha256_surface"),
-                                sha256_baro: s(it, "sha256_baro"),
-                                retire: s(it, "retire"),
-                                id,
-                            })
-                        })
-                        .collect::<anyhow::Result<Vec<_>>>()?,
-                    _ => Vec::new(),
-                };
-                let ids = v1_traces.iter().map(|t| t.id.clone()).collect();
-                traces.extend(v1_traces);
-                Some(PersoV1 {
-                    ouvrages: pair("ouvrages_v1")?,
-                    temoins: pair("temoins_v1")?,
-                    temoins_tags: p.get("temoins_v1_tags").map(|_| pair("temoins_v1_tags")).transpose()?,
-                    series: pair("series_v1")?,
-                    retard_gele: p.get("retard_baro_gele").map(|_| pair("retard_baro_gele")).transpose()?,
-                    donnees_serveur: p.get("recalage").and_then(|r| s(r, "donnees_serveur")),
-                    osm_tags: match p.get("osm_tags_reference") {
-                        Some(e) => {
-                            let (fichier, sum) = pair("osm_tags_reference")?;
-                            Some((fichier, sum, req(e, "date", "osm_tags_reference")?))
-                        }
-                        None => None,
-                    },
-                    planifies,
-                    traces: ids,
-                    judged: false,
-                })
-            }
-            None => None,
-        };
+        let v1 = parse_section(&root, &SECTION_V1, &mut traces)?;
+        let v11 = parse_section(&root, &SECTION_V11, &mut traces)?;
         let hors_git = match root.get("hors_git") {
             Some(Value::Sequence(items)) => items
                 .iter()
@@ -303,16 +347,18 @@ impl Manifest {
             ouvrages_perso,
             traces,
             v1,
+            v11,
             mvp_judged: false,
         })
     }
 
     /// Série MVP jugée (README §2, point 3) : ses traces et ses ouvrages tenus à l'écart deviennent
     /// calibration, et les fenêtres masquées des traces du MVP (ouvrages d'une autre série au MVP)
-    /// n'ont plus lieu d'être. Les traces V1 gardent leur série et leurs fenêtres.
+    /// n'ont plus lieu d'être. Les traces V1 et V1.1 gardent leur série et leurs fenêtres.
     pub fn with_mvp_judged(mut self) -> Self {
-        let v1: BTreeSet<String> = self.v1.as_ref().map(|v| v.traces.clone()).unwrap_or_default();
-        for t in self.traces.iter_mut().filter(|t| !v1.contains(&t.id)) {
+        // Traces des séries nouvelles (V1, V1.1) : leur série et leurs fenêtres restent.
+        let new: BTreeSet<String> = self.sections().flat_map(|v| v.traces.iter().cloned()).collect();
+        for t in self.traces.iter_mut().filter(|t| !new.contains(&t.id)) {
             t.serie = Serie::Calibration;
             t.passages_masques.clear();
         }
@@ -325,15 +371,80 @@ impl Manifest {
     /// passe en calibration ») : ses traces deviennent calibration, sans fenêtres masquées ; ses
     /// ouvrages, croisements, témoins et itinéraires tenus à l'écart sont lus en calibration
     /// (`PersoV1::judged`). La série jugée n'a plus ni masques ni extraits. Les cas absents du
-    /// manifest (série V1.1) ne sont jamais lus.
-    pub fn with_v1_judged(mut self) -> Self {
-        let Some(v1) = self.v1.as_mut() else { return self };
-        v1.judged = true;
-        for t in self.traces.iter_mut().filter(|t| v1.traces.contains(&t.id)) {
+    /// manifest ne sont jamais lus.
+    pub fn with_v1_judged(self) -> Self {
+        self.with_judged("V1")
+    }
+
+    /// Série nouvelle `name` (`V1`, `V1.1`) jugée (README §2, point 3) : comme `with_v1_judged`.
+    pub fn with_judged(mut self, name: &str) -> Self {
+        let slot = match name {
+            n if n == SECTION_V1.name => self.v1.as_mut(),
+            n if n == SECTION_V11.name => self.v11.as_mut(),
+            _ => None,
+        };
+        let Some(sec) = slot else { return self };
+        sec.judged = true;
+        for t in self.traces.iter_mut().filter(|t| sec.traces.contains(&t.id)) {
             t.serie = Serie::Calibration;
             t.passages_masques.clear();
         }
         self
+    }
+
+    /// Sections des séries nouvelles présentes au manifest, avec leur incrément, dans l'ordre (V1,
+    /// puis V1.1).
+    pub fn named_sections(&self) -> impl Iterator<Item = (&'static str, &PersoV1)> {
+        [(SECTION_V1.name, self.v1.as_ref()), (SECTION_V11.name, self.v11.as_ref())]
+            .into_iter()
+            .filter_map(|(n, v)| Some((n, v?)))
+    }
+
+    /// Sections des séries nouvelles présentes au manifest (V1, puis V1.1).
+    pub fn sections(&self) -> impl Iterator<Item = &PersoV1> {
+        self.named_sections().map(|(_, v)| v)
+    }
+
+    /// Section d'un incrément (`V1`, `V1.1`).
+    pub fn section(&self, name: &str) -> Option<&PersoV1> {
+        self.named_sections().find(|(n, _)| *n == name).map(|(_, v)| v)
+    }
+
+    /// Trace ou itinéraire d'une série nouvelle (V1, V1.1) : ses fichiers ne sont jamais ouverts
+    /// tant que la série est tenue à l'écart, extraits compris.
+    pub fn is_new_series(&self, id: &str) -> bool {
+        self.sections().any(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
+    }
+
+    /// Section dont le recalage a produit la référence Valhalla d'un cas (trace ou itinéraire) :
+    /// celle du cas, ou `perso_v1` pour une trace hors des séries nouvelles (MVP, recalée avec la
+    /// calibration V1 ; manifest `perso_v1.recalage`).
+    pub fn recalage_section(&self, id: &str) -> Option<&PersoV1> {
+        self.sections()
+            .find(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
+            .or(self.v1.as_ref())
+    }
+
+    /// Incrément tenu à l'écart que `judge` et `gel` peuvent viser (à partir de V1) : la section
+    /// doit être au manifest, non jugée, et être la seule série nouvelle non jugée (la campagne
+    /// de la série tenue à l'écart mesure tout ce qui l'est).
+    pub fn held_out_increment(&self, increment: &str) -> anyhow::Result<&PersoV1> {
+        let sec = self.section(increment).with_context(|| {
+            format!("incrément {increment} : section de ses cas absente du manifest (perso_v1, perso_v11)")
+        })?;
+        anyhow::ensure!(!sec.judged, "incrément {increment} déjà jugé (judgements.md)");
+        let others: Vec<&str> =
+            self.named_sections().filter(|(n, v)| !v.judged && *n != increment).map(|(n, _)| n).collect();
+        anyhow::ensure!(
+            others.is_empty(),
+            "incrément {increment} : série(s) {} encore tenue(s) à l'écart, à juger d'abord",
+            others.join(", ")
+        );
+        anyhow::ensure!(
+            !self.traces.iter().any(|t| t.serie == Serie::TenueALEcart && !sec.traces.contains(&t.id)),
+            "incrément {increment} : traces tenues à l'écart hors de sa section"
+        );
+        Ok(sec)
     }
 
     /// Trace de la section `perso_v1`.
@@ -354,8 +465,14 @@ impl Manifest {
         } else {
             manifest
         };
-        // De même pour V1 (README §2, point 3), jugée le 2026-11-02.
-        Ok(if crate::judge::already_judged(&judgements, "V1") { manifest.with_v1_judged() } else { manifest })
+        // De même pour V1 (README §2, point 3), jugée le 2026-11-02, puis V1.1.
+        let mut manifest = manifest;
+        for name in [SECTION_V1.name, SECTION_V11.name] {
+            if crate::judge::already_judged(&judgements, name) {
+                manifest = manifest.with_judged(name);
+            }
+        }
+        Ok(manifest)
     }
 
     pub fn hors_git(&self, id: &str) -> Option<&HorsGitEntry> {

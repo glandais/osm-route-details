@@ -22,6 +22,7 @@ pub mod hash;
 pub mod inserted;
 pub mod judge;
 pub mod manifest;
+pub mod marche;
 pub mod metrics;
 pub mod off_network;
 pub mod osm_surface;
@@ -35,6 +36,8 @@ pub mod structures_diag;
 pub mod temoin_tags;
 pub mod typology;
 pub mod v1;
+#[cfg(test)]
+mod v11_tests;
 
 use std::path::{Path, PathBuf};
 
@@ -174,8 +177,17 @@ impl BenchPaths {
 /// décision de l'utilisateur, 2026-11-02 : `Manifest::with_v1_judged`, plus de masques ni
 /// d'extraits) : changement d'outil postérieur à cette campagne, mesuré pour la première fois par
 /// la campagne des règles 2026.11.10 (`bicycle=no` sans effet sur les voies non routières), qui
-/// remet la révision à `None` ; à rapporter `bench1` s'il était mesuré sous 2026.11.9.
-pub const BENCH_REVISION: Option<&str> = None;
+/// remet la révision à `None` ; à rapporter `bench1` s'il était mesuré sous 2026.11.9. `bench1`
+/// (règles 2026.11.10 inchangées, après la campagne `2026-11-02-2026.11.10` ; décisions de
+/// l'utilisateur, 2026-11-02) : E1, marche du baro (README §4 ter.11, 3f8a810 : |Δ court| et
+/// |Δ long| > 10 m de même signe, MNT lisse, δ appliqué avant ; référence incertaine, rapportée,
+/// non jugée) ; contrôle M1 hors graphe vélo satisfait par une voie du graphe vélo distincte de la
+/// route fermée (62bd46e, `passe_si_un_de`) ; série tenue à l'écart V1.1 lue (`perso_v11`, à défaut
+/// `serie_v11` ; 7b1a4e9, 22dbba7) : en calibration, aucun cas V1.1 ouvert, ses éléments masqués
+/// sur les cas de calibration ; au jugement V1.1, cas jugés entiers sans masque ni extrait, E3 non
+/// bloquant, minimum E2b sur `dplus` et `plaine` ; instantané OSM de R1, R2 et R3 choisi par la
+/// date du recalage de chaque cas.
+pub const BENCH_REVISION: Option<&str> = Some("bench1");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
