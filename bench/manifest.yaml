@@ -1741,6 +1741,22 @@ perso_v1:
       sha256_trim1km: f7e90ccba662ea28d7e11f60a9b332b32ee1a72a98ee45b1975ff696703e87ba
       qualification: {verdict: suspect, offset_m: 12.22, drift_m: 29.2, noise_m: 2.55, p95_abs_m: 12.3, gain_baro_m: 139, gain_mnt_m: 361}
 
+tuiles_2026_11_02:   # campagne de tuiles datée (décision de l'utilisateur, 2026-11-02) : calibration MVP + V1 et série V1.1 ; tools/tuiles_v1.py
+  source: "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}"
+  z: 14
+  espace_cache: versatiles-shortbread-z14-d2e31ed09602913b
+  tuiles: 20581   # toutes avec corps, aucune vide ; ETag distincts : 20 500
+  telechargement: {debut: "2026-11-02T11:21Z", fin: "2026-11-02T15:32Z", premiere_echeance: "2026-11-09T11:21Z", ttl_jours: 7, max_age_serveur_s: 21600}
+  date_osm:   # les tuiles n'ont pas de Last-Modified ; date lue dans les métadonnées TileJSON du serveur
+    planetiler_osm_osmosisreplicationtime: "2026-10-19T00:00:04Z"
+    planetiler_buildtime: "2026-10-27T09:36:13.063Z"
+    planetiler: {version: 0.10.3-SNAPSHOT, githash: 1a164371b993a6146789bd07ab45dbef301a366e}
+    tile_schema: shortbread@1.1
+    lu_le: "2026-11-02T16:50Z"   # lu après les tuiles ; build du 2026-10-27, antérieur au téléchargement ; les tuiles ne portent pas de marque de build : rattachement non vérifié tuile par tuile
+    fichier: private/tuiles/versatiles-meta-2026-11-02.json   # copie de https://tiles.versatiles.org/tiles/osm/meta.json
+    sha256: 43ad4b7dc72a4bb109974f0489592015f11474ddb242ee7d8021e15bb9cbae90
+  schema_streets: {surface: "valeur OSM brute", tracktype: chaine, bicycle: chaine, foot: chaine, horse: chaine, motorcar: chaine}   # champs du meta.json, couche streets
+
 serie_v11:   # série tenue à l'écart V1.1 (décision de l'utilisateur, 2026-11-02, après le jugement V1 refusé) ; MVP et V1 en calibration
   date_tirage: "2026-11-02"
   sel: "osm-route-details:v1.1:"
