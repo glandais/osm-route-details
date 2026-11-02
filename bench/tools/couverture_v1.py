@@ -493,6 +493,7 @@ def cas(B):
                 for k in range(1, n):
                     dec.append((q0[0] + (p[0] - q0[0]) * k / n, q0[1] + (p[1] - q0[1]) * k / n))
                 dec.append(p)
+        pas = [math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(dec, dec[1:])] + [0.0]   # longueur portée par chaque point décimé
         tg = Grid(); tg.add("t", dec)
         E = load_overpass(B, i)
         ways = {}; others = []
@@ -689,7 +690,7 @@ def cas(B):
                 best = max(parts, key=parts.get)
                 nature = best if parts[best] >= 0.5 else None
             out["temoins"].append({"id": i, "trace": i, "planifie": True, "nature": nature, "nature_declaree": declaree,
-                                   "length_m": STEP_M * len(libres), "parts_osm": parts})
+                                   "length_m": round(sum(pas[idx] for idx in libres), 1), "parts_osm": parts})
             tr["hors_graphe_velo_m"] = round(sum(ferme) * STEP_M)
             print(i, "passages", len(passages), "croisements", len(xs), file=sys.stderr, flush=True)
             continue
@@ -698,8 +699,13 @@ def cas(B):
             if run and n == run[0]:
                 run[2] = idx; continue
             if run:
-                Lr = STEP_M * (run[2] - run[1] + 1)
-                if Lr >= TEMOIN_MIN_M:
+                # seuil de construction de la série figée (ee3cb76) : STEP_M par point décimé ; la
+                # longueur écrite est celle du tronçon, de debut à fin (décision de l'utilisateur,
+                # 2026-11-02 : les points décimés sont espacés de STEP_M à 2 × STEP_M)
+                Lr = round(sum(pas[j] for j in range(run[1], run[2])), 1)
+                if STEP_M * (run[2] - run[1] + 1) < TEMOIN_MIN_M <= Lr:
+                    print(i, "témoin éligible à sa longueur, hors série figée :", run[0], Lr, file=sys.stderr, flush=True)
+                if STEP_M * (run[2] - run[1] + 1) >= TEMOIN_MIN_M:
                     ends = [(dec[j][1] / plan.ky, dec[j][0] / plan.kx) for j in (run[1], run[2])]
                     out["temoins"].append({"id": f"{i}-s{k}", "trace": i, "planifie": tr["zone"] == "planifie",
                                            "nature": run[0], "length_m": Lr, "debut": ends[0], "fin": ends[1]})

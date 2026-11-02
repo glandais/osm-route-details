@@ -105,6 +105,7 @@ def main(B):
             json.dump(d, open(raw, "w")); time.sleep(2)
         ways = [(tag_of(e.get("tags", {})), [(g["lat"], g["lon"]) for g in e["geometry"]])
                 for e in d.get("elements", []) if e.get("type") == "way" and "geometry" in e and tag_of(e.get("tags", {}))]
+        pas = [hav(a, b) for a, b in zip(P, P[1:])] + [0.0]
         lab = []
         for k, p in enumerate(P):
             q = P[min(k + 1, len(P) - 1)] if k + 1 < len(P) else P[k - 1]
@@ -129,13 +130,15 @@ def main(B):
         for k in range(len(lab) + 1):
             cur = lab[k] if k < len(lab) else None
             if k0 is not None and cur != lab[k0]:
-                plages.append({"tag": lab[k0], "debut": P[k0], "fin": P[k - 1], "longueur_m": round(STEP_M * (k - k0), 1)})
+                # longueur portée par chaque point : son pas jusqu'au suivant (décision de l'utilisateur,
+                # 2026-11-02 : les pas de P ne valent pas STEP_M, de quelques mètres aux arrêts à 2 × STEP_M)
+                plages.append({"tag": lab[k0], "debut": P[k0], "fin": P[k - 1], "longueur_m": round(sum(pas[k0:k]), 1)})
                 counts[lab[k0]] = counts.get(lab[k0], 0) + 1
                 k0 = None
             if cur and k0 is None:
                 k0 = k
         out[t["id"]] = {"base_osm": BASE, "serie": t["serie"], "plages": plages,
-                        "longueur_temoin_m": round(STEP_M * (len(P) - 1), 1)}
+                        "longueur_temoin_m": round(sum(pas), 1)}
     json.dump(out, open(f"{B}/v1/temoins-v1-tags.json", "w"))
     print(json.dumps({"temoins": len(out), "avec_plage": sum(1 for v in out.values() if v["plages"]), "plages_par_tag": counts}))
 

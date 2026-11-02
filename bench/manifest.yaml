@@ -703,7 +703,7 @@ serie_v1:
     non_controle: [bandes_de_portail_E4, reference_incertaine]   # la campagne peut encore exclure
   empreintes:   # fichiers de bench/private/
     v1/tirage.json: f6486e8f53585e7b1dc20c52e4ebc9a8d5e49d68bbe98f4ca08b398c4b7d5907
-    v1/couverture-cas.json: 12f4c92e8e2225df6eb81194fff95e7dde86b977e2b412b360c3af058c53ad79   # extrémités des témoins ajoutées, tirage inchangé
+    v1/couverture-cas.json: 6fd2ef0427829543ecbbfd784c22a60138683147cf9a570cc5a4c54a35b9e2ae   # extrémités des témoins ajoutées ; longueurs des témoins le long de la trace (2026-11-02) ; tirage inchangé
     v1/couverture-resume.json: e050d1dba80fa03921e8acf18e9b8f79394877424554f279111f8635b7899795
     v1/selection.json: 9a9f9c2abd5a551a94a4f7f70925b912bd53e3db53ff89b7a1ff0551e1ebbda0
     v1/planifies/specs.json: a8062de48530ffd5c4ff51f4872a631bdb07b3674d3790872822acd73d318fd5
@@ -719,8 +719,8 @@ perso_v1:
   regle_serie: "tirage figé V1 (README §4 ter.4, serie_v1) ; fenêtres ± 500 m des ouvrages, croisements et témoins d'une autre série masquées (passages_masques)"
   recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-01", donnees_serveur: "2026-11-01T13:01Z", sorties: private/recales/}
   ouvrages_v1: {fichier: private/v1/ouvrages-v1.json, sha256: d2d7e45e085127d87db0568ad8ae9a7c338f991dee3c014e4e61e11bff3b78ab, nombre: 554, ponts_tunnels: 213, croisements_e5: 341, tenus_a_l_ecart: 177}
-  temoins_v1: {fichier: private/v1/temoins-v1.json, sha256: 92c4b90ae4dd47a48db32fb22d4d3376f91b7451bbb0d2facd0885b81d024e45}
-  temoins_v1_tags: {fichier: private/v1/temoins-v1-tags.json, sha256: 0bc3c1c04a594874f0f5382cef9d16f83f9c42ec0d6a9afdb1fe28de3db9b014, temoins: 17, plages: 17, outil: tools/temoins_v1_tags.py, osm_date: "2026-11-01T13:00:00Z"}   # ouvrages réels sur la voie des témoins (README §4 ter.6)
+  temoins_v1: {fichier: private/v1/temoins-v1.json, sha256: 8d44b05b6fa8fc6cb1ae4c1277e32526864d77aec7260460bf41aa6b1818b4fa}   # length_m le long de la trace (décision de l'utilisateur, 2026-11-02)
+  temoins_v1_tags: {fichier: private/v1/temoins-v1-tags.json, sha256: 7abd86ab54ebb2a2a6b4dec21ccf2675e1ba753f5fec3ed98cc558222e325107, temoins: 17, plages: 17, outil: tools/temoins_v1_tags.py, osm_date: "2026-11-01T13:00:00Z"}   # ouvrages réels sur la voie des témoins (README §4 ter.6)
   series_v1: {fichier: private/v1/series-v1.csv, sha256: b7f2facb61124e4cc90a6722809fbe85a541866899c4ed9e26cd30f4b7f3950e}
   retard_baro_gele: {fichier: data/retard-baro-v1.json, sha256: 9fe53a0fc343bc7530407c3be37fccf9976c4d6ab9fc082bc9ebc49a4a801ef0, cas: 101, estimes: 101, outil: tools/retard_gele.py, source: reports/2026-11-02-2026.11.6-bench3/results.json, sha256_source: 68cd223a3a0f29066ca9800cd24eb3cffd47f331647db56e6df5abb80112b41f}   # δ des traces de calibration, appliqué à leurs extraits au jugement (README §4 ter.9)
   planifies:   # sans donnée perso ; hors git jusqu'au jugement V1 (discipline de la série)

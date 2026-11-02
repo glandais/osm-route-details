@@ -773,6 +773,17 @@ inchangés.
    - *plus de la moitié* : ouvrage par ouvrage, sans additionner les ouvrages d'un même témoin.
      Sans effet sur les témoins actuels : la somme ne dépasse pas non plus la moitié (au plus 46 %
      pour `tn10`, 14 % pour `tn12`, sorti par sa catégorie).
+   - **Longueurs des témoins V1** (décision de l'utilisateur, 2026-11-02, avant le jugement V1) :
+     longueur du témoin et des plages mesurée le long de la trace, somme des pas entre points
+     (`length_m` de `temoins-v1.json` et `couverture-cas.json`, `longueur_temoin_m` et `longueur_m`
+     des plages de `temoins-v1-tags.json`). Elles comptaient jusque-là un pas fixe par point
+     (10 m à la construction, 5 m pour les tags), alors que les pas vont de quelques mètres aux
+     arrêts à deux fois ce pas : de × 0,54 (`perso-66-s1`, arrêts) à × 1,78 (`perso-91-s0`).
+     Extrémités, natures, plages et tirage inchangés ; aucun témoin ne change d'état (aucune plage
+     ne dépasse 0,4 % de son témoin ; `perso-56-s0`, de calibration, sans plage). Le seuil de
+     construction de 300 m reste celui de la série figée (ee3cb76) : 10 tronçons de sorties
+     (7 sur des traces de calibration, 3 sur la série tenue à l'écart) l'atteindraient à leur
+     longueur réelle et ne sont pas ajoutés.
 7. **Référence d'E5 au croisement** (décision de l'utilisateur, 2026-11-01, après la calibration
    2026.11.5-bench1 : E5 221/240). Pour chaque passage sous un pont, dans cet ordre, sans lire le
    service :
