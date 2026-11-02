@@ -129,7 +129,7 @@ decisions:   # de l'utilisateur, 2026-10-30
   - id: e5_points_baro_abscisse_corrigee   # 2026-11-02, après la calibration 2026.11.6-bench2
     decision: "E5 : les points bruts d'un côté se comptent à leur abscisse corrigée du retard (s_p − δ, §4 ter.9), celle où ils entrent dans le décalage du côté"
   - id: e5_approche_sur_ouvrage   # 2026-11-02, après le jugement V1
-    decision: "E5, référence MNT : incertaine, rapportée, non comptée, si une approche 20–50 m chevauche un autre ouvrage (station à ≤ 10 m d'une ligne bridge ou tunnel des tuiles à < 20° de la trace : pont emprunté, tunnel)"
+    decision: "E5, référence MNT : incertaine, rapportée, non comptée, si une approche 20–50 m chevauche un autre ouvrage (station à ≤ 10 m d'une ligne bridge ou tunnel des tuiles à < 20° de la trace : pont emprunté, tunnel) ; définition validée telle quelle le 2026-11-02"
   - id: retard_baro_extraits_jugement   # 2026-11-02, après la calibration 2026.11.6-bench3
     decision: "Au jugement, chaque extrait d'une trace de calibration reçoit le δ de sa trace entière, celui de la calibration gelée (cas.retard_baro de 2026.11.6-bench3), sans réestimation au jugement"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
