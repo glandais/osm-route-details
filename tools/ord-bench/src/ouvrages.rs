@@ -368,8 +368,13 @@ pub struct CaseProfile<'a> {
     /// Sortie corrigée du mode `distance` : repli 1–3 km du décalage local (baro − service au
     /// sol), égale à `svc` en mode `distance`.
     pub ref_svc: &'a [f64],
-    /// Baro transporté, sans décalage (`NaN` = absent ou masqué).
+    /// Baro transporté, corrigé de son retard (README §4 ter.9), sans décalage (`NaN` = absent
+    /// ou masqué).
     pub baro: &'a [f64],
+    /// Abscisses (grille `d`, celles de `baro.csv`, sans correction du retard) des points bruts
+    /// de baro gardés : hors points
+    /// insérés écartés et fenêtres masquées (points de baro d'E5, README §4 ter.7, 6bc77a5).
+    pub baro_points: &'a [f64],
     /// Station sur un pont ou un tunnel du service.
     pub on_structure: &'a [bool],
     /// Station sur terrain IGN LiDAR HD.
@@ -1167,6 +1172,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         raw: p.raw,
                         ign: Some(p.ign),
                         baro: p.baro_fiable.then_some(p.baro),
+                        baro_points: p.baro_points,
                         tiles: p.tiles,
                         at: o.pts[1],
                         im,
@@ -1922,8 +1928,8 @@ const E5_SIDE_POINTS_MIN: usize = 3;
 /// Demi-fenêtre de la direction de la trace au croisement (test « trace sur un ouvrage »).
 const E5_DIRECTION_HALF_M: f64 = 10.0;
 
-/// Décalages baro − MNT de chaque côté du croisement (200–1 500 m), avant puis après, et nombre de
-/// stations de la grille où baro et MNT existent.
+/// Décalages baro − MNT de chaque côté du croisement (200–1 500 m, stations de la grille), avant
+/// puis après, et nombre de points bruts de baro de chaque côté (6bc77a5).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BaroSides {
     pub offset_m: [Option<f64>; 2],
@@ -1966,6 +1972,9 @@ pub struct E5Input<'a> {
     pub ign: Option<&'a [bool]>,
     /// Baro transporté d'une trace perso fiable (`None` sinon).
     pub baro: Option<&'a [f64]>,
+    /// Abscisses des points bruts de baro gardés (hors points insérés écartés et fenêtres
+    /// masquées), comptés par côté (minimum 3 entre 200 et 1 500 m ; 6bc77a5).
+    pub baro_points: &'a [f64],
     pub tiles: Option<&'a Tiles>,
     /// Point de croisement et station la plus proche.
     pub at: LatLon,
@@ -2008,17 +2017,21 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
         }
     }
     if let Some(baro) = x.baro.filter(|b| b[im].is_finite()) {
-        // Décalage par côté (200–1 500 m chacun) ; décalage retenu = médiane des deux réunis.
+        // Décalage par côté (200–1 500 m chacun, stations de la grille) ; décalage retenu =
+        // médiane des deux réunis. Points d'un côté : points bruts de baro (6bc77a5), pas les
+        // stations interpolées entre eux.
+        let in_ring = |dir: f64, s: f64| (E5_BARO_RING_M.0..=E5_BARO_RING_M.1).contains(&(dir * (s - d[im])));
         let side = |dir: f64| -> Vec<f64> {
             (0..d.len())
-                .filter(|&k| (E5_BARO_RING_M.0..=E5_BARO_RING_M.1).contains(&(dir * (d[k] - d[im]))))
+                .filter(|&k| in_ring(dir, d[k]))
                 .map(|k| baro[k] - x.raw[k])
                 .filter(|v| v.is_finite())
                 .collect()
         };
+        let points = |dir: f64| x.baro_points.iter().filter(|&&s| in_ring(dir, s)).count();
         let (before, after) = (side(-1.0), side(1.0));
         let med = |v: &[f64]| (!v.is_empty()).then(|| median(v));
-        let sides = BaroSides { offset_m: [med(&before), med(&after)], points: [before.len(), after.len()] };
+        let sides = BaroSides { offset_m: [med(&before), med(&after)], points: [points(-1.0), points(1.0)] };
         let ring: Vec<f64> = before.iter().chain(&after).copied().collect();
         let offset_m = med(&ring);
         let z = offset_m.map_or(f64::NAN, |o| baro[im] - o);
@@ -2032,12 +2045,15 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
         if sides.points.iter().any(|&n| n < E5_SIDE_POINTS_MIN) {
             return uncertain("points_baro_insuffisants");
         }
-        if let ([Some(a), Some(b)], Some(offset_m)) = (sides.offset_m, offset_m) {
-            if (a - b).abs() > E5_SIDE_OFFSETS_MAX_M {
-                return uncertain("decalages_des_cotes");
-            }
-            return E5Reference::Baro { z, offset_m, sides };
+        // Côté sans décalage (aucune station avec baro et MNT) : incertaine aussi, jamais de
+        // repli sur le MNT pour une trace fiable au baro présent au croisement (1477b5f).
+        let ([Some(a), Some(b)], Some(offset_m)) = (sides.offset_m, offset_m) else {
+            return uncertain("decalage_d_un_cote_absent");
+        };
+        if (a - b).abs() > E5_SIDE_OFFSETS_MAX_M {
+            return uncertain("decalages_des_cotes");
         }
+        return E5Reference::Baro { z, offset_m, sides };
     }
     let nodata = (0..d.len())
         .filter(|&k| (d[k] - d[im]).abs() <= E5_NODATA_M)
@@ -2420,6 +2436,7 @@ pub async fn vc_items(
                     raw: &r.raw.ele,
                     ign: None,
                     baro: None,
+                    baro_points: &[],
                     tiles: Some(tiles),
                     at: pts[im],
                     im,
@@ -3053,6 +3070,7 @@ mod tests {
             raw: &flat,
             ref_svc: &flat,
             baro: &flat,
+            baro_points: &d,
             on_structure: &flags,
             ign: &flags,
             matched: &flags,
@@ -3140,6 +3158,7 @@ mod tests {
                 raw: &z,
                 ref_svc: &z,
                 baro: &z,
+                baro_points: &d,
                 on_structure: &flags,
                 ign: &yes,
                 matched: &flags,
@@ -3332,6 +3351,7 @@ mod tests {
                 raw: &raw,
                 ref_svc: &raw,
                 baro,
+                baro_points: &d,
                 on_structure: &flags,
                 ign: &flags,
                 matched: &flags,
@@ -3416,6 +3436,7 @@ mod tests {
                 raw: &raw,
                 ref_svc: &raw,
                 baro,
+                baro_points: &d,
                 on_structure: &flags,
                 ign: &ign,
                 matched: &flags,
@@ -3491,6 +3512,7 @@ mod tests {
                 raw: &raw,
                 ref_svc: &raw,
                 baro: &baro,
+                baro_points: &d,
                 on_structure: &on,
                 ign: &ign,
                 matched: &flags,
@@ -3642,7 +3664,7 @@ mod e5_tests {
         baro: Option<&'a [f64]>,
         tiles: Option<&'a Tiles>,
     ) -> E5Input<'a> {
-        E5Input { d, pts, raw, ign: None, baro, tiles, at: pts[40], im: 40, ends: [40, 40] }
+        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40] }
     }
 
     /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.
@@ -3705,6 +3727,7 @@ mod e5_tests {
             raw: &raw,
             ign: None,
             baro: Some(&baro),
+            baro_points: &d,
             tiles: None,
             at: pts[400],
             im: 400,
@@ -3762,6 +3785,7 @@ mod e5_tests {
                 raw: &raw,
                 ign: None,
                 baro: Some(&baro),
+                baro_points: &d,
                 tiles: None,
                 at: pts[400],
                 im: 400,
@@ -3807,12 +3831,14 @@ mod e5_tests {
             .iter()
             .map(|&x| if x >= 1_950.0 || x == 1_790.0 || x == 1_795.0 { 103.0 } else { f64::NAN })
             .collect();
+        let points: Vec<f64> = d.iter().zip(&baro).filter(|(_, z)| z.is_finite()).map(|(s, _)| *s).collect();
         let x = E5Input {
             d: &d,
             pts: &pts,
             raw: &raw,
             ign: None,
             baro: Some(&baro),
+            baro_points: &points,
             tiles: None,
             at: pts[400],
             im: 400,
@@ -3823,6 +3849,45 @@ mod e5_tests {
             matches!(r, E5Reference::Incertaine { raison: "points_baro_insuffisants", sides: Some(s), .. } if s.points[0] == 2),
             "{r:?}"
         );
+    }
+
+    /// 6bc77a5 : les points d'un côté sont les points bruts de baro, pas les stations de la grille
+    /// interpolées entre eux ; 1477b5f : côté sans baro, incertaine sans repli sur le MNT, même
+    /// quand le MNT serait une référence valable.
+    #[test]
+    fn baro_points_are_raw_points_and_a_side_without_baro_never_falls_back_to_the_dtm() {
+        let (d, pts, raw) = long_line();
+        // Baro interpolé sur toute la grille, mais 2 points bruts seulement entre 200 et 1 500 m
+        // avant le croisement (pas brut ≤ 100 m ailleurs).
+        let baro = vec![103.0; d.len()];
+        let mut points: Vec<f64> = (0..=40).map(|k| 2_000.0 + k as f64 * 50.0).collect();
+        points.extend([500.0, 1_700.0, 1_850.0, 1_950.0]);
+        points.sort_by(f64::total_cmp);
+        let x = E5Input {
+            d: &d,
+            pts: &pts,
+            raw: &raw,
+            ign: None,
+            baro: Some(&baro),
+            baro_points: &points,
+            tiles: None,
+            at: pts[400],
+            im: 400,
+            ends: [400, 400],
+        };
+        let r = e5_reference(&x);
+        assert!(
+            matches!(r, E5Reference::Incertaine { reference: "baro_corrige_local", raison: "points_baro_insuffisants", sides: Some(s), .. }
+                if s.points == [2, 27] && s.offset_m == [Some(3.0), Some(3.0)]),
+            "{r:?}"
+        );
+        // Trois points bruts : référence baro.
+        let mut three = points.clone();
+        three.push(1_000.0);
+        three.sort_by(f64::total_cmp);
+        assert!(matches!(e5_reference(&E5Input { baro_points: &three, ..x }), E5Reference::Baro { .. }));
+        // Trace non fiable (baro absent de l'entrée) : MNT plat, référence MNT.
+        assert_eq!(e5_reference(&E5Input { baro: None, ..x }), E5Reference::Mnt { z: 100.0 });
     }
 
     /// e9430ac : plage `O` de 80 m, approches de la bosse depuis ses bouts ; mesurées depuis le
