@@ -700,24 +700,125 @@ pub fn mask_windows(
     w
 }
 
-/// Fenêtres évaluées d'un cas d'une trace tenue à l'écart (abscisses du cas) : ± 500 m autour de
-/// chaque passage d'un ouvrage de calibration (`passages_masques`), fusionnées.
+/// Stations du mode `distance` d'un cas au pas `step`, calculées sans le service comme il les
+/// place (`ord_core::prepare` et `sample_output`) : sur chaque tronçon, points d'entrée
+/// dédoublonnés, distance cumulée (haversine), stations à `k × step` puis à la fin du tronçon,
+/// position interpolée sur la géométrie envoyée, arrondis de sortie (distance au cm, coordonnées à
+/// 1e-6°) ; tronçons recollés comme `recolle` (station de raccord retirée, distances du tronçon
+/// N+1 décalées de la longueur des précédents). Ce sont les stations où la calibration calcule ses
+/// fenêtres masquées (`mask_windows(&p.d, &p.pts, …)`).
+pub fn distance_stations(case: &PersoCase, step: f64) -> (Vec<f64>, Vec<LatLon>) {
+    let (mut d, mut pts) = (Vec::new(), Vec::new());
+    let mut offset = 0.0;
+    for (k, part) in case.parts.iter().enumerate() {
+        let (pd, pp) = part_stations(part, step);
+        let skip = usize::from(k > 0);
+        d.extend(pd.iter().skip(skip).map(|x| x + offset));
+        pts.extend(pp.iter().skip(skip));
+        offset += pd.last().copied().unwrap_or(0.0);
+    }
+    (d, pts)
+}
+
+/// Stations `distance` d'un tronçon (voir `distance_stations`).
+fn part_stations(part: &[Pt], step: f64) -> (Vec<f64>, Vec<LatLon>) {
+    const EPS: f64 = ord_core::prepare::DUPLICATE_EPS_DEG;
+    // Dernier pas confondu avec la fin du tronçon (`LAST_STEP_EPS_M` du service).
+    const LAST_STEP_EPS_M: f64 = 1e-3;
+    let mut kept: Vec<LatLon> = Vec::with_capacity(part.len());
+    for p in part {
+        let q = LatLon::new(p.lat, p.lon);
+        if !kept.last().is_some_and(|l| (q.lat - l.lat).abs() <= EPS && (q.lon - l.lon).abs() <= EPS) {
+            kept.push(q);
+        }
+    }
+    let Some(&first) = kept.first() else { return (Vec::new(), Vec::new()) };
+    let mut cum = vec![0.0];
+    for w in kept.windows(2) {
+        cum.push(cum[cum.len() - 1] + haversine_m(w[0], w[1]));
+    }
+    let length = cum[cum.len() - 1];
+    let at = |x: f64| -> LatLon {
+        if kept.len() < 2 {
+            return first;
+        }
+        let i = cum.partition_point(|v| *v <= x).clamp(1, cum.len() - 1);
+        let (a, b) = (kept[i - 1], kept[i]);
+        let span = cum[i] - cum[i - 1];
+        let t = if span > 0.0 { ((x - cum[i - 1]) / span).clamp(0.0, 1.0) } else { 0.0 };
+        LatLon::new(a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon))
+    };
+    let step = if step.is_finite() && step > 0.0 { step } else { f64::INFINITY };
+    let (mut d, mut pts) = (Vec::new(), Vec::new());
+    let mut k: u64 = 0;
+    loop {
+        let x = k as f64 * step;
+        if x > length + LAST_STEP_EPS_M || (k > 0 && !step.is_finite()) {
+            break;
+        }
+        d.push(x.min(length));
+        pts.push(at(x.min(length)));
+        k += 1;
+    }
+    if d.last().is_some_and(|x| length - x > LAST_STEP_EPS_M) {
+        d.push(length);
+        pts.push(at(length));
+    }
+    // Arrondis de sortie du service (`ord_core::round`) : distances au cm, coordonnées à 1e-6°.
+    let coord = |v: f64| (v * 1_000_000.0).round() / 1_000_000.0;
+    (
+        d.into_iter().map(|x| (x * 100.0).round() / 100.0).collect(),
+        pts.into_iter().map(|p| LatLon::new(coord(p.lat), coord(p.lon))).collect(),
+    )
+}
+
+/// Abscisse du cas (`s_ref`) d'une distance du service (`request_distances`) : interpolation
+/// entre les points envoyés, prolongée au pas de 1 m pour 1 m au-delà des extrémités (une fenêtre
+/// de ± 500 m déborde du parcours sans être rognée).
+fn service_to_case(d_srv: &[f64], s_ref: &[f64], x: f64) -> f64 {
+    match (d_srv.first(), d_srv.last(), s_ref.first(), s_ref.last()) {
+        (Some(&d0), _, Some(&s0), _) if x <= d0 => s0 + (x - d0),
+        (_, Some(&d1), _, Some(&s1)) if x >= d1 => s1 + (x - d1),
+        (Some(_), Some(_), Some(_), Some(_)) => interp_one(d_srv, s_ref, x),
+        _ => x,
+    }
+}
+
+/// Fenêtres masquées de chaque élément de `case.masks` (abscisses du cas), calculées exactement
+/// comme en calibration : `mask_windows` sur les stations du mode `distance` au pas de la grille
+/// (`distance_stations`), mêmes tolérance (`passage_tol_m`), demi-largeur, regroupement des
+/// passages et tronçon entier d'un témoin ; distances du service ramenées à l'abscisse du cas.
+/// Un élément sans passage a une liste vide.
+pub fn held_out_windows_by_id(
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<(String, Vec<std::ops::Range<f64>>)> {
+    let d_srv = request_distances(case);
+    if d_srv.len() != case.s_ref.len() {
+        return case.masks.iter().map(|id| (id.clone(), Vec::new())).collect();
+    }
+    let (d, pts) = distance_stations(case, rules.grid_step_m);
+    let to_case = |x: f64| service_to_case(&d_srv, &case.s_ref, x);
+    case.masks
+        .iter()
+        .map(|id| {
+            let w = mask_windows(&d, &pts, id, refs, rules);
+            (id.clone(), w.into_iter().map(|w| to_case(w.start)..to_case(w.end)).collect())
+        })
+        .collect()
+}
+
+/// Fenêtres évaluées d'un cas d'une trace tenue à l'écart (abscisses du cas) : les fenêtres
+/// masquées en calibration de ses ouvrages de calibration (`passages_masques`,
+/// `held_out_windows_by_id`), fusionnées.
 pub fn held_out_windows(
     case: &PersoCase,
     refs: &BTreeMap<String, Vec<LatLon>>,
     rules: &BenchRules,
 ) -> Vec<std::ops::Range<f64>> {
-    let ll: Vec<LatLon> = case
-        .parts
-        .iter()
-        .enumerate()
-        .flat_map(|(k, part)| part.iter().skip(usize::from(k > 0)).map(|q| LatLon::new(q.lat, q.lon)))
-        .collect();
-    if ll.len() != case.s_ref.len() {
-        return Vec::new();
-    }
     let mut windows: Vec<std::ops::Range<f64>> =
-        case.masks.iter().flat_map(|id| mask_windows(&case.s_ref, &ll, id, refs, rules)).collect();
+        held_out_windows_by_id(case, refs, rules).into_iter().flat_map(|(_, w)| w).collect();
     windows.sort_by(|a, b| a.start.total_cmp(&b.start));
     let mut merged: Vec<std::ops::Range<f64>> = Vec::new();
     for w in windows {
@@ -727,6 +828,47 @@ pub fn held_out_windows(
         }
     }
     merged
+}
+
+/// Contrôle des extraits d'une trace de l'autre série (`passages_masques`, tous ses cas `.sN`) :
+/// raisons, sans position, des éléments qui y seraient perdus en silence. Un élément sans fenêtre
+/// sur aucun cas ; un témoin V1 dont aucun cas n'a de station à `passage_tol_m` au plus de chacune
+/// de ses extrémités (fenêtre partielle) ; un cas dont une fenêtre n'a pas d'extrait. Chaque
+/// raison est un cas sauté (un jugement n'en tolère aucun).
+pub fn held_out_losses(
+    passages: &[String],
+    cases: &[PersoCase],
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let by_case: Vec<Vec<(String, Vec<std::ops::Range<f64>>)>> =
+        cases.iter().map(|c| held_out_windows_by_id(c, refs, rules)).collect();
+    for id in passages {
+        let windowed = by_case.iter().flatten().any(|(x, w)| x == id && !w.is_empty());
+        if !windowed {
+            out.push(format!("{id} : passage sans fenêtre"));
+            continue;
+        }
+        if crate::v1::is_temoin_id(id) {
+            let ends = refs.get(id).map_or(&[][..], Vec::as_slice);
+            let whole = cases.iter().any(|c| {
+                let (_, pts) = distance_stations(c, rules.grid_step_m);
+                ends.len() == 2
+                    && ends.iter().all(|e| pts.iter().any(|p| haversine_m(*p, *e) <= rules.passage_tol_m))
+            });
+            if !whole {
+                out.push(format!("{id} : témoin aux extrémités non retrouvées"));
+            }
+        }
+    }
+    for c in cases {
+        let (w, e) = (held_out_windows(c, refs, rules).len(), held_out_extracts(c, refs, rules).len());
+        if w != e {
+            out.push(format!("{} : {} fenêtres, {} extraits", c.id, w, e));
+        }
+    }
+    out
 }
 
 /// Plages d'un cas tenu à l'écart où son baro est lu : fenêtres ± 3 km (repli du décalage
@@ -1836,6 +1978,11 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
             continue;
         };
+        // Aucun passage perdu en silence : élément sans fenêtre, témoin incomplet, fenêtre sans
+        // extrait (`held_out_losses`) → cas sauté.
+        for reason in held_out_losses(&t.passages_masques, &loaded, refs, &rules) {
+            skipped.push(json!({"id": t.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
+        }
         for mut case in loaded {
             // Points insérés : seulement là où le baro de l'extrait est lu ; bilan non rapporté.
             let ranges = held_out_baro_ranges(&case, refs, &rules);
@@ -2826,6 +2973,156 @@ mod tests {
         assert_eq!((w.len(), r.len()), (1, 1));
         assert!((w[0].start - r[0].start - 3_100.0).abs() < 1e-9);
         assert!((r[0].end - w[0].end - 3_100.0).abs() < 1e-9);
+    }
+
+    /// Trace synthétique nord-sud (méridien : la distance haversine y est exacte) de `len_m`, un
+    /// sommet tous les `vertex_m`, coupée en tronçons `.partN` aux sommets `cuts` (le tronçon N+1
+    /// repart du dernier point du tronçon N) ; masques `masks`.
+    fn meridian_case(len_m: f64, vertex_m: f64, cuts: &[usize], masks: &[&str]) -> PersoCase {
+        let deg = |m: f64| (m / ord_domain::geo::EARTH_RADIUS_M).to_degrees();
+        let n = (len_m / vertex_m).round() as usize;
+        let all: Vec<Pt> = (0..=n).map(|k| Pt { lat: 45.0 + deg(k as f64 * vertex_m), lon: 6.0 }).collect();
+        let mut bounds = vec![0];
+        bounds.extend_from_slice(cuts);
+        bounds.push(n);
+        let parts: Vec<Vec<Pt>> = bounds.windows(2).map(|b| all[b[0]..=b[1]].to_vec()).collect();
+        let s_ref = cumulative(&all);
+        PersoCase {
+            id: "perso-99".into(),
+            groupe: "ouvrage".into(),
+            serie: Serie::Calibration,
+            baro_fiable: true,
+            baro_noise_m: None,
+            parts,
+            baro_s: s_ref.clone(),
+            baro_z: vec![10.0; s_ref.len()],
+            baro_inserted: vec![false; s_ref.len()],
+            s_ref,
+            masks: masks.iter().map(|m| (*m).to_owned()).collect(),
+            implicit_masks: Vec::new(),
+            ring: Vec::new(),
+            raw: None,
+        }
+    }
+
+    /// Point à `along` m du début de `meridian_case`, décalé de `aside` m vers l'est.
+    fn meridian_point(along: f64, aside: f64) -> LatLon {
+        let deg = |m: f64| (m / ord_domain::geo::EARTH_RADIUS_M).to_degrees();
+        LatLon::new(45.0 + deg(along), 6.0 + deg(aside) / 45f64.to_radians().cos())
+    }
+
+    /// perso-44-s0 (jugement V1 interrompu) : une extrémité de témoin à quelques mètres de la
+    /// géométrie, au milieu de deux sommets espacés de plus de 80 m, est à plus de 40 m de tout
+    /// sommet. Les stations de 5 m du mode `distance` (celles de la calibration) la trouvent : la
+    /// fenêtre couvre tout le témoin, ± 500 m, et l'extrait le contient entier, ± 1 km.
+    #[test]
+    fn a_temoin_end_between_distant_vertices_is_found() {
+        let case = meridian_case(12_000.0, 100.0, &[], &["perso-1-s0"]);
+        let (a, b) = (meridian_point(3_050.0, 3.6), meridian_point(8_550.0, 3.6));
+        // Aucun sommet à 40 m : la lecture sur les sommets de la géométrie (avant bench5) ne
+        // voyait aucune des deux extrémités.
+        let ll: Vec<LatLon> = case.parts[0].iter().map(|q| LatLon::new(q.lat, q.lon)).collect();
+        assert!(ll.iter().all(|p| haversine_m(*p, a) > 40.0 && haversine_m(*p, b) > 40.0));
+        let refs = BTreeMap::from([("perso-1-s0".to_owned(), vec![a, b])]);
+        let rules = BenchRules::default();
+        let w = held_out_windows_by_id(&case, &refs, &rules);
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].1.len(), 1, "{w:?}");
+        let r = &w[0].1[0];
+        // Stations à 40 m au plus : de 3 015 à 3 085 m, de 8 515 à 8 585 m (pas de 5 m).
+        assert!((r.start - 2_515.0).abs() < 1e-6 && (r.end - 9_085.0).abs() < 1e-6, "{r:?}");
+        assert!(held_out_losses(&case.masks, std::slice::from_ref(&case), &refs, &rules).is_empty());
+        let ex = held_out_extracts(&case, &refs, &rules);
+        assert_eq!(ex.len(), 1);
+        let (e, ew) = &ex[0];
+        let (s0, s1) = (e.s_ref[0], e.s_ref[e.s_ref.len() - 1]);
+        assert!(s0 <= ew.start - 1_000.0 + 100.0 && s1 >= ew.end + 1_000.0 - 100.0, "{ew:?}");
+        // Les deux extrémités du témoin sont dans la fenêtre évaluée de l'extrait.
+        assert!(ew.contains(&(3_050.0 - 1_515.0)) && ew.contains(&(8_550.0 - 1_515.0)), "{ew:?}");
+    }
+
+    /// La fenêtre de jugement est le masque de calibration : `mask_windows` sur la grille de 5 m
+    /// du service (`d = 5 k`, position sur le méridien), ici sur un cas en deux tronçons
+    /// `.partN` (raccord à 4 200 m, hors de la grille) et un ouvrage, un témoin, un croisement.
+    #[test]
+    fn the_judgement_window_is_the_calibration_mask() {
+        let case = meridian_case(10_030.0, 85.0, &[50], &["nv-1", "perso-1-s0", "nv-2"]);
+        let total = case.s_ref[case.s_ref.len() - 1];
+        let refs = BTreeMap::from([
+            (
+                "nv-1".to_owned(),
+                vec![
+                    meridian_point(1_210.0, 6.0),
+                    meridian_point(1_260.0, 6.0),
+                    meridian_point(1_310.0, 6.0),
+                ],
+            ),
+            ("perso-1-s0".to_owned(), vec![meridian_point(3_990.0, 2.0), meridian_point(6_642.0, -1.0)]),
+            ("nv-2".to_owned(), vec![meridian_point(9_900.0, 20.0)]),
+        ]);
+        // Grille du service, recollée : premier tronçon de 0 à 4 250 m (50 × 85) au pas de 5 m,
+        // second repartant de 4 250 m.
+        let cut = 50.0 * 85.0;
+        let mut d: Vec<f64> = (0..=850).map(|k| k as f64 * 5.0).collect();
+        d.extend((1..).map(|k| cut + k as f64 * 5.0).take_while(|x| *x < total - 1e-3));
+        d.push(total);
+        // Sortie du service : distances au cm, coordonnées à 1e-6°.
+        let coord = |v: f64| (v * 1e6).round() / 1e6;
+        let pts: Vec<LatLon> = d
+            .iter()
+            .map(|&x| meridian_point(x, 0.0))
+            .map(|p| LatLon::new(coord(p.lat), coord(p.lon)))
+            .collect();
+        let d: Vec<f64> = d.iter().map(|x| (x * 100.0).round() / 100.0).collect();
+        let rules = BenchRules::default();
+        let (sd, sp) = distance_stations(&case, rules.grid_step_m);
+        assert_eq!(sd.len(), d.len());
+        assert!(sd.iter().zip(&d).all(|(a, b)| (a - b).abs() < 1e-6));
+        assert!(sp.iter().zip(&pts).all(|(a, b)| haversine_m(*a, *b) < 1e-3));
+        let judged = held_out_windows_by_id(&case, &refs, &rules);
+        for (id, w) in &judged {
+            let calib = mask_windows(&d, &pts, id, &refs, &rules);
+            assert!(!calib.is_empty(), "{id}");
+            assert_eq!(w.len(), calib.len(), "{id}");
+            for (a, b) in w.iter().zip(&calib) {
+                assert!((a.start - b.start).abs() < 1e-6 && (a.end - b.end).abs() < 1e-6, "{id} {a:?} {b:?}");
+            }
+        }
+        // La fenêtre d'un passage en bout de parcours n'est pas rognée (comme en calibration).
+        let tail = &judged.iter().find(|(id, _)| id == "nv-2").unwrap().1[0];
+        assert!(tail.end > total + 400.0, "{tail:?}");
+    }
+
+    /// Un élément de `passages_masques` sans fenêtre (aucune station à 40 m), un témoin dont une
+    /// extrémité n'est pas retrouvée, une fenêtre sans extrait : jamais une perte silencieuse,
+    /// chacun est une raison de cas sauté (`measure_pass`).
+    #[test]
+    fn a_passage_without_a_window_is_a_skipped_case() {
+        let case = meridian_case(10_000.0, 100.0, &[], &["nv-1", "perso-1-s0", "nv-3"]);
+        let refs = BTreeMap::from([
+            ("nv-1".to_owned(), vec![meridian_point(2_000.0, 5.0)]),
+            ("perso-1-s0".to_owned(), vec![meridian_point(4_000.0, 1.0), meridian_point(6_000.0, 300.0)]),
+            ("nv-3".to_owned(), vec![meridian_point(8_000.0, 45.0)]),
+        ]);
+        let rules = BenchRules::default();
+        let losses = held_out_losses(&case.masks, std::slice::from_ref(&case), &refs, &rules);
+        assert_eq!(
+            losses,
+            vec![
+                "perso-1-s0 : témoin aux extrémités non retrouvées".to_owned(),
+                "nv-3 : passage sans fenêtre".to_owned()
+            ]
+        );
+        // Élément absent du corpus, et cas `.sN` d'une trace : l'élément est cherché sur tous.
+        let other = meridian_case(3_000.0, 100.0, &[], &["nv-1"]);
+        let losses = held_out_losses(&["nv-1".to_owned(), "nv-9".to_owned()], &[other, case], &refs, &rules);
+        assert_eq!(losses, vec!["nv-9 : passage sans fenêtre".to_owned()]);
+        // Cas illisible (abscisses et points envoyés désaccordés) : rien de mesurable, tout est
+        // rapporté.
+        let mut broken = meridian_case(10_000.0, 100.0, &[], &["nv-1"]);
+        broken.s_ref.pop();
+        let losses = held_out_losses(&broken.masks.clone(), &[broken], &refs, &rules);
+        assert_eq!(losses, vec!["nv-1 : passage sans fenêtre".to_owned()]);
     }
 
     #[test]

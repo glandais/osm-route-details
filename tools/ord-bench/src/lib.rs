@@ -150,8 +150,14 @@ impl BenchPaths {
 /// 2026.11.6 inchangées, README §4 ter.9 après la calibration 2026.11.6-bench3 : 30e8024, 48ca44a,
 /// 87b0ea8) : au jugement, extraits des traces de calibration au δ gelé de leur trace
 /// (`data/retard-baro-v1.json`, empreinte du manifest vérifiée), sans réestimation, baro brut si
-/// la trace n'y figure pas ; δ calculés de la calibration contrôlés contre ce fichier.
-pub const BENCH_REVISION: Option<&str> = Some("bench4");
+/// la trace n'y figure pas ; δ calculés de la calibration contrôlés contre ce fichier. `bench5`
+/// (règles 2026.11.6 inchangées, après le jugement V1 interrompu : témoin aux extrémités non
+/// retrouvées) : fenêtres des extraits des traces de l'autre série calculées comme les masques de
+/// la calibration, sur les stations du mode `distance` au pas de la grille (et non plus sur les
+/// sommets de la géométrie recalée), tronçons `.partN` recollés comme le service ; élément de
+/// `passages_masques` sans fenêtre, témoin V1 aux extrémités non retrouvées ou fenêtre sans
+/// extrait : cas sauté, jamais une perte silencieuse.
+pub const BENCH_REVISION: Option<&str> = Some("bench5");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
