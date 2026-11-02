@@ -139,6 +139,11 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
             }
         }
     }
+    // Retard du baro gelé de la calibration (versionné, README §4 ter.9, 48ca44a) : vérifié
+    // comme les autres index, avec ou sans bench/private/.
+    if let Some((fichier, sum)) = manifest.v1.as_ref().and_then(|v| v.retard_gele.as_ref()) {
+        verify(&mut report, &paths.resolve(fichier), sum, "retard_baro_gele");
+    }
     // Traces et ouvrages personnels, s'ils sont présents (jamais en CI).
     if report.private_present {
         let mut held_out = 0usize;

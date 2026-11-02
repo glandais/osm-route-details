@@ -146,8 +146,12 @@ impl BenchPaths {
 /// corrigée du retard (s_p − δ), fenêtres masquées lues à cette abscisse ; lectures du retard
 /// (dérive par médiane glissante de 5 km, MNT sans correction du mode `distance`, extraits au
 /// baro brut, traces tenues à l'écart en cas entiers au jugement) et d'E5 (baro corrigé au
-/// croisement, côté sans décalage incertain sans repli) vérifiées conformes.
-pub const BENCH_REVISION: Option<&str> = Some("bench3");
+/// croisement, côté sans décalage incertain sans repli) vérifiées conformes. `bench4` (règles
+/// 2026.11.6 inchangées, README §4 ter.9 après la calibration 2026.11.6-bench3 : 30e8024, 48ca44a,
+/// 87b0ea8) : au jugement, extraits des traces de calibration au δ gelé de leur trace
+/// (`data/retard-baro-v1.json`, empreinte du manifest vérifiée), sans réestimation, baro brut si
+/// la trace n'y figure pas ; δ calculés de la calibration contrôlés contre ce fichier.
+pub const BENCH_REVISION: Option<&str> = Some("bench4");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

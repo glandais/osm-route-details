@@ -35,6 +35,10 @@ pub struct Retard {
     pub stations: usize,
     /// Raison de `retard_non_estimable`.
     pub raison: Option<&'static str>,
+    /// Source du δ quand il n'est pas estimé sur le cas : `gele` pour un extrait d'une trace de
+    /// calibration au jugement (δ de `data/retard-baro-v1.json`, sans réestimation) ; `None` :
+    /// δ estimé sur le cas (ou non estimé).
+    pub source: Option<&'static str>,
 }
 
 impl Retard {
@@ -47,6 +51,7 @@ impl Retard {
             ecart_robuste_min_m: None,
             stations: 0,
             raison: Some(raison),
+            source: None,
         }
     }
 
@@ -55,8 +60,16 @@ impl Retard {
         self.retard_m.unwrap_or(0.0)
     }
 
-    /// Bloc rapporté par cas (sans coordonnée).
+    /// Bloc rapporté par cas (sans coordonnée) ; pour un δ gelé, source et valeur seulement.
     pub fn to_json(&self) -> Value {
+        if let Some(source) = self.source {
+            let mut v = json!({"source": source, "retard_m": self.retard_m});
+            if let Some(raison) = self.raison {
+                v["mention"] = json!("retard_non_estimable");
+                v["raison"] = json!(raison);
+            }
+            return v;
+        }
         let r = |x: Option<f64>| x.map_or(Value::Null, |v| json!((v * 1_000.0).round() / 1_000.0));
         let mut v = json!({
             "retard_m": self.retard_m,
@@ -145,6 +158,7 @@ pub fn estimate(
             ecart_robuste_min_m: None,
             stations,
             raison: Some("stations_insuffisantes"),
+            source: None,
         };
     }
     let mut best = (0.0, e0);
@@ -162,6 +176,106 @@ pub fn estimate(
         ecart_robuste_min_m: Some(best.1),
         stations,
         raison: at_bound.then_some("minimum_a_une_borne"),
+        source: None,
+    }
+}
+
+/// Retard du baro gelé de la calibration (README §4 ter.9, criteria
+/// `preparation.retard_baro.extraits_au_jugement`, décision de l'utilisateur du 2026-11-02 ;
+/// `data/retard-baro-v1.json`, manifest `perso_v1.retard_baro_gele`, empreinte vérifiée) : δ de
+/// chaque cas de calibration (`cas.<id>.retard_m`), estimé sur la trace entière en calibration
+/// 2026.11.6-bench3. Au jugement, les extraits d'une trace de calibration le reçoivent, sans
+/// réestimation.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RetardGele {
+    /// δ par cas ; `None` : `retard_m` null dans le fichier.
+    pub cas: std::collections::BTreeMap<String, Option<f64>>,
+}
+
+impl RetardGele {
+    /// Lit le fichier du manifest (`(fichier, sha256)`) et vérifie son empreinte : un fichier
+    /// absent ou modifié est refusé. Entrée absente du manifest : aucun δ gelé.
+    pub fn load(paths: &crate::BenchPaths, entry: Option<&(String, String)>) -> anyhow::Result<Self> {
+        use anyhow::Context;
+        let Some((fichier, sha)) = entry else { return Ok(Self::default()) };
+        let bytes =
+            std::fs::read(paths.resolve(fichier)).with_context(|| format!("{fichier} : fichier absent"))?;
+        if crate::hash::sha256_bytes(&bytes) != *sha {
+            anyhow::bail!(
+                "{fichier} : empreinte différente de celle du manifest (perso_v1.retard_baro_gele)"
+            );
+        }
+        Self::parse(std::str::from_utf8(&bytes).with_context(|| format!("{fichier} illisible"))?)
+    }
+
+    /// `{cas: {id: {retard_m, …}}}` ; les autres champs ne sont pas lus.
+    pub fn parse(text: &str) -> anyhow::Result<Self> {
+        use anyhow::Context;
+        let v: Value = serde_json::from_str(text).context("retard du baro gelé illisible")?;
+        let cas = v["cas"]
+            .as_object()
+            .context("retard du baro gelé sans `cas`")?
+            .iter()
+            .map(|(id, c)| (id.clone(), c["retard_m"].as_f64()))
+            .collect();
+        Ok(Self { cas })
+    }
+
+    /// Retard d'un extrait du cas `id` (trace de calibration, au jugement) : δ gelé, sans
+    /// réestimation ; cas absent du fichier ou `retard_m` null : baro brut, `retard_non_estimable`.
+    pub fn extract(&self, id: &str) -> Retard {
+        let (retard_m, raison) = match self.cas.get(id) {
+            Some(Some(x)) => (Some(*x), None),
+            Some(None) => (None, Some("retard_gele_non_estime")),
+            None => (None, Some("absent_du_retard_gele")),
+        };
+        Retard {
+            retard_m,
+            minimum_m: None,
+            ecart_robuste_0_m: None,
+            ecart_robuste_min_m: None,
+            stations: 0,
+            raison,
+            source: Some("gele"),
+        }
+    }
+
+    /// Contrôle de la calibration : δ calculé par cas (`cas[].retard_baro.retard_m`) contre le
+    /// fichier gelé ; ids opaques et δ seulement.
+    pub fn control(&self, cases: &[Value]) -> Value {
+        let mut compared = 0usize;
+        let mut equal = 0usize;
+        let mut different = Vec::new();
+        let mut absent = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for c in cases {
+            let (Some(id), r) = (c["id"].as_str(), &c["retard_baro"]) else { continue };
+            if r.is_null() {
+                continue;
+            }
+            seen.insert(id.to_owned());
+            let computed = r["retard_m"].as_f64();
+            match self.cas.get(id) {
+                None => absent.push(json!(id)),
+                Some(frozen) => {
+                    compared += 1;
+                    if *frozen == computed {
+                        equal += 1;
+                    } else {
+                        different.push(json!({"id": id, "calcule_m": computed, "gele_m": frozen}));
+                    }
+                }
+            }
+        }
+        let missing: Vec<&String> = self.cas.keys().filter(|k| !seen.contains(*k)).collect();
+        json!({
+            "fichier_cas": self.cas.len(),
+            "compares": compared,
+            "egaux": equal,
+            "differents": different,
+            "absents_du_fichier": absent,
+            "absents_de_la_campagne": missing,
+        })
     }
 }
 

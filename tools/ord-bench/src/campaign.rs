@@ -613,6 +613,19 @@ pub fn held_out_extracts(
     refs: &BTreeMap<String, Vec<LatLon>>,
     rules: &BenchRules,
 ) -> Vec<(PersoCase, std::ops::Range<f64>)> {
+    held_out_extracts_lagged(case, refs, rules, 0.0)
+}
+
+/// `held_out_extracts`, baro du repli 1–3 km lu corrigé du retard `shift` de la trace
+/// (baro(s + δ), abscisse de la trace, README §4 ter.9) : δ gelé d'un extrait de trace de
+/// calibration au jugement, 0 sinon (baro brut). Le baro de l'extrait reste brut ; `measure_case`
+/// le corrige du même δ (`OuvrageEval::retard`).
+pub fn held_out_extracts_lagged(
+    case: &PersoCase,
+    refs: &BTreeMap<String, Vec<LatLon>>,
+    rules: &BenchRules,
+    shift: f64,
+) -> Vec<(PersoCase, std::ops::Range<f64>)> {
     let pts: Vec<Pt> = case
         .parts
         .iter()
@@ -652,7 +665,14 @@ pub fn held_out_extracts(
             // Les ouvrages de calibration de l'extrait sont mesurés, pas masqués.
             masks: Vec::new(),
             implicit_masks: Vec::new(),
-            ring: ring_points(case, &ll, (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M), s0, rules),
+            ring: ring_points(
+                case,
+                &ll,
+                (w.start - HELD_OUT_RING_M)..(w.end + HELD_OUT_RING_M),
+                s0,
+                shift,
+                rules,
+            ),
             raw: case.raw.as_ref().map(|r| RawRef { gps: r.gps.clone(), shift: r.shift + s0 }),
         };
         out.push((extract, (w.start - s0)..(w.end - s0)));
@@ -721,17 +741,19 @@ pub fn held_out_baro_ranges(
 }
 
 /// Points de la trace dans `range` (abscisse de la trace), en abscisse de l'extrait (`s0`), avec
-/// le baro transporté (`NaN` au-delà d'un trou de baro).
+/// le baro transporté corrigé du retard `shift`, baro(s + δ) (`NaN` au-delà d'un trou de baro).
 fn ring_points(
     case: &PersoCase,
     ll: &[LatLon],
     range: std::ops::Range<f64>,
     s0: f64,
+    shift: f64,
     rules: &BenchRules,
 ) -> Vec<RingPoint> {
     let idx: Vec<usize> = (0..ll.len()).filter(|&i| range.contains(&case.s_ref[i])).collect();
     let s: Vec<f64> = idx.iter().map(|&i| case.s_ref[i]).collect();
-    let baro = interpolate(&case.baro_s, &case.baro_z, &s, rules.baro_gap_max_m);
+    let lagged: Vec<f64> = s.iter().map(|x| x + shift).collect();
+    let baro = interpolate(&case.baro_s, &case.baro_z, &lagged, rules.baro_gap_max_m);
     idx.iter().zip(s).zip(baro).map(|((&i, s), baro)| RingPoint { s: s - s0, at: ll[i], baro }).collect()
 }
 
@@ -760,9 +782,26 @@ async fn ring_reference(
         .collect())
 }
 
-/// Mesures d'ouvrage d'une trace tenue à l'écart, sur ses extraits : seuls les passages de ses
-/// ouvrages de calibration dans la fenêtre évaluée, sans position (distances retirées) ; aucune
-/// métrique de trace ni sortie du service hors fenêtre.
+/// Retard du baro des extraits d'un cas de la trace `trace` (README §4 ter.9) : trace de
+/// calibration (extraits lus au jugement), δ gelé de `retard-baro-v1.json` pour le cas, sans
+/// réestimation (30e8024, 87b0ea8) ; trace de l'autre série (extraits en calibration), baro brut
+/// (`extrait_tenu_a_l_ecart`).
+pub fn extract_retard(
+    trace: &Trace,
+    case_id: &str,
+    frozen: &crate::retard::RetardGele,
+) -> crate::retard::Retard {
+    if trace.serie == Serie::Calibration {
+        frozen.extract(case_id)
+    } else {
+        crate::retard::Retard::not_estimated("extrait_tenu_a_l_ecart")
+    }
+}
+
+/// Mesures d'ouvrage d'une trace de l'autre série, sur ses extraits : seuls les passages de ses
+/// ouvrages de la série mesurée dans la fenêtre évaluée, sans position (distances retirées) ;
+/// aucune métrique de trace ni sortie du service hors fenêtre. Renvoie aussi, par extrait (id
+/// opaque), la source et la valeur de son δ (`extract_retard`).
 #[allow(clippy::too_many_arguments)]
 pub async fn measure_held_out(
     service: &Service,
@@ -774,16 +813,21 @@ pub async fn measure_held_out(
     rules_core: &Rules,
     cache: &Path,
     temoins: &[crate::v1::TemoinV1],
-) -> anyhow::Result<Vec<Value>> {
+    frozen: &crate::retard::RetardGele,
+) -> anyhow::Result<(Vec<Value>, Vec<Value>)> {
     let mut items = Vec::new();
-    for (extract, window) in held_out_extracts(case, refs, rules) {
+    let mut extracts = Vec::new();
+    let retard = extract_retard(trace, &case.id, frozen);
+    for (extract, window) in held_out_extracts_lagged(case, refs, rules, retard.shift_m()) {
         let ring = ring_reference(service, cache, &extract.ring).await?;
-        let eval = OuvrageEval { cache, window: Some(window), ring: Some(ring) };
+        let eval =
+            OuvrageEval { cache, window: Some(window), ring: Some(ring), retard: Some(retard.clone()) };
         let (_trace_metrics, _, its) =
             measure_case(service, &extract, None, refs, ouvrages, rules, rules_core, &eval, temoins).await?;
+        extracts.push(json!({"id": extract.id, "retard_baro": retard.to_json()}));
         items.extend(held_out_items(its, &trace.id, &trace.passages_masques));
     }
-    Ok(items)
+    Ok((items, extracts))
 }
 
 /// Items d'un extrait tenu à l'écart : ouvrages de `passages_masques` seulement, cas = la trace,
@@ -818,20 +862,24 @@ pub struct OuvrageEval<'a> {
     pub window: Option<std::ops::Range<f64>>,
     /// Extrait : repli 1–3 km lu sur la trace (`(abscisse, baro − MNT)`), hors service.
     pub ring: Option<Vec<(f64, f64)>>,
+    /// Extrait : retard du baro reçu de sa trace, jamais réestimé (`extract_retard` : δ gelé au
+    /// jugement, baro brut en calibration) ; `None` sur un extrait : baro brut.
+    pub retard: Option<crate::retard::Retard>,
 }
 
 impl<'a> OuvrageEval<'a> {
     /// Cas entier : trace de la série mesurée (calibration au `run`, série tenue à l'écart au
     /// `judge`) ou itinéraire planifié ; ni fenêtre ni repli d'extrait, retard du baro estimé.
     pub fn whole(cache: &'a Path) -> Self {
-        Self { cache, window: None, ring: None }
+        Self { cache, window: None, ring: None, retard: None }
     }
 }
 
 /// Retard du baro d'un cas (README §4 ter.9) : δ estimé sur le cas entier (tronçons `.partN`
 /// recousus, segment `.sN` seul), MNT = sortie sans correction du mode `distance`, hors fenêtres
-/// masquées (points insérés écartés déjà retirés de `bd`, `bz`). Extrait d'une trace de l'autre
-/// série (`eval.window`) : plus court que la fenêtre de la dérive, jamais estimé, baro brut
+/// masquées (points insérés écartés déjà retirés de `bd`, `bz`). Extrait (`eval.window`) : plus
+/// court que la fenêtre de la dérive, jamais estimé ; il reçoit le retard de sa trace
+/// (`eval.retard`) : δ gelé pour une trace de calibration au jugement (30e8024), baro brut sinon
 /// (`extrait_tenu_a_l_ecart`, 7dab276). Au jugement, les traces de la série tenue à l'écart sont
 /// des cas entiers (`OuvrageEval::whole`) : leur δ est estimé normalement.
 pub fn case_retard(
@@ -844,7 +892,10 @@ pub fn case_retard(
     rules: &BenchRules,
 ) -> crate::retard::Retard {
     if eval.window.is_some() {
-        return crate::retard::Retard::not_estimated("extrait_tenu_a_l_ecart");
+        return eval
+            .retard
+            .clone()
+            .unwrap_or_else(|| crate::retard::Retard::not_estimated("extrait_tenu_a_l_ecart"));
     }
     if bd.is_empty() {
         return crate::retard::Retard::not_estimated("sans_baro");
@@ -1686,6 +1737,8 @@ struct PassCtx<'a> {
     /// Série mesurée : calibration (`run`) ou tenue à l'écart (`judge`).
     target: Serie,
     v1: &'a V1Ctx,
+    /// Retard du baro gelé de la calibration (`perso_v1.retard_baro_gele`, empreinte vérifiée).
+    frozen: &'a crate::retard::RetardGele,
 }
 
 /// Bilan des points insérés d'un cas (sans position) : points par km et densité maximale.
@@ -1705,7 +1758,8 @@ fn inserted_stats(stats: &[crate::service::InsertedStats]) -> Value {
 /// Une passe : traces perso, extraits tenus à l'écart, parcours d'osm-surface, ouvrages des
 /// parcours vcyclist et témoins, lus dans le mode du service.
 async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pass> {
-    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids, target, v1 } = *ctx;
+    let PassCtx { paths, manifest, selection, refs, ouvrages, tiles, groupes, ids, target, v1, frozen } =
+        *ctx;
     let rules = BenchRules::default();
     let rules_core = Rules::default();
     let structures_wanted = ids.is_empty();
@@ -1804,14 +1858,16 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 &rules_core,
                 &paths.cache,
                 &temoins,
+                frozen,
             )
             .await;
             // Aucune sortie du service hors des fenêtres : bilans des extraits jamais rapportés.
             service.take_stats();
             match measured {
-                Ok(its) => {
+                Ok((its, extraits)) => {
                     eprintln!("{} : extraits mesurés ({} mesures d'ouvrage)", case.id, its.len());
-                    held_out_measured.push(json!({"id": case.id, "mesures": its.len()}));
+                    held_out_measured
+                        .push(json!({"id": case.id, "mesures": its.len(), "extraits": extraits}));
                     items.extend(its);
                 }
                 Err(_) => skipped
@@ -1929,6 +1985,7 @@ fn judge_pass(
     limits: &[(String, String)],
     info: &crate::coverage::OuvrageInfo,
     q1: usize,
+    frozen: Option<&crate::retard::RetardGele>,
 ) -> (Vec<Value>, Vec<Value>, Value, Value, Pass) {
     let Pass {
         mut cases,
@@ -1967,6 +2024,9 @@ fn judge_pass(
     agregats["couverture"] = couverture;
     // Retard du baro des traces perso (README §4 ter.9) : id opaque et δ seulement.
     agregats["retard_baro"] = crate::retard::summary(&cases);
+    if let Some(frozen) = frozen {
+        agregats["retard_baro"]["controle_gele"] = frozen.control(&cases);
+    }
     agregats["planifies"] = json!(planned
         .iter()
         .map(|c| json!({"id": c["id"], "role": c["role"], "M1.non_apparie": c["typologie"]["M1.non_apparie"],
@@ -2026,6 +2086,10 @@ pub async fn run_series(
     let tiles = crate::ouvrages::Tiles::load(&paths.cache, &tile_points).await?;
     crate::ouvrages::apply_perimeter(&mut ouvrages, &tiles, &geoms);
     let limits = crate::ouvrages::corpus_data_limits(&ouvrages, &crate::ouvrages::data_limits(&paths.bench)?);
+    // Retard du baro gelé (README §4 ter.9, 48ca44a) : empreinte vérifiée, fichier modifié refusé ;
+    // lu pour les extraits des traces de calibration au jugement, contrôlé en calibration.
+    let frozen =
+        crate::retard::RetardGele::load(paths, manifest.v1.as_ref().and_then(|v| v.retard_gele.as_ref()))?;
     let service = Service::start(&paths.cache, true, Variant::DEFAULT).await?;
     let ctx = PassCtx {
         paths,
@@ -2038,15 +2102,18 @@ pub async fn run_series(
         ids,
         target,
         v1: &v1,
+        frozen: &frozen,
     };
     // Deux passes (README §2.2, étape 2) : `distance` au pas de la grille, puis le mode par défaut
     // `input_with_breakpoints`, rééchantillonné sur la même grille (étape 3).
     let reference = measure_pass(&service, &ctx).await?;
     let breakpoints = measure_pass(&service.with_mode(BenchMode::Breakpoints), &ctx).await?;
+    // Calibration : δ calculé de chaque cas contre le fichier gelé (contrôle, sans effet).
+    let control = (target == Serie::Calibration).then_some(&frozen);
     let (cases, ouvrages_public, agregats, mut verdicts, rest) =
-        judge_pass(reference, &limits, &info, q1.negatives);
+        judge_pass(reference, &limits, &info, q1.negatives, control);
     let (bp_cases, bp_ouvrages, bp_agregats, mut bp_verdicts, bp_rest) =
-        judge_pass(breakpoints, &limits, &info, q1.negatives);
+        judge_pass(breakpoints, &limits, &info, q1.negatives, control);
     let Pass { skipped, data_versions, inserted_report, held_out_measured, .. } = rest;
     let bp_inserted: Vec<&Value> = bp_cases.iter().filter_map(|c| c.get("points_inseres")).collect();
     let max_per_km = bp_inserted.iter().filter_map(|v| v["max_sur_un_km"].as_u64()).max().unwrap_or(0);
@@ -2076,7 +2143,7 @@ pub async fn run_series(
             "increment": "V1",
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -2106,7 +2173,7 @@ pub async fn run_series(
                 "Limite des données (README §4 bis.4, 2026-11-01) : ouvrages de criteria.yaml perimetre.limite_donnees, et toute galerie tunnel=avalanche_protector du corpus (absente du schéma Shortbread) : note limite_donnees, hors du décompte d'E4 (E3 pour un pont) et de S1, rapportés à part (agrégat ouvrages.limite_donnees : mesures et erreur d'altitude contre leur référence, sans seuil)",
                 "S3 : stn-acces-nord, balcons de test4 et balcons entre tunnels d'une série, contre vcyclist S ; V1 (README §3) : detecte = station du milieu typée pont ou tunnel par le service (stn-acces-nord), part_typee_ouvrage = part des stations de l'emprise (balcons : stations S) typées pont ou tunnel, rapportées sans seuil",
                 "E5 : |service − référence| au croisement des passages dessous (perso, itinéraires) ; max sur les stations O des témoins négatifs. Référence (README §4 ter.7 : 800d4e0, f1bfda3, e477dd4, 504c800, e9430ac), sans le service, dans l'ordre : retiré (e5_trace_sur_ouvrage, agregats.ouvrages.E5.trace_sur_ouvrage) si une ligne bridge ou tunnel de la couche streets (tuile du point de croisement et ses 8 voisines, toutes classes) passe à ≤ 10 m du point de croisement en faisant < 20° avec la trace (direction = stations à ± 10 m du croisement) ; sinon baro corrigé localement (baro corrigé de son retard, README §4 ter.9, au croisement comme sur les côtés ; baro absent au croisement : MNT, 7dab276) si la trace est perso au verdict fiable (qualify_baro.py ; segments .sN = cas distincts, chacun avec son baro ; tronçons .partN recousus par abscisse, README §2.2) et que son baro existe à la station du croisement (interpolation sur la grille de 5 m sans pas brut > 100 m) : baro − médiane (baro − MNT) des stations à 200–1 500 m de part et d'autre réunies, tolérance 2 m ; incertaine (e5_reference_incertaine, agregats.ouvrages.E5.references_incertaines, non comptée, écart indicatif, jamais de repli sur le MNT) si un côté compte moins de 3 points bruts de baro.csv entre 200 et 1 500 m, hors points insérés écartés et fenêtres masquées, à leur abscisse corrigée du retard s_p − δ, fenêtres masquées lues à cette abscisse (points_baro_insuffisants ; 6bc77a5 : pas les stations de la grille ; 085d26e : abscisse corrigée), si un côté a ses 3 points mais aucune station avec baro et MNT (decalage_d_un_cote_absent, sans repli ; 7dab276) ou si les médianes (baro − MNT) des deux côtés pris à part diffèrent de plus de 2 m (decalages_des_cotes) ; décalages par côté rapportés (decalages_cotes_m, points_baro_cotes) ; sinon MNT LiDAR (sortie sans correction du mode distance), tolérance 1 m, indisponible (e5_reference_indisponible) si une station à ≤ 10 m est sans MNT ou hors IGN LiDAR HD (mnt_sans_donnee), si la bosse MNT(croisement) − moyenne des médianes du MNT à 20–50 m de part et d'autre le long de la trace dépasse 2,0 m (mnt_lit_le_tablier), ou si un côté n'a pas de station à 20–50 m (approche_sans_mnt) ; incertaine (bosse_mnt) si la bosse est entre 1,0 et 2,0 m inclus ; témoins négatifs vcyclist : croisement = station du milieu de la plage O, référence MNT, approches 20–50 m mesurées depuis les bouts de la plage, écart = max sur la plage ; bosse_mnt_m, ecart_mnt_m et seuil_m rapportés",
-                "Retard du baro (README §4 ter.9, b922ce4 ; criteria preparation.retard_baro) : par cas (tronçons .partN recousus, segments .sN chacun), δ de −50 à +200 m par pas de 5 m minimisant 1,4826 × MAD du résidu baro(s + δ) − MNT(s) sur la grille de 5 m, MNT = sortie sans correction du mode distance (IGN LiDAR HD, Mapterhorn hors IGN ; identique dans les deux modes), hors points insérés écartés, fenêtres masquées et stations sans baro (pas brut > 100 m), dérive retirée par médiane glissante de 5 km (pas de calcul 50 m, comme E1) ; à écart égal, le plus petit |δ| ; baro corrigé(s) = baro(s + δ) pour E1, E3 (décalage d'approche, milieu, max, test de niveau, repli 1–3 km), hors_graphe_velo et E5 ; E2, E2b, stations_comparees et couverture au baro brut ; non estimable (moins de 400 stations à δ = 0 : stations_insuffisantes ; minimum à −50 ou +200 m : minimum_a_une_borne ; extrait d'une trace de l'autre série, plus court que la fenêtre de la dérive : extrait_tenu_a_l_ecart) : baro brut, mention retard_non_estimable ; au jugement, traces de la série tenue à l'écart lues en cas entiers, δ estimé normalement (7dab276) ; cas.retard_baro (retard_m, minimum_m, ecart_robuste_0_m, ecart_robuste_min_m, stations) et agregats.retard_baro",
+                "Retard du baro (README §4 ter.9, b922ce4 ; criteria preparation.retard_baro) : par cas (tronçons .partN recousus, segments .sN chacun), δ de −50 à +200 m par pas de 5 m minimisant 1,4826 × MAD du résidu baro(s + δ) − MNT(s) sur la grille de 5 m, MNT = sortie sans correction du mode distance (IGN LiDAR HD, Mapterhorn hors IGN ; identique dans les deux modes), hors points insérés écartés, fenêtres masquées et stations sans baro (pas brut > 100 m), dérive retirée par médiane glissante de 5 km (pas de calcul 50 m, comme E1) ; à écart égal, le plus petit |δ| ; baro corrigé(s) = baro(s + δ) pour E1, E3 (décalage d'approche, milieu, max, test de niveau, repli 1–3 km), hors_graphe_velo et E5 ; E2, E2b, stations_comparees et couverture au baro brut ; non estimable (moins de 400 stations à δ = 0 : stations_insuffisantes ; minimum à −50 ou +200 m : minimum_a_une_borne ; extrait d'une trace de l'autre série, plus court que la fenêtre de la dérive : extrait_tenu_a_l_ecart) : baro brut, mention retard_non_estimable ; au jugement, traces de la série tenue à l'écart lues en cas entiers, δ estimé normalement (7dab276) ; au jugement, extraits des traces de calibration au δ gelé de leur cas (data/retard-baro-v1.json, cas.<id>.retard_m, manifest perso_v1.retard_baro_gele, empreinte vérifiée, fichier modifié refusé ; 30e8024, 48ca44a, 87b0ea8), sans réestimation : baro(s + δ) dans l'abscisse de la trace, avant tout décalage, pour le repli 1–3 km et toutes les références d'ouvrage de l'extrait ; cas absent du fichier ou retard_m null : baro brut, retard_non_estimable ; source et valeur rapportées par extrait (extraits_calibration[].extraits[].retard_baro) ; en calibration, δ calculé de chaque cas contrôlé contre le fichier gelé (agregats.retard_baro.controle_gele, sans effet) ; cas.retard_baro (retard_m, minimum_m, ecart_robuste_0_m, ecart_robuste_min_m, stations) et agregats.retard_baro",
                 "E1 plaine (README §4 ter.8, 4423741) : trace plaine dont le bruit baro de qualify_baro.py (noise_m du manifest) dépasse 1,0 m = référence incertaine, rapportée (verdicts.E1_references_incertaines, avec un verdict indicatif), non jugée et hors couverture E1 ; dplus et E2b inchangés",
                 "Témoins S2 V1, ouvrages réels sur leur voie (README §4 ter.6, 57e9d95) : private/v1/temoins-v1-tags.json (perso_v1.temoins_v1_tags du manifest, 6ed1da7, empreinte vérifiée ; entrée absente du manifest : aucune plage), entrées de la série mesurée seulement ; extrémités de chaque plage projetées sur la station la plus proche du tronçon du témoin (≤ 40 m, sinon non_retrouvee) ; plage ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel, longueur et part du témoin lues dans le fichier ; avalanche_protector et covered : limite_donnees, erreur d'altitude non mesurée) ; témoin sorti (S2_temoin_sorti) si une plage dépasse la moitié de longueur_temoin_m",
                 "S1 (README §4 ter.1, V1) : longueur typée = recouvrement continu de l'emprise [s_A, s_B] par les segments bridge/tunnel du service (abscisses from_m/to_m), un segment arrêté à 2,5 m au plus d'une borne, à l'intérieur de l'emprise, prolongé jusqu'à elle ; rappel = typé ÷ (s_B − s_A) ; s_A, s_B = projection continue de A et B sur la trace (polyligne des stations du mode testé) pour les traces perso, abscisses des stations bornes des plages pour les parcours vcyclist (structures.csv bridge/tunnel/missed, témoins D/N, tunnels d'ouvrages.yaml entre portails) ; S2 : témoins négatifs n*, tn*, hn*, longueur typée hors plages X/x ; plages hors graphe vélo du témoin (règle de M1 resserrée, README §4 ter.5, 09dcda0) retirées des ouvrages fictifs, de la longueur typée et de la longueur totale, hors_graphe_velo_m par témoin ; ouvrage réel sur la voie même d'un témoin (README §4 ter.6, 32f6867, précisé en eb4c4cc : suites de stations dont la way, colonne way des fichiers de stations, plages X et O comprises, porte à la base OSM du témoin bridge, tunnel, dont avalanche_protector = galerie, ou covered=yes ; tags lus par Overpass daté dans le cache de banc, temoins-tags/) : plage A–B ± 35 m retirée des ouvrages fictifs, de la longueur typée et de la longueur totale (ouvrage_reel_masque_m), rapportée (S2_ouvrage_reel ; galerie : limite_donnees, mesurée comme un tunnel entre ses portails) ; témoin sorti de S2 (S2_temoin_sorti) si sa catégorie nomme la nature de l'ouvrage (galerie : « galler… », sinon « tunnel », « bridge ») ou si un ouvrage couvre à lui seul plus de la moitié de sa longueur ; objet = catégorie vcyclist nommant la nature d'un ouvrage emprunté (galler…, tunnel, bridge, viaduc…, sans under/above/beside/over avant le nom) ; covered : limite_donnees (shortbread sans covered), non mesuré ; tags absents du cache : S2 du témoin sauté ; p06-normandie exclu (ouvrage tenu à l'écart)",
@@ -2549,7 +2616,8 @@ mod tests {
         let r = case_retard(&whole, &d, &bd, &bz, &mnt, &masked, &rules);
         assert_eq!((r.retard_m, r.raison), (Some(40.0), None), "{r:?}");
         // Extrait (fenêtre évaluée) : baro brut, mention.
-        let extract = OuvrageEval { cache, window: Some(9_500.0..10_500.0), ring: Some(Vec::new()) };
+        let extract =
+            OuvrageEval { cache, window: Some(9_500.0..10_500.0), ring: Some(Vec::new()), retard: None };
         let r = case_retard(&extract, &d, &bd, &bz, &mnt, &masked, &rules);
         assert_eq!((r.retard_m, r.raison), (None, Some("extrait_tenu_a_l_ecart")));
     }
@@ -2605,6 +2673,111 @@ mod tests {
             raw: None,
         };
         (case, refs)
+    }
+
+    /// Trace de calibration `id` (extraits lus au jugement), sans fichier.
+    fn calibration_trace(id: &str) -> Trace {
+        Trace {
+            id: id.into(),
+            groupe: "ouvrage".into(),
+            serie: Serie::Calibration,
+            fichier: format!("private/traces/{id}.gpx"),
+            sha256: None,
+            sha256_trim1km: None,
+            passages_masques: vec!["pont".into()],
+            verdict: None,
+            dist_km: None,
+            gain_baro_m: None,
+            gain_mnt_m: None,
+            noise_m: None,
+        }
+    }
+
+    /// Relief sinusoïdal sur 20 km, baro en retard de 40 m (δ réel du profil).
+    #[allow(clippy::type_complexity)]
+    fn lagged_profile() -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        let relief = |s: f64| 200.0 + 40.0 * (s * std::f64::consts::TAU / 2_000.0).sin();
+        let d: Vec<f64> = (0..=4_000).map(|k| k as f64 * 5.0).collect();
+        let mnt: Vec<f64> = d.iter().map(|&s| relief(s)).collect();
+        let bd: Vec<f64> = (0..=800).map(|k| k as f64 * 25.0).collect();
+        let bz: Vec<f64> = bd.iter().map(|&s| relief(s - 40.0) + 5.0).collect();
+        (d, mnt, bd, bz)
+    }
+
+    /// README §4 ter.9 (30e8024, 87b0ea8) : au jugement, un extrait d'une trace de calibration
+    /// reçoit le δ gelé de sa trace, sans réestimation (ici 15 m, quand le profil de l'extrait
+    /// donnerait 40 m) ; le repli 1–3 km lit le baro corrigé baro(s + δ) dans l'abscisse de la
+    /// trace. Données synthétiques, aucun fichier de la série tenue à l'écart.
+    #[test]
+    fn a_calibration_extract_at_judgement_takes_the_frozen_lag() {
+        let frozen =
+            crate::retard::RetardGele::parse(r#"{"cas": {"perso-99": {"retard_m": 15.0}}}"#).unwrap();
+        let trace = calibration_trace("perso-99");
+        let r = extract_retard(&trace, "perso-99", &frozen);
+        assert_eq!((r.retard_m, r.raison, r.source), (Some(15.0), None, Some("gele")));
+        assert_eq!(r.to_json(), json!({"source": "gele", "retard_m": 15.0}));
+        // Pas de réestimation : le δ reçu l'emporte sur celui que donnerait le profil.
+        let (d, mnt, bd, bz) = lagged_profile();
+        let rules = BenchRules::default();
+        let cache = Path::new("/nonexistent");
+        let masked = vec![false; d.len()];
+        let eval =
+            OuvrageEval { cache, window: Some(9_500.0..10_500.0), ring: Some(Vec::new()), retard: Some(r) };
+        let got = case_retard(&eval, &d, &bd, &bz, &mnt, &masked, &rules);
+        assert_eq!((got.retard_m, got.shift_m(), got.source), (Some(15.0), 15.0, Some("gele")));
+        // Repli 1–3 km : baro(s + δ) de la trace (baro linéaire, 1 m tous les 100 m).
+        let (mut case, refs) = straight_case();
+        case.serie = Serie::Calibration;
+        case.baro_z = case.baro_s.iter().map(|s| s / 100.0).collect();
+        let raw = held_out_extracts(&case, &refs, &rules);
+        let lagged = held_out_extracts_lagged(&case, &refs, &rules, 15.0);
+        assert_eq!(raw.len(), 1);
+        assert_eq!(lagged.len(), 1);
+        let (r0, r1) = (&raw[0].0.ring, &lagged[0].0.ring);
+        assert_eq!(r0.len(), r1.len());
+        let pairs: Vec<(f64, f64)> = r0
+            .iter()
+            .zip(r1)
+            .filter(|(a, b)| a.baro.is_finite() && b.baro.is_finite())
+            .map(|(a, b)| (a.baro, b.baro))
+            .collect();
+        assert!(pairs.len() > 100);
+        assert!(pairs.iter().all(|(a, b)| (b - a - 0.15).abs() < 1e-9), "baro(s + 15 m)");
+        // Le baro de l'extrait reste brut ; `measure_case` le corrige du δ reçu.
+        assert_eq!(raw[0].0.baro_z, lagged[0].0.baro_z);
+    }
+
+    /// Trace de calibration absente du fichier gelé, ou `retard_m` null : l'extrait garde son
+    /// baro brut (`retard_non_estimable`), sans estimation ; extrait d'une trace de l'autre série
+    /// (calibration) : baro brut, `extrait_tenu_a_l_ecart`.
+    #[test]
+    fn an_extract_without_a_frozen_lag_keeps_its_raw_baro() {
+        let frozen =
+            crate::retard::RetardGele::parse(r#"{"cas": {"perso-98": {"retard_m": null}}}"#).unwrap();
+        let (d, mnt, bd, bz) = lagged_profile();
+        let rules = BenchRules::default();
+        let cache = Path::new("/nonexistent");
+        let masked = vec![false; d.len()];
+        for (id, raison) in [("perso-97", "absent_du_retard_gele"), ("perso-98", "retard_gele_non_estime")] {
+            let r = extract_retard(&calibration_trace(id), id, &frozen);
+            assert_eq!((r.retard_m, r.raison, r.shift_m()), (None, Some(raison), 0.0));
+            let v = r.to_json();
+            assert_eq!(
+                (&v["source"], &v["retard_m"], &v["mention"]),
+                (&json!("gele"), &Value::Null, &json!("retard_non_estimable"))
+            );
+            let eval = OuvrageEval {
+                cache,
+                window: Some(9_500.0..10_500.0),
+                ring: Some(Vec::new()),
+                retard: Some(r),
+            };
+            let got = case_retard(&eval, &d, &bd, &bz, &mnt, &masked, &rules);
+            assert_eq!((got.retard_m, got.shift_m(), got.raison), (None, 0.0, Some(raison)), "baro brut");
+        }
+        let held = Trace { serie: Serie::TenueALEcart, ..calibration_trace("perso-98") };
+        let r = extract_retard(&held, "perso-98", &frozen);
+        assert_eq!((r.retard_m, r.raison, r.source), (None, Some("extrait_tenu_a_l_ecart"), None));
     }
 
     #[test]

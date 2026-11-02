@@ -102,6 +102,10 @@ pub struct PersoV1 {
     /// `None` : entrée absente du manifest, aucune plage.
     pub temoins_tags: Option<(String, String)>,
     pub series: (String, String),
+    /// Retard du baro gelé de la calibration (`retard_baro_gele`, README §4 ter.9, 48ca44a) :
+    /// δ des traces de calibration, appliqué à leurs extraits au jugement ; `None` : entrée
+    /// absente du manifest, extraits au baro brut.
+    pub retard_gele: Option<(String, String)>,
     pub planifies: Vec<Planned>,
     pub traces: BTreeSet<String>,
 }
@@ -244,6 +248,7 @@ impl Manifest {
                     temoins: pair("temoins_v1")?,
                     temoins_tags: p.get("temoins_v1_tags").map(|_| pair("temoins_v1_tags")).transpose()?,
                     series: pair("series_v1")?,
+                    retard_gele: p.get("retard_baro_gele").map(|_| pair("retard_baro_gele")).transpose()?,
                     planifies,
                     traces: ids,
                 })
