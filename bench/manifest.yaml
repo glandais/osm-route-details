@@ -1739,3 +1739,16 @@ perso_v1:
       sha256: d946ef0b90ef3030198814a9ad1e2cbe1e806b01d7c0e7271258b8c44f5817a1
       sha256_trim1km: f7e90ccba662ea28d7e11f60a9b332b32ee1a72a98ee45b1975ff696703e87ba
       qualification: {verdict: suspect, offset_m: 12.22, drift_m: 29.2, noise_m: 2.55, p95_abs_m: 12.3, gain_baro_m: 139, gain_mnt_m: 361}
+
+serie_v11:   # série tenue à l'écart V1.1 (décision de l'utilisateur, 2026-11-02, après le jugement V1 refusé) ; MVP et V1 en calibration
+  date_tirage: "2026-11-02"
+  sel: "osm-route-details:v1.1:"
+  outil: tools/tirage_v11.py
+  vivier: {source: "private/strava/inventaire.json (polylignes réduites, sans téléchargement)", types: [Ride, GravelRide, MountainBikeRide], depuis: "2014-01-01", france: true,
+           jamais_utilisees: "ni MVP ni V1, négatifs compris", min_inedit_km: 50, cellule_m: 200, sorties: 173, km: 30522}
+  selection: {sorties: 45, km: 7475, km_inedits: 5019, reserve: "suite de l'ordre sha256(sel + id), lue dans l'ordre si un minimum n'est pas atteint"}
+  q1: {suspectes_jamais_utilisees: 18, retenus: 2, regle: "défaut attesté (D+ enregistré < 0,6 ou > 1,6 × D+ MNT, 930f6e8), ordre sha256(sel + 'q1:' + id)"}
+  planifies_prevus: {e4: "2 à 3", s2: "3 à 4", r1_r2: "4 à 5, hors des régions de V1 et d'osm-surface"}
+  tout_tenu_a_l_ecart: true
+  empreintes:   # fichiers de bench/private/
+    v11/tirage.json: 0b04bbd19666cd932fa90137f1b0cb2d822cee5c2fd201052d4883ac9424a329
