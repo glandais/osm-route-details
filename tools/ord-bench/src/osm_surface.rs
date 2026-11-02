@@ -61,11 +61,30 @@ pub fn load_planned(paths: &crate::BenchPaths, p: &crate::manifest::Planned) -> 
     Ok(OsRoute { points: pts.iter().map(|q| Pt { lat: q.lat, lon: q.lon }).collect(), dist, ..route })
 }
 
+/// `<id>.surface.csv` et `<id>.baro.csv` de la réponse Valhalla d'un parcours planifié R1/R2 (d'où
+/// `tools/reference_r12_v1.py` a tiré la référence, à côté du dossier `reference/`), avec leurs
+/// empreintes du manifest (`sha256_surface`, `sha256_baro`, 40c65cd).
+pub fn planned_sources(
+    paths: &crate::BenchPaths,
+    p: &crate::manifest::Planned,
+) -> anyhow::Result<[(std::path::PathBuf, Option<String>); 2]> {
+    let (fichier, _) = p.reference.as_ref().with_context(|| format!("{} : référence R1/R2 absente", p.id))?;
+    let reference = paths.resolve(fichier);
+    let dir = reference
+        .parent()
+        .and_then(Path::parent)
+        .with_context(|| format!("{} : dossier de la réponse Valhalla introuvable", p.id))?;
+    Ok([
+        (dir.join(format!("{}.surface.csv", p.id)), p.sha256_surface.clone()),
+        (dir.join(format!("{}.baro.csv", p.id)), p.sha256_baro.clone()),
+    ])
+}
+
 /// Erreur de la référence d'un parcours planifié R1/R2 (README §4 bis.8, 562d729) : plages de
-/// `<id>.surface.csv` (réponse Valhalla d'où `tools/reference_r12_v1.py` a tiré la référence, à
-/// côté du dossier `reference/`) en erreur selon l'instantané `tags`, ramenées à l'abscisse de
-/// l'itinéraire par `<id>.baro.csv`, contrôlées contre les plages non revêtues de la référence
-/// empreintée, puis retirées de la référence.
+/// `<id>.surface.csv` en erreur selon l'instantané `tags`, ramenées à l'abscisse de l'itinéraire
+/// par `<id>.baro.csv`, contrôlées contre les plages non revêtues de la référence empreintée, puis
+/// retirées de la référence. Les deux fichiers sont lus contre leur empreinte du manifest : absente
+/// ou différente, refus.
 pub fn exclude_reference_errors(
     paths: &crate::BenchPaths,
     p: &crate::manifest::Planned,
@@ -73,17 +92,17 @@ pub fn exclude_reference_errors(
     tags: &crate::reference_error::OsmTags,
 ) -> anyhow::Result<()> {
     use crate::reference_error::{check_on_unpaved, error_ranges, exclude, to_origin};
-    let (fichier, _) = p.reference.as_ref().with_context(|| format!("{} : référence R1/R2 absente", p.id))?;
-    let reference = paths.resolve(fichier);
-    let dir = reference
-        .parent()
-        .and_then(Path::parent)
-        .with_context(|| format!("{} : dossier de la réponse Valhalla introuvable", p.id))?;
-    let read = |ext: &str| {
-        std::fs::read_to_string(dir.join(format!("{}.{ext}", p.id)))
-            .with_context(|| format!("{} : {ext} de la réponse Valhalla absent", p.id))
-    };
-    let cut = to_origin(&error_ranges(&read("surface.csv")?, tags), &read("baro.csv")?)?;
+    let [surface, baro] = planned_sources(paths, p)?.map(|(path, sum)| {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let bytes = std::fs::read(&path).with_context(|| format!("{name} absent"))?;
+        let sum = sum.with_context(|| format!("{name} : empreinte absente du manifest"))?;
+        anyhow::ensure!(
+            crate::hash::sha256_bytes(&bytes) == sum,
+            "{name} : empreinte différente de celle du manifest"
+        );
+        String::from_utf8(bytes).with_context(|| format!("{name} illisible"))
+    });
+    let cut = to_origin(&error_ranges(&surface?, tags), &baro?)?;
     check_on_unpaved(&cut, &route.reference).with_context(|| p.id.clone())?;
     let x = exclude(std::mem::take(&mut route.reference), &cut);
     route.reference = x.reference.clone();
@@ -228,10 +247,12 @@ mod tests {
             "s_debut_m,s_fin_m,surface,road_class,use,way_id\n0,100,paved,tertiary,road,1\n100,200,dirt,unclassified,road,2\n200,300,dirt,track,road,3\n",
         )
         .unwrap();
-        std::fs::write(r12.join("pl-x.baro.csv"), "s_recale_m,s_origine_m,insere\n0,0,0\n300,330,0\n")
-            .unwrap();
+        let surface_csv = std::fs::read(r12.join("pl-x.surface.csv")).unwrap();
+        let baro_csv = "s_recale_m,s_origine_m,insere\n0,0,0\n300,330,0\n";
+        std::fs::write(r12.join("pl-x.baro.csv"), baro_csv).unwrap();
         let reference = json!({"tracks": [{"line": {"coordinates": [[-1.5, 47.2, 0.0, 0.0], [-1.5, 47.203, 0.0, 330.0]]},
-            "surfaces": [{"from": 0.0, "to": 110.0, "surface": "PAVED"}, {"from": 110.0, "to": 330.0, "surface": "DIRT"}]}]});
+            "surfaces": [{"from": 0.0, "to": 110.0, "surface": "PAVED"}, {"from": 110.0, "to": 300.0, "surface": "DIRT"},
+                {"from": 300.0, "to": 330.0, "surface": "UNKNOWN"}]}]});
         let text = reference.to_string();
         std::fs::write(r12.join("reference/pl-x.reference.json"), &text).unwrap();
         let paths = crate::BenchPaths::new(dir.path(), Some(dir.path()), Some(&private));
@@ -242,6 +263,8 @@ mod tests {
                 "private/v1/r12/reference/pl-x.reference.json".into(),
                 crate::hash::sha256_bytes(text.as_bytes()),
             )),
+            sha256_surface: Some(crate::hash::sha256_bytes(&surface_csv)),
+            sha256_baro: Some(crate::hash::sha256_bytes(baro_csv.as_bytes())),
             ..Default::default()
         };
         let snapshot = |w2: &str| {
@@ -256,14 +279,26 @@ mod tests {
         let mut route = parse("pl-x", &reference).unwrap();
         exclude_reference_errors(&paths, &pl, &mut route, &snapshot("asphalt")).unwrap();
         let x = route.erreur_reference.as_ref().unwrap();
-        assert!((x.excluded_m - 110.0).abs() < 1e-9 && x.reference_m == 330.0, "{x:?}");
+        // Base de la part : référence classée, sans la plage UNKNOWN (40c65cd).
+        assert!((x.excluded_m - 110.0).abs() < 1e-9 && x.reference_m == 300.0, "{x:?}");
         let kept: Vec<(f64, f64)> = route.reference.iter().map(|r| (r.from, r.to)).collect();
-        assert_eq!(kept.len(), 2);
+        assert_eq!(kept.len(), 3);
         assert!((kept[1].0 - 220.0).abs() < 1e-9);
         // Voie 2 en `paved` (ambigu), voie 3 absente de l'instantané : rien n'est retiré.
         let mut route = parse("pl-x", &reference).unwrap();
         exclude_reference_errors(&paths, &pl, &mut route, &snapshot("paved")).unwrap();
         assert_eq!(route.erreur_reference.as_ref().unwrap().excluded_m, 0.0);
-        assert_eq!(route.reference.len(), 2);
+        assert_eq!(route.reference.len(), 3);
+        // Empreinte fausse ou absente de surface.csv ou de baro.csv : refus.
+        let wrong = Some("0".repeat(64));
+        for bad in [
+            crate::manifest::Planned { sha256_surface: wrong.clone(), ..pl.clone() },
+            crate::manifest::Planned { sha256_baro: wrong, ..pl.clone() },
+            crate::manifest::Planned { sha256_baro: None, ..pl.clone() },
+        ] {
+            let mut route = parse("pl-x", &reference).unwrap();
+            let e = exclude_reference_errors(&paths, &bad, &mut route, &snapshot("asphalt")).unwrap_err();
+            assert!(e.to_string().contains("empreinte"), "{e}");
+        }
     }
 }

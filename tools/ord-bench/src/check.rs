@@ -197,6 +197,24 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
                 if let Some((fichier, sum)) = &p.reference {
                     verify(&mut report, &paths.resolve(fichier), sum, &format!("{} (référence)", p.id));
                 }
+                // Réponse Valhalla d'où la référence est tirée (README §4 bis.8, 40c65cd).
+                if p.reference.is_some() && p.role == "R1_R2" {
+                    match crate::osm_surface::planned_sources(paths, p) {
+                        Ok(sources) => {
+                            for ((path, sum), what) in sources.iter().zip(["surface.csv", "baro.csv"]) {
+                                match sum {
+                                    Some(sum) => {
+                                        verify(&mut report, path, sum, &format!("{} ({what})", p.id))
+                                    }
+                                    None => report
+                                        .failures
+                                        .push(format!("{} : empreinte de {what} absente du manifest", p.id)),
+                                }
+                            }
+                        }
+                        Err(e) => report.failures.push(format!("{} : {e}", p.id)),
+                    }
+                }
             }
         }
         if held_out > 0 {

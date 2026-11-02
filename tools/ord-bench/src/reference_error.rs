@@ -167,7 +167,8 @@ pub struct Exclusion {
     pub reference: Vec<Ref>,
     /// Longueur de référence retirée (m).
     pub excluded_m: f64,
-    /// Longueur de la référence avant exclusion (m), discontinuités non comprises.
+    /// Longueur de référence classée avant exclusion (m) : sans discontinuités ni plages
+    /// `UNKNOWN`, base de la part (README §4 bis.8, lecture de 40c65cd).
     pub reference_m: f64,
 }
 
@@ -197,11 +198,17 @@ fn length(r: &[Ref]) -> f64 {
     r.iter().map(|x| x.to - x.from).sum()
 }
 
+/// Longueur de référence classée (40c65cd) : sans les plages `UNKNOWN` (les discontinuités du
+/// recalage ne sont déjà pas des plages de référence).
+fn classed(r: &[Ref]) -> f64 {
+    r.iter().filter(|x| x.class != Class::Unknown).map(|x| x.to - x.from).sum()
+}
+
 /// Exclut les plages `cut` de la référence.
 pub fn exclude(reference: Vec<Ref>, cut: &[Range<f64>]) -> Exclusion {
-    let reference_m = length(&reference);
+    let reference_m = classed(&reference);
     let kept = without(&reference, cut);
-    let excluded_m = (reference_m - length(&kept)).max(0.0);
+    let excluded_m = (length(&reference) - length(&kept)).max(0.0);
     Exclusion { reference: kept, excluded_m, reference_m }
 }
 
@@ -341,8 +348,10 @@ mod tests {
     /// Une voie dure dont aucune plage n'est non revêtue chez Valhalla : rien n'est exclu.
     #[test]
     fn no_exclusion_without_an_unpaved_valhalla_class() {
-        let csv = "s_debut_m,s_fin_m,surface,road_class,use,way_id\n0,100,paved,tertiary,road,11\n";
+        let csv = "s_debut_m,s_fin_m,surface,road_class,use,way_id\n0,100,paved,tertiary,road,11\n\
+                   100,150,,service,road,12\n";
         assert!(error_ranges(csv, &tags()).is_empty());
+        // Base de la part : référence classée, la plage sans classe (UNKNOWN) n'y est pas (40c65cd).
         let x = exclude(crate::typology::read_stadia_surface(csv), &[]);
         assert_eq!((x.excluded_m, x.reference_m), (0.0, 100.0));
     }

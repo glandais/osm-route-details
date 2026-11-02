@@ -88,6 +88,10 @@ pub struct Planned {
     pub sha256: String,
     /// Référence R1/R2 au format osm-surface (`reference`, `sha256_reference`).
     pub reference: Option<(String, String)>,
+    /// Empreintes de `<id>.surface.csv` et `<id>.baro.csv` de la réponse Valhalla d'un parcours
+    /// R1/R2 (`sha256_surface`, `sha256_baro` ; README §4 bis.8, 40c65cd).
+    pub sha256_surface: Option<String>,
+    pub sha256_baro: Option<String>,
     /// Témoin retiré (`retire`) : l'itinéraire reste un cas pour ses ouvrages.
     pub retire: Option<String>,
 }
@@ -239,6 +243,8 @@ impl Manifest {
                                 fichier: req(it, "fichier", &id)?,
                                 sha256: req(it, "sha256", &id)?,
                                 reference: s(it, "reference").zip(s(it, "sha256_reference")),
+                                sha256_surface: s(it, "sha256_surface"),
+                                sha256_baro: s(it, "sha256_baro"),
                                 retire: s(it, "retire"),
                                 id,
                             })

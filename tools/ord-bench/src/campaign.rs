@@ -2152,12 +2152,16 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             osm_tags = Some(crate::reference_error::OsmTags::load(paths, manifest)?);
         }
         let tags = osm_tags.as_ref().expect("instantané lu");
-        let measured = async {
-            let mut route = crate::osm_surface::load_planned(paths, pl)?;
-            crate::osm_surface::exclude_reference_errors(paths, pl, &mut route, tags)?;
-            crate::osm_surface::measure(service, &route).await
+        let mut route = match crate::osm_surface::load_planned(paths, pl) {
+            Ok(r) => r,
+            Err(e) => {
+                skipped.push(json!({"id": pl.id, "raison": e.to_string()}));
+                continue;
+            }
         };
-        match measured.await {
+        // Empreintes de surface.csv et baro.csv, cohérence avec la référence : refus de la campagne.
+        crate::osm_surface::exclude_reference_errors(paths, pl, &mut route, tags)?;
+        match crate::osm_surface::measure(service, &route).await {
             Ok(mut c) => {
                 eprintln!("{} : mesuré", pl.id);
                 c["serie"] = json!(target);
