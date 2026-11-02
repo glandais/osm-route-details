@@ -854,6 +854,15 @@ inchangés.
      autre source ;
    - une approche (20–50 m d'un côté) sans aucune station de MNT : bosse non mesurable, référence
      indisponible ;
+   - une approche (20–50 m d'un côté) qui chevauche un autre ouvrage : référence **incertaine**
+     (`approche_sur_ouvrage`, rapportée, non comptée ; décision de l'utilisateur, 2026-11-02, après
+     le jugement V1). Chevauche = une station de l'approche à 10 m au plus d'une ligne `bridge` ou
+     `tunnel` de la couche `streets` (tuile de la station et ses 8 voisines, toutes classes) qui
+     fait moins de 20° avec la trace (pont emprunté, tunnel), comme la règle de la trace sur un
+     ouvrage ci-dessus ; les voies de l'ouvrage du dessus ne comptent pas. Le MNT d'une telle
+     approche n'est pas le sol de la voie du dessous, et la bosse ne protège plus la référence
+     (`nv-423` au jugement V1 : une approche sur un pont emprunté, l'autre dans un tunnel). Se
+     teste avant la bosse ; plages `O` : approches mesurées depuis les bouts, comme la bosse ;
    - plages `O` des témoins vcyclist (sans point de croisement, sans baro) : croisement au milieu de
      la plage, référence MNT, écart retenu = écart max sur la plage. Les approches de la bosse
      (20–50 m) se mesurent depuis les **bouts** de la plage, pas depuis son milieu (décision de

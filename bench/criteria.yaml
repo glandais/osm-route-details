@@ -128,6 +128,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : les points de baro d'un côté (minimum 3) sont les points bruts de baro.csv, hors points insérés écartés et fenêtres masquées, pas les stations de la grille de 5 m"
   - id: e5_points_baro_abscisse_corrigee   # 2026-11-02, après la calibration 2026.11.6-bench2
     decision: "E5 : les points bruts d'un côté se comptent à leur abscisse corrigée du retard (s_p − δ, §4 ter.9), celle où ils entrent dans le décalage du côté"
+  - id: e5_approche_sur_ouvrage   # 2026-11-02, après le jugement V1
+    decision: "E5, référence MNT : incertaine, rapportée, non comptée, si une approche 20–50 m chevauche un autre ouvrage (station à ≤ 10 m d'une ligne bridge ou tunnel des tuiles à < 20° de la trace : pont emprunté, tunnel)"
   - id: retard_baro_extraits_jugement   # 2026-11-02, après la calibration 2026.11.6-bench3
     decision: "Au jugement, chaque extrait d'une trace de calibration reçoit le δ de sa trace entière, celui de la calibration gelée (cas.retard_baro de 2026.11.6-bench3), sans réestimation au jugement"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
@@ -359,6 +361,7 @@ criteres:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]
         marque: e5_reference_indisponible
         incertaine_si: {mnt_bosse_m: [1.0, 2.0], bornes: incluses, marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
+        incertaine_si_approche_sur_ouvrage: {approches_m: [20, 50], couche: streets, attributs: [bridge, tunnel], tuiles: [station, 8_voisines], distance_m_max: 10, angle_deg_max: 20, hors: voies_de_l_ouvrage_du_dessus, avant: bosse, raison: approche_sur_ouvrage, marque: e5_reference_incertaine}   # 2026-11-02, après le jugement V1
         plages_o_vcyclist: {croisement: milieu_de_la_plage, ecart: max_sur_la_plage, approches_depuis: bouts_de_la_plage}   # 2026-11-01
     seuils:
       - {abs_m_max: 1.0, reference: mnt}
