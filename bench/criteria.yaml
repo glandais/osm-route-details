@@ -138,6 +138,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
+  - id: e1_marche_baro   # 2026-11-02, après la calibration 2026.11.10
+    decision: "E1, toutes séries : marche brutale du baro sans marche du MNT (résidu baro(s + δ) − MNT : |Δ| > 10 m entre fenêtres de 200 m séparées de 200 m, confirmé sur 2 000 m, même signe ; MNT d'amplitude ≤ 30 m sur 600 m) = référence incertaine, rapportée, non jugée"
   - id: serie_v11_e3_rapporte   # 2026-11-02, après le contrôle de couverture de V1.1
     decision: "Série tenue à l'écart V1.1 : E3 rapporté, non bloquant, seuils inchangés (échec ou minimum non atteint sans refus) ; minimum E2b sur les groupes dplus et plaine seulement, groupe ouvrage rapporté ; E3 reste calibré sur MVP + V1"
 
@@ -270,6 +272,16 @@ criteres:
     seuils:
       - {strate: plaine, rmse_m_max: 1.5, p95_m_max: 4.0, reference_incertaine_si: {noise_m_baro_min_exclu: 1.0, source: qualify_baro.py, rapporte: true, juge: false}}   # README §4 ter.8, 2026-11-01
       - {strate: dplus, rmse_m_max: 3.0, p95_m_max: 8.0}
+    reference_incertaine_si_marche_baro:   # README §4 ter.11, décision de l'utilisateur, 2026-11-02 ; toutes strates, toutes séries
+      residu: "baro(s + δ) − MNT(s), grille 5 m, MNT mode distance sans correction, δ de la trace (§4 ter.9)"
+      stations_exclues: [ouvrage, fenetre_masquee, sans_baro]   # en s comme en s + δ
+      delta_court: {fenetres_m: 200, transition_m: 200, stations_min: 20}
+      delta_long: {fenetres_m: 2000, transition_m: 200, stations_min: 20, bornees_a_la_trace: true}
+      seuil_m: 10.0   # |Δ court| > 10 et |Δ long| > 10, même signe
+      mnt_lisse: {amplitude_m_max: 30.0, sur_m: 600}   # [s − 300, s + 300]
+      ordre: [retard_baro, marche, decalage_et_tendance_E1]
+      alors: {rapporte: [abscisse_km, delta_court_m, delta_long_m], juge: false}
+      ne_touche_pas: [E2, E2b]
     passe_si: toutes_les_traces
     bloquant: true
 

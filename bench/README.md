@@ -1012,6 +1012,31 @@ inchangés.
    rendement observé. Les ponts des itinéraires planifiés, sans baro, n'ont que la référence MNS
    (cohérence seulement) et n'entrent pas en E3. Les autres minimums de V1.1 sont atteints
    (manifest `serie_v11.couverture`).
+11. **Marche du baro, référence E1 incertaine** (décision de l'utilisateur, 2026-11-02, après la
+   calibration 2026.11.10 ; toutes les séries ; définition rédigée par le banc). Une marche brutale
+   du baro sans marche du MNT au même endroit rend la référence E1 de la trace incertaine :
+   rapportée, non jugée, comme une E1 plaine incertaine (point 8). Définition, sur la grille de 5 m :
+   - **grandeur** : résidu r(s) = baro corrigé(s) − MNT(s), baro corrigé = baro(s + δ) (référence
+     E1 de la trace : baro transporté, points insérés écartés ; δ de la trace, §4 ter.9 : gelé pour
+     une trace de calibration, estimé pour une trace nouvelle), MNT = mode `distance` sans
+     correction (§2.2), comme l'estimation de δ ; stations exclues : sur un ouvrage (corrigées par
+     le service ou du corpus), dans une fenêtre masquée, sans baro, pour s comme pour s + δ ;
+   - **marche à l'abscisse s** : Δ court = médiane de r sur [s + 100, s + 300] − médiane sur
+     [s − 300, s − 100] (deux fenêtres de 200 m séparées par une transition de 200 m, au moins
+     20 stations chacune) ; Δ long = même différence sur des fenêtres de 2 000 m,
+     [s + 100, s + 2 100] et [s − 2 100, s − 100], bornées à la trace (au moins 20 stations) ;
+   - **condition** : |Δ court| > 10 m et |Δ long| > 10 m, de même signe (la marche est gardée au
+     moins 2 km), et **MNT lisse** : amplitude du MNT (max − min) ≤ 30 m sur [s − 300, s + 300].
+   La trace est rapportée avec l'abscisse de la plus grande marche, Δ court et Δ long. Ordre : δ,
+   puis la marche, puis E1 (décalage global et retrait de tendance au-delà de 5 km) si la trace
+   reste jugée ; le décalage global s'annule dans Δ, et le retrait de tendance n'efface pas une
+   marche (il l'étale), d'où la règle. E2 et E2b ne changent pas. Motif : `perso-44` (plaine), marche
+   d'environ −30 m vers 16,2 km gardée jusqu'à la fin de la trace, MNT lisse, sol nu (échec E1,
+   RMSE 2,78 m). La condition de MNT lisse écarte les inversions de pente : au sommet d'un col, le
+   retard du baro au-delà de δ change de signe avec la pente (`perso-98`, 10,2 m sans elle). Effet
+   sur la calibration, sans réglage du service (128 traces de MVP + V1 sur 129, `perso-53` sans
+   tuiles) : `perso-44` seule (Δ court −30,1 m, Δ long −30,1 m, amplitude 5 m) ; la marche
+   suivante est de 9,2 m (`perso-09`).
 
 ---
 
