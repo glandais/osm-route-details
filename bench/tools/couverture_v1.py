@@ -929,10 +929,11 @@ def tirage(B):
     S1 = {"ouvrages": len(held_ouv), "emprise_m": round(sum(compte[k]["L"] for k in held_ouv))}
     # affectation de chaque élément (ouvrage, croisement : série de son groupe ; témoin, trace, itinéraire) ;
     # fichier à part, tirage.json inchangé
-    aff = {"ouvrages": {k: serie.get(gname[groupe[k]], "calibration") for k in compte},
-           "croisements": {k: serie.get(gname[groupe[k]], "calibration") for k in xs},
-           "temoins": {t["id"]: serie.get(t["id"], "calibration") for t in tem},
-           "traces": {t["id"]: serie.get(t["id"], "calibration") for t in C["traces"] if t["role"] in ("trace", "Q1")},
+    hors = "calibration" if SERIE == "v1" else "tenue_a_l_ecart"   # élément hors strate (pont sans baro d'un itinéraire)
+    aff = {"ouvrages": {k: serie.get(gname[groupe[k]], hors) for k in compte},
+           "croisements": {k: serie.get(gname[groupe[k]], hors) for k in xs},
+           "temoins": {t["id"]: serie.get(t["id"], hors) for t in tem},
+           "traces": {t["id"]: serie.get(t["id"], hors) for t in C["traces"] if t["role"] in ("trace", "Q1")},
            "groupes_ouvrages": {k: gname[groupe[k]] for k in keys},
            "groupes_traces": grp}
     json.dump(aff, open(f"{B}/{SERIE}/affectation.json", "w"), sort_keys=True)

@@ -12,7 +12,8 @@ Sortie (hors git) : private/v1/temoins-v1-tags.json, {id: {base_osm, plages: [{t
 fin: [lat, lon], longueur_m}]}} ; tag ∈ covered, avalanche_protector, bridge, tunnel. Réponses brutes
 dans private/v1/overpass/temoin-<id>.json. Sortie standard : comptes par tag, sans coordonnées.
 
-Usage : temoins_v1_tags.py private/
+Série : variable d'environnement SERIE (v1 par défaut ; v11 : private/v11/, base 2026-11-02T09:32Z, date
+des données du recalage de V1.1). Usage : [SERIE=v11] temoins_v1_tags.py private/
 """
 import csv
 import glob
@@ -25,7 +26,8 @@ import time
 import urllib.parse
 import urllib.request
 
-BASE = "2026-11-01T13:00:00Z"
+SERIE = os.environ.get("SERIE", "v1")
+BASE = {"v1": "2026-11-01T13:00:00Z", "v11": "2026-11-02T09:32:00Z"}[SERIE]
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 STEP_M = 5.0
 TOL_M = 10.0
@@ -43,12 +45,12 @@ def gpx(path):
 
 def geometry(B, t, pseudo_to_strava):
     if t["planifie"]:
-        P = gpx(f"{B}/v1/planifies/{t['trace']}.gpx")
+        P = gpx(f"{B}/{SERIE}/planifies/{t['trace']}.gpx")
         if "debut" not in t:   # témoin planifié : l'itinéraire entier
             return P
         P = densify(P)         # tronçon d'un itinéraire (E4) : entre ses extrémités
     else:
-        s = json.load(open(f"{B}/strava/streams-v1/{pseudo_to_strava[t['trace']]}.json"))
+        s = json.load(open(f"{B}/strava/streams-{SERIE}/{pseudo_to_strava[t['trace']]}.json"))
         P = [tuple(p) for p in s["location"] if p]
     i0 = min(range(len(P)), key=lambda k: hav(P[k], t["debut"]))
     i1 = min(range(len(P)), key=lambda k: hav(P[k], t["fin"]))
@@ -91,13 +93,13 @@ def tag_of(t):
 
 def main(B):
     B = B.rstrip("/")
-    T = json.load(open(f"{B}/v1/temoins-v1.json"))
-    p2s = {r["pseudo"]: r["strava_id"] for r in csv.DictReader(open(f"{B}/v1/perso-map-v1.csv"))}
+    T = json.load(open(f"{B}/{SERIE}/temoins-{SERIE}.json"))
+    p2s = {r["pseudo"]: r["strava_id"] for r in csv.DictReader(open(f"{B}/{SERIE}/perso-map-{SERIE}.csv"))}
     out, counts = {}, {}
     for t in T:
         P = densify(geometry(B, t, p2s))
         la = [p[0] for p in P]; lo = [p[1] for p in P]
-        raw = f"{B}/v1/overpass/temoin-{t['id']}.json"
+        raw = f"{B}/{SERIE}/overpass/temoin-{t['id']}.json"
         if os.path.exists(raw):
             d = json.load(open(raw))
         else:
@@ -139,7 +141,7 @@ def main(B):
                 k0 = k
         out[t["id"]] = {"base_osm": BASE, "serie": t["serie"], "plages": plages,
                         "longueur_temoin_m": round(sum(pas), 1)}
-    json.dump(out, open(f"{B}/v1/temoins-v1-tags.json", "w"))
+    json.dump(out, open(f"{B}/{SERIE}/temoins-{SERIE}-tags.json", "w"))
     print(json.dumps({"temoins": len(out), "avec_plage": sum(1 for v in out.values() if v["plages"]), "plages_par_tag": counts}))
 
 
