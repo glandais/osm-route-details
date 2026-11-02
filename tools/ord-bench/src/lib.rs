@@ -155,8 +155,10 @@ impl BenchPaths {
 /// retrouvées) : fenêtres des extraits des traces de l'autre série calculées comme les masques de
 /// la calibration, sur les stations du mode `distance` au pas de la grille (et non plus sur les
 /// sommets de la géométrie recalée), tronçons `.partN` recollés comme le service ; élément de
-/// `passages_masques` sans fenêtre, témoin V1 aux extrémités non retrouvées ou fenêtre sans
-/// extrait : cas sauté, jamais une perte silencieuse.
+/// `passages_masques` retrouvé mais sans fenêtre, témoin V1 aux extrémités non retrouvées ou
+/// fenêtre sans extrait : cas sauté, jamais une perte silencieuse ; élément qu'aucune station
+/// n'approche à 40 m (non retrouvé, comme en calibration) : rapporté (`passage_non_retrouve`),
+/// sans interrompre le jugement (décision de l'utilisateur, 2026-11-02).
 pub const BENCH_REVISION: Option<&str> = Some("bench5");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

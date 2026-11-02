@@ -830,42 +830,59 @@ pub fn held_out_windows(
     merged
 }
 
-/// Contrôle des extraits d'une trace de l'autre série (`passages_masques`, tous ses cas `.sN`) :
-/// raisons, sans position, des éléments qui y seraient perdus en silence. Un élément sans fenêtre
-/// sur aucun cas ; un témoin V1 dont aucun cas n'a de station à `passage_tol_m` au plus de chacune
-/// de ses extrémités (fenêtre partielle) ; un cas dont une fenêtre n'a pas d'extrait. Chaque
-/// raison est un cas sauté (un jugement n'en tolère aucun).
+/// Contrôle des extraits d'une trace de l'autre série (`passages_masques`, tous ses cas `.sN`),
+/// sur les stations du mode `distance` recalculées (`distance_stations`, celles de la calibration),
+/// sans le service. Raisons sans position.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HeldOutLosses {
+    /// Cas sautés (un jugement n'en tolère aucun) : élément retrouvé (station à `passage_tol_m`
+    /// au plus d'un de ses points) mais sans fenêtre, élément absent du corpus, témoin V1 dont
+    /// aucun cas n'a de station près de chacune de ses extrémités, fenêtre sans extrait.
+    pub skipped: Vec<String>,
+    /// Éléments qu'aucune station n'approche à `passage_tol_m` : pas un passage, comme en
+    /// calibration (`passages_non_retrouves`) ; rapportés (`passage_non_retrouve`), sans
+    /// interrompre le jugement (décision de l'utilisateur, 2026-11-02).
+    pub not_found: Vec<String>,
+}
+
 pub fn held_out_losses(
     passages: &[String],
     cases: &[PersoCase],
     refs: &BTreeMap<String, Vec<LatLon>>,
     rules: &BenchRules,
-) -> Vec<String> {
-    let mut out = Vec::new();
+) -> HeldOutLosses {
+    let mut out = HeldOutLosses::default();
     let by_case: Vec<Vec<(String, Vec<std::ops::Range<f64>>)>> =
         cases.iter().map(|c| held_out_windows_by_id(c, refs, rules)).collect();
+    let stations: Vec<Vec<LatLon>> =
+        cases.iter().map(|c| distance_stations(c, rules.grid_step_m).1).collect();
+    let near = |pts: &[LatLon], e: &LatLon| pts.iter().any(|p| haversine_m(*p, *e) <= rules.passage_tol_m);
     for id in passages {
+        let Some(r) = refs.get(id).filter(|r| !r.is_empty()) else {
+            out.skipped.push(format!("{id} : absent du corpus"));
+            continue;
+        };
         let windowed = by_case.iter().flatten().any(|(x, w)| x == id && !w.is_empty());
-        if !windowed {
-            out.push(format!("{id} : passage sans fenêtre"));
+        if crate::v1::is_temoin_id(id) {
+            let whole = r.len() == 2 && stations.iter().any(|pts| r.iter().all(|e| near(pts, e)));
+            if !whole {
+                out.skipped.push(format!("{id} : témoin aux extrémités non retrouvées"));
+            } else if !windowed {
+                out.skipped.push(format!("{id} : témoin retrouvé sans fenêtre"));
+            }
             continue;
         }
-        if crate::v1::is_temoin_id(id) {
-            let ends = refs.get(id).map_or(&[][..], Vec::as_slice);
-            let whole = cases.iter().any(|c| {
-                let (_, pts) = distance_stations(c, rules.grid_step_m);
-                ends.len() == 2
-                    && ends.iter().all(|e| pts.iter().any(|p| haversine_m(*p, *e) <= rules.passage_tol_m))
-            });
-            if !whole {
-                out.push(format!("{id} : témoin aux extrémités non retrouvées"));
-            }
+        let approached = stations.iter().any(|pts| r.iter().any(|e| near(pts, e)));
+        if !approached {
+            out.not_found.push(id.clone());
+        } else if !windowed {
+            out.skipped.push(format!("{id} : passage retrouvé sans fenêtre"));
         }
     }
     for c in cases {
         let (w, e) = (held_out_windows(c, refs, rules).len(), held_out_extracts(c, refs, rules).len());
         if w != e {
-            out.push(format!("{} : {} fenêtres, {} extraits", c.id, w, e));
+            out.skipped.push(format!("{} : {} fenêtres, {} extraits", c.id, w, e));
         }
     }
     out
@@ -1978,10 +1995,15 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
             skipped.push(json!({"id": t.id, "raison": "extraits tenus à l'écart : trace illisible"}));
             continue;
         };
-        // Aucun passage perdu en silence : élément sans fenêtre, témoin incomplet, fenêtre sans
-        // extrait (`held_out_losses`) → cas sauté.
-        for reason in held_out_losses(&t.passages_masques, &loaded, refs, &rules) {
+        // Aucun passage perdu en silence (`held_out_losses`) : élément retrouvé sans fenêtre,
+        // témoin incomplet, fenêtre sans extrait → cas sauté ; élément qu'aucune station
+        // n'approche (non retrouvé, comme en calibration) → rapporté.
+        let losses = held_out_losses(&t.passages_masques, &loaded, refs, &rules);
+        for reason in losses.skipped {
             skipped.push(json!({"id": t.id, "raison": format!("extraits tenus à l'écart : {reason}")}));
+        }
+        if !losses.not_found.is_empty() {
+            held_out_measured.push(json!({"id": t.id, "passage_non_retrouve": losses.not_found}));
         }
         for mut case in loaded {
             // Points insérés : seulement là où le baro de l'extrait est lu ; bilan non rapporté.
@@ -3031,7 +3053,10 @@ mod tests {
         let r = &w[0].1[0];
         // Stations à 40 m au plus : de 3 015 à 3 085 m, de 8 515 à 8 585 m (pas de 5 m).
         assert!((r.start - 2_515.0).abs() < 1e-6 && (r.end - 9_085.0).abs() < 1e-6, "{r:?}");
-        assert!(held_out_losses(&case.masks, std::slice::from_ref(&case), &refs, &rules).is_empty());
+        assert_eq!(
+            held_out_losses(&case.masks, std::slice::from_ref(&case), &refs, &rules),
+            HeldOutLosses::default()
+        );
         let ex = held_out_extracts(&case, &refs, &rules);
         assert_eq!(ex.len(), 1);
         let (e, ew) = &ex[0];
@@ -3093,11 +3118,13 @@ mod tests {
         assert!(tail.end > total + 400.0, "{tail:?}");
     }
 
-    /// Un élément de `passages_masques` sans fenêtre (aucune station à 40 m), un témoin dont une
-    /// extrémité n'est pas retrouvée, une fenêtre sans extrait : jamais une perte silencieuse,
-    /// chacun est une raison de cas sauté (`measure_pass`).
+    /// Décision de l'utilisateur (2026-11-02) : un élément de `passages_masques` qu'aucune station
+    /// n'approche à 40 m n'est pas un passage (non retrouvé en calibration aussi) : rapporté, sans
+    /// interrompre le jugement. Un élément retrouvé mais perdu au jugement (sans fenêtre), un témoin
+    /// aux extrémités non retrouvées, un élément absent du corpus : cas sautés, jamais une perte
+    /// silencieuse.
     #[test]
-    fn a_passage_without_a_window_is_a_skipped_case() {
+    fn a_passage_not_found_is_reported_and_a_lost_one_is_skipped() {
         let case = meridian_case(10_000.0, 100.0, &[], &["nv-1", "perso-1-s0", "nv-3"]);
         let refs = BTreeMap::from([
             ("nv-1".to_owned(), vec![meridian_point(2_000.0, 5.0)]),
@@ -3106,23 +3133,20 @@ mod tests {
         ]);
         let rules = BenchRules::default();
         let losses = held_out_losses(&case.masks, std::slice::from_ref(&case), &refs, &rules);
-        assert_eq!(
-            losses,
-            vec![
-                "perso-1-s0 : témoin aux extrémités non retrouvées".to_owned(),
-                "nv-3 : passage sans fenêtre".to_owned()
-            ]
-        );
-        // Élément absent du corpus, et cas `.sN` d'une trace : l'élément est cherché sur tous.
+        assert_eq!(losses.skipped, vec!["perso-1-s0 : témoin aux extrémités non retrouvées".to_owned()]);
+        assert_eq!(losses.not_found, vec!["nv-3".to_owned()], "non retrouvé : rapporté");
+        // Cas `.sN` d'une trace : l'élément est cherché sur tous ; élément absent du corpus : sauté.
         let other = meridian_case(3_000.0, 100.0, &[], &["nv-1"]);
         let losses = held_out_losses(&["nv-1".to_owned(), "nv-9".to_owned()], &[other, case], &refs, &rules);
-        assert_eq!(losses, vec!["nv-9 : passage sans fenêtre".to_owned()]);
-        // Cas illisible (abscisses et points envoyés désaccordés) : rien de mesurable, tout est
-        // rapporté.
-        let mut broken = meridian_case(10_000.0, 100.0, &[], &["nv-1"]);
+        assert_eq!(losses.skipped, vec!["nv-9 : absent du corpus".to_owned()]);
+        assert!(losses.not_found.is_empty());
+        // Perdu au jugement : une station approche l'ouvrage (retrouvé), mais le cas ne donne
+        // aucune fenêtre (abscisses et points envoyés désaccordés) → sauté, pas rapporté.
+        let mut broken = meridian_case(10_000.0, 100.0, &[], &["nv-1", "nv-3"]);
         broken.s_ref.pop();
         let losses = held_out_losses(&broken.masks.clone(), &[broken], &refs, &rules);
-        assert_eq!(losses, vec!["nv-1 : passage sans fenêtre".to_owned()]);
+        assert_eq!(losses.skipped, vec!["nv-1 : passage retrouvé sans fenêtre".to_owned()]);
+        assert_eq!(losses.not_found, vec!["nv-3".to_owned()]);
     }
 
     #[test]
