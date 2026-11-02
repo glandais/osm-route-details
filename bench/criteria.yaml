@@ -126,6 +126,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Retard du baro estimé par trace sur toute la trace (δ de −50 à +200 m minimisant l'écart robuste de baro(s + δ) − MNT) et corrigé avant le calcul des références baro d'E5, E3 et E1 ; non estimable = baro brut, rapporté"
   - id: e5_points_baro_bruts   # 2026-11-02
     decision: "E5 : les points de baro d'un côté (minimum 3) sont les points bruts de baro.csv, hors points insérés écartés et fenêtres masquées, pas les stations de la grille de 5 m"
+  - id: e5_points_baro_abscisse_corrigee   # 2026-11-02, après la calibration 2026.11.6-bench2
+    decision: "E5 : les points bruts d'un côté se comptent à leur abscisse corrigée du retard (s_p − δ, §4 ter.9), celle où ils entrent dans le décalage du côté"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
@@ -348,7 +350,7 @@ criteres:
     reference:   # README §4 ter.7, décision de l'utilisateur, 2026-11-01 ; jamais le service
       retire_si: {trace_sur_ouvrage: {couche: streets, attributs: [bridge, tunnel], distance_m_max: 10, angle_deg_max: 20}, marque: e5_trace_sur_ouvrage}
       baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100,
-                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3, points_baro: bruts_hors_inseres_ecartes_et_fenetres_masquees, repli_mnt: false}, marque: e5_reference_incertaine,
+                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3, points_baro: bruts_hors_inseres_ecartes_et_fenetres_masquees, abscisse_points: corrigee_du_retard, repli_mnt: false}, marque: e5_reference_incertaine,
                            traces_en_parties: {partN: recousues_par_abscisse, sN: segment_par_segment}}   # 2026-11-01, après 2026.11.6
       sinon_mnt:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]

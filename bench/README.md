@@ -791,7 +791,10 @@ inchangés.
      l'utilisateur, 2026-11-01). Ces points sont les points bruts de `<id>.baro.csv`, hors points
      insérés écartés (§2.1) et fenêtres masquées, et non les stations de la grille de 5 m : des
      stations interpolées entre un ou deux points bruts n'apportent pas de mesure indépendante
-     (décision de l'utilisateur, 2026-11-02). Effet sur la
+     (décision de l'utilisateur, 2026-11-02). Chaque point compte à son abscisse corrigée du retard, s_p − δ
+     (§4 ter.9) : c'est là qu'il entre dans le décalage du côté (décision de l'utilisateur,
+     2026-11-02, après la calibration 2026.11.6-bench2 ; à l'abscisse de `baro.csv`, `nv-343`
+     comptait 3 points sur un côté qui n'en reçoit qu'un). Effet sur la
      calibration 2026.11.6, sans le service (MNT du cache ; 153 des 174 passages au baro mesurables
      ainsi, les 21 autres sur des traces en plusieurs parties ou sans pas brut au croisement) :
      14 passages incertains, dont 6 sans baro sur l'un des côtés (`nv-272..275` sur `perso-71`,
