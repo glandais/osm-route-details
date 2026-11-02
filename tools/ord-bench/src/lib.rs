@@ -27,6 +27,7 @@ pub mod off_network;
 pub mod osm_surface;
 pub mod ouvrages;
 pub mod privacy;
+pub mod reference_error;
 pub mod report_check;
 pub mod retard;
 pub mod service;
@@ -160,7 +161,14 @@ impl BenchPaths {
 /// n'approche à 40 m (non retrouvé, comme en calibration) : rapporté (`passage_non_retrouve`),
 /// sans interrompre le jugement (décision de l'utilisateur, 2026-11-02). Remise à `None` avec
 /// les règles 2026.11.7 (garde-fou de plausibilité des valeurs IGN). Reste à `None` avec les
-/// règles 2026.11.8 (point de rupture au croisement d'un pont au-dessus de la trace).
+/// règles 2026.11.8 (point de rupture au croisement d'un pont au-dessus de la trace) ; règles du
+/// banc du 2026-11-02, après le jugement V1 (README §4 ter.7 et §4 bis.8 : f38b745, 2e511e5,
+/// 562d729), appliquées dans la même révision, la première campagne des règles 2026.11.8 n'ayant
+/// pas encore tourné : référence MNT d'E5 incertaine (`approche_sur_ouvrage`) si une approche
+/// 20–50 m chevauche un autre ouvrage des tuiles, hors voies de l'ouvrage du dessus, testée avant
+/// la bosse ; plages d'erreur de la référence Valhalla (classe non revêtue sur une voie OSM en
+/// revêtement dur, instantané daté `osm_tags_reference`, empreinte vérifiée) hors décompte de R1,
+/// R2 et R3, rapportées à part.
 pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

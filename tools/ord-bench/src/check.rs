@@ -176,6 +176,10 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
             if let Some((fichier, sum)) = &v1.temoins_tags {
                 verify(&mut report, &paths.resolve(fichier), sum, "temoins_v1_tags");
             }
+            // Instantané des tags OSM des références Valhalla (README §4 bis.8, 562d729).
+            if let Some((fichier, sum, _)) = &v1.osm_tags {
+                verify(&mut report, &paths.resolve(fichier), sum, "osm_tags_reference");
+            }
             let rows = crate::v1::series_rows(paths, v1).unwrap_or_default();
             for p in &v1.planifies {
                 let opened = match crate::v1::planned_serie(&rows, &p.id) {

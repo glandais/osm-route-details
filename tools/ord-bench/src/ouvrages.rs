@@ -1837,6 +1837,19 @@ impl Tiles {
     /// `at`, faisant moins de `max_deg` avec la direction `dir` de la trace (unités globales).
     /// Renvoie la distance (m) et l'angle (°) du segment le plus proche qui convient.
     pub fn structure_along(&self, at: LatLon, dir: [f64; 2], max_m: f64, max_deg: f64) -> Option<(f64, f64)> {
+        self.structure_along_except(at, dir, max_m, max_deg, &BTreeSet::new())
+    }
+
+    /// Comme `structure_along`, sans les lignes `except` (tuile, rang de la ligne dans la tuile) :
+    /// approche d'E5 sur un autre ouvrage, hors voies de l'ouvrage du dessus (f38b745).
+    fn structure_along_except(
+        &self,
+        at: LatLon,
+        dir: [f64; 2],
+        max_m: f64,
+        max_deg: f64,
+        except: &BTreeSet<(TileKey, usize)>,
+    ) -> Option<(f64, f64)> {
         let grid = Shortbread::GRID;
         let u = grid.to_units(at);
         let mpu = grid.metres_per_unit(at.lat);
@@ -1846,9 +1859,11 @@ impl Tiles {
             for dy in -1i64..=1 {
                 let tk = TileKey { z: k.z, x: (k.x as i64 + dx) as u32, y: (k.y as i64 + dy) as u32 };
                 let Some(Some(t)) = self.tiles.get(&tk) else { continue };
-                for l in &t.lines {
+                for (li, l) in t.lines.iter().enumerate() {
                     let a = &t.attrs[l.attr as usize];
-                    if !matches!(a.structure, StructureTag::Bridge | StructureTag::Tunnel) {
+                    if !matches!(a.structure, StructureTag::Bridge | StructureTag::Tunnel)
+                        || except.contains(&(tk, li))
+                    {
                         continue;
                     }
                     for w in l.points.windows(2) {
@@ -1865,6 +1880,86 @@ impl Tiles {
             }
         }
         best
+    }
+
+    /// Voies de l'ouvrage du dessus d'un croisement d'E5 (README §4 ter.7, f38b745) : lignes
+    /// `bridge` ou `tunnel` de la couche `streets` dont un segment passe à `max_m` au plus de l'une
+    /// des stations `span` (point, direction de la trace) en faisant au moins `min_deg` avec la
+    /// trace (le pont du dessus la croise à 20° au moins), tuile de la station et ses 8 voisines ;
+    /// puis, de proche en proche, les morceaux du même élément (attributs identiques) qui les
+    /// prolongent dans les tuiles voisines (un sommet à 1 m au plus d'un morceau retenu).
+    fn crossing_lines(
+        &self,
+        span: &[(LatLon, [f64; 2])],
+        max_m: f64,
+        min_deg: f64,
+    ) -> BTreeSet<(TileKey, usize)> {
+        let grid = Shortbread::GRID;
+        let mut out = BTreeSet::new();
+        let mut around = BTreeSet::new();
+        let is_structure = |a: &ord_domain::street::WayAttrs| {
+            matches!(a.structure, StructureTag::Bridge | StructureTag::Tunnel)
+        };
+        for &(p, dir) in span {
+            let u = grid.to_units(p);
+            let mpu = grid.metres_per_unit(p.lat);
+            let k = grid.tile_of(u);
+            for dx in -2i64..=2 {
+                for dy in -2i64..=2 {
+                    let tk = TileKey { z: k.z, x: (k.x as i64 + dx) as u32, y: (k.y as i64 + dy) as u32 };
+                    around.insert(tk);
+                    if dx.abs() > 1 || dy.abs() > 1 {
+                        continue;
+                    }
+                    let Some(Some(t)) = self.tiles.get(&tk) else { continue };
+                    for (li, l) in t.lines.iter().enumerate() {
+                        if !is_structure(&t.attrs[l.attr as usize]) {
+                            continue;
+                        }
+                        let crosses = l.points.windows(2).any(|w| {
+                            dist_units(u, project_on_segment(u, w[0], w[1]).point) * mpu <= max_m
+                                && axis_angle_deg(dir, [w[1][0] - w[0][0], w[1][1] - w[0][1]]) >= min_deg
+                        });
+                        if crosses {
+                            out.insert((tk, li));
+                        }
+                    }
+                }
+            }
+        }
+        let Some(&(p0, _)) = span.first() else { return out };
+        let mpu = grid.metres_per_unit(p0.lat);
+        let line = |&(tk, li): &(TileKey, usize)| {
+            let t = self.tiles.get(&tk).and_then(Option::as_ref).expect("ligne retenue dans une tuile lue");
+            (format!("{:?}", t.attrs[t.lines[li].attr as usize]), &t.lines[li].points[..])
+        };
+        loop {
+            let kept: Vec<(String, &[[f64; 2]])> = out.iter().map(line).collect();
+            let mut added = Vec::new();
+            for &tk in &around {
+                let Some(Some(t)) = self.tiles.get(&tk) else { continue };
+                for (li, l) in t.lines.iter().enumerate() {
+                    let a = &t.attrs[l.attr as usize];
+                    if out.contains(&(tk, li)) || !is_structure(a) {
+                        continue;
+                    }
+                    let key = format!("{a:?}");
+                    let joins = kept.iter().filter(|(k, _)| *k == key).any(|(_, pts)| {
+                        l.points.iter().any(|&q| {
+                            pts.windows(2)
+                                .any(|w| dist_units(q, project_on_segment(q, w[0], w[1]).point) * mpu <= 1.0)
+                        })
+                    });
+                    if joins {
+                        added.push((tk, li));
+                    }
+                }
+            }
+            if added.is_empty() {
+                return out;
+            }
+            out.extend(added);
+        }
     }
 
     /// Les ouvrages (`tunnel` ou pont) à moins de 15 m de `p` sont-ils dans le graphe vélo ?
@@ -2001,20 +2096,64 @@ pub fn e5_bump(d: &[f64], raw: &[f64], im: usize, ends: [usize; 2]) -> Option<f6
     raw[im].is_finite().then(|| raw[im] - 0.5 * (a + b))
 }
 
-/// Règle de référence d'E5 (README §4 ter.7), dans l'ordre : retiré, baro, MNT. Jamais le service.
+/// Direction de la trace à la station `k` (unités globales) : de la première à la dernière station
+/// à ± 10 m de `k` (`d` croissante). `None` si une seule station.
+fn trace_dir(d: &[f64], pts: &[LatLon], k: usize) -> Option<[f64; 2]> {
+    let (mut a, mut b) = (k, k);
+    while a > 0 && d[k] - d[a - 1] <= E5_DIRECTION_HALF_M {
+        a -= 1;
+    }
+    while b + 1 < d.len() && d[b + 1] - d[k] <= E5_DIRECTION_HALF_M {
+        b += 1;
+    }
+    if a >= b {
+        return None;
+    }
+    let grid = Shortbread::GRID;
+    let (ua, ub) = (grid.to_units(pts[a]), grid.to_units(pts[b]));
+    Some([ub[0] - ua[0], ub[1] - ua[1]])
+}
+
+/// Stations des approches 20–50 m de la bosse : avant `ends[0]` et après `ends[1]`, le long de la
+/// trace (bouts de la plage pour une plage `O`, e9430ac).
+fn approach_stations(d: &[f64], ends: [usize; 2]) -> Vec<usize> {
+    let within = |x: f64| (E5_APPROACH_M.0..=E5_APPROACH_M.1).contains(&x);
+    let before = (0..=ends[0]).rev().take_while(|&k| d[ends[0]] - d[k] <= E5_APPROACH_M.1);
+    let after = (ends[1]..d.len()).take_while(|&k| d[k] - d[ends[1]] <= E5_APPROACH_M.1);
+    before
+        .filter(|&k| within(d[ends[0]] - d[k]))
+        .chain(after.filter(|&k| within(d[k] - d[ends[1]])))
+        .collect()
+}
+
+/// Une approche 20–50 m chevauche un autre ouvrage (README §4 ter.7, f38b745, validé en 2e511e5) :
+/// l'une de ses stations est à 10 m au plus d'une ligne `bridge` ou `tunnel` de la couche
+/// `streets` (tuile de la station et ses 8 voisines, toutes classes) qui fait moins de 20° avec la
+/// trace, le test de la trace sur un ouvrage au croisement ; les voies de l'ouvrage du dessus
+/// (`Tiles::crossing_lines`, lues sur les stations de `ends[0]` à `ends[1]` et au croisement) ne
+/// comptent pas.
+fn approach_on_structure(x: &E5Input<'_>, tiles: &Tiles) -> bool {
+    let (d, pts) = (x.d, x.pts);
+    let mut span: Vec<(LatLon, [f64; 2])> =
+        (x.ends[0]..=x.ends[1]).filter_map(|k| Some((pts[k], trace_dir(d, pts, k)?))).collect();
+    span.extend(trace_dir(d, pts, x.im).map(|v| (x.at, v)));
+    let above = tiles.crossing_lines(&span, E5_ON_STRUCTURE_M, E5_ON_STRUCTURE_DEG);
+    approach_stations(d, x.ends).into_iter().any(|k| {
+        trace_dir(d, pts, k).is_some_and(|v| {
+            tiles.structure_along_except(pts[k], v, E5_ON_STRUCTURE_M, E5_ON_STRUCTURE_DEG, &above).is_some()
+        })
+    })
+}
+
+/// Règle de référence d'E5 (README §4 ter.7), dans l'ordre : retiré, baro, MNT (sans donnée,
+/// approche sur un autre ouvrage, bosse). Jamais le service.
 pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
     let (d, im) = (x.d, x.im);
-    let near: Vec<usize> = (0..d.len()).filter(|&k| (d[k] - d[im]).abs() <= E5_DIRECTION_HALF_M).collect();
-    if let (Some(tiles), Some(&a), Some(&b)) = (x.tiles, near.first(), near.last()) {
-        let grid = Shortbread::GRID;
-        let (ua, ub) = (grid.to_units(x.pts[a]), grid.to_units(x.pts[b]));
-        let dir = [ub[0] - ua[0], ub[1] - ua[1]];
-        if a < b {
-            if let Some((distance_m, angle_deg)) =
-                tiles.structure_along(x.at, dir, E5_ON_STRUCTURE_M, E5_ON_STRUCTURE_DEG)
-            {
-                return E5Reference::Retire { distance_m, angle_deg };
-            }
+    if let (Some(tiles), Some(dir)) = (x.tiles, trace_dir(d, x.pts, im)) {
+        if let Some((distance_m, angle_deg)) =
+            tiles.structure_along(x.at, dir, E5_ON_STRUCTURE_M, E5_ON_STRUCTURE_DEG)
+        {
+            return E5Reference::Retire { distance_m, angle_deg };
         }
     }
     if let Some(baro) = x.baro.filter(|b| b[im].is_finite()) {
@@ -2061,6 +2200,16 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
         .any(|k| !x.raw[k].is_finite() || x.ign.is_some_and(|g| !g[k]));
     if nodata {
         return E5Reference::Indisponible { raison: "mnt_sans_donnee" };
+    }
+    // Approche sur un autre ouvrage (f38b745, 2e511e5) : testée avant la bosse.
+    if x.tiles.is_some_and(|t| approach_on_structure(x, t)) {
+        return E5Reference::Incertaine {
+            reference: "mnt",
+            raison: "approche_sur_ouvrage",
+            z: x.raw[im],
+            offset_m: None,
+            sides: None,
+        };
     }
     match e5_bump(d, x.raw, im, x.ends) {
         Some(b) if b > E5_DECK_BUMP_M => E5Reference::Indisponible { raison: "mnt_lit_le_tablier" },
@@ -3933,6 +4082,149 @@ mod e5_tests {
         // 3 050), pas 2 940 (brut 3 000, qui serait dedans à l'abscisse de `baro.csv`).
         let kept = crate::campaign::e5_baro_points(&corrected, &[2_960.0..3_020.0], None);
         assert!(kept.contains(&2_940.0) && !kept.contains(&2_990.0), "{kept:?}");
+    }
+
+    /// Tuile de lignes données en mètres (est, nord) autour de `mid`.
+    /// Ligne en mètres : nature d'ouvrage, `highway`, sommets (est, nord).
+    type LineM<'a> = (StructureTag, &'a str, Vec<(f64, f64)>);
+
+    fn tiles_m(mid: LatLon, lines: Vec<LineM<'_>>) -> Tiles {
+        let grid = Shortbread::GRID;
+        let m_lat = 111_320.0;
+        let m_lon = m_lat * mid.lat.to_radians().cos();
+        let key = grid.tile_of(grid.to_units(mid));
+        let mut t = StreetTile::empty(key);
+        for (k, (structure, kind, pts)) in lines.into_iter().enumerate() {
+            t.attrs.push(super::tests::way_attrs(kind, structure));
+            t.lines.push(ord_domain::street::StreetLine {
+                attr: k as u32,
+                points: pts
+                    .iter()
+                    .map(|&(e, n)| grid.to_units(LatLon::new(mid.lat + n / m_lat, mid.lon + e / m_lon)))
+                    .collect(),
+                cut: [false, false],
+            });
+        }
+        Tiles { tiles: BTreeMap::from([(key, Some(Arc::new(t)))]), bridges: BTreeMap::new() }
+    }
+
+    fn approche_sur_ouvrage(z: f64) -> E5Reference {
+        E5Reference::Incertaine {
+            reference: "mnt",
+            raison: "approche_sur_ouvrage",
+            z,
+            offset_m: None,
+            sides: None,
+        }
+    }
+
+    /// f38b745, 2e511e5 : trace nord-sud sous un pont est-ouest ; une approche (20–50 m) sur un
+    /// pont emprunté (ligne nord-sud à ≤ 10 m, < 20°) rend la référence MNT incertaine, avant la
+    /// bosse ; un ouvrage à plus de 10 m, ou qui croise l'approche, ne compte pas.
+    #[test]
+    fn an_approach_on_another_structure_makes_the_dtm_uncertain() {
+        let mid = LatLon::new(47.2, -1.5);
+        let (d, pts) = line(mid, false);
+        let above = (StructureTag::Bridge, "primary", vec![(-60.0, 0.0), (60.0, 0.0)]);
+        let flat = dtm(&d, 0.0);
+        let deck = dtm(&d, 4.0);
+        // Pont emprunté de 25 à 60 m au nord du croisement, à 3 m de l'axe de la trace.
+        for (structure, kind) in [(StructureTag::Bridge, "cycleway"), (StructureTag::Tunnel, "rail")] {
+            let tiles = tiles_m(mid, vec![above.clone(), (structure, kind, vec![(3.0, 25.0), (3.0, 60.0)])]);
+            assert_eq!(
+                e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))),
+                approche_sur_ouvrage(100.0)
+            );
+            // Testée avant la bosse : une bosse de 4 m ne la rend pas indisponible.
+            assert_eq!(
+                e5_reference(&input(&d, &pts, &deck, None, Some(&tiles))),
+                approche_sur_ouvrage(104.0)
+            );
+        }
+        // Pont parallèle à 12 m de l'axe, ou pont qui croise l'approche à 30 m : compté au MNT.
+        for other in [vec![(12.0, 25.0), (12.0, 60.0)], vec![(-60.0, 30.0), (60.0, 30.0)]] {
+            let tiles = tiles_m(mid, vec![above.clone(), (StructureTag::Bridge, "cycleway", other)]);
+            assert_eq!(
+                e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))),
+                E5Reference::Mnt { z: 100.0 }
+            );
+        }
+        // Voie ordinaire le long de l'approche : compté au MNT.
+        let tiles =
+            tiles_m(mid, vec![above, (StructureTag::None, "cycleway", vec![(3.0, 25.0), (3.0, 60.0)])]);
+        assert_eq!(e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))), E5Reference::Mnt { z: 100.0 });
+    }
+
+    /// f38b745 : les voies de l'ouvrage du dessus ne comptent pas, même quand la bretelle du pont
+    /// revient le long de l'approche ; le même tracé, porté par un autre ouvrage, compte.
+    #[test]
+    fn the_ways_of_the_structure_above_do_not_count() {
+        let mid = LatLon::new(47.2, -1.5);
+        let (d, pts) = line(mid, false);
+        let flat = dtm(&d, 0.0);
+        // Pont est-ouest qui croise la trace puis revient vers le nord à 6 m de son axe.
+        let ramp = vec![(-60.0, 0.0), (25.0, 0.0), (6.0, 25.0), (6.0, 60.0)];
+        let tiles = tiles_m(mid, vec![(StructureTag::Bridge, "primary", ramp)]);
+        assert_eq!(e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))), E5Reference::Mnt { z: 100.0 });
+        // Le pont du dessus coupé en deux morceaux (bord de tuile) qui se prolongent : toujours exclu.
+        let tiles = tiles_m(
+            mid,
+            vec![
+                (StructureTag::Bridge, "primary", vec![(-60.0, 0.0), (25.0, 0.0), (6.0, 25.0)]),
+                (StructureTag::Bridge, "primary", vec![(6.0, 25.0), (6.0, 60.0)]),
+            ],
+        );
+        assert_eq!(e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))), E5Reference::Mnt { z: 100.0 });
+        // Un autre pont (attributs différents) le long de l'approche : compté comme ouvrage.
+        let tiles = tiles_m(
+            mid,
+            vec![
+                (StructureTag::Bridge, "primary", vec![(-60.0, 0.0), (25.0, 0.0), (6.0, 25.0)]),
+                (StructureTag::Bridge, "cycleway", vec![(6.0, 25.0), (6.0, 60.0)]),
+            ],
+        );
+        assert_eq!(e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))), approche_sur_ouvrage(100.0));
+    }
+
+    /// f38b745 : plage `O`, approches mesurées depuis les bouts de la plage, comme la bosse.
+    #[test]
+    fn the_approaches_on_a_structure_of_an_o_range_start_from_its_ends() {
+        let mid = LatLon::new(47.2, -1.5);
+        let (d, pts) = line(mid, false);
+        let flat = dtm(&d, 0.0);
+        // Pont emprunté de 25 à 35 m au nord du milieu : sous la plage `O` de ± 40 m.
+        let tiles = tiles_m(mid, vec![(StructureTag::Bridge, "cycleway", vec![(3.0, 25.0), (3.0, 35.0)])]);
+        let x = E5Input { ends: [32, 48], ..input(&d, &pts, &flat, None, Some(&tiles)) };
+        assert_eq!(e5_reference(&x), E5Reference::Mnt { z: 100.0 });
+        // Depuis le milieu, il serait sur l'approche.
+        assert_eq!(e5_reference(&input(&d, &pts, &flat, None, Some(&tiles))), approche_sur_ouvrage(100.0));
+        // De 65 à 80 m au nord du milieu : sur l'approche depuis le bout de la plage.
+        let tiles = tiles_m(mid, vec![(StructureTag::Bridge, "cycleway", vec![(3.0, 65.0), (3.0, 80.0)])]);
+        let x = E5Input { ends: [32, 48], ..input(&d, &pts, &flat, None, Some(&tiles)) };
+        assert_eq!(e5_reference(&x), approche_sur_ouvrage(100.0));
+    }
+
+    /// La référence au baro n'est pas concernée : l'approche sur un ouvrage ne vise que le MNT.
+    #[test]
+    fn an_approach_on_a_structure_leaves_the_baro_reference() {
+        let (d, pts, raw) = long_line();
+        let mid = pts[400];
+        let baro = vec![103.0; d.len()];
+        let tiles = tiles_m(mid, vec![(StructureTag::Bridge, "cycleway", vec![(3.0, 25.0), (3.0, 60.0)])]);
+        let x = E5Input {
+            d: &d,
+            pts: &pts,
+            raw: &raw,
+            ign: None,
+            baro: Some(&baro),
+            baro_points: &d,
+            tiles: Some(&tiles),
+            at: mid,
+            im: 400,
+            ends: [400, 400],
+        };
+        assert!(matches!(e5_reference(&x), E5Reference::Baro { .. }), "{:?}", e5_reference(&x));
+        assert_eq!(e5_reference(&E5Input { baro: None, ..x }), approche_sur_ouvrage(100.0));
     }
 
     /// e9430ac : plage `O` de 80 m, approches de la bosse depuis ses bouts ; mesurées depuis le

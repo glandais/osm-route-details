@@ -106,6 +106,11 @@ pub struct PersoV1 {
     /// δ des traces de calibration, appliqué à leurs extraits au jugement ; `None` : entrée
     /// absente du manifest, extraits au baro brut.
     pub retard_gele: Option<(String, String)>,
+    /// Date des données du serveur Valhalla des références de revêtement (`recalage.donnees_serveur`).
+    pub donnees_serveur: Option<String>,
+    /// Instantané des tags OSM des voies de ces références (`osm_tags_reference` : fichier,
+    /// empreinte, date ; README §4 bis.8).
+    pub osm_tags: Option<(String, String, String)>,
     pub planifies: Vec<Planned>,
     pub traces: BTreeSet<String>,
 }
@@ -249,6 +254,14 @@ impl Manifest {
                     temoins_tags: p.get("temoins_v1_tags").map(|_| pair("temoins_v1_tags")).transpose()?,
                     series: pair("series_v1")?,
                     retard_gele: p.get("retard_baro_gele").map(|_| pair("retard_baro_gele")).transpose()?,
+                    donnees_serveur: p.get("recalage").and_then(|r| s(r, "donnees_serveur")),
+                    osm_tags: match p.get("osm_tags_reference") {
+                        Some(e) => {
+                            let (fichier, sum) = pair("osm_tags_reference")?;
+                            Some((fichier, sum, req(e, "date", "osm_tags_reference")?))
+                        }
+                        None => None,
+                    },
                     planifies,
                     traces: ids,
                 })
