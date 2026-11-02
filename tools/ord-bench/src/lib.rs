@@ -168,7 +168,8 @@ impl BenchPaths {
 /// 20–50 m chevauche un autre ouvrage des tuiles, hors voies de l'ouvrage du dessus, testée avant
 /// la bosse ; plages d'erreur de la référence Valhalla (classe non revêtue sur une voie OSM en
 /// revêtement dur, instantané daté `osm_tags_reference`, empreinte vérifiée) hors décompte de R1,
-/// R2 et R3, rapportées à part.
+/// R2 et R3, rapportées à part. Reste à `None` avec les règles 2026.11.9 (`surface` brut et
+/// `bicycle` normalisé des tuiles VersaTiles shortbread@1.1).
 pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

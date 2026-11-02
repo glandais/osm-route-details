@@ -132,9 +132,9 @@ pub trait StreetSchemaAdapter: Send + Sync {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SurfaceFidelity {
-    /// paved / unpaved (VersaTiles, OpenFreeMap).
+    /// paved / unpaved (VersaTiles shortbread@1.0, OpenFreeMap).
     Grouped,
-    /// `surface` brut (tuiles maison, V2).
+    /// `surface` brut (VersaTiles shortbread@1.1, tuiles maison V2).
     Raw,
 }
 

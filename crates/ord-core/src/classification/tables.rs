@@ -56,7 +56,10 @@ pub const BICYCLE_YES: &[&str] = &[
     "mtb",
 ];
 
-/// Valeurs `bicycle=*` qui la ferment.
+/// Valeurs `bicycle=*` qui la ferment. VersaTiles shortbread@1.1 normalise `bicycle` en `yes` /
+/// `limited` / `no` : `no` ferme (route motorisée : état « hors graphe », `bicycle_forbidden`) ;
+/// `limited` n'est dans aucune des deux listes, il ne ferme rien et laisse l'accès par défaut de la
+/// classe (règles 2026.11.9 ; fermer `limited` demanderait une décision de l'utilisateur).
 pub const BICYCLE_NO: &[&str] = &["no", "agricultural", "discouraged", "forestry", "emergency", "psv"];
 
 /// Voies piétonnes : malus d'émission (Valhalla rend le trottoir plus cher que la chaussée).
@@ -80,6 +83,79 @@ pub const INFERRED_PAVED: &[&str] = &[
 ];
 pub const INFERRED_UNPAVED: &[&str] =
     &["track", "path", "footway", "pedestrian", "bridleway", "sidewalk", "crossing"];
+
+/// Valeur `surface` brute → surface Valhalla (`pbfgraphparser.cc`, `tag_handlers_["surface"]`,
+/// recopiée par osm-surface `surface_from_osm`, `src/valhalla.rs`), dans l'ordre de Valhalla : la
+/// valeur passée en minuscules est cherchée comme **sous-chaîne** (`=` : égalité stricte), la
+/// première entrée qui correspond gagne. La classe en découle comme au banc (`Class::of_valhalla`,
+/// README du banc §4) : revêtu = `paved_smooth`, `paved`, `paved_rough` ; non revêtu = pire que
+/// `paved_rough`. Une valeur qui ne correspond à rien (`bicouche`, `tiles`, `none`, fautes…) passe à
+/// la règle suivante (`tracktype`, puis `kind`), comme chez Valhalla : sa source n'est pas `tagged`.
+pub const RAW_SURFACE: &[(&str, &str)] = &[
+    ("unpaved", "gravel"),
+    ("paved", "paved_smooth"),
+    ("pavement", "paved_smooth"),
+    ("asphalt", "paved_smooth"),
+    ("concrete", "paved_smooth"),
+    ("cement", "paved_smooth"),
+    ("chipseal", "paved_smooth"),
+    ("metal", "paved_smooth"),
+    ("tartan", "paved"),
+    ("pavingstone", "paved"),
+    ("paving_stones", "paved"),
+    ("sett", "paved"),
+    ("grass_paver", "paved"),
+    ("rubber", "paved"),
+    ("acrylic", "paved"),
+    ("plastic", "paved"),
+    ("cobblestone", "paved_rough"),
+    ("brick", "paved_rough"),
+    ("=stone", "paved_rough"),
+    ("compacted", "compacted"),
+    ("wood", "compacted"),
+    ("boardwalk", "compacted"),
+    ("dirt", "dirt"),
+    ("natural", "dirt"),
+    ("earth", "dirt"),
+    ("ground", "dirt"),
+    ("mud", "dirt"),
+    ("clay", "dirt"),
+    ("laterite", "dirt"),
+    ("soil", "dirt"),
+    ("gravel", "gravel"),
+    ("pebblestone", "gravel"),
+    ("sand", "gravel"),
+    ("grass", "path"),
+    ("artificial_turf", "path"),
+    ("rock", "path"),
+    ("stepping_stones", "path"),
+];
+
+/// Surfaces Valhalla revêtues (`unpaved` de Valhalla : pire que `paved_rough`).
+pub const VALHALLA_PAVED: &[&str] = &["paved_smooth", "paved", "paved_rough"];
+
+/// Surface Valhalla d'une valeur `surface` brute (table [`RAW_SURFACE`]) ; `None` : non reconnue.
+pub fn valhalla_surface(raw: &str) -> Option<&'static str> {
+    let v = raw.to_ascii_lowercase();
+    RAW_SURFACE
+        .iter()
+        .find(|(pat, _)| match pat.strip_prefix('=') {
+            Some(exact) => v == exact,
+            None => v.contains(pat),
+        })
+        .map(|(_, s)| *s)
+}
+
+/// Classe d'une valeur `surface` brute ; `None` : non reconnue, règle suivante.
+pub fn raw_surface_class(raw: &str) -> Option<SurfaceClass> {
+    valhalla_surface(raw).map(|s| {
+        if VALHALLA_PAVED.contains(&s) {
+            SurfaceClass::Paved
+        } else {
+            SurfaceClass::Unpaved
+        }
+    })
+}
 
 /// `way_kind` par `kind` ; le reste donne `unknown`.
 pub const WAY_KINDS: &[(&str, WayKind)] = &[
@@ -126,13 +202,19 @@ pub fn bicycle_closed(a: &WayAttrs) -> bool {
     !a.rail && matches!(way_kind(&a.highway), WayKind::MajorRoad | WayKind::MinorRoad) && !bicycle_routable(a)
 }
 
-/// Revêtement : tag regroupé, puis `tracktype`, puis `kind`, sinon inconnu.
+/// Revêtement : tag (regroupé ou brut), puis `tracktype`, puis `kind`, sinon inconnu.
 pub fn surface(a: &WayAttrs) -> (SurfaceClass, SurfaceSource) {
     match &a.surface {
         SurfaceTag::Grouped(PavedGroup::Paved) => return (SurfaceClass::Paved, SurfaceSource::Tagged),
         SurfaceTag::Grouped(PavedGroup::Unpaved) => return (SurfaceClass::Unpaved, SurfaceSource::Tagged),
-        // `Raw` (V2) : table brute à venir ; une valeur inconnue passe à la règle suivante.
-        SurfaceTag::Raw(_) | SurfaceTag::Absent => {}
+        // Valeur brute (VersaTiles shortbread@1.1, tuiles maison V2) : table de Valhalla ; une valeur
+        // non reconnue passe à la règle suivante.
+        SurfaceTag::Raw(v) => {
+            if let Some(class) = raw_surface_class(v) {
+                return (class, SurfaceSource::Tagged);
+            }
+        }
+        SurfaceTag::Absent => {}
     }
     match a.tracktype {
         Some(TrackType::Grade1) => return (SurfaceClass::Paved, SurfaceSource::InferredTracktype),
@@ -157,6 +239,7 @@ pub fn way_kind(kind: &str) -> WayKind {
 pub fn canonical() -> String {
     format!(
         "{ROUTABLE_KINDS:?}|{BICYCLE_CLOSED_KINDS:?}|{BICYCLE_YES:?}|{BICYCLE_NO:?}|{FOOTWAY_LIKE:?}|\
-         {INFERRED_PAVED:?}|{INFERRED_UNPAVED:?}|{WAY_KINDS:?}|grade1=paved,grade2..5=unpaved"
+         {INFERRED_PAVED:?}|{INFERRED_UNPAVED:?}|{WAY_KINDS:?}|grade1=paved,grade2..5=unpaved|\
+         {RAW_SURFACE:?}|{VALHALLA_PAVED:?}|raw=lowercase,contains,first"
     )
 }

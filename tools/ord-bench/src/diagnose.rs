@@ -47,7 +47,8 @@ fn tag(a: &WayAttrs) -> String {
     let surface = match a.surface {
         SurfaceTag::Grouped(PavedGroup::Paved) => "paved",
         SurfaceTag::Grouped(PavedGroup::Unpaved) => "unpaved",
-        _ => "-",
+        SurfaceTag::Raw(ref v) => v,
+        SurfaceTag::Absent => "-",
     };
     let tt = a.tracktype.map_or("-".to_owned(), |t| format!("grade{}", t as u8 + 1));
     let st = match a.structure {

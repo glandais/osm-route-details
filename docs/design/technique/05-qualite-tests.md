@@ -48,7 +48,7 @@ Par composant (noms de doc 01 §4), les cas qui **doivent** exister, en plus des
   plus de 16 000 points d'entrée ou plus de 200 km → 413 ; les bornes ne portent que sur l'**entrée** :
   200 km en `distance` à 5 m (≈ 40 000 points de sortie) → 200, jamais 413 (doc 01 §10, doc 02 §7).
 - **Classification** : table de T03 §7 exécutée **en table** (`rstest`) : chaque ligne `(kind,
-  surface regroupée, tracktype)` → `(surface.class, surface.source, way_kind)`. Un test d'exhaustivité
+  surface regroupée ou brute, tracktype)` → `(surface.class, surface.source, way_kind)`. Un test d'exhaustivité
   énumère toutes les combinaisons d'attributs neutres connues et vérifie qu'aucune ne panique et que
   `source = none` ⇔ `class = unknown`.
 - **Adaptateur élévation** : valeur au **centre** du pixel (`VC/elevation/.../ElevationCalculator.kt:92-94`) :

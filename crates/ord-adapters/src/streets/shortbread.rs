@@ -1,8 +1,14 @@
-//! Schéma Shortbread 1.0 de VersaTiles, couche `streets` (T03 §3.2, exploration 02 §4).
+//! Schéma Shortbread de VersaTiles, couche `streets` (T03 §3.2, exploration 02 §4).
 //!
 //! Clés lues comme osm-surface (`src/mvt.rs`, Apache-2.0, © Gabriel Landais) : `kind`, `surface`,
-//! `tracktype`, `service`, `bicycle`, `link`, `rail`, `bridge`, `tunnel`. `oneway` et `horse` ne
-//! sont plus lus.
+//! `tracktype`, `service`, `bicycle`, `link`, `rail`, `bridge`, `tunnel`. `oneway`, `horse`, `foot`
+//! et `motorcar` ne sont pas lus.
+//!
+//! Deux générations de tuiles sont acceptées (règles 2026.11.9) :
+//! - `shortbread@1.0` (servi jusqu'en octobre 2026) : `surface` regroupé `paved` / `unpaved` ;
+//! - `shortbread@1.1` (build Planetiler du 2026-10-27) : `surface` = valeur OSM brute, rangée par
+//!   la table de la classification (`classification::tables::RAW_SURFACE`) ; `bicycle` normalisé
+//!   `yes` / `limited` / `no`.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -74,12 +80,15 @@ fn attrs_of(properties: &[(String, MvtValue)], interner: &mut Interner) -> WayAt
     for (k, v) in properties {
         match k.as_str() {
             "kind" => a.highway = interner.sym(&v.as_string()),
-            // VersaTiles ne sert que `paved` / `unpaved` ; toute autre valeur est ignorée.
+            // `paved` / `unpaved` : regroupement de shortbread@1.0 ; toute autre valeur est brute
+            // (shortbread@1.1), classée par la table de la classification, jamais ici.
             "surface" => {
-                a.surface = match v.as_string().as_str() {
+                let raw = v.as_string();
+                a.surface = match raw.trim() {
+                    "" => SurfaceTag::Absent,
                     "paved" => SurfaceTag::Grouped(PavedGroup::Paved),
                     "unpaved" => SurfaceTag::Grouped(PavedGroup::Unpaved),
-                    _ => SurfaceTag::Absent,
+                    t => SurfaceTag::Raw(interner.sym(t)),
                 }
             }
             "tracktype" => a.tracktype = track_type(&v.as_string()),
@@ -115,7 +124,8 @@ impl StreetSchemaAdapter for Shortbread {
 
     fn capabilities(&self) -> SchemaCapabilities {
         SchemaCapabilities {
-            surface: SurfaceFidelity::Grouped,
+            // Brut depuis shortbread@1.1 ; le regroupement de 1.0 reste accepté au décodage.
+            surface: SurfaceFidelity::Raw,
             tracktype: true,
             layer: false,
             ford_ways: false,
@@ -214,6 +224,72 @@ mod tests {
             for p in &l.points {
                 assert!(p[0] >= x0 && p[0] <= x0 + 4096.0 && p[1] >= y0 && p[1] <= y0 + 4096.0);
             }
+        }
+    }
+
+    fn decode(features: &[EncodeFeature]) -> StreetTile {
+        let key = TileKey { z: 14, x: 10, y: 20 };
+        Shortbread.decode(key, &encode_line_layer("streets", 4096, features)).unwrap()
+    }
+
+    fn feature(props: &[(&str, &str)]) -> EncodeFeature {
+        EncodeFeature {
+            properties: props.iter().map(|(k, v)| ((*k).into(), s(v))).collect(),
+            lines: vec![vec![[10, 10], [100, 10]]],
+        }
+    }
+
+    /// shortbread@1.1 (VersaTiles, build du 2026-10-27) : `surface` brut, `bicycle` normalisé.
+    #[test]
+    fn new_schema_raw_surface_and_normalized_bicycle() {
+        let tile = decode(&[
+            feature(&[("kind", "residential"), ("surface", "asphalt"), ("bicycle", "yes")]),
+            feature(&[("kind", "track"), ("surface", "compacted"), ("tracktype", "grade2")]),
+            feature(&[("kind", "path"), ("surface", "sett"), ("bicycle", "limited")]),
+            feature(&[("kind", "service"), ("surface", " gravel "), ("bicycle", "no")]),
+        ]);
+        let got: Vec<(&str, SurfaceTag, Option<&str>)> =
+            tile.attrs.iter().map(|a| (&*a.highway, a.surface.clone(), a.bicycle.as_deref())).collect();
+        let raw = |v: &str| SurfaceTag::Raw(Arc::from(v));
+        assert_eq!(
+            got,
+            vec![
+                ("residential", raw("asphalt"), Some("yes")),
+                ("track", raw("compacted"), None),
+                ("path", raw("sett"), Some("limited")),
+                ("service", raw("gravel"), Some("no")),
+            ]
+        );
+        assert_eq!(tile.attrs[1].tracktype, Some(TrackType::Grade2));
+        assert_eq!(Shortbread.capabilities().surface, SurfaceFidelity::Raw);
+    }
+
+    /// shortbread@1.0 (tuiles d'avant octobre 2026) : `paved` / `unpaved` restent regroupés, une
+    /// valeur vide reste absente.
+    #[test]
+    fn old_schema_grouped_surface_is_still_accepted() {
+        let tile = decode(&[
+            feature(&[("kind", "primary"), ("surface", "paved")]),
+            feature(&[("kind", "track"), ("surface", "unpaved"), ("bicycle", "designated")]),
+            feature(&[("kind", "footway"), ("surface", "")]),
+        ]);
+        assert_eq!(tile.attrs[0].surface, SurfaceTag::Grouped(PavedGroup::Paved));
+        assert_eq!(tile.attrs[1].surface, SurfaceTag::Grouped(PavedGroup::Unpaved));
+        assert_eq!(tile.attrs[1].bicycle.as_deref(), Some("designated"));
+        assert_eq!(tile.attrs[2].surface, SurfaceTag::Absent);
+    }
+
+    /// Valeurs inconnues ou ambiguës : l'adaptateur les garde brutes, telles quelles (le classement
+    /// est celui de la classification) ; deux valeurs brutes distinctes font deux classes.
+    #[test]
+    fn unknown_surface_values_stay_raw() {
+        let values = ["unhewn_cobblestone", "wood", "metal", "bicouche", "asphalt;ground", "Rough"];
+        let features: Vec<EncodeFeature> =
+            values.iter().map(|v| feature(&[("kind", "residential"), ("surface", v)])).collect();
+        let tile = decode(&features);
+        assert_eq!(tile.attrs.len(), values.len());
+        for (a, v) in tile.attrs.iter().zip(values) {
+            assert_eq!(a.surface, SurfaceTag::Raw(Arc::from(v)));
         }
     }
 

@@ -332,8 +332,10 @@ ou aux frontières) : l'écart est jugé négligeable pour l'usage vélo et rand
   `compacted`, `gravel`, `dirt`, `grass`. Il est **absent en v1**. Il n'est rempli qu'avec les tuiles
   maison (V2). Un client doit tolérer une valeur inconnue et la ramener à `class`.
 - **`surface.source`** :
-  - `tagged` : valeur explicite dans la source. Avec VersaTiles, c'est déjà un regroupement
-    paved/unpaved ;
+  - `tagged` : valeur explicite dans la source. Avec VersaTiles shortbread@1.0, c'était déjà un
+    regroupement paved/unpaved ; depuis shortbread@1.1 (build du 2026-10-27), la valeur OSM brute est
+    rangée par la table de Valhalla (T03 §7, règles 2026.11.9). Une valeur que cette table ne
+    reconnaît pas n'est pas `tagged` : la règle suivante s'applique ;
   - `inferred_tracktype` : déduit du `tracktype` ;
   - `inferred_highway` : déduit de la classe de voie, par les règles par défaut de la doc 02 §6
     (route → paved, track → unpaved…) ;

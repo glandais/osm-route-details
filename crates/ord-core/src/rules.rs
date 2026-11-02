@@ -39,7 +39,9 @@ use serde::Serialize;
 // mêlés de no-data par le WMS lus comme du no-data, repli comme sur un vrai no-data.
 // 2026.11.8 : point de rupture `overpass_crossing` au croisement d'un pont qui enjambe la trace
 // au sol (mode `input_with_breakpoints`, api 1.4).
-pub const RULES_VERSION: &str = "2026.11.8";
+// 2026.11.9 : `surface` brut des tuiles VersaTiles shortbread@1.1 rangé par la table de Valhalla
+// (`classification::tables::RAW_SURFACE`, source `tagged`) ; `bicycle` normalisé yes/limited/no.
+pub const RULES_VERSION: &str = "2026.11.9";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -489,6 +491,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.8", "a2629035ede49475".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.9", "bc3d62b5334df210".to_owned()));
     }
 }

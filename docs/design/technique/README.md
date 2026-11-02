@@ -82,6 +82,16 @@ vérifié par `ord-bench check` avant toute campagne.
       de la référence). Nouvelle raison `overpass_crossing`, classe A (jamais retirée par le
       plafond), rattachée à un point d'entrée à moins de 0,5 m seulement (`overpass_snap_m`) ; la liste des raisons est ouverte : ajout au contrat, api 1.4, règles 2026.11.8,
       T04 §6.1.
+    - les tuiles VersaTiles passent au schéma shortbread@1.1 (réplication OSM du 2026-10-19, build
+      Planetiler du 2026-10-27, lu dans le TileJSON du serveur) : `surface` porte la valeur OSM
+      brute, `bicycle` vaut `yes` / `limited` / `no`. Le service s'y adapte sans changer le
+      contrat : la valeur brute est rangée dans `surface.class` (`paved` / `unpaved`, vocabulaire
+      inchangé) par la table de Valhalla, la même que le regroupement de la référence du banc,
+      avec `surface.source: tagged` ; une valeur que la table ne reconnaît pas passe à la règle
+      suivante (`inferred_*`). `paved` / `unpaved` de shortbread@1.0 restent acceptés. Pour
+      `bicycle`, seul `no` ferme : une route motorisée `bicycle=no` devient l'état « hors graphe »
+      (`bicycle_forbidden`, api 1.1) ; `limited` garde l'accès par défaut de la classe. Règles
+      2026.11.9, api inchangée (1.4), T03 §3.2, §4.2 et §7.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

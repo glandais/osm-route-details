@@ -181,3 +181,102 @@ fn public_values_are_snake_case() {
     assert_eq!(WayKind::MajorRoad.as_str(), "major_road");
     assert_eq!(StructureSource::OsmHeuristic.as_str(), "osm_heuristic");
 }
+
+fn raw(kind: &str, surface: &str, tracktype: Option<TrackType>) -> WayAttrs {
+    WayAttrs { surface: SurfaceTag::Raw(Arc::from(surface)), tracktype, ..way(kind) }
+}
+
+/// Valeurs brutes (VersaTiles shortbread@1.1) : classe du regroupement de Valhalla, celui du banc
+/// (`Class::of_valhalla`), source `tagged` ; les valeurs les plus fréquentes du cache de banc et
+/// les cas ambigus.
+#[test]
+fn raw_surface_follows_the_valhalla_grouping() {
+    use super::tables::valhalla_surface;
+    let rows: &[(&str, Option<&str>, C)] = &[
+        ("asphalt", Some("paved_smooth"), C::Paved),
+        ("concrete", Some("paved_smooth"), C::Paved),
+        ("concrete:plates", Some("paved_smooth"), C::Paved),
+        ("chipseal", Some("paved_smooth"), C::Paved),
+        ("metal", Some("paved_smooth"), C::Paved),
+        ("metal_grid", Some("paved_smooth"), C::Paved),
+        ("paving_stones", Some("paved"), C::Paved),
+        ("sett", Some("paved"), C::Paved),
+        ("grass_paver", Some("paved"), C::Paved),
+        ("cobblestone", Some("paved_rough"), C::Paved),
+        ("unhewn_cobblestone", Some("paved_rough"), C::Paved),
+        ("brick", Some("paved_rough"), C::Paved),
+        ("stone", Some("paved_rough"), C::Paved),
+        ("compacted", Some("compacted"), C::Unpaved),
+        ("fine_gravel", Some("gravel"), C::Unpaved),
+        ("gravel", Some("gravel"), C::Unpaved),
+        ("pebblestone", Some("gravel"), C::Unpaved),
+        ("sand", Some("gravel"), C::Unpaved),
+        ("wood", Some("compacted"), C::Unpaved),
+        ("woodchips", Some("compacted"), C::Unpaved),
+        ("boardwalk", Some("compacted"), C::Unpaved),
+        ("ground", Some("dirt"), C::Unpaved),
+        ("dirt", Some("dirt"), C::Unpaved),
+        ("earth", Some("dirt"), C::Unpaved),
+        ("mud", Some("dirt"), C::Unpaved),
+        ("grass", Some("path"), C::Unpaved),
+        ("rock", Some("path"), C::Unpaved),
+        ("stepping_stones", Some("path"), C::Unpaved),
+        // Valeurs composées : première entrée de la table de Valhalla, pas premier terme.
+        ("asphalt;ground", Some("paved_smooth"), C::Paved),
+        ("dirt;sand", Some("dirt"), C::Unpaved),
+        ("compacted;asphalt", Some("paved_smooth"), C::Paved),
+        ("unpaved", Some("gravel"), C::Unpaved),
+        ("paved", Some("paved_smooth"), C::Paved),
+        ("Asphalt", Some("paved_smooth"), C::Paved),
+    ];
+    for &(v, valhalla, class) in rows {
+        assert_eq!(valhalla_surface(v), valhalla, "{v}");
+        let c = classify(&raw("track", v, Some(TrackType::Grade5)), &caps());
+        assert_eq!((c.surface_class, c.surface_source), (class, S::Tagged), "{v}");
+    }
+}
+
+/// Valeur brute non reconnue par Valhalla : règle suivante (`tracktype`, puis `kind`), source
+/// inférée, jamais `tagged`.
+#[test]
+fn unknown_raw_surface_falls_through() {
+    for v in ["bicouche", "tiles", "none", "no", "slate", "aslphalt", "4", "stones"] {
+        assert_eq!(super::tables::valhalla_surface(v), None, "{v}");
+        let c = classify(&raw("track", v, Some(TrackType::Grade1)), &caps());
+        assert_eq!((c.surface_class, c.surface_source), (C::Paved, S::InferredTracktype), "{v}");
+        let c = classify(&raw("path", v, None), &caps());
+        assert_eq!((c.surface_class, c.surface_source), (C::Unpaved, S::InferredHighway), "{v}");
+        let c = classify(&raw("raceway", v, None), &caps());
+        assert_eq!((c.surface_class, c.surface_source), (C::Unknown, S::None), "{v}");
+    }
+}
+
+/// `bicycle` normalisé de shortbread@1.1 (`yes` / `limited` / `no`) : seul `no` ferme ; une route
+/// motorisée `bicycle=no` est l'état « hors graphe » (`bicycle_forbidden`), un sentier `bicycle=no`
+/// sort du graphe sans l'être ; `limited` ne ferme rien et laisse l'accès par défaut de la classe.
+#[test]
+fn normalized_bicycle_access() {
+    use super::tables::bicycle_closed;
+    let with_bike = |kind: &str, v: &str| WayAttrs { bicycle: Some(Arc::from(v)), ..way(kind) };
+    for kind in ["primary", "residential", "service", "unclassified"] {
+        assert!(
+            !bicycle_routable(&with_bike(kind, "no")) && bicycle_closed(&with_bike(kind, "no")),
+            "{kind}"
+        );
+        assert!(bicycle_routable(&with_bike(kind, "yes")), "{kind}");
+        assert!(bicycle_routable(&with_bike(kind, "limited")), "{kind}");
+    }
+    for kind in ["path", "track", "footway"] {
+        assert!(
+            !bicycle_routable(&with_bike(kind, "no")) && !bicycle_closed(&with_bike(kind, "no")),
+            "{kind}"
+        );
+        assert!(bicycle_routable(&with_bike(kind, "limited")), "{kind}");
+    }
+    assert!(bicycle_routable(&with_bike("pedestrian", "yes")));
+    // `limited` : accès par défaut de la classe (trunk fermé, hors graphe).
+    assert!(
+        !bicycle_routable(&with_bike("trunk", "limited")) && bicycle_closed(&with_bike("trunk", "limited"))
+    );
+    assert!(!bicycle_routable(&with_bike("pedestrian", "limited")));
+}

@@ -56,7 +56,7 @@ pub struct WayAttrs {
     pub layer: Option<i8>, pub smoothness: Option<Sym>, pub osm_id: Option<u64>,   // V1.x / V2
     pub raw: Option<Box<[(Sym, Sym)]>>,      // seulement si debug (doc 02 §3.2)
 }
-pub enum SurfaceTag { Absent, Grouped(PavedGroup), Raw(Sym) }   // Grouped : Shortbread ; Raw : V2
+pub enum SurfaceTag { Absent, Grouped(PavedGroup), Raw(Sym) }   // Grouped : shortbread@1.0 ; Raw : shortbread@1.1, V2
 pub enum PavedGroup { Paved, Unpaved }
 pub enum StructureTag { None, Bridge, Tunnel, Covered, BuildingPassage, Ford }
 pub enum TrackType { Grade1, Grade2, Grade3, Grade4, Grade5 }
@@ -82,7 +82,7 @@ pub trait StreetSchemaAdapter: Send + Sync {
     fn capabilities(&self) -> SchemaCapabilities;
     fn decode(&self, key: TileKey, bytes: &[u8]) -> Result<StreetTile, DecodeError>;
 }
-pub struct SchemaCapabilities { pub surface: SurfaceFidelity,   // Grouped (VersaTiles, OFM) | Raw (V2)
+pub struct SchemaCapabilities { pub surface: SurfaceFidelity,   // Grouped (OFM) | Raw (VersaTiles 1.1, V2)
     pub tracktype: bool, pub layer: bool, pub ford_ways: bool, pub ford_nodes: bool,
     pub covered_distinct: bool, pub osm_id: bool, pub smoothness: bool, pub lines_merged: bool }
 ```
@@ -94,8 +94,11 @@ la tuile, en **ordre canonique** des extrémités pour que deux tuiles voisines 
 est reprise d'`os:src/mvt.rs:291-378`.
 
 **Shortbread 1.0** (`shortbread.rs`) : couche `streets`, clés `kind`, `surface`, `tracktype`, `service`,
-`bicycle`, `link`, `rail`, `bridge`, `tunnel` (`os:src/mvt.rs:102-115, 215-241`) ; `surface` →
-`Grouped` (VersaTiles ne sert que `paved`/`unpaved`, doc exploration 02 §4) ; `bridge=true` →
+`bicycle`, `link`, `rail`, `bridge`, `tunnel` (`os:src/mvt.rs:102-115, 215-241`) ; `surface` :
+`paved`/`unpaved` → `Grouped` (shortbread@1.0, seul servi par VersaTiles jusqu'en octobre 2026,
+doc exploration 02 §4), toute autre valeur non vide → `Raw` (shortbread@1.1, build Planetiler du
+2026-10-27 : valeur OSM brute), rangée par la classification (§7), jamais par l'adaptateur ;
+`bicycle` est gardé tel quel (brut en 1.0, normalisé `yes` / `limited` / `no` en 1.1, §4.2) ; `bridge=true` →
 `Bridge` (y compris les gués bétonnés `low_water_crossing`, doc 01 §5.3) ; `tunnel=true` → `Tunnel`
 (y compris `covered` et `building_passage`, indiscernables). `oneway`, `horse` ne sont plus lus.
 
@@ -135,7 +138,12 @@ clé : deux ponts superposés deviennent deux niveaux.
 1. **Classes** : un `WayAttrs` routable pour le mode vélo devient une classe (dédoublonnée par
    hachage). Routable et accès : `is_routable_kind` et `derive` d'osm-surface avec règles d'accès
    France (`os:src/valhalla.rs:255-279, 306-330`) : motorway, trunk (France), pedestrian, bridleway,
-   busway exclus pour le vélo, footway ouvert ; `bicycle=*` prime ; `rail` exclu.
+   busway exclus pour le vélo, footway ouvert ; `bicycle=*` prime ; `rail` exclu. Depuis
+   shortbread@1.1, VersaTiles normalise `bicycle` en `yes` / `limited` / `no` (valeurs observées
+   sur tout le cache de banc ; la règle de normalisation du profil Planetiler n'est pas documentée
+   ici). `yes` ouvre, `no` ferme (une route motorisée `bicycle=no` devient l'état « hors graphe »,
+   §5.3), `limited` ne ferme rien et laisse l'accès par défaut de la classe (règles 2026.11.9 ;
+   fermer `limited` demanderait une décision de l'utilisateur).
 2. **Nœuds** par coordonnée quantifiée au 1/16 d'unité (`os:src/network.rs:138`). ▲ La clé inclut le
    `Level` : `(x16, y16, level)`. Dans osm-surface un sommet d'un pont qui tombe exactement sur un
    sommet de la route du dessous (même entier de tuile, ≈ 0,4 m) les relie ; ici c'est impossible.
@@ -413,7 +421,7 @@ Valhalla repris par osm-surface (`os:src/valhalla.rs:396-458`, `os:README.md:100
 | Sortie | Règle (v1) |
 |---|---|
 | `structure` | `Bridge` → bridge ; `Tunnel`, `Covered`, `BuildingPassage` → tunnel ; `Ford` → ford **si** `caps.ford_ways`, sinon ground ; `None` → ground |
-| surface 1 | `Grouped(Paved)` → paved / tagged ; `Grouped(Unpaved)` → unpaved / tagged ; `Raw(v)` (V2) → table brute → classe / tagged, `detail` rempli ; `Raw` inconnu → règle suivante (▲ Valhalla sautait le tracktype) |
+| surface 1 | `Grouped(Paved)` → paved / tagged ; `Grouped(Unpaved)` → unpaved / tagged ; `Raw(v)` (VersaTiles shortbread@1.1, tuiles maison V2) → table brute `RAW_SURFACE` → classe / tagged (`detail` rempli en V2 seulement) ; `Raw` inconnu → règle suivante (▲ Valhalla sautait le tracktype) |
 | surface 2 | tracktype `grade1` → paved ; `grade2`–`grade5` → unpaved ; source `inferred_tracktype` |
 | surface 3 | highway motorway…residential, `*_link`, living_street, service, road, busway, cycleway, steps → paved ; track, path, footway, pedestrian, bridleway, sidewalk, crossing → unpaved ; source `inferred_highway` |
 | surface 4 | sinon unknown / `none` |
@@ -421,6 +429,32 @@ Valhalla repris par osm-surface (`os:src/valhalla.rs:396-458`, `os:README.md:100
 | `level_of` | §4.2 ; `layer` pris en compte seulement si `caps.layer` |
 
 `surface.detail` reste vide en v1 ; `unpaved_guess` d'osm-surface (classe fine) n'est pas repris.
+
+**Table brute `RAW_SURFACE`** (règles 2026.11.9). C'est la table de Valhalla
+(`pbfgraphparser.cc`, `tag_handlers_["surface"]`, recopiée par `os:src/valhalla.rs`
+`surface_from_osm`), dans son ordre et avec sa recherche : valeur en minuscules, **sous-chaîne**,
+première entrée gagnante (`stone` seul en égalité stricte). La classe en découle comme au banc
+(`Class::of_valhalla`, bench README §4) : `paved_smooth`, `paved`, `paved_rough` → paved ; pire →
+unpaved. Aucun écart au regroupement de Valhalla, donc à la référence de R1/R2/R3.
+
+| Surface Valhalla | Sous-chaînes (ordre de la table) | Classe |
+|---|---|---|
+| `gravel` | `unpaved` (testée en premier) | unpaved |
+| `paved_smooth` | `paved`, `pavement`, `asphalt`, `concrete`, `cement`, `chipseal`, `metal` | paved |
+| `paved` | `tartan`, `pavingstone`, `paving_stones`, `sett`, `grass_paver`, `rubber`, `acrylic`, `plastic` | paved |
+| `paved_rough` | `cobblestone` (dont `unhewn_cobblestone`), `brick`, `stone` (exact) | paved |
+| `compacted` | `compacted`, `wood` (dont `woodchips`), `boardwalk` | unpaved |
+| `dirt` | `dirt`, `natural`, `earth`, `ground`, `mud`, `clay`, `laterite`, `soil` | unpaved |
+| `gravel` | `gravel` (dont `fine_gravel`), `pebblestone`, `sand` | unpaved |
+| `path` | `grass`, `artificial_turf`, `rock`, `stepping_stones` | unpaved |
+
+Cas ambigus, tranchés par la table et non au cas par cas : `wood` (passerelles, platelages) est
+non revêtu comme chez Valhalla ; `metal` est revêtu ; `sett`, `cobblestone`, `unhewn_cobblestone`
+sont revêtus (`paved_rough`) ; une valeur composée prend la première entrée de la table qui y figure,
+pas son premier terme (`asphalt;ground` → paved, `compacted;asphalt` → paved). Une valeur que la
+table ne reconnaît pas (`bicouche`, `tiles`, `slate`, `none`, fautes de frappe : ≈ 0,1 % des
+valeurs du cache de banc) passe à la règle suivante : sa source est `inferred_tracktype` ou
+`inferred_highway`, jamais `tagged`, et la valeur brute reste lisible en `debug` (`osm.surface`).
 
 **Version** : `rules_version` est unique pour le service (doc 02 §6). La table de typologie et les
 paramètres HMM (§5.2) en font partie ; un test fige une empreinte (hachage) de ces tables, si bien
