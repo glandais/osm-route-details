@@ -92,6 +92,14 @@ vérifié par `ord-bench check` avant toute campagne.
       `bicycle`, seul `no` ferme : une route motorisée `bicycle=no` devient l'état « hors graphe »
       (`bicycle_forbidden`, api 1.1) ; `limited` garde l'accès par défaut de la classe. Règles
       2026.11.9, api inchangée (1.4), T03 §3.2, §4.2 et §7.
+    - `bicycle=no` ne ferme plus que les routes motorisées (`way_kind` `major_road` /
+      `minor_road`) : sur une voie non routière (track, path, cycleway, footway, sidewalk,
+      crossing, steps), la voie reste au graphe vélo avec l'accès par défaut de sa classe. Motif :
+      la calibration 2026.11.9 échouait sur M1 (`os-graymond`, `perso-127`), dont la trace suit des
+      voies non routières que shortbread@1.1 marque `bicycle=no`, probablement pour un
+      `access=private`. Sur une route, `bicycle=no` garde l'état « hors graphe » et
+      `bicycle_forbidden`. Les classes fermées par défaut le restent (pedestrian, bridleway,
+      motorway, trunk, busway). Règles 2026.11.10, contrat inchangé, T03 §4.2.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

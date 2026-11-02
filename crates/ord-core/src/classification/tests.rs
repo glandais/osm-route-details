@@ -145,7 +145,10 @@ fn bicycle_access_france() {
     assert!(bicycle_routable(&ped), "bicycle=* prime");
     let mut path = way("path");
     path.bicycle = Some(Arc::from("no"));
-    assert!(!bicycle_routable(&path));
+    assert!(bicycle_routable(&path), "bicycle=no ne ferme que les routes (2026.11.10)");
+    let mut road = way("residential");
+    road.bicycle = Some(Arc::from("no"));
+    assert!(!bicycle_routable(&road));
     let mut rail = way("service");
     rail.rail = true;
     assert!(!bicycle_routable(&rail));
@@ -251,9 +254,9 @@ fn unknown_raw_surface_falls_through() {
     }
 }
 
-/// `bicycle` normalisé de shortbread@1.1 (`yes` / `limited` / `no`) : seul `no` ferme ; une route
-/// motorisée `bicycle=no` est l'état « hors graphe » (`bicycle_forbidden`), un sentier `bicycle=no`
-/// sort du graphe sans l'être ; `limited` ne ferme rien et laisse l'accès par défaut de la classe.
+/// `bicycle` normalisé de shortbread@1.1 (`yes` / `limited` / `no`) : seul `no` ferme, et sur une
+/// route motorisée seulement (état « hors graphe », `bicycle_forbidden`) ; sur une voie non routière,
+/// `no` ne ferme rien (règles 2026.11.10) ; `limited` laisse l'accès par défaut de la classe.
 #[test]
 fn normalized_bicycle_access() {
     use super::tables::bicycle_closed;
@@ -266,12 +269,26 @@ fn normalized_bicycle_access() {
         assert!(bicycle_routable(&with_bike(kind, "yes")), "{kind}");
         assert!(bicycle_routable(&with_bike(kind, "limited")), "{kind}");
     }
-    for kind in ["path", "track", "footway"] {
+    for kind in ["path", "track", "footway", "cycleway", "steps", "sidewalk", "crossing"] {
+        assert!(
+            bicycle_routable(&with_bike(kind, "no")) && !bicycle_closed(&with_bike(kind, "no")),
+            "{kind}"
+        );
+        assert!(bicycle_routable(&with_bike(kind, "limited")), "{kind}");
+    }
+    // Classes fermées par défaut : `no` n'y change rien, elles restent fermées ; pedestrian et
+    // bridleway hors de l'état « hors graphe », motorway, trunk et busway dans cet état.
+    for kind in ["pedestrian", "bridleway"] {
         assert!(
             !bicycle_routable(&with_bike(kind, "no")) && !bicycle_closed(&with_bike(kind, "no")),
             "{kind}"
         );
-        assert!(bicycle_routable(&with_bike(kind, "limited")), "{kind}");
+    }
+    for kind in ["motorway", "trunk", "busway", "secondary"] {
+        assert!(
+            !bicycle_routable(&with_bike(kind, "no")) && bicycle_closed(&with_bike(kind, "no")),
+            "{kind}"
+        );
     }
     assert!(bicycle_routable(&with_bike("pedestrian", "yes")));
     // `limited` : accès par défaut de la classe (trunk fermé, hors graphe).

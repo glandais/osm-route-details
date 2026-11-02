@@ -507,3 +507,35 @@ fn a_bridge_split_above_the_trace_has_no_abutment_there() {
     assert!(!out.overpasses.is_empty(), "{:?}", out.overpasses);
     assert!(out.overpasses.iter().all(|o| o.end_m > 50.0), "{:?}", out.overpasses);
 }
+
+/// Règles 2026.11.10 (décision de l'utilisateur, 2026-11-02) : `bicycle=no` (shortbread@1.1, souvent
+/// un `access=private`) ne ferme plus une voie non routière. Une piste `bicycle=no` seule sous la
+/// trace reste au graphe : appariée et typée.
+#[test]
+fn a_track_tagged_bicycle_no_stays_matched_and_typed() {
+    let track = WayAttrs { bicycle: Some(Arc::from("no")), ..with_surface("track", PavedGroup::Unpaved) };
+    let net = Net::new().add(track, &[(-600.0, 0.0), (600.0, 0.0)]);
+    let (segs, _) = run(net, &[(-500.0, 0.0), (500.0, 0.0)], None);
+    assert!(
+        segs.iter().all(|s| s.matched
+            && !s.off_graph
+            && s.way_kind == WayKind::Track
+            && s.surface_class == SurfaceClass::Unpaved),
+        "{segs:?}"
+    );
+}
+
+/// Une route motorisée `bicycle=no` (secondary) garde l'état « hors graphe » : typologie de la
+/// route rendue, non appariée (`bicycle_forbidden`).
+#[test]
+fn a_secondary_tagged_bicycle_no_stays_off_graph() {
+    let road = WayAttrs { bicycle: Some(Arc::from("no")), ..with_surface("secondary", PavedGroup::Paved) };
+    // Une rue du graphe la croise à x = 0 (comme sous le pont fermé de `closed_bridge`).
+    let net = Net::new()
+        .add(road, &[(-600.0, 0.0), (600.0, 0.0)])
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, 400.0)]);
+    let (segs, _) = run(net, &[(-500.0, 0.0), (500.0, 0.0)], None);
+    assert!(segs.iter().all(|s| !s.matched), "{segs:?}");
+    let off = length_where(&segs, |s| s.off_graph && s.way_kind == WayKind::MajorRoad);
+    assert!(off > 900.0, "{off} m hors graphe : {segs:?}");
+}

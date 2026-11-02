@@ -141,9 +141,18 @@ clé : deux ponts superposés deviennent deux niveaux.
    busway exclus pour le vélo, footway ouvert ; `bicycle=*` prime ; `rail` exclu. Depuis
    shortbread@1.1, VersaTiles normalise `bicycle` en `yes` / `limited` / `no` (valeurs observées
    sur tout le cache de banc ; la règle de normalisation du profil Planetiler n'est pas documentée
-   ici). `yes` ouvre, `no` ferme (une route motorisée `bicycle=no` devient l'état « hors graphe »,
-   §5.3), `limited` ne ferme rien et laisse l'accès par défaut de la classe (règles 2026.11.9 ;
-   fermer `limited` demanderait une décision de l'utilisateur).
+   ici). `yes` ouvre. `no` (et les autres valeurs fermantes de la table `access` de Valhalla) ne
+   ferme que les **routes motorisées** (`way_kind` `major_road` / `minor_road`, `service` et
+   `busway` compris) : la route sort du graphe et devient l'état « hors graphe » (§5.3,
+   `bicycle_forbidden`). Sur une voie non routière (track, path, cycleway, footway, sidewalk,
+   crossing, steps), `bicycle=no` ne ferme plus rien depuis les règles 2026.11.10 : la voie reste au
+   graphe avec l'accès par défaut de sa classe (décision de l'utilisateur, 2026-11-02 ; en
+   shortbread@1.1 ce `no` traduit probablement un `access=private`, et M1 échouait sur `os-graymond`
+   et `perso-127`, dont la trace suit de telles voies). Les classes fermées par défaut le restent,
+   quel que soit `bicycle=no` : pedestrian et bridleway (hors graphe sans état « hors graphe »),
+   motorway, trunk et busway (état « hors graphe »). `limited` ne ferme rien et laisse l'accès par
+   défaut de la classe (règles 2026.11.9 ; fermer `limited` demanderait une décision de
+   l'utilisateur).
 2. **Nœuds** par coordonnée quantifiée au 1/16 d'unité (`os:src/network.rs:138`). ▲ La clé inclut le
    `Level` : `(x16, y16, level)`. Dans osm-surface un sommet d'un pont qui tombe exactement sur un
    sommet de la route du dessous (même entier de tuile, ≈ 0,4 m) les relie ; ici c'est impossible.
@@ -231,7 +240,8 @@ Surchargeables par configuration (comme `MATCH_*`) ; valeurs effectives dans `ru
 6. ▲ **État hors graphe des routes fermées au vélo** (2026.10.6). Les routes motorisées
    (`way_kind` `major_road` ou `minor_road`) que la règle d'accès exclut du graphe (étape 1 du
    §4.2 : motorway, trunk, route `bicycle=no`…) restent connues des tuiles. Les rails n'en sont pas,
-   ni les voies non motorisées fermées au vélo (rue piétonne, sentier `bicycle=no`) : le cycliste
+   ni les voies non motorisées fermées au vélo (rue piétonne, bridleway ; un sentier `bicycle=no`
+   reste au graphe depuis 2026.11.10) : le cycliste
    les emprunte réellement, et la voie du graphe voisine reste la meilleure approximation (sur le
    banc, les inclure dégradait M1 au-delà de son seuil sur `os-np655`). Leurs segments du couloir forment un index à part, sans topologie.
    Chaque observation a, en plus de ses candidats, un état « hors graphe » : sa projection sur la
@@ -599,7 +609,8 @@ pub enum TypologyError { Timeout, Cancelled, Internal(String) }
    dit explicitement au lieu d'apparier les rues voisines. Depuis 2026.11.1 (api 1.1), la portion
    porte la typologie de cette route (classe, revêtement, pont ou tunnel) avec `bicycle_forbidden`,
    toujours `matched = false` ; son pont ou son tunnel n'est toujours pas corrigé. Une rue piétonne
-   ou un sentier `bicycle=no` restent appariés à la voie voisine du graphe, comme avant : la règle
+   reste appariée à la voie voisine du graphe, comme avant ; un sentier `bicycle=no` est lui-même au
+   graphe depuis 2026.11.10 (étape 1 du §4.2). La règle
    M1 hors graphe vélo du banc (bench README §4 ter.3) les compte pourtant parmi les voies fermées
    (écart signalé à l'utilisateur, non tranché ici).
 3. **Trois écarts à osm-surface jamais mesurés** (clé de nœud par niveau, recollage au même niveau,

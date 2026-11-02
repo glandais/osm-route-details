@@ -56,10 +56,13 @@ pub const BICYCLE_YES: &[&str] = &[
     "mtb",
 ];
 
-/// Valeurs `bicycle=*` qui la ferment. VersaTiles shortbread@1.1 normalise `bicycle` en `yes` /
-/// `limited` / `no` : `no` ferme (route motorisée : état « hors graphe », `bicycle_forbidden`) ;
-/// `limited` n'est dans aucune des deux listes, il ne ferme rien et laisse l'accès par défaut de la
-/// classe (règles 2026.11.9 ; fermer `limited` demanderait une décision de l'utilisateur).
+/// Valeurs `bicycle=*` qui la ferment, **sur une route motorisée seulement** (`way_kind`
+/// `major_road` / `minor_road` : état « hors graphe », `bicycle_forbidden`). Sur une voie non
+/// routière (track, path, cycleway, footway, steps…), elles ne ferment rien : l'accès par défaut de
+/// la classe s'applique (décision de l'utilisateur, 2026-11-02, règles 2026.11.10 : shortbread@1.1
+/// y met `no` pour un probable `access=private`, et la trace les suit). VersaTiles shortbread@1.1
+/// normalise `bicycle` en `yes` / `limited` / `no` ; `limited` n'est dans aucune des deux listes, il
+/// ne ferme rien et laisse l'accès par défaut de la classe.
 pub const BICYCLE_NO: &[&str] = &["no", "agricultural", "discouraged", "forestry", "emergency", "psv"];
 
 /// Voies piétonnes : malus d'émission (Valhalla rend le trottoir plus cher que la chaussée).
@@ -189,17 +192,23 @@ pub fn bicycle_routable(a: &WayAttrs) -> bool {
     }
     match a.bicycle.as_deref() {
         Some(v) if BICYCLE_YES.contains(&v) => true,
-        Some(v) if BICYCLE_NO.contains(&v) => false,
+        Some(v) if BICYCLE_NO.contains(&v) && is_road(kind) => false,
         _ => !BICYCLE_CLOSED_KINDS.contains(&kind),
     }
 }
 
+/// Route motorisée (`way_kind` `major_road` ou `minor_road`) : seule classe où `bicycle=no` ferme.
+fn is_road(kind: &str) -> bool {
+    matches!(way_kind(kind), WayKind::MajorRoad | WayKind::MinorRoad)
+}
+
 /// Route motorisée (`way_kind` route principale ou secondaire) connue des tuiles mais fermée au vélo
 /// (autoroute, trunk, route `bicycle=no`…) : hors du graphe, elle reste un état « hors graphe » du
-/// HMM (T03 §5.3). Les rails n'en sont pas, ni les voies non motorisées fermées au vélo (rue
-/// piétonne, sentier `bicycle=no`), que le cycliste emprunte à côté d'une voie du graphe.
+/// HMM (T03 §5.3). Les rails n'en sont pas, ni les voies non motorisées fermées au vélo par défaut
+/// (rue piétonne, bridleway), que le cycliste emprunte à côté d'une voie du graphe ; un sentier
+/// `bicycle=no` reste au graphe (règles 2026.11.10).
 pub fn bicycle_closed(a: &WayAttrs) -> bool {
-    !a.rail && matches!(way_kind(&a.highway), WayKind::MajorRoad | WayKind::MinorRoad) && !bicycle_routable(a)
+    !a.rail && is_road(&a.highway) && !bicycle_routable(a)
 }
 
 /// Revêtement : tag (regroupé ou brut), puis `tracktype`, puis `kind`, sinon inconnu.
@@ -240,6 +249,7 @@ pub fn canonical() -> String {
     format!(
         "{ROUTABLE_KINDS:?}|{BICYCLE_CLOSED_KINDS:?}|{BICYCLE_YES:?}|{BICYCLE_NO:?}|{FOOTWAY_LIKE:?}|\
          {INFERRED_PAVED:?}|{INFERRED_UNPAVED:?}|{WAY_KINDS:?}|grade1=paved,grade2..5=unpaved|\
+         bicycle_no=roads_only|\
          {RAW_SURFACE:?}|{VALHALLA_PAVED:?}|raw=lowercase,contains,first"
     )
 }
