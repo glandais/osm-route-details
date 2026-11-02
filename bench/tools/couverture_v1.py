@@ -60,7 +60,10 @@ LONG_TUNNEL_M = 300.0
 TEMOIN_MIN_M = 300.0
 TEMOIN_LIBRE_M = 100.0   # pas d'ouvrage ni de croisement à moins de cette distance
 STEP_M = 10.0
-SEL = "osm-route-details:v1:"
+# Série contrôlée (README §4 ter.4) : v1 (tirage stratifié) ou v11 (V1.1, décision de l'utilisateur,
+# 2026-11-02 : tout le nouveau matériau tenu à l'écart, MVP et V1 en calibration).
+SERIE = os.environ.get("SERIE", "v1")
+SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:"}[SERIE]
 ALTI = "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json"
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 FERMES = {"motorway", "motorway_link", "trunk", "trunk_link", "pedestrian", "bridleway", "busway"}
@@ -201,6 +204,11 @@ def calibration_refs(B):
             refs += [tuple(p) for p in o["pts"].values()]
     tracks = sorted(glob.glob(f"{B}/traces/*.gpx")) + sorted(glob.glob(f"{B}/../data/vcyclist/**/*.gpx", recursive=True)) \
         + sorted(glob.glob(f"{B}/../data/osm-surface/*.gpx"))
+    if SERIE != "v1":
+        # V1 est en calibration : ses ouvrages, croisements et itinéraires planifiés
+        for o in json.load(open(f"{B}/v1/ouvrages-v1.json")):
+            refs += [tuple(p) for p in o["pts"].values()]
+        tracks += sorted(glob.glob(f"{B}/v1/planifies/*.gpx"))
     tracks = [t for t in tracks if ".trim1km." not in t]
     cg = {}
     for n, t in enumerate(tracks):
@@ -261,7 +269,7 @@ def chains(ways):
 
 def load_overpass(B, i):
     E = []
-    for f in [f"{B}/v1/overpass/{i}.json", f"{B}/v1/overpass/{i}.cliff.json"]:
+    for f in [f"{B}/{SERIE}/overpass/{i}.json", f"{B}/{SERIE}/overpass/{i}.cliff.json"]:
         if os.path.exists(f):
             E += [e for e in json.load(open(f)).get("elements", []) if e.get("type") == "way" and "geometry" in e]
     return E
@@ -269,7 +277,7 @@ def load_overpass(B, i):
 
 def load_forets(B, i):
     """Polygones forêt/bois (ways fermées et anneaux extérieurs des relations) : listes de [lat, lon]."""
-    f = f"{B}/v1/overpass/{i}.foret.json"
+    f = f"{B}/{SERIE}/overpass/{i}.foret.json"
     if not os.path.exists(f):
         return []
     out = []
@@ -441,11 +449,17 @@ def in_poly(p, ring):
 
 def trace_list(B):
     """Traces du contrôle : sorties fiables, négatifs Q1 (sans extraction), itinéraires planifiés."""
-    qual = {r["id"]: r for r in csv.DictReader(open(f"{B}/strava/qualif_v1.csv"))}
-    for f in ("qualif_q1.csv",):
-        if os.path.exists(f"{B}/strava/{f}"):
-            qual.update({r["id"]: dict(r, q1=True) for r in csv.DictReader(open(f"{B}/strava/{f}"))})
-    sel = {i: (z, k) for i, z, k in json.load(open(f"{B}/v1/selection.json"))}
+    qual = {r["id"]: r for r in csv.DictReader(open(f"{B}/strava/qualif_{SERIE}.csv"))}
+    if SERIE == "v1":
+        for f in ("qualif_q1.csv",):
+            if os.path.exists(f"{B}/strava/{f}"):
+                qual.update({r["id"]: dict(r, q1=True) for r in csv.DictReader(open(f"{B}/strava/{f}"))})
+    else:
+        # négatifs Q1 du tirage figé (tools/tirage_v11.py), déjà qualifiés
+        q1 = set(json.load(open(f"{B}/{SERIE}/tirage.json"))["q1"])
+        for f in sorted(glob.glob(f"{B}/strava/qualif*.csv")):
+            qual.update({r["id"]: dict(r, q1=True) for r in csv.DictReader(open(f)) if r["id"] in q1})
+    sel = {i: (z, k) for i, z, k in json.load(open(f"{B}/{SERIE}/selection.json"))}
     inv = {str(a["id"]): a for a in json.load(open(f"{B}/strava/inventaire.json"))}
     out = []
     for i in sorted(qual):
@@ -460,7 +474,7 @@ def trace_list(B):
             continue
         out.append({"id": i, "zone": sel[i][0], "verdict": r["verdict"], "km": float(r["dist_km"] or sel[i][1]),
                     "gain_dem_m": float(r["gain_dem_m"] or 0), "role": "trace" if r["verdict"] == "fiable" else "hors_serie"})
-    res = f"{B}/v1/planifies/resume.json"
+    res = f"{B}/{SERIE}/planifies/resume.json"
     if os.path.exists(res):
         for i, r in sorted(json.load(open(res)).items()):
             out.append({"id": i, "zone": "planifie", "verdict": "planifie", "km": r["km"], "gain_dem_m": 0.0,
@@ -470,8 +484,8 @@ def trace_list(B):
 
 def trace_points(B, t):
     if t["zone"] == "planifie":
-        return gpx_points(f"{B}/v1/planifies/{t['id']}.gpx")
-    return [tuple(p) for p in json.load(open(f"{B}/strava/streams-v1/{t['id']}.json"))["location"] if p]
+        return gpx_points(f"{B}/{SERIE}/planifies/{t['id']}.gpx")
+    return [tuple(p) for p in json.load(open(f"{B}/strava/streams-{SERIE}/{t['id']}.json"))["location"] if p]
 
 
 def cas(B):
@@ -715,7 +729,7 @@ def cas(B):
                 run = [n, idx, idx]
         tr["hors_graphe_velo_m"] = round(sum(ferme) * STEP_M)
         print(i, "passages", len(passages), "croisements", len(xs), file=sys.stderr, flush=True)
-    json.dump(out, open(f"{B}/v1/couverture-cas.json", "w"))
+    json.dump(out, open(f"{B}/{SERIE}/couverture-cas.json", "w"))
 
 
 # --- étape 2 : IGN ---
@@ -751,8 +765,8 @@ def batched(points, lidar, n=40):
 
 
 def ign_step(B):
-    C = json.load(open(f"{B}/v1/couverture-cas.json"))
-    cache_f = f"{B}/v1/couverture-ign.json"
+    C = json.load(open(f"{B}/{SERIE}/couverture-cas.json"))
+    cache_f = f"{B}/{SERIE}/couverture-ign.json"
     cache = json.load(open(cache_f)) if os.path.exists(cache_f) else {}
     todo = [o for o in C["ouvrages"].values() if o["type"] == "bridge" and o["id"] not in cache and not o["exclusions"]]
     for o in todo:
@@ -767,7 +781,7 @@ def ign_step(B):
         cache[o["id"]] = o_ign
         json.dump(cache, open(cache_f, "w"))
     # contrôle de niveau des ponts à MNH ≥ 10 m, par passage
-    lev_f = f"{B}/v1/couverture-niveau.json"
+    lev_f = f"{B}/{SERIE}/couverture-niveau.json"
     lev = json.load(open(lev_f)) if os.path.exists(lev_f) else {}
     for o in C["ouvrages"].values():
         g = cache.get(o["id"])
@@ -777,7 +791,7 @@ def ign_step(B):
             key = f'{o["id"]}:{p["trace"]}'
             if key in lev or p["exclusions"] or not p.get("fiable"):   # niveau : passages baro seulement
                 continue
-            s = json.load(open(f'{B}/strava/streams-v1/{p["trace"]}.json'))
+            s = json.load(open(f'{B}/strava/streams-{SERIE}/{p["trace"]}.json'))
             L = [(tuple(x), z, dd) for x, z, dd in zip(s["location"], s["altitude"], s["distance"]) if x]
             m = o["pts"]["milieu"]
             k0 = min(range(len(L)), key=lambda k: hav(L[k][0], m))
@@ -808,9 +822,9 @@ def cible(minimum):
 
 
 def tirage(B):
-    C = json.load(open(f"{B}/v1/couverture-cas.json"))
-    G = json.load(open(f"{B}/v1/couverture-ign.json"))
-    LV = json.load(open(f"{B}/v1/couverture-niveau.json")) if os.path.exists(f"{B}/v1/couverture-niveau.json") else {}
+    C = json.load(open(f"{B}/{SERIE}/couverture-cas.json"))
+    G = json.load(open(f"{B}/{SERIE}/couverture-ign.json"))
+    LV = json.load(open(f"{B}/{SERIE}/couverture-niveau.json")) if os.path.exists(f"{B}/{SERIE}/couverture-niveau.json") else {}
     fiables = [t for t in C["traces"] if t["role"] == "trace"]
     planifies = {t["id"]: t for t in C["traces"] if t["zone"] == "planifie"}
     # ouvrages comptés
@@ -847,6 +861,10 @@ def tirage(B):
     for k in keys:
         gid.setdefault(groupe[k], []).append(k)
     gname = {g: min(m) for g, m in gid.items()}
+    # membres d'un cas, par son nom (plus petit id du groupe) : la racine de l'union-find n'est pas ce nom.
+    # V1 garde le défaut : son tirage figé (comptes sous-estimés, donc plus de cas tenus à l'écart) se reproduit.
+    if SERIE != "v1":
+        gid = {gname[g]: m for g, m in gid.items()}
     serie = {}
 
     def assign(stratum, cases, measure, enough):
@@ -856,7 +874,7 @@ def tirage(B):
         for c in cases:
             if c in serie:
                 continue
-            if not enough(measure(held)) or len(held) < math.ceil(n / 3):
+            if SERIE != "v1" or not enough(measure(held)) or len(held) < math.ceil(n / 3):
                 serie[c] = "tenue_a_l_ecart"; held.append(c)
             else:
                 serie[c] = "calibration"
@@ -906,6 +924,8 @@ def tirage(B):
                           lambda m: m["traces"] >= cible(8) and m["km"] >= cible(800) and all(m[g] >= cible(3) for g in ("dplus", "plaine", "ouvrage")))
     # S1 sur l'ensemble des ouvrages tenus à l'écart (toutes strates)
     held_ouv = [k for c, s in serie.items() if s == "tenue_a_l_ecart" for k in gid.get(c, []) if k in compte]
+    if SERIE != "v1":   # tout est tenu à l'écart, ponts sans baro des itinéraires planifiés compris
+        held_ouv = list(compte)
     S1 = {"ouvrages": len(held_ouv), "emprise_m": round(sum(compte[k]["L"] for k in held_ouv))}
     # affectation de chaque élément (ouvrage, croisement : série de son groupe ; témoin, trace, itinéraire) ;
     # fichier à part, tirage.json inchangé
@@ -915,10 +935,12 @@ def tirage(B):
            "traces": {t["id"]: serie.get(t["id"], "calibration") for t in C["traces"] if t["role"] in ("trace", "Q1")},
            "groupes_ouvrages": {k: gname[groupe[k]] for k in keys},
            "groupes_traces": grp}
-    json.dump(aff, open(f"{B}/v1/affectation.json", "w"), sort_keys=True)
+    json.dump(aff, open(f"{B}/{SERIE}/affectation.json", "w"), sort_keys=True)
     tir = {"sel": SEL, "serie": serie, "groupes_traces": grp}
-    json.dump(tir, open(f"{B}/v1/tirage.json", "w"), sort_keys=True)
-    sha = hashlib.sha256(open(f"{B}/v1/tirage.json", "rb").read()).hexdigest()
+    # V1.1 : le tirage figé (tools/tirage_v11.py) n'est jamais réécrit ; tout est tenu à l'écart
+    tir_f = f"{B}/{SERIE}/tirage.json" if SERIE == "v1" else f"{B}/{SERIE}/affectation-tirage.json"
+    json.dump(tir, open(tir_f, "w"), sort_keys=True)
+    sha = hashlib.sha256(open(tir_f, "rb").read()).hexdigest()
     held_tr = [c for c in td if serie.get(c) == "tenue_a_l_ecart"]
     held_cases = {c for c, x in serie.items() if x == "tenue_a_l_ecart"}
     pl_held = [p for p in planifies if p in held_cases or any(t["trace"] == p and t["id"] in held_cases for t in tem)
