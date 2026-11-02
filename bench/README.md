@@ -794,7 +794,11 @@ inchangés.
      (décision de l'utilisateur, 2026-11-02). Chaque point compte à son abscisse corrigée du retard, s_p − δ
      (§4 ter.9) : c'est là qu'il entre dans le décalage du côté (décision de l'utilisateur,
      2026-11-02, après la calibration 2026.11.6-bench2 ; à l'abscisse de `baro.csv`, `nv-343`
-     comptait 3 points sur un côté qui n'en reçoit qu'un). Effet sur la
+     comptait 3 points sur un côté qui n'en reçoit qu'un). Lectures (rédaction du banc, après la
+     calibration 2026.11.6-bench2) : le baro au croisement est lui aussi le baro corrigé du retard ;
+     s'il manque au croisement, la référence passe au MNT comme avant (la décision « sans repli »
+     ne vise que les côtés) ; un côté qui a ses 3 points mais aucune station avec baro et MNT n'a
+     pas de décalage : référence incertaine (`decalage_d_un_cote_absent`), sans repli sur le MNT. Effet sur la
      calibration 2026.11.6, sans le service (MNT du cache ; 153 des 174 passages au baro mesurables
      ainsi, les 21 autres sur des traces en plusieurs parties ou sans pas brut au croisement) :
      14 passages incertains, dont 6 sans baro sur l'un des côtés (`nv-272..275` sur `perso-71`,
@@ -877,8 +881,9 @@ inchangés.
    - **Estimation**, une valeur δ par trace, sur toute la trace (toute la trace recousue pour les
      tronçons `.partN` ; chaque segment `.sN` à part) : stations de la grille de 5 m de la géométrie
      recalée, résidu baro(s + δ) − MNT(s), le MNT lu comme au §2.2 (mode `distance`, sans
-     correction), hors points insérés écartés (§2.1), fenêtres masquées et stations sans baro (pas
-     brut de plus de 100 m) ; dérive lente retirée par médiane glissante de 5 km ; δ minimise
+     correction ; Mapterhorn hors de l'IGN LiDAR HD), hors points insérés écartés (§2.1), fenêtres masquées et stations sans baro (pas
+     brut de plus de 100 m) ; dérive lente retirée par médiane glissante de 5 km (calculée au pas
+     de 50 m, comme E1) ; δ minimise
      l'écart robuste du résidu (1,4826 × MAD). Recherche de **−50 à +200 m** par pas de 5 m ;
      à écart égal, le plus petit |δ|. Un δ négatif est admis (abscisse du recalage décalée).
    - **Correction** : baro corrigé(s) = baro(s + δ), avant tout calcul de décalage. Elle s'applique
@@ -890,14 +895,20 @@ inchangés.
      de `qualify_baro.py` ni le tirage figé V1 ne sont recalculés.
    - **Retard non estimable** : moins de 400 stations utilisables (2 km), ou minimum atteint à une
      borne de la recherche (−50 ou +200 m). La trace garde alors son baro brut, avec la mention
-     `retard_non_estimable`, rapportée, sans autre effet.
+     `retard_non_estimable`, rapportée, sans autre effet. Les extraits des traces tenues à l'écart,
+     lus en calibration seulement (± 1,5 km autour d'un ouvrage de calibration, plus courts que la
+     fenêtre de la dérive), gardent leur baro brut (`extrait_tenu_a_l_ecart`) ; au jugement V1,
+     ces traces sont des cas entiers et leur δ est estimé normalement.
    - Le δ estimé, l'écart robuste à δ = 0 et au minimum et le nombre de stations sont rapportés
      par trace.
    Vérification sur la calibration, sans le service (MNT du cache, toutes stations, blocs de 5 km) :
    91 des 94 traces perso estimées, 3 non estimables faute de MNT (hors IGN) ; δ de −10 à +105 m,
    médiane 10 m, aucun à une borne ; `perso-84` 40 m (écart robuste 0,63 → 0,36 m), `perso-71`
-   45 m sur toute la trace (1,36 → 1,12 m ; 65 m chez ord-bench sur ± 1,5 km). Profils en V nets :
-   le δ est bien identifié.
+   45 m sur toute la trace (1,36 → 1,12 m ; 65 m chez ord-bench sur ± 1,5 km). Les blocs de 5 km
+   n'étaient qu'une approximation de la médiane glissante : avec elle, ord-bench trouve 45 m
+   (`perso-84`) et 35 m (`perso-71`), sur des minimums presque plats ; à 5 ou 10 m près, δ est
+   dans la précision de l'estimateur. Calibration 2026.11.6-bench2 (MNT du §2.2, Mapterhorn
+   compris) : 101 cas sur 101 estimés, δ de −5 à +105 m, médiane 15 m.
 
 ---
 
