@@ -223,6 +223,13 @@ d'un tablier est le baromètre. Le passage sous Cheviré confirme le piège du M
      l'écart sont calculées puis **jetées** : jamais mesurées, ni rapportées autrement que par
      l'identifiant opaque de l'élément masqué (`passages_masques`), et jamais lues pour régler quoi
      que ce soit. Les mesures de la trace portent sur le reste.
+     Les fenêtres se cherchent sur la grille de 5 m de la géométrie recalée, en calibration (masques)
+     comme au jugement (extraits) : ce qui a été masqué est exactement ce qui est mesuré. Un élément
+     de `passages_masques` qu'aucune station n'approche à 40 m n'a pas de fenêtre : il est
+     rapporté (`passages_non_retrouves` du cas), ni masqué ni mesuré sur cette trace, et le cas
+     n'est pas sauté (décision de l'utilisateur, 2026-11-02, avant le jugement V1). C'est le cas
+     d'un élément proche du GPS brut mais loin de la voie recalée (`nv-354`, `nv-390`, `nv-255`),
+     ou posé sur un autre segment `.sN` de la même trace (`perso-77-s0`).
    - **passage en hauteur sur un pont** (décision de l'utilisateur, 2026-10-31, avant toute nouvelle
      mesure) : le critère horizontal ne distingue pas une trace qui longe un pont par-dessous
      (Cheviré × perso-23, au sol sous un tablier à plus de 50 m). Si le MNH au milieu (médiane MNS
