@@ -28,7 +28,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.8"
+    "rules_version": "2026.11.9"
   },
   "points": [
     {
@@ -2010,7 +2010,7 @@
   ],
   "quality": {
     "elevation_coverage": 1.0,
-    "inferred_surface_ratio": 0.01,
+    "inferred_surface_ratio": 0.0,
     "matched_ratio": 1.0,
     "structure_correction": {
       "bridges": "applied",
@@ -2053,46 +2053,12 @@
       "way_kind": "major_road"
     },
     {
-      "ele_end": 6.45,
+      "ele_end": 4.52,
       "ele_method": "dem",
       "ele_start": 47.23,
       "from_index": 12,
       "from_m": 1085.73,
-      "grade_pct": -3.66,
-      "matched": true,
-      "structure": "ground",
-      "surface": {
-        "class": "paved",
-        "source": "tagged"
-      },
-      "to_index": 29,
-      "to_m": 2200.77,
-      "way_kind": "major_road"
-    },
-    {
-      "ele_end": 6.08,
-      "ele_method": "dem",
-      "ele_start": 6.45,
-      "from_index": 28,
-      "from_m": 2200.77,
-      "grade_pct": -1.48,
-      "matched": true,
-      "structure": "ground",
-      "surface": {
-        "class": "paved",
-        "source": "inferred_highway"
-      },
-      "to_index": 30,
-      "to_m": 2225.37,
-      "way_kind": "major_road"
-    },
-    {
-      "ele_end": 4.52,
-      "ele_method": "dem",
-      "ele_start": 6.08,
-      "from_index": 29,
-      "from_m": 2225.37,
-      "grade_pct": -0.68,
+      "grade_pct": -3.12,
       "matched": true,
       "structure": "ground",
       "surface": {
@@ -2114,8 +2080,7 @@
       "paved": 2455.58
     },
     "by_surface_source_m": {
-      "inferred_highway": 24.6,
-      "tagged": 2430.98
+      "tagged": 2455.58
     },
     "by_way_kind_m": {
       "major_road": 2455.58

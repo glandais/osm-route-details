@@ -35,7 +35,7 @@
     },
     "duration_ms": null,
     "request_id": null,
-    "rules_version": "2026.11.8"
+    "rules_version": "2026.11.9"
   },
   "points": [
     {
@@ -62,7 +62,7 @@
   ],
   "quality": {
     "elevation_coverage": 1.0,
-    "inferred_surface_ratio": 1.0,
+    "inferred_surface_ratio": 0.0,
     "matched_ratio": 1.0,
     "structure_correction": {
       "bridges": "partial",
@@ -110,8 +110,8 @@
       "structure": "bridge",
       "structure_source": "osm",
       "surface": {
-        "class": "paved",
-        "source": "inferred_highway"
+        "class": "unpaved",
+        "source": "tagged"
       },
       "to_index": 2,
       "to_m": 173.14,
@@ -124,10 +124,10 @@
       "bridge": 173.14
     },
     "by_surface_class_m": {
-      "paved": 173.14
+      "unpaved": 173.14
     },
     "by_surface_source_m": {
-      "inferred_highway": 173.14
+      "tagged": 173.14
     },
     "by_way_kind_m": {
       "cycleway": 173.14

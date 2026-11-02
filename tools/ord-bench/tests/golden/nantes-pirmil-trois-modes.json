@@ -29,7 +29,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.8"
+      "rules_version": "2026.11.9"
     },
     "points": [
       {
@@ -240,7 +240,7 @@
     "quality": {
       "elevation_coverage": 1.0,
       "inferred_surface_ratio": 0.0,
-      "matched_ratio": 1.0,
+      "matched_ratio": 0.8783,
       "structure_correction": {
         "bridges": "applied",
         "counts": {
@@ -260,16 +260,46 @@
           "to_m": 821.99
         }
       ],
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unmatched_range",
+          "from_m": 575.0,
+          "message": "route not matched on the street network",
+          "to_m": 675.0
+        },
+        {
+          "code": "bicycle_forbidden",
+          "from_m": 585.0,
+          "message": "route follows a way closed to bicycles; its typology is given, its structures are not corrected",
+          "to_m": 665.0
+        }
+      ]
     },
     "segments": [
       {
-        "ele_end": 10.3,
+        "ele_end": 8.3,
         "ele_method": "dem",
         "ele_start": 7.63,
         "from_index": 0,
         "from_m": 0.0,
-        "grade_pct": 0.89,
+        "grade_pct": 0.59,
+        "matched": true,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 1,
+        "to_m": 112.06,
+        "way_kind": "cycleway"
+      },
+      {
+        "ele_end": 10.3,
+        "ele_method": "dem",
+        "ele_start": 8.3,
+        "from_index": 0,
+        "from_m": 112.06,
+        "grade_pct": 1.06,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -299,12 +329,12 @@
         "way_kind": "major_road"
       },
       {
-        "ele_end": 8.57,
+        "ele_end": 8.77,
         "ele_method": "dem",
         "ele_start": 10.29,
         "from_index": 1,
         "from_m": 521.97,
-        "grade_pct": -2.92,
+        "grade_pct": -2.86,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -312,16 +342,67 @@
           "source": "tagged"
         },
         "to_index": 2,
-        "to_m": 581.02,
+        "to_m": 575.0,
         "way_kind": "major_road"
+      },
+      {
+        "ele_end": 8.53,
+        "ele_method": "dem",
+        "ele_start": 8.77,
+        "from_index": 1,
+        "from_m": 575.0,
+        "grade_pct": -2.39,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 585.0,
+        "way_kind": "unknown"
+      },
+      {
+        "ele_end": 8.05,
+        "ele_method": "dem",
+        "ele_start": 8.53,
+        "from_index": 1,
+        "from_m": 585.0,
+        "grade_pct": -0.61,
+        "matched": false,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 2,
+        "to_m": 665.0,
+        "way_kind": "minor_road"
+      },
+      {
+        "ele_end": 8.02,
+        "ele_method": "dem",
+        "ele_start": 8.05,
+        "from_index": 1,
+        "from_m": 665.0,
+        "grade_pct": -0.28,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 675.0,
+        "way_kind": "unknown"
       },
       {
         "ele_end": 8.13,
         "ele_method": "dem",
-        "ele_start": 8.57,
+        "ele_start": 8.02,
         "from_index": 1,
-        "from_m": 581.02,
-        "grade_pct": -0.18,
+        "from_m": 675.0,
+        "grade_pct": 0.08,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -337,17 +418,22 @@
     "summary": {
       "by_structure_m": {
         "bridge": 221.93,
-        "ground": 600.06
+        "ground": 580.06,
+        "unknown": 20.0
       },
       "by_surface_class_m": {
-        "paved": 821.99
+        "paved": 801.99,
+        "unknown": 20.0
       },
       "by_surface_source_m": {
-        "tagged": 821.99
+        "none": 20.0,
+        "tagged": 801.99
       },
       "by_way_kind_m": {
-        "major_road": 581.02,
-        "minor_road": 240.97
+        "cycleway": 112.06,
+        "major_road": 462.94,
+        "minor_road": 226.99,
+        "unknown": 20.0
       },
       "ele_max_m": 12.35,
       "ele_min_m": 7.63,
@@ -374,7 +460,7 @@
       "terrain_m": {
         "ign_lidar_hd": 821.99
       },
-      "unknown_m": 0.0
+      "unknown_m": 100.0
     }
   },
   "input": {
@@ -407,7 +493,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.8"
+      "rules_version": "2026.11.9"
     },
     "points": [
       {
@@ -435,7 +521,7 @@
     "quality": {
       "elevation_coverage": 1.0,
       "inferred_surface_ratio": 0.0,
-      "matched_ratio": 1.0,
+      "matched_ratio": 0.8783,
       "structure_correction": {
         "bridges": "applied",
         "counts": {
@@ -455,16 +541,46 @@
           "to_m": 821.99
         }
       ],
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unmatched_range",
+          "from_m": 575.0,
+          "message": "route not matched on the street network",
+          "to_m": 675.0
+        },
+        {
+          "code": "bicycle_forbidden",
+          "from_m": 585.0,
+          "message": "route follows a way closed to bicycles; its typology is given, its structures are not corrected",
+          "to_m": 665.0
+        }
+      ]
     },
     "segments": [
       {
-        "ele_end": 10.3,
+        "ele_end": 8.3,
         "ele_method": "dem",
         "ele_start": 7.63,
         "from_index": 0,
         "from_m": 0.0,
-        "grade_pct": 0.89,
+        "grade_pct": 0.59,
+        "matched": true,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 1,
+        "to_m": 112.06,
+        "way_kind": "cycleway"
+      },
+      {
+        "ele_end": 10.3,
+        "ele_method": "dem",
+        "ele_start": 8.3,
+        "from_index": 0,
+        "from_m": 112.06,
+        "grade_pct": 1.06,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -494,12 +610,12 @@
         "way_kind": "major_road"
       },
       {
-        "ele_end": 8.57,
+        "ele_end": 8.77,
         "ele_method": "dem",
         "ele_start": 10.29,
         "from_index": 1,
         "from_m": 521.97,
-        "grade_pct": -2.92,
+        "grade_pct": -2.86,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -507,16 +623,67 @@
           "source": "tagged"
         },
         "to_index": 2,
-        "to_m": 581.02,
+        "to_m": 575.0,
         "way_kind": "major_road"
+      },
+      {
+        "ele_end": 8.53,
+        "ele_method": "dem",
+        "ele_start": 8.77,
+        "from_index": 1,
+        "from_m": 575.0,
+        "grade_pct": -2.39,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 585.0,
+        "way_kind": "unknown"
+      },
+      {
+        "ele_end": 8.05,
+        "ele_method": "dem",
+        "ele_start": 8.53,
+        "from_index": 1,
+        "from_m": 585.0,
+        "grade_pct": -0.61,
+        "matched": false,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 2,
+        "to_m": 665.0,
+        "way_kind": "minor_road"
+      },
+      {
+        "ele_end": 8.02,
+        "ele_method": "dem",
+        "ele_start": 8.05,
+        "from_index": 1,
+        "from_m": 665.0,
+        "grade_pct": -0.28,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 675.0,
+        "way_kind": "unknown"
       },
       {
         "ele_end": 8.13,
         "ele_method": "dem",
-        "ele_start": 8.57,
+        "ele_start": 8.02,
         "from_index": 1,
-        "from_m": 581.02,
-        "grade_pct": -0.18,
+        "from_m": 675.0,
+        "grade_pct": 0.08,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -532,17 +699,22 @@
     "summary": {
       "by_structure_m": {
         "bridge": 221.93,
-        "ground": 600.06
+        "ground": 580.06,
+        "unknown": 20.0
       },
       "by_surface_class_m": {
-        "paved": 821.99
+        "paved": 801.99,
+        "unknown": 20.0
       },
       "by_surface_source_m": {
-        "tagged": 821.99
+        "none": 20.0,
+        "tagged": 801.99
       },
       "by_way_kind_m": {
-        "major_road": 581.02,
-        "minor_road": 240.97
+        "cycleway": 112.06,
+        "major_road": 462.94,
+        "minor_road": 226.99,
+        "unknown": 20.0
       },
       "ele_max_m": 12.35,
       "ele_min_m": 7.63,
@@ -569,7 +741,7 @@
       "terrain_m": {
         "ign_lidar_hd": 821.99
       },
-      "unknown_m": 0.0
+      "unknown_m": 100.0
     }
   },
   "input_with_breakpoints": {
@@ -602,7 +774,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.8"
+      "rules_version": "2026.11.9"
     },
     "points": [
       {
@@ -650,6 +822,46 @@
         ]
       },
       {
+        "d_m": 575.0,
+        "ele": 8.77,
+        "ele_method": "dem",
+        "index": 1,
+        "origin": "inserted",
+        "reasons": [
+          "surface_change"
+        ]
+      },
+      {
+        "d_m": 585.0,
+        "ele": 8.53,
+        "ele_method": "dem",
+        "index": 1,
+        "origin": "inserted",
+        "reasons": [
+          "surface_change"
+        ]
+      },
+      {
+        "d_m": 665.0,
+        "ele": 8.05,
+        "ele_method": "dem",
+        "index": 1,
+        "origin": "inserted",
+        "reasons": [
+          "surface_change"
+        ]
+      },
+      {
+        "d_m": 675.0,
+        "ele": 8.02,
+        "ele_method": "dem",
+        "index": 1,
+        "origin": "inserted",
+        "reasons": [
+          "surface_change"
+        ]
+      },
+      {
         "d_m": 680.0,
         "ele": 8.01,
         "ele_method": "dem",
@@ -670,7 +882,7 @@
     "quality": {
       "elevation_coverage": 1.0,
       "inferred_surface_ratio": 0.0,
-      "matched_ratio": 1.0,
+      "matched_ratio": 0.8783,
       "structure_correction": {
         "bridges": "applied",
         "counts": {
@@ -690,16 +902,46 @@
           "to_m": 821.99
         }
       ],
-      "warnings": []
+      "warnings": [
+        {
+          "code": "unmatched_range",
+          "from_m": 575.0,
+          "message": "route not matched on the street network",
+          "to_m": 675.0
+        },
+        {
+          "code": "bicycle_forbidden",
+          "from_m": 585.0,
+          "message": "route follows a way closed to bicycles; its typology is given, its structures are not corrected",
+          "to_m": 665.0
+        }
+      ]
     },
     "segments": [
       {
-        "ele_end": 10.3,
+        "ele_end": 8.3,
         "ele_method": "dem",
         "ele_start": 7.63,
         "from_index": 0,
         "from_m": 0.0,
-        "grade_pct": 0.89,
+        "grade_pct": 0.59,
+        "matched": true,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 1,
+        "to_m": 112.06,
+        "way_kind": "cycleway"
+      },
+      {
+        "ele_end": 10.3,
+        "ele_method": "dem",
+        "ele_start": 8.3,
+        "from_index": 0,
+        "from_m": 112.06,
+        "grade_pct": 1.06,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -729,12 +971,12 @@
         "way_kind": "major_road"
       },
       {
-        "ele_end": 8.57,
+        "ele_end": 8.77,
         "ele_method": "dem",
         "ele_start": 10.29,
         "from_index": 1,
         "from_m": 521.97,
-        "grade_pct": -2.92,
+        "grade_pct": -2.86,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -742,16 +984,67 @@
           "source": "tagged"
         },
         "to_index": 2,
-        "to_m": 581.02,
+        "to_m": 575.0,
         "way_kind": "major_road"
+      },
+      {
+        "ele_end": 8.53,
+        "ele_method": "dem",
+        "ele_start": 8.77,
+        "from_index": 1,
+        "from_m": 575.0,
+        "grade_pct": -2.39,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 585.0,
+        "way_kind": "unknown"
+      },
+      {
+        "ele_end": 8.05,
+        "ele_method": "dem",
+        "ele_start": 8.53,
+        "from_index": 1,
+        "from_m": 585.0,
+        "grade_pct": -0.61,
+        "matched": false,
+        "structure": "ground",
+        "surface": {
+          "class": "paved",
+          "source": "tagged"
+        },
+        "to_index": 2,
+        "to_m": 665.0,
+        "way_kind": "minor_road"
+      },
+      {
+        "ele_end": 8.02,
+        "ele_method": "dem",
+        "ele_start": 8.05,
+        "from_index": 1,
+        "from_m": 665.0,
+        "grade_pct": -0.28,
+        "matched": false,
+        "structure": "unknown",
+        "surface": {
+          "class": "unknown",
+          "source": "none"
+        },
+        "to_index": 2,
+        "to_m": 675.0,
+        "way_kind": "unknown"
       },
       {
         "ele_end": 8.13,
         "ele_method": "dem",
-        "ele_start": 8.57,
+        "ele_start": 8.02,
         "from_index": 1,
-        "from_m": 581.02,
-        "grade_pct": -0.18,
+        "from_m": 675.0,
+        "grade_pct": 0.08,
         "matched": true,
         "structure": "ground",
         "surface": {
@@ -767,17 +1060,22 @@
     "summary": {
       "by_structure_m": {
         "bridge": 221.93,
-        "ground": 600.06
+        "ground": 580.06,
+        "unknown": 20.0
       },
       "by_surface_class_m": {
-        "paved": 821.99
+        "paved": 801.99,
+        "unknown": 20.0
       },
       "by_surface_source_m": {
-        "tagged": 821.99
+        "none": 20.0,
+        "tagged": 801.99
       },
       "by_way_kind_m": {
-        "major_road": 581.02,
-        "minor_road": 240.97
+        "cycleway": 112.06,
+        "major_road": 462.94,
+        "minor_road": 226.99,
+        "unknown": 20.0
       },
       "ele_max_m": 12.35,
       "ele_min_m": 7.63,
@@ -804,7 +1102,7 @@
       "terrain_m": {
         "ign_lidar_hd": 821.99
       },
-      "unknown_m": 0.0
+      "unknown_m": 100.0
     }
   }
 }
