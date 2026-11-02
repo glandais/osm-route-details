@@ -239,7 +239,7 @@ preparation:
     sans_effet_sur: [E2, E2b, qualify_baro, tirage_v1]
     non_estimable: {si: [{stations_min: 400}, minimum_a_une_borne], alors: baro_brut, marque: retard_non_estimable, rapporte: true}
     rapporte: [retard_m, ecart_robuste_0_m, ecart_robuste_min_m, stations]
-    extraits_au_jugement: {delta: trace_entiere_calibration_gelee, source: "cas.retard_baro de 2026.11.6-bench3", reestimation: false}   # 2026-11-02
+    extraits_au_jugement: {delta: trace_entiere_calibration_gelee, source: "cas.retard_baro de 2026.11.6-bench3", fichier: data/retard-baro-v1.json, absent: baro_brut, reestimation: false}   # 2026-11-02
   baro_points_inseres:   # README §2.1, étape 3
     colonne: insere   # <id>.baro.csv, 1 = point d'origine inséré par fill_jumps
     garde_si: {distance_voie_m_max: 30.0, couche: streets, tuiles: [point, 8_voisines]}
@@ -353,7 +353,7 @@ criteres:
     reference:   # README §4 ter.7, décision de l'utilisateur, 2026-11-01 ; jamais le service
       retire_si: {trace_sur_ouvrage: {couche: streets, attributs: [bridge, tunnel], distance_m_max: 10, angle_deg_max: 20}, marque: e5_trace_sur_ouvrage}
       baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100,
-                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3, points_baro: bruts_hors_inseres_ecartes_et_fenetres_masquees, abscisse_points: corrigee_du_retard, repli_mnt: false}, marque: e5_reference_incertaine,
+                           incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3, points_baro: bruts_hors_inseres_ecartes_et_fenetres_masquees, abscisse_points: corrigee_du_retard, fenetres_masquees_lues_a: abscisse_corrigee, repli_mnt: false}, marque: e5_reference_incertaine,
                            traces_en_parties: {partN: recousues_par_abscisse, sN: segment_par_segment}}   # 2026-11-01, après 2026.11.6
       sinon_mnt:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]

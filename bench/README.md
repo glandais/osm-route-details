@@ -798,7 +798,9 @@ inchangés.
      calibration 2026.11.6-bench2) : le baro au croisement est lui aussi le baro corrigé du retard ;
      s'il manque au croisement, la référence passe au MNT comme avant (la décision « sans repli »
      ne vise que les côtés) ; un côté qui a ses 3 points mais aucune station avec baro et MNT n'a
-     pas de décalage : référence incertaine (`decalage_d_un_cote_absent`), sans repli sur le MNT. Effet sur la
+     pas de décalage : référence incertaine (`decalage_d_un_cote_absent`), sans repli sur le MNT.
+     Les fenêtres masquées se lisent à la même abscisse corrigée que les points : un point compte
+     si s_p − δ est hors fenêtre (sans effet sur la calibration 2026.11.6-bench3, qui l'appliquait). Effet sur la
      calibration 2026.11.6, sans le service (MNT du cache ; 153 des 174 passages au baro mesurables
      ainsi, les 21 autres sur des traces en plusieurs parties ou sans pas brut au croisement) :
      14 passages incertains, dont 6 sans baro sur l'un des côtés (`nv-272..275` sur `perso-71`,
@@ -895,17 +897,21 @@ inchangés.
      de `qualify_baro.py` ni le tirage figé V1 ne sont recalculés.
    - **Retard non estimable** : moins de 400 stations utilisables (2 km), ou minimum atteint à une
      borne de la recherche (−50 ou +200 m). La trace garde alors son baro brut, avec la mention
-     `retard_non_estimable`, rapportée, sans autre effet. Les extraits des traces tenues à l'écart,
-     lus en calibration seulement (± 1,5 km autour d'un ouvrage de calibration, plus courts que la
-     fenêtre de la dérive), gardent leur baro brut (`extrait_tenu_a_l_ecart`) ; au jugement V1,
-     ces traces sont des cas entiers et leur δ est estimé normalement.
+     `retard_non_estimable`, rapportée, sans autre effet. Un extrait (± 1,5 km autour d'un ouvrage,
+     plus court que la fenêtre de la dérive) n'a pas de δ propre. En calibration, aucun extrait
+     n'est lu (2026.11.6-bench2 et -bench3) ; au jugement V1, les traces de la série tenue à
+     l'écart sont des cas entiers, δ estimé normalement, et les extraits des traces de calibration
+     reçoivent le δ gelé de leur trace entière (ci-dessous). Rédaction corrigée après la
+     calibration 2026.11.6-bench3 : 7dab276 plaçait ces extraits en calibration.
    - Le δ estimé, l'écart robuste à δ = 0 et au minimum et le nombre de stations sont rapportés
      par trace.
    - **Extraits au jugement** : chaque extrait d'une trace de calibration reçoit le δ de sa trace
      entière, celui de la calibration gelée (`cas.retard_baro` de 2026.11.6-bench3), sans
      réestimation au jugement : le retard est une propriété de la trace, et la référence ne dépend
      pas des données jugées (décision de l'utilisateur, 2026-11-02, après la calibration
-     2026.11.6-bench3).
+     2026.11.6-bench3). Ce δ est lu dans `data/retard-baro-v1.json` (manifest
+     `perso_v1.retard_baro_gele`, écrit par `tools/retard_gele.py` depuis le rapport commité) ;
+     un extrait dont la trace n'y figure pas garde son baro brut (`retard_non_estimable`).
    Vérification sur la calibration, sans le service (MNT du cache, toutes stations, blocs de 5 km) :
    91 des 94 traces perso estimées, 3 non estimables faute de MNT (hors IGN) ; δ de −10 à +105 m,
    médiane 10 m, aucun à une borne ; `perso-84` 40 m (écart robuste 0,63 → 0,36 m), `perso-71`
