@@ -851,6 +851,11 @@ inchangés.
    tolérance baro et les deux références incertaines du 2026-11-01 : **65** croisements gardent une
    référence (48 au baro, 17 au MNT), 10 ont un baro incertain (côtés à plus de 2 m), 1 une bosse
    MNT de 1 à 2 m, 1 n'a de baro que d'un côté du croisement ; toujours au-dessus du minimum (8) et
+   de la cible (10). Recompté le 2026-11-02 (abscisse géodésique de `baro.csv` — la première version
+   la calculait dans un plan local et dérivait de 40 à 460 m sur les longues traces —, fenêtres
+   masquées retirées, points bruts, règles du 2026-11-02, retard du baro non corrigé) : **69**
+   croisements gardent une référence (52 au baro, 17 au MNT), 27 retirés, 6 avec un côté de moins
+   de 3 points bruts, 2 avec des côtés en désaccord, 1 indisponible ; au-dessus du minimum (8) et
    de la cible (10).
 8. **Référence incertaine en E1 plaine** (décision de l'utilisateur, 2026-11-01, après la
    calibration 2026.11.5-bench1). Une trace du groupe `plaine` dont le bruit baro mesuré par
