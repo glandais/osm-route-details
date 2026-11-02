@@ -596,6 +596,13 @@ nouvelle mesure) : limite des données hors décompte (point 4), plages hors ré
    les seules que la règle regarde. Effet sur la calibration, sans le service (instantané du
    2026-11-01T13:01Z, 1 993 voies non revêtues chez Valhalla) : 3,2 km exclus sur 12 876 km de
    référence, `pl-r-vosges-nord` (2,83 km) et `perso-15` (351 m).
+   Lectures (rédaction du banc, 2026-11-02, outil `ddd253d`) : l'instantané est celui de la date des
+   données du serveur du recalage de la campagne ; s'il manque au manifest, la campagne est refusée
+   (une voie absente d'un instantané présent n'est pas exclue). La part rapportée se rapporte à la
+   longueur de référence classée, hors discontinuités du recalage et hors plages `UNKNOWN`, pour
+   les traces perso comme pour les parcours planifiés. Les fichiers `<id>.surface.csv` et
+   `<id>.baro.csv` des parcours planifiés sont empreintés au manifest (`sha256_surface`,
+   `sha256_baro`) comme leur référence.
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux
@@ -886,7 +893,11 @@ inchangés.
      2026-11-02). Le MNT d'une telle
      approche n'est pas le sol de la voie du dessous, et la bosse ne protège plus la référence
      (`nv-423` au jugement V1 : une approche sur un pont emprunté, l'autre dans un tunnel). Se
-     teste avant la bosse ; plages `O` : approches mesurées depuis les bouts, comme la bosse ;
+     teste avant la bosse ; plages `O` : approches mesurées depuis les bouts, comme la bosse.
+     Lectures (rédaction du banc, outil `ddd253d`) : ordre retiré, baro, MNT sans donnée,
+     approche sur un ouvrage, bosse ; voies de l'ouvrage du dessus reconnues par la géométrie
+     (lignes `bridge` ou `tunnel` à 10 m au plus du croisement et à 20° au moins de la trace, avec
+     leurs prolongements dans les tuiles voisines) ;
    - plages `O` des témoins vcyclist (sans point de croisement, sans baro) : croisement au milieu de
      la plage, référence MNT, écart retenu = écart max sur la plage. Les approches de la bosse
      (20–50 m) se mesurent depuis les **bouts** de la plage, pas depuis son milieu (décision de
