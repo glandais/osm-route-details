@@ -911,7 +911,11 @@ inchangés.
      pas des données jugées (décision de l'utilisateur, 2026-11-02, après la calibration
      2026.11.6-bench3). Ce δ est lu dans `data/retard-baro-v1.json` (manifest
      `perso_v1.retard_baro_gele`, écrit par `tools/retard_gele.py` depuis le rapport commité) ;
-     un extrait dont la trace n'y figure pas garde son baro brut (`retard_non_estimable`).
+     un extrait dont la trace n'y figure pas garde son baro brut (`retard_non_estimable`, raison
+     `absent_du_retard_gele`), de même si son `retard_m` y est null (raison
+     `retard_gele_non_estime`). En calibration, le δ calculé de chaque cas est contrôlé contre le
+     fichier (`agregats.retard_baro.controle_gele`, sans effet sur les verdicts) : 101 sur 101
+     égaux en 2026.11.6-bench4.
    Vérification sur la calibration, sans le service (MNT du cache, toutes stations, blocs de 5 km) :
    91 des 94 traces perso estimées, 3 non estimables faute de MNT (hors IGN) ; δ de −10 à +105 m,
    médiane 10 m, aucun à une borne ; `perso-84` 40 m (écart robuste 0,63 → 0,36 m), `perso-71`
