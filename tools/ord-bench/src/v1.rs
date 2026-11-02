@@ -82,7 +82,26 @@ pub fn parse_series(text: &str) -> Vec<SeriesRow> {
 
 /// `series-v1.csv`, empreinte vérifiée.
 pub fn series_rows(paths: &BenchPaths, v1: &PersoV1) -> anyhow::Result<Vec<SeriesRow>> {
-    Ok(parse_series(&read_verified(paths, &v1.series)?))
+    let mut rows = parse_series(&read_verified(paths, &v1.series)?);
+    if v1.judged {
+        judged_rows(&mut rows);
+    }
+    Ok(rows)
+}
+
+/// Série V1 jugée (README §2, point 3) : les lignes tenues à l'écart passent en calibration ; un
+/// itinéraire `par_cas` le reste (tous ses éléments sont désormais de calibration).
+pub fn judged_rows(rows: &mut [SeriesRow]) {
+    for r in rows.iter_mut().filter(|r| r.serie == "tenue_a_l_ecart") {
+        r.serie = "calibration".into();
+    }
+}
+
+/// Série d'une entrée d'index V1 (`temoins-v1.json`, `temoins-v1-tags.json`) : calibration pour
+/// toute entrée une fois la série V1 jugée.
+fn index_serie(v1: &PersoV1, s: Option<&str>) -> Option<Serie> {
+    let serie = Serie::parse(s?).ok()?;
+    Some(if v1.judged { Serie::Calibration } else { serie })
 }
 
 /// Série d'un itinéraire planifié ; `None` s'il est absent de `series-v1.csv`.
@@ -169,7 +188,7 @@ fn real_ranges(
     let v: Value = serde_json::from_str(&text).context("temoins-v1-tags.json")?;
     let mut out = BTreeMap::new();
     for (id, t) in v.as_object().into_iter().flatten() {
-        if t["serie"].as_str().and_then(|s| Serie::parse(s).ok()) != Some(target) {
+        if index_serie(v1, t["serie"].as_str()) != Some(target) {
             continue;
         }
         let ranges = t["plages"]
@@ -201,7 +220,7 @@ pub fn temoins(paths: &BenchPaths, v1: &PersoV1, target: Serie) -> anyhow::Resul
         .into_iter()
         .flatten()
         .filter_map(|t| {
-            let serie = Serie::parse(t["serie"].as_str()?).ok()?;
+            let serie = index_serie(v1, t["serie"].as_str())?;
             (serie == target).then(|| TemoinV1 {
                 id: t["id"].as_str().unwrap_or_default().to_owned(),
                 trace: t["trace"].as_str().unwrap_or_default().to_owned(),
@@ -471,6 +490,87 @@ mod tests {
         refs.insert("nv-3".into(), vec![LatLon::new(45.001, 5.0)]);
         let got = other_series_on(&pts, &refs, &rows, Serie::Calibration, "pl-x");
         assert_eq!(got, ["nv-1", "pl-x-s0"]);
+    }
+
+    /// README §2, point 3 : la série V1 jugée passe en calibration. Traces, itinéraires, témoins
+    /// et éléments tenus à l'écart sont lus en calibration ; plus aucun masque ni extrait ; un cas
+    /// absent du manifest (série V1.1) n'est jamais sélectionné.
+    #[test]
+    fn a_judged_v1_series_is_calibration() {
+        use crate::manifest::Trace;
+        let trace = |id: &str, serie, masques: &[&str]| Trace {
+            id: id.into(),
+            groupe: "dplus".into(),
+            serie,
+            fichier: format!("private/traces/{id}.gpx"),
+            sha256: None,
+            sha256_trim1km: None,
+            passages_masques: masques.iter().map(|m| (*m).to_owned()).collect(),
+            verdict: None,
+            dist_km: None,
+            gain_baro_m: None,
+            gain_mnt_m: None,
+            noise_m: None,
+        };
+        let m = Manifest {
+            traces: vec![
+                trace("perso-01", Serie::Calibration, &[]),
+                trace("perso-40", Serie::Calibration, &["nv-9"]),
+                trace("perso-53", Serie::TenueALEcart, &["nv-1"]),
+            ],
+            v1: Some(PersoV1 {
+                traces: ["perso-40", "perso-53"].iter().map(|s| (*s).to_owned()).collect(),
+                planifies: ["pl-r-a", "pl-s2-b"]
+                    .iter()
+                    .map(|i| Planned { id: (*i).into(), ..Planned::default() })
+                    .collect(),
+                ..PersoV1::default()
+            }),
+            mvp_judged: true,
+            ..Manifest::default()
+        };
+        let csv = "id,type,groupe,serie,passages_masques\npl-r-a,planifie,R1_R2,tenue_a_l_ecart,\n\
+                   pl-s2-b,planifie,S2,par_cas,\nnv-1,ouvrage,,tenue_a_l_ecart,\nnv-9,ouvrage,,calibration,\n\
+                   pl-s2-b-s0,temoin,digue,tenue_a_l_ecart,\n";
+        // Avant : perso-53 et pl-r-a tenus à l'écart, nv-1 et le témoin masqués.
+        let before = crate::campaign::select_series(&m, &[], &[], Serie::Calibration);
+        assert_eq!(before.excluded_held_out, ["perso-53"]);
+        let rows = parse_series(csv);
+        assert_eq!(select_planned(&m, &rows, &[], Serie::Calibration).excluded, ["pl-r-a"]);
+        let mut refs = BTreeMap::new();
+        refs.insert("nv-1".into(), vec![LatLon::new(45.001, 5.0)]);
+        let pts: Vec<LatLon> = (0..100).map(|k| LatLon::new(45.0 + k as f64 * 0.0001, 5.0)).collect();
+        assert_eq!(
+            other_series_on(&pts, &refs, &rows, Serie::Calibration, "pl-s2-b"),
+            ["nv-1", "pl-s2-b-s0"]
+        );
+        // Après le jugement V1.
+        let m = m.with_v1_judged();
+        assert!(m.v1.as_ref().unwrap().judged);
+        let after = crate::campaign::select_series(&m, &[], &[], Serie::Calibration);
+        assert!(after.excluded_held_out.is_empty());
+        assert_eq!(
+            after.cases.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["perso-01", "perso-40", "perso-53"]
+        );
+        assert!(m.traces.iter().all(|t| t.passages_masques.is_empty()), "plus de fenêtres masquées");
+        assert!(crate::campaign::select_series(&m, &[], &[], Serie::TenueALEcart).cases.is_empty());
+        let mut rows = parse_series(csv);
+        judged_rows(&mut rows);
+        let cal = select_planned(&m, &rows, &[], Serie::Calibration);
+        assert_eq!(cal.cases.iter().map(|c| c.0.id.as_str()).collect::<Vec<_>>(), ["pl-r-a", "pl-s2-b"]);
+        assert!(cal.excluded.is_empty());
+        assert!(
+            other_series_on(&pts, &refs, &rows, Serie::Calibration, "pl-s2-b").is_empty(),
+            "plus de masques"
+        );
+        assert_eq!(element_serie(&rows, "nv-1"), Some(Serie::Calibration));
+        // Index V1 (témoins) : calibration une fois jugée.
+        let v1 = m.v1.as_ref().unwrap();
+        assert_eq!(index_serie(v1, Some("tenue_a_l_ecart")), Some(Serie::Calibration));
+        assert_eq!(index_serie(&PersoV1::default(), Some("tenue_a_l_ecart")), Some(Serie::TenueALEcart));
+        // Une trace hors du manifest (V1.1) n'est jamais un cas.
+        assert!(!after.cases.iter().any(|t| t.id == "perso-130"));
     }
 
     #[test]

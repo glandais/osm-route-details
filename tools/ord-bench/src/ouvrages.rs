@@ -277,7 +277,10 @@ pub fn series_ouvrages(
         let v: Value = serde_json::from_slice(&bytes).context("géométrie des ouvrages")?;
         for o in v.as_array().into_iter().flatten() {
             let Some(id) = o["id"].as_str() else { continue };
-            let marked = o["serie"].as_str() == Some("tenue_a_l_ecart");
+            // Série V1 jugée (README §2, point 3) : ses ouvrages tenus à l'écart sont de la
+            // calibration.
+            let v1_judged = v1 && manifest.v1.as_ref().is_some_and(|x| x.judged);
+            let marked = o["serie"].as_str() == Some("tenue_a_l_ecart") && !v1_judged;
             let is_held_out =
                 if v1 { marked } else { !manifest.mvp_judged && (held_out.contains(id) || marked) };
             if is_held_out != (target == crate::manifest::Serie::TenueALEcart) {
@@ -3100,6 +3103,35 @@ mod tests {
             osm_id: None,
             raw: None,
         }
+    }
+
+    /// README §2, point 3 : les ouvrages V1 tenus à l'écart sont de la calibration une fois la
+    /// série V1 jugée (`with_v1_judged`).
+    #[test]
+    fn judged_v1_structures_are_calibration() {
+        let dir = tempfile::tempdir().unwrap();
+        let private = dir.path().join("private");
+        std::fs::create_dir_all(private.join("traces")).unwrap();
+        std::fs::create_dir_all(private.join("v1")).unwrap();
+        let json = r#"[{"id":"nv-1","type":"bridge","serie":"tenue_a_l_ecart","pts":{"croisement":[45.0,5.0]}},
+            {"id":"nv-2","type":"bridge","serie":"calibration","pts":{"croisement":[45.1,5.0]}}]"#;
+        std::fs::write(private.join("v1/ouvrages-v1.json"), json).unwrap();
+        let paths = crate::BenchPaths::new(dir.path(), Some(dir.path()), Some(&private));
+        let m = crate::manifest::Manifest {
+            v1: Some(crate::manifest::PersoV1 {
+                ouvrages: ("private/v1/ouvrages-v1.json".into(), crate::hash::sha256_bytes(json.as_bytes())),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let ids = |m: &crate::manifest::Manifest, s| -> Vec<String> {
+            series_ouvrages(&paths, m, s).unwrap().into_iter().map(|o| o.id).collect()
+        };
+        assert_eq!(ids(&m, crate::manifest::Serie::Calibration), ["nv-2"]);
+        assert_eq!(ids(&m, crate::manifest::Serie::TenueALEcart), ["nv-1"]);
+        let m = m.with_v1_judged();
+        assert_eq!(ids(&m, crate::manifest::Serie::Calibration), ["nv-1", "nv-2"]);
+        assert!(ids(&m, crate::manifest::Serie::TenueALEcart).is_empty());
     }
 
     #[test]

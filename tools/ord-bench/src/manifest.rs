@@ -117,6 +117,10 @@ pub struct PersoV1 {
     pub osm_tags: Option<(String, String, String)>,
     pub planifies: Vec<Planned>,
     pub traces: BTreeSet<String>,
+    /// Série V1 jugée (README §2, point 3 ; `with_v1_judged`) : ses éléments tenus à l'écart
+    /// (`ouvrages-v1.json`, `temoins-v1.json`, `temoins-v1-tags.json`, `series-v1.csv`) se lisent
+    /// en calibration.
+    pub judged: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -270,6 +274,7 @@ impl Manifest {
                     },
                     planifies,
                     traces: ids,
+                    judged: false,
                 })
             }
             None => None,
@@ -316,6 +321,21 @@ impl Manifest {
         self
     }
 
+    /// Série V1 jugée (README §2, point 3 ; décision de l'utilisateur, 2026-11-02 : « la série V1
+    /// passe en calibration ») : ses traces deviennent calibration, sans fenêtres masquées ; ses
+    /// ouvrages, croisements, témoins et itinéraires tenus à l'écart sont lus en calibration
+    /// (`PersoV1::judged`). La série jugée n'a plus ni masques ni extraits. Les cas absents du
+    /// manifest (série V1.1) ne sont jamais lus.
+    pub fn with_v1_judged(mut self) -> Self {
+        let Some(v1) = self.v1.as_mut() else { return self };
+        v1.judged = true;
+        for t in self.traces.iter_mut().filter(|t| v1.traces.contains(&t.id)) {
+            t.serie = Serie::Calibration;
+            t.passages_masques.clear();
+        }
+        self
+    }
+
     /// Trace de la section `perso_v1`.
     pub fn is_v1(&self, id: &str) -> bool {
         self.v1.as_ref().is_some_and(|v| v.traces.contains(id))
@@ -329,11 +349,13 @@ impl Manifest {
         // Après le jugement du MVP, sa série tenue à l'écart est de la calibration (README §2,
         // point 3) : lu dans `judgements.md`, jamais deviné.
         let judgements = std::fs::read_to_string(bench.join("judgements.md")).unwrap_or_default();
-        Ok(if crate::judge::already_judged(&judgements, "MVP") {
+        let manifest = if crate::judge::already_judged(&judgements, "MVP") {
             manifest.with_mvp_judged()
         } else {
             manifest
-        })
+        };
+        // De même pour V1 (README §2, point 3), jugée le 2026-11-02.
+        Ok(if crate::judge::already_judged(&judgements, "V1") { manifest.with_v1_judged() } else { manifest })
     }
 
     pub fn hors_git(&self, id: &str) -> Option<&HorsGitEntry> {

@@ -169,7 +169,12 @@ impl BenchPaths {
 /// la bosse ; plages d'erreur de la référence Valhalla (classe non revêtue sur une voie OSM en
 /// revêtement dur, instantané daté `osm_tags_reference`, empreinte vérifiée) hors décompte de R1,
 /// R2 et R3, rapportées à part. Reste à `None` avec les règles 2026.11.9 (`surface` brut et
-/// `bicycle` normalisé des tuiles VersaTiles shortbread@1.1).
+/// `bicycle` normalisé des tuiles VersaTiles shortbread@1.1), campagne
+/// `2026-11-02-2026.11.9` sans révision. Série V1 jugée lue en calibration (README §2, point 3 ;
+/// décision de l'utilisateur, 2026-11-02 : `Manifest::with_v1_judged`, plus de masques ni
+/// d'extraits) : changement d'outil postérieur à cette campagne, mesuré pour la première fois par
+/// la campagne des règles 2026.11.10 (`bicycle=no` sans effet sur les voies non routières), qui
+/// remet la révision à `None` ; à rapporter `bench1` s'il était mesuré sous 2026.11.9.
 pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

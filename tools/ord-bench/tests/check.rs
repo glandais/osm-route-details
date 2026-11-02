@@ -13,7 +13,9 @@ fn bench_fingerprints_and_q1() {
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     assert!(report.verified > 100, "{}", report.verified);
     assert!(!report.private_present);
-    assert_eq!(report.q1.negatives, 4);
+    // 4 négatifs du MVP et 3 de V1, en calibration depuis le jugement V1 (README §2, point 3).
+    assert_eq!(report.q1.negatives, 7);
+    assert_eq!(report.q1_tenue.negatives, 0);
     assert!(report.q1.pass(), "{:?}", report.q1);
 }
 
@@ -21,7 +23,14 @@ fn bench_fingerprints_and_q1() {
 fn held_out_cases_are_excluded_before_any_read() {
     let manifest = ord_bench::manifest::Manifest::load(&BenchPaths::repo_bench()).expect("manifest");
     let all = ord_bench::campaign::select(&manifest, &[], &[]);
-    assert!(!all.excluded_held_out.is_empty());
+    // Série tenue à l'écart du manifest (vide entre le jugement V1 et l'entrée de V1.1) : exclue.
+    let held: Vec<&str> = manifest
+        .traces
+        .iter()
+        .filter(|t| t.serie == ord_bench::manifest::Serie::TenueALEcart)
+        .map(|t| t.id.as_str())
+        .collect();
+    assert_eq!(all.excluded_held_out, held);
     assert!(all.cases.iter().all(|t| t.serie == ord_bench::manifest::Serie::Calibration));
     assert!(all.cases.iter().all(|t| t.groupe != "negatif"));
 }
