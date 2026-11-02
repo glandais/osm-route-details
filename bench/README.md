@@ -1001,6 +1001,17 @@ inchangés.
      traces, 53 avec une marche de plus de 1 m, 11 de plus de 3 m. Une règle pour ces points
      (les écarter du baro de référence quand leur baro varie de plus de 1 m, par exemple) est
      reportée après V1 (décision de l'utilisateur, 2026-11-02).
+10. **Série tenue à l'écart V1.1 : E3 rapporté, groupe E2b « ouvrage » non exigé** (décision de
+   l'utilisateur, 2026-11-02, après le contrôle de couverture de V1.1, sans le service). Sur la
+   série V1.1 seulement, E3 est mesuré avec ses seuils inchangés, mais un échec ou un minimum non
+   atteint est rapporté sans refuser l'incrément ; le minimum E2b ne porte que sur les groupes
+   `dplus` et `plaine`, le groupe `ouvrage` est rapporté s'il a des traces. E3 reste calibré sur
+   MVP + V1. Motif : sur 279 ponts franchis par les 44 sorties nouvelles, 274 sont déjà en
+   calibration (MVP + V1) ; il reste 1 pont nouveau avec référence baro (minimum 12), aucune trace
+   du groupe `ouvrage` (minimum 3), et la réserve du tirage n'en donnerait qu'environ 6 au
+   rendement observé. Les ponts des itinéraires planifiés, sans baro, n'ont que la référence MNS
+   (cohérence seulement) et n'entrent pas en E3. Les autres minimums de V1.1 sont atteints
+   (manifest `serie_v11.couverture`).
 
 ---
 

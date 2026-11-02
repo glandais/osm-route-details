@@ -138,6 +138,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E1 plaine : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non jugée"
   - id: couverture_serie_v1   # 2026-11-01, V1
     decision: "Série tenue à l'écart V1 : minimums de couverture par critère bloquant, comptés après exclusions ; données nouvelles seulement ; tirage stratifié figé avant mesure ; contrôle de couverture sans le service ; sauté ou sous le minimum = refus"
+  - id: serie_v11_e3_rapporte   # 2026-11-02, après le contrôle de couverture de V1.1
+    decision: "Série tenue à l'écart V1.1 : E3 rapporté, non bloquant, seuils inchangés (échec ou minimum non atteint sans refus) ; minimum E2b sur les groupes dplus et plaine seulement, groupe ouvrage rapporté ; E3 reste calibré sur MVP + V1"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -230,6 +232,9 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
     controle_couverture: {lit: [corpus, tuiles, mnt], jamais: service, ecrit_dans: manifest}
     minimum_non_atteint: collecter_d_autres_cas   # jamais changer le sel
   reference_R1_R2: {source: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de), 1 req/s", donnees_serveur: "2026-11-01T13:01Z", donnees_perso: false, meme_semaine_que: campagne.data_versions, stockage: hors_git_regenerable}   # décision de l'utilisateur, 2026-11-01 (était Stadia Maps)
+  serie_v11:   # README §4 ter.10, décision de l'utilisateur, 2026-11-02 ; série V1.1 seulement
+    E3: {bloquant: false, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1]}
+    E2b: {groupes_exiges: [dplus, plaine], ouvrage: rapporte}
   erreur_reference_R:   # README §4 bis.8, décision de l'utilisateur, 2026-11-02 ; R1, R2 (référence Valhalla) et R3
     s_applique_a: {R1_R2: parcours_planifies_reference_valhalla, R3: traces_perso, osm_surface: false}
     si: {classe_valhalla: [compacted, dirt, gravel, path, impassable], surface_osm: [asphalt, concrete, "concrete:lanes", "concrete:plates", paving_stones]}
