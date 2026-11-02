@@ -909,6 +909,21 @@ inchangés.
    (`perso-84`) et 35 m (`perso-71`), sur des minimums presque plats ; à 5 ou 10 m près, δ est
    dans la précision de l'estimateur. Calibration 2026.11.6-bench2 (MNT du §2.2, Mapterhorn
    compris) : 101 cas sur 101 estimés, δ de −5 à +105 m, médiane 15 m.
+   - **Retard en temps, testé et non retenu** (décision de l'utilisateur, 2026-11-02, après la
+     calibration 2026.11.6-bench2 : δ reste en distance pour V1). Un retard τ en temps, baro(t + τ),
+     testé sans le service sur 91 traces de calibration (de −10 à +40 s) : écart robuste médian
+     0,481 m avec δ, 0,456 m avec τ ; τ meilleur sur 44 traces, égal sur 39, moins bon sur 8 ;
+     au croisement, meilleur pour `nv-352`, moins bon pour `nv-268`/`nv-269` (sous 2 m dans les
+     deux cas). Un τ négatif sur certaines traces montre qu'une part du décalage vient de l'abscisse
+     du recalage, que δ absorbe.
+   - **Limite connue : points empilés.** Le recalage projette parfois plusieurs points bruts sur la
+     même abscisse (moins de 2 m d'écart sur plus de 5 s) : arrêts le plus souvent, mais aussi une
+     rampe hors de la voie appariée, et baro(s) a alors une marche verticale, que δ déplace avec le
+     reste. C'est la cause de l'écart de `nv-125` (`perso-40`, E3 : marche de 7 m en bout de tablier,
+     écart max 1,34 → 3,59 m une fois δ appliqué), pas la vitesse. Calibration : 163 piles sur 49
+     traces, 53 avec une marche de plus de 1 m, 11 de plus de 3 m. Une règle pour ces points
+     (les écarter du baro de référence quand leur baro varie de plus de 1 m, par exemple) est
+     reportée après V1 (décision de l'utilisateur, 2026-11-02).
 
 ---
 
