@@ -574,6 +574,28 @@ nouvelle mesure) : limite des données hors décompte (point 4), plages hors ré
    différentes, les tuiles du service et le graphe de Stadia Maps ; un retaguage OSM entre ces deux
    dates n'est pas un défaut du service. R1 et R2, sur osm-surface, restent bloquants ; R1 garde son
    seuil de 85 %. Cas déclencheur : `perso-17`.
+8. **Erreur de la référence de revêtement, hors décompte** (décision de l'utilisateur, 2026-11-02,
+   après le jugement V1). Quand la référence est la réponse `trace_attributes` de Valhalla (R1/R2
+   des parcours planifiés, R3 des traces perso ; pas les parcours d'osm-surface, dont la référence
+   est la leur), une plage de la référence est une **erreur de la référence** si :
+   - Valhalla y rend une classe non revêtue (`compacted`, `dirt`, `gravel`, `path`, `impassable`),
+   - et la voie OSM de la plage (`way_id` de `<id>.surface.csv`) porte, à la date des données du
+     serveur Valhalla, un tag `surface` de revêtement dur sans ambiguïté : `asphalt`, `concrete`,
+     `concrete:lanes`, `concrete:plates`, `paving_stones` (valeurs exactes ; `paved`, `sett`,
+     `paving_stones:lanes`, `unhewn_cobblestone` et les autres n'en sont pas).
+
+   La plage sort du décompte de R1, R2 et R3 (ni accord ni désaccord, ni dans la longueur comparée)
+   et est rapportée à part (longueur et part par cas). Source des tags : instantané Overpass daté à
+   la date des données du serveur (`[date:…]`), écrit par `tools/osm_tags_reference.py` dans
+   `private/osm-tags/<date>.json`, hors git (identifiants de voies), empreinté au manifest ; aucun
+   appel réseau pendant le banc ; voie absente de l'instantané : pas d'exclusion. Le sens inverse
+   (Valhalla revêtu, OSM non revêtu) n'est pas visé. Cas déclencheur : `pl-r-vosges-nord` au
+   jugement V1, où Valhalla FOSSGIS rend `dirt` sur des voies taguées `surface=asphalt` depuis 2019
+   à 2022 (environ 2,5 km, 72 % du désaccord de R2 ; aucune de ces voies modifiée entre juin et
+   novembre 2026). L'instantané ne retient que les voies où Valhalla rend une classe non revêtue,
+   les seules que la règle regarde. Effet sur la calibration, sans le service (instantané du
+   2026-11-01T13:01Z, 1 993 voies non revêtues chez Valhalla) : 3,2 km exclus sur 12 876 km de
+   référence, `pl-r-vosges-nord` (2,83 km) et `perso-15` (351 m).
 
 **Lecture de R1–R3 et M1 au MVP** (incrément 3, 2026-10-31 ; seuils inchangés). `surface.class` est
 gelée à `paved` / `unpaved` / `unknown` pour la v1 (doc 01). La classe Stadia est donc ramenée aux

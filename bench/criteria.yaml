@@ -130,6 +130,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : les points bruts d'un côté se comptent à leur abscisse corrigée du retard (s_p − δ, §4 ter.9), celle où ils entrent dans le décalage du côté"
   - id: e5_approche_sur_ouvrage   # 2026-11-02, après le jugement V1
     decision: "E5, référence MNT : incertaine, rapportée, non comptée, si une approche 20–50 m chevauche un autre ouvrage (station à ≤ 10 m d'une ligne bridge ou tunnel des tuiles à < 20° de la trace : pont emprunté, tunnel) ; définition validée telle quelle le 2026-11-02"
+  - id: r_erreur_reference   # 2026-11-02, après le jugement V1
+    decision: "R1, R2, R3 contre Valhalla : plage où Valhalla rend une classe non revêtue alors que la voie OSM porte, à la date des données du serveur, surface en revêtement dur sans ambiguïté = erreur de la référence, hors décompte, rapportée à part"
   - id: retard_baro_extraits_jugement   # 2026-11-02, après la calibration 2026.11.6-bench3
     decision: "Au jugement, chaque extrait d'une trace de calibration reçoit le δ de sa trace entière, celui de la calibration gelée (cas.retard_baro de 2026.11.6-bench3), sans réestimation au jugement"
   - id: e1_plaine_bruit_baro   # 2026-11-01, après la calibration 2026.11.5-bench1
@@ -228,6 +230,11 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
     controle_couverture: {lit: [corpus, tuiles, mnt], jamais: service, ecrit_dans: manifest}
     minimum_non_atteint: collecter_d_autres_cas   # jamais changer le sel
   reference_R1_R2: {source: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de), 1 req/s", donnees_serveur: "2026-11-01T13:01Z", donnees_perso: false, meme_semaine_que: campagne.data_versions, stockage: hors_git_regenerable}   # décision de l'utilisateur, 2026-11-01 (était Stadia Maps)
+  erreur_reference_R:   # README §4 bis.8, décision de l'utilisateur, 2026-11-02 ; R1, R2 (référence Valhalla) et R3
+    s_applique_a: {R1_R2: parcours_planifies_reference_valhalla, R3: traces_perso, osm_surface: false}
+    si: {classe_valhalla: [compacted, dirt, gravel, path, impassable], surface_osm: [asphalt, concrete, "concrete:lanes", "concrete:plates", paving_stones]}
+    tags: {source: "instantané Overpass à la date des données du serveur Valhalla", fichier: "private/osm-tags/<date>.json", outil: tools/osm_tags_reference.py, empreinte: manifest, reseau_pendant_le_banc: false, voie_absente: pas_d_exclusion}
+    alors: {decompte: exclue, rapportee: true}
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de)", debit_max: "1 req/s, en séquence", donnees_serveur: "2026-11-01T13:01Z", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx", toutes_les_traces: true}   # décision de l'utilisateur, 2026-11-01 (Stadia Maps jusqu'au MVP)
