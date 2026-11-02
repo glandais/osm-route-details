@@ -1769,3 +1769,27 @@ serie_v11:   # série tenue à l'écart V1.1 (décision de l'utilisateur, 2026-1
   tout_tenu_a_l_ecart: true
   empreintes:   # fichiers de bench/private/
     v11/tirage.json: 0b04bbd19666cd932fa90137f1b0cb2d822cee5c2fd201052d4883ac9424a329
+    v11/perso-map-v11.csv: 3c6e2818090ca8a74d117b3cccacacbcfe41d3568e2b8d10a5e3ed2283e7e73d   # tools/traces_v11.py : perso-130 à perso-165, neg-08 et neg-09
+    v11/couverture-cas.json: 33c5acb065af2ed55acd5a7a9497e09edfed3bfb42b23bfea6bb20d2d03c6fb7
+    v11/affectation-tirage.json: 46cbe10c68a656b9f45454cb17d4e198288e4e5a117c0f1af787a4e974c2c57e   # tirage.json jamais réécrit
+    v11/planifies/specs.json: 53f4db4ae76b7b03d2d6dd5659ab7a8a4d4bb175a72b1bac51e27449fe98b945
+  recalage: {service: "Valhalla FOSSGIS trace_attributes", donnees_serveur: "2026-11-02T09:32Z", traces: 38, planifies_r: 5}
+  osm_tags_reference: {fichier: private/osm-tags/2026-11-02T09-32Z.json, date: "2026-11-02T09:32:00Z", voies: 1848, revetement_dur_sur_non_revetu_valhalla: 7,
+                       sha256: 3f1c5b34772272efaf7385f13602950fd7ef09a04ce3018d7266a68637952896}
+  tuiles: tuiles_2026_11_02
+  couverture:   # 2026-11-02, tools/couverture_v1.py (SERIE=v11), sans le service ; tout tenu à l'écart ; atteint / minimum de jugement
+    statut: incomplete   # E3 et groupe E2b « ouvrage » sous le minimum : décision de l'utilisateur attendue
+    traces: {selection: 47, streams: 46, sans_altitude: 1, fiables: 36, km_fiables: 6067, suspectes: 8, negatifs_q1: 2}
+    planifies: {e4: 3, s2: 4, r1_r2: 5, s2_sans_temoin: 1}
+    exclusions_candidats:
+      ponts: {deja_vu_calibration: 274, hors_graphe_velo: 28, passage_sur_ouvrage_parallele: 1, absent_des_donnees: 1}
+      tunnels: {deja_vu_calibration: 13, hors_graphe_velo: 4}
+    E4: {atteint: {tunnels: 9, plus_de_300m: 2}, minimum: {tunnels: 7, plus_de_300m: 2}}
+    E5: {atteint: {croisements: 209}, minimum: {croisements: 8}}
+    S2: {atteint: {temoins: 38, km: 81.4, natures: 4}, minimum: {temoins: 4, km: 40, natures: 3}}
+    R1_R2: {atteint: {parcours: 5, km: 514, part_non_revetu: 0.276}, minimum: {parcours: 4, km: 400, part_non_revetu: 0.10}}
+    E3: {atteint: {ponts: 1, mnh_10m: 0, plus_de_150m: 0}, minimum: {ponts: 12, mnh_10m: 3, plus_de_150m: 3}}   # NON ATTEINT
+    Q1: {atteint: {traces: 2}, minimum: {traces: 2}}
+    reste: {atteint: {traces: 36, km: 6067, dplus: 7, plaine: 29, ouvrage: 0}, minimum: {traces: 8, km: 800, par_groupe: 3}}   # groupe ouvrage NON ATTEINT
+    S1: {atteint: {ouvrages: 25, emprise_m: 3600}, minimum: {ouvrages: 15, emprise_m: 2000}}
+    M1: {atteint: {traces: 47, km: 6687}, minimum: {km: 800}}
