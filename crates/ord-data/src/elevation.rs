@@ -14,7 +14,7 @@ use std::sync::Arc;
 use ord_domain::coverage::CoverageRef;
 use ord_domain::ctx::RequestCtx;
 use ord_domain::elevation::{
-    DemKind, DsmSample, Missing, TerrainMode, TerrainOrigin, TerrainReader, TerrainSample,
+    DemKind, DsmSample, Missing, Plausibility, TerrainMode, TerrainOrigin, TerrainReader, TerrainSample,
 };
 use ord_domain::tiles::{ElevationTile, TileKey, TileOutcome, TileStore};
 use ord_domain::LatLon;
@@ -76,6 +76,8 @@ fn global_pixel_rows(p: LatLon, zoom: u8, size: u32, rows: RowMode) -> (f64, f64
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Neighbours {
     px: [(u64, u64); 4],
+    /// Pixel nord-ouest du carré, avant bouclage et blocage (couronne du garde-fou).
+    origin: (i64, i64),
     dx: f64,
     dy: f64,
 }
@@ -100,6 +102,7 @@ fn neighbours(p: LatLon, zoom: u8, size: u32, rows: RowMode, convention: PixelCo
             (wrap(x0), clamp(y0 + 1)),
             (wrap(x0 + 1), clamp(y0 + 1)),
         ],
+        origin: (x0, y0),
         dx,
         dy,
     }
@@ -136,10 +139,20 @@ struct TileGrid<'a> {
     pub zoom: u8,
     pub size: u32,
     pub tiles: &'a BTreeMap<TileKey, TileOutcome<ElevationTile>>,
+    /// Garde-fou de plausibilité (couches IGN) ; `None` : valeurs lues telles quelles.
+    pub plausibility: Option<Plausibility>,
 }
 
 impl TileGrid<'_> {
-    fn pixel(&self, (gx, gy): (u64, u64)) -> Pixel {
+    /// Valeur d'un pixel ; sous le plancher de plausibilité, no-data (`NaN`).
+    fn pixel(&self, at: (u64, u64)) -> Pixel {
+        match (self.raw_pixel(at), self.plausibility) {
+            (Pixel::Value(v), Some(p)) if v < p.floor_m => Pixel::Value(f64::NAN),
+            (px, _) => px,
+        }
+    }
+
+    fn raw_pixel(&self, (gx, gy): (u64, u64)) -> Pixel {
         let size = u64::from(self.size);
         let key = TileKey { z: self.zoom, x: (gx / size) as u32, y: (gy / size) as u32 };
         match self.tiles.get(&key) {
@@ -156,7 +169,30 @@ impl TileGrid<'_> {
         }
     }
 
-    /// Bilinéaire ; un voisin no-data, même de poids nul, rend le point no-data (T02 §6.2).
+    /// Garde-fou des pixels mêlés de no-data (règles 2026.11.7) : les 4 voisins, tous valides,
+    /// s'écartent de plus de `mixed_spread_m` et un pixel no-data est dans la couronne de
+    /// `mixed_ring_px` pixels autour d'eux. Seules les tuiles déjà chargées sont lues : une tuile
+    /// absente, en échec ou non planifiée ne compte pas comme no-data.
+    fn mixed_with_nodata(&self, n: &Neighbours, v: &[f64; 4]) -> bool {
+        let Some(p) = self.plausibility else { return false };
+        let (lo, hi) =
+            v.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &x| (lo.min(x), hi.max(x)));
+        if hi - lo <= p.mixed_spread_m {
+            return false;
+        }
+        let r = i64::from(p.mixed_ring_px);
+        let world = i64::from(self.size) * (1i64 << self.zoom);
+        let (x0, y0) = n.origin;
+        (y0 - r..=y0 + 1 + r).any(|y| {
+            (x0 - r..=x0 + 1 + r).any(|x| {
+                let at = (x.rem_euclid(world) as u64, y.clamp(0, world - 1) as u64);
+                matches!(self.pixel(at), Pixel::Value(h) if h.is_nan())
+            })
+        })
+    }
+
+    /// Bilinéaire ; un voisin no-data, même de poids nul, rend le point no-data (T02 §6.2), comme
+    /// une valeur invraisemblable (garde-fou de plausibilité des couches IGN).
     fn sample(&self, n: &Neighbours) -> Result<f64, SampleError> {
         let mut v = [0.0; 4];
         let mut absent = false;
@@ -169,6 +205,9 @@ impl TileGrid<'_> {
         }
         if absent {
             return Err(SampleError::Absent);
+        }
+        if v.iter().any(|x| x.is_nan()) || self.mixed_with_nodata(n, &v) {
+            return Err(SampleError::NoData);
         }
         let top = v[0] * (1.0 - n.dx) + v[1] * n.dx;
         let bottom = v[2] * (1.0 - n.dx) + v[3] * n.dx;
@@ -207,6 +246,9 @@ pub struct ElevationLayer {
     /// Côté des tuiles, en pixels.
     pub size: u32,
     pub rows: RowMode,
+    /// Garde-fou de plausibilité (IGN LiDAR HD, MNT et MNS) ; `None` pour Mapterhorn, dont le
+    /// décodeur borne déjà les valeurs.
+    pub plausibility: Option<Plausibility>,
 }
 
 impl std::fmt::Debug for ElevationLayer {
@@ -215,6 +257,7 @@ impl std::fmt::Debug for ElevationLayer {
             .field("zoom", &self.zoom)
             .field("size", &self.size)
             .field("rows", &self.rows)
+            .field("plausibility", &self.plausibility)
             .finish_non_exhaustive()
     }
 }
@@ -244,7 +287,7 @@ impl ElevationLayer {
         for k in skipped {
             tiles.insert(k, TileOutcome::Empty(Arc::clone(&nodata)));
         }
-        let grid = TileGrid { zoom, size: self.size, tiles: &tiles };
+        let grid = TileGrid { zoom, size: self.size, tiles: &tiles, plausibility: self.plausibility };
         neighbours.iter().map(|n| grid.sample(n)).collect()
     }
 
@@ -492,7 +535,7 @@ mod tests {
     #[test]
     fn pixel_centre_returns_the_pixel_itself() {
         let tiles = all_tiles(|x, y| (x * 100 + y) as f32);
-        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles };
+        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None };
         for (gx, gy) in [(5, 9), (12, 3), (4, 4), (7, 8)] {
             let p = pixel_center(gx, gy, Z, S);
             let n = neighbours(p, Z, S, RowMode::Mercator, PixelConvention::Center);
@@ -505,7 +548,7 @@ mod tests {
     fn continuity_across_a_tile_edge_and_plane_reproduced() {
         // Plan en pixels globaux : la bilinéaire au centre le reproduit sans décalage.
         let tiles = all_tiles(|x, y| (2.0 * x as f64 + 0.5 * y as f64) as f32);
-        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles };
+        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None };
         let edge = pixel_center(8, 10, Z, S); // pixel 8 = premier pixel de la tuile x = 2
         let (x, y) = global_pixel(edge, Z, S);
         for dx in [-0.6, -0.5, -0.01, 0.0, 0.01, 0.5] {
@@ -529,7 +572,7 @@ mod tests {
     #[test]
     fn corner_convention_reads_half_a_pixel_south_east() {
         let tiles = all_tiles(|x, _| x as f32);
-        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles };
+        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None };
         let p = pixel_center(10, 10, Z, S);
         let centre = grid.sample(&neighbours(p, Z, S, RowMode::Mercator, PixelConvention::Center)).unwrap();
         let corner = grid.sample(&neighbours(p, Z, S, RowMode::Mercator, PixelConvention::Corner)).unwrap();
@@ -540,14 +583,17 @@ mod tests {
     #[test]
     fn nodata_failure_and_absence() {
         let mut tiles = all_tiles(|x, y| if (x, y) == (9, 9) { f32::NAN } else { 1.0 });
-        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles };
+        let grid = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None };
         // Centre exact du pixel (8, 9) : le voisin (9, 9) a un poids nul mais est no-data.
         let n = neighbours(pixel_center(8, 9, Z, S), Z, S, RowMode::Mercator, PixelConvention::Center);
         assert_eq!(grid.sample(&n), Err(SampleError::NoData));
         let k = TileKey { z: Z, x: 0, y: 0 };
         tiles.insert(k, TileOutcome::Absent);
         let n0 = neighbours(pixel_center(1, 1, Z, S), Z, S, RowMode::Mercator, PixelConvention::Center);
-        assert_eq!(TileGrid { zoom: Z, size: S, tiles: &tiles }.sample(&n0), Err(SampleError::Absent));
+        assert_eq!(
+            TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None }.sample(&n0),
+            Err(SampleError::Absent)
+        );
         tiles.insert(
             k,
             TileOutcome::Failed(TileFailure {
@@ -560,7 +606,10 @@ mod tests {
                 message: String::new(),
             }),
         );
-        assert_eq!(TileGrid { zoom: Z, size: S, tiles: &tiles }.sample(&n0), Err(SampleError::Failed));
+        assert_eq!(
+            TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None }.sample(&n0),
+            Err(SampleError::Failed)
+        );
     }
 
     #[test]
@@ -647,13 +696,20 @@ mod tests {
 
     fn reader(ign: Arc<MemStore>, mt: Arc<MemStore>, mt_zoom: u8) -> LayeredTerrainReader {
         LayeredTerrainReader::new(
-            Some(ElevationLayer { store: ign, zoom: 15, size: 256, rows: RowMode::LatLinear }),
+            Some(ElevationLayer {
+                store: ign,
+                zoom: 15,
+                size: 256,
+                rows: RowMode::LatLinear,
+                plausibility: Some(IGN_PLAUSIBILITY),
+            }),
             None,
             MapterhornLayer::new(ElevationLayer {
                 store: mt,
                 zoom: mt_zoom,
                 size: 512,
                 rows: RowMode::Mercator,
+                plausibility: None,
             }),
             Arc::new(crate::coverage::MapterhornCoverage::hull_only()),
             TerrainMode::Full,
@@ -735,6 +791,127 @@ mod tests {
         let mt = MemStore::new(tiles_around(france, 12, 512, RowMode::Mercator, failed));
         let s = reader(ign, mt, 12).sample_terrain(&[france], &ctx()).await;
         assert_eq!((s[0].ele, s[0].missing, s[0].fallback_after_error), (None, Some(Missing::Failed), false));
+    }
+
+    /// Garde-fou des règles (MNT) : plancher −50 m, écart 20 m, couronne de 2 pixels.
+    const IGN_PLAUSIBILITY: Plausibility =
+        Plausibility { floor_m: -50.0, mixed_spread_m: 20.0, mixed_ring_px: 2 };
+
+    /// Tuile IGN z15 dont chaque pixel vaut `f(x, y)` en pixels globaux.
+    fn ign_tile(k: TileKey, f: &impl Fn(i64, i64) -> f32) -> TileOutcome<ElevationTile> {
+        let values: Box<[f32]> = (0..256 * 256)
+            .map(|i| f(i64::from(k.x) * 256 + i % 256, i64::from(k.y) * 256 + i / 256))
+            .collect();
+        let all_valid = values.iter().all(|v| !v.is_nan());
+        TileOutcome::Data {
+            tile: Arc::new(ElevationTile::Grid { size: 256, values, all_valid }),
+            stale: false,
+        }
+    }
+
+    /// Point IGN au milieu d'une tuile et son carré de voisins.
+    fn ign_point() -> (LatLon, (i64, i64)) {
+        let p = LatLon::new(47.2184, -1.5536);
+        let n = neighbours(p, 15, 256, RowMode::LatLinear, PixelConvention::Center);
+        let (x0, y0) = n.origin;
+        assert!((4..250).contains(&x0.rem_euclid(256)) && (4..250).contains(&y0.rem_euclid(256)));
+        (p, n.origin)
+    }
+
+    #[tokio::test]
+    async fn band_mixed_with_nodata_falls_back_to_mapterhorn() {
+        let (p, (_, y0)) = ign_point();
+        let mt = MemStore::new(tiles_around(p, 12, 512, RowMode::Mercator, |_| constant(512, 351.0)));
+        // Bande du WMS (perso-53) : une ligne sous le plancher (−9999 mêlé à 1/8), la ligne du point
+        // mêlée plus faiblement (202 m, au-dessus du plancher), terrain vers 349 m autour.
+        let band = move |_: i64, y: i64| match y - y0 {
+            -1 => -945.0,
+            0 => 202.0,
+            _ => 349.0,
+        };
+        let ign = MemStore::new(tiles_around(p, 15, 256, RowMode::LatLinear, |k| ign_tile(k, &band)));
+        let s = reader(ign, Arc::clone(&mt), 12).sample_terrain(&[p], &ctx()).await;
+        assert_eq!(
+            (s[0].ele, s[0].origin, s[0].fallback_after_error),
+            (Some(351.0), TerrainOrigin::MapterhornMeasured, false),
+            "repli normal, comme sur un vrai no-data"
+        );
+        // Le point voisin dont un des 4 voisins est sous le plancher se replie aussi.
+        let below = |_: i64, y: i64| if y == y0 { -297.0 } else { 349.0 };
+        let ign = MemStore::new(tiles_around(p, 15, 256, RowMode::LatLinear, |k| ign_tile(k, &below)));
+        let s = reader(ign, Arc::clone(&mt), 12).sample_terrain(&[p], &ctx()).await;
+        assert_eq!((s[0].ele, s[0].origin), (Some(351.0), TerrainOrigin::MapterhornMeasured));
+        // MNT IGN seul (sans repli) : no-data.
+        let ign = MemStore::new(tiles_around(p, 15, 256, RowMode::LatLinear, |k| ign_tile(k, &band)));
+        assert_eq!(reader(ign, mt, 12).sample_ign_dtm(&[p], &ctx()).await, vec![None]);
+    }
+
+    #[tokio::test]
+    async fn plausible_tiles_are_unchanged() {
+        let (p, (_, y0)) = ign_point();
+        let mt = MemStore::new(tiles_around(p, 12, 512, RowMode::Mercator, |_| constant(512, 351.0)));
+        let n = neighbours(p, 15, 256, RowMode::LatLinear, PixelConvention::Center);
+        // Falaise de 147 m sans no-data autour : lue telle quelle, interpolation comprise.
+        let cliff = move |_: i64, y: i64| if y <= y0 { 202.0 } else { 349.0 };
+        let ign = MemStore::new(tiles_around(p, 15, 256, RowMode::LatLinear, |k| ign_tile(k, &cliff)));
+        let s = reader(ign, Arc::clone(&mt), 12).sample_terrain(&[p], &ctx()).await;
+        let expected = 202.0 + n.dy * 147.0;
+        assert_eq!(s[0].origin, TerrainOrigin::IgnLidarHd);
+        assert!((f64::from(s[0].ele.unwrap()) - expected).abs() < 1e-3, "{:?} vs {expected}", s[0].ele);
+        // Terrain bas mais plausible (polder à −3 m) au bord d'un vrai no-data : écart faible, lu.
+        let polder = move |_: i64, y: i64| if y < y0 - 1 { f32::NAN } else { -3.0 + (y - y0) as f32 };
+        let ign = MemStore::new(tiles_around(p, 15, 256, RowMode::LatLinear, |k| ign_tile(k, &polder)));
+        let s = reader(ign, mt, 12).sample_terrain(&[p], &ctx()).await;
+        assert_eq!(s[0].origin, TerrainOrigin::IgnLidarHd);
+        assert!((f64::from(s[0].ele.unwrap()) - (-3.0 + n.dy)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn plausibility_floor_and_mixed_pixels_on_the_grid() {
+        let guard = Some(IGN_PLAUSIBILITY);
+        let p = pixel_center(9, 9, Z, S);
+        let n = neighbours(p, Z, S, RowMode::Mercator, PixelConvention::Center);
+        // Sous le plancher : no-data ; sans garde-fou (Mapterhorn) : lu tel quel.
+        let tiles = all_tiles(|x, y| if (x, y) == (9, 9) { -60.0 } else { 100.0 });
+        assert_eq!(
+            TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: guard }.sample(&n),
+            Err(SampleError::NoData)
+        );
+        let near = |r: Result<f64, SampleError>, v: f64| r.is_ok_and(|h| (h - v).abs() < 1e-6);
+        assert!(near(TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: None }.sample(&n), -60.0));
+        let low = all_tiles(|_, _| -40.0);
+        assert!(
+            near(TileGrid { zoom: Z, size: S, tiles: &low, plausibility: guard }.sample(&n), -40.0),
+            "au-dessus du plancher"
+        );
+        // Pixel mêlé au-dessus du plancher, à deux pixels d'un no-data : rejeté ; sans no-data
+        // dans la couronne (falaise) ou à trois pixels du carré `[9, 10]²`, gardé.
+        let mixed = |nodata: (u64, u64)| {
+            all_tiles(move |x, y| match (x, y) {
+                (9, 9) => 30.0,
+                q if q == nodata => f32::NAN,
+                _ => 100.0,
+            })
+        };
+        for (nodata, ok) in [
+            ((11, 9), false),
+            ((7, 7), false),
+            ((12, 12), false),
+            ((13, 9), true),
+            ((6, 9), true),
+            ((0, 0), true),
+        ] {
+            let tiles = mixed(nodata);
+            let r = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: guard }.sample(&n);
+            assert_eq!(r.is_ok(), ok, "no-data en {nodata:?} : {r:?}");
+        }
+        // Écart sous le seuil, no-data voisin : gardé.
+        let tiles = all_tiles(|x, y| match (x, y) {
+            (9, 9) => 85.0,
+            (11, 9) => f32::NAN,
+            _ => 100.0,
+        });
+        assert!(near(TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: guard }.sample(&n), 85.0));
     }
 
     #[test]

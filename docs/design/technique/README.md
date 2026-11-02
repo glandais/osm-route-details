@@ -69,6 +69,13 @@ vérifié par `ord-bench check` avant toute campagne.
       C'est un ajout au contrat ;
     - les galeries pare-avalanche, absentes du schéma Shortbread, sont couvertes par la détection
       MNS des heuristiques. Jusque-là, elles restent en « limite des données » (bench §4 bis.4).
+  - Décisions de l'utilisateur (2026-11-02, après le jugement V1, refusé : `bench/judgements.md`) :
+    - une valeur IGN invraisemblable (MNT et MNS) est lue comme du no-data et se replie comme lui
+      (Mapterhorn pour le MNT, `NoData` pour le MNS) : pixel sous le plancher de −50 m, ou carré
+      d'interpolation qui s'écarte de plus de 20 m (MNT ; 50 m sur le MNS) au bord d'un no-data,
+      signature d'un pixel mêlé de no-data par le rééchantillonnage du WMS (échec E1 de `perso-53` :
+      −944 m rendus en `dem`, D+ gonflé d'environ 325 m). Règles 2026.11.7, T02 §6.2. Le repli se
+      lit dans `quality.terrain`, sans ajout au contrat ;
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

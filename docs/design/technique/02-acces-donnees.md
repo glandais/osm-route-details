@@ -304,6 +304,32 @@ source, x linéaire en longitude, y en Mercator pour Terrarium et **linéaire en
 blocage au bord du monde (vc:`M/ElevationFunctions.kt:33-80`) ; (4) un voisin no-data, **même de
 poids nul**, rend le point no-data (vc:`M/ElevationCalculator.kt:22-25`).
 
+**Garde-fou de plausibilité des couches IGN** (MNT et MNS, règles 2026.11.7, décision de
+l'utilisateur du 2026-11-02 ; `ElevationRules::ign_plausibility`, `ord-data::elevation`). Le
+rééchantillonnage du WMS mêle le no-data `−9999` aux pixels valides voisins, qui sortent du format
+comme des altitudes : sur `perso-53`, une bande de deux lignes de pixels à −297 … −953 m sur un
+terrain à 340 m (à −945 m, la part de no-data vaut 1/8), bordée de pixels à 20–200 m, rendue
+−944 m en `dem` (échec E1). Deux cas sont lus comme du no-data, et le point se replie comme sur un
+vrai no-data (§6.3, cas 3 ; `NoData` pour le MNS) :
+
+- un pixel sous le **plancher de −50 m** : le sol le plus bas de la couverture LiDAR HD est vers
+  −3 m (Moëres, Camargue) ; un pixel mêlé passe sous −50 m dès 0,5 % de no-data au niveau de la mer ;
+- un **carré d'interpolation mêlé** : ses 4 voisins valides s'écartent de plus de 20 m (MNT ;
+  50 m sur le MNS) **et** un pixel no-data ou sous le plancher est dans la couronne de 2 pixels
+  autour du carré, lue sur les tuiles déjà chargées (une tuile absente, en échec ou non planifiée
+  n'y compte pas). Mesure sur le cache de banc du 2026-11-02 (11 892 tuiles MNT, 11 693 MNS) :
+  les carrés d'écart > 20 m (MNT) ou > 50 m (MNS) proches d'un no-data en sont tous à 1 ou
+  2 pixels (563 et 522 carrés ; 78 tuiles MNT et 75 MNS ont des valeurs entre −9000 et −50 m),
+  aucun à 3–6 pixels ; les falaises, toits et arbres, loin du no-data, ne sont pas touchés. Sur le MNS,
+  le bâti et les arbres au bord de l'eau (no-data) font des écarts de 20 à 50 m à 2–6 pixels du
+  no-data : seuil de 50 m.
+
+Le seuil de no-data du décodeur (§6.1) ne change pas : une tuile qui n'a que des valeurs mêlées
+reste `all_valid` pour la `TtlClass`. Mapterhorn n'a pas ce garde-fou (son décodeur borne déjà les
+valeurs). Le repli se lit dans `quality.terrain` (plage `mapterhorn_measured`) et dans les points
+de rupture `terrain_source_change` ; aucune altitude rejetée n'atteint le profil, ni donc un point
+inséré.
+
 Lecture en trois phases, sans `await` par pixel : **planifier** les tuiles touchées (voisines
 comprises à moins d'un demi-pixel d'un bord), **charger** par `get_many` (concurrence du
 `HostBudget`), **échantillonner** de façon synchrone en O(N) points densifiés.

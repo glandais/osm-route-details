@@ -56,6 +56,22 @@ pub enum DsmSample {
     Unavailable,
 }
 
+/// Garde-fou de plausibilité d'une couche IGN LiDAR HD (règles 2026.11.7, décision de
+/// l'utilisateur du 2026-11-02) : le rééchantillonnage du WMS mêle le no-data `−9999` aux pixels
+/// valides voisins, qui sortent du format comme des altitudes (−297 à −947 m sur un terrain à
+/// 349 m). Une valeur rejetée est lue comme du no-data : le point se replie comme sur un vrai
+/// no-data (Mapterhorn pour le MNT, `NoData` pour le MNS).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Plausibility {
+    /// Pixel sous ce plancher rejeté.
+    pub floor_m: f64,
+    /// Interpolation rejetée quand l'écart entre le plus haut et le plus bas des 4 voisins dépasse
+    /// ce seuil **et** qu'un pixel no-data (ou sous le plancher) est à moins de `mixed_ring_px`
+    /// pixels du carré des voisins : signature d'un pixel mêlé de no-data.
+    pub mixed_spread_m: f64,
+    pub mixed_ring_px: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TerrainMode {
     Full,

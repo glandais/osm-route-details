@@ -20,7 +20,7 @@ use ord_data::port::{
     namespace, ReaderSettings, SourceDescriptor, StatusMeaning, StatusPolicy, TileReader, TileSource,
 };
 use ord_domain::coverage::{CoverageRef, CoverageTile};
-use ord_domain::elevation::TerrainMode;
+use ord_domain::elevation::{Plausibility, TerrainMode};
 use ord_domain::street::{StreetSchemaAdapter, StreetTile};
 use ord_domain::tiles::{ElevationTile, SourceId, TileStore};
 use ord_pipeline::typology::TileTypology;
@@ -166,7 +166,13 @@ impl Builder<'_> {
         TileReader::new(source, codec, Some(DiskStore::new(&self.config.cache.dir, &ns)), &self.settings)
     }
 
-    fn ign_layer(&self, id: SourceId, product: &str, layer: &str) -> ElevationLayer {
+    fn ign_layer(
+        &self,
+        id: SourceId,
+        product: &str,
+        layer: &str,
+        plausibility: Plausibility,
+    ) -> ElevationLayer {
         let ign = &self.config.elevation.ign;
         let template = wms_template(&ign.wms_url, layer);
         let budget = self.budgets.for_url(&ign.wms_url, Some(ign.rate_per_s), ign.concurrency);
@@ -184,7 +190,13 @@ impl Builder<'_> {
             nodata_ttl: Duration::from_secs(self.config.cache.ttl_ign_nodata_days.saturating_mul(86_400)),
         };
         let store: Arc<dyn TileStore<ElevationTile>> = Arc::new(self.reader(source, codec));
-        ElevationLayer { store, zoom: ign.zoom, size: u32::from(IGN_TILE_SIZE), rows: RowMode::LatLinear }
+        ElevationLayer {
+            store,
+            zoom: ign.zoom,
+            size: u32::from(IGN_TILE_SIZE),
+            rows: RowMode::LatLinear,
+            plausibility: Some(plausibility),
+        }
     }
 
     fn coverage(&self, startup: &Startup) -> MapterhornCoverage {
@@ -303,12 +315,16 @@ pub fn orchestrator(
         zoom: m.zoom,
         size: u32::from(m.tile_size),
         rows: RowMode::Mercator,
+        plausibility: None,
     });
+    let rules = Rules::default();
+    rules.elevation.validate().map_err(StartupError::Rules)?;
     let ign = &config.elevation.ign;
+    let guard = &rules.elevation.ign_plausibility;
     let (dtm, dsm) = if ign.enabled {
         (
-            Some(b.ign_layer(SourceId::IgnDtm, "mnt", &ign.dtm_layer)),
-            Some(b.ign_layer(SourceId::IgnDsm, "mns", &ign.dsm_layer)),
+            Some(b.ign_layer(SourceId::IgnDtm, "mnt", &ign.dtm_layer, guard.dtm)),
+            Some(b.ign_layer(SourceId::IgnDsm, "mns", &ign.dsm_layer, guard.dsm)),
         )
     } else {
         (None, None)
@@ -321,8 +337,6 @@ pub fn orchestrator(
     let terrain =
         LayeredTerrainReader::new(dtm, dsm, mapterhorn, Arc::clone(&coverage), mode, wiring.pixel_convention);
     let budget = &config.budget;
-    let rules = Rules::default();
-    rules.elevation.validate().map_err(StartupError::Rules)?;
     Ok(Orchestrator::new(
         Sources { typology, terrain: Arc::new(terrain), coverage, catalog },
         rules,

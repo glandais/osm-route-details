@@ -158,8 +158,9 @@ impl BenchPaths {
 /// `passages_masques` retrouvé mais sans fenêtre, témoin V1 aux extrémités non retrouvées ou
 /// fenêtre sans extrait : cas sauté, jamais une perte silencieuse ; élément qu'aucune station
 /// n'approche à 40 m (non retrouvé, comme en calibration) : rapporté (`passage_non_retrouve`),
-/// sans interrompre le jugement (décision de l'utilisateur, 2026-11-02).
-pub const BENCH_REVISION: Option<&str> = Some("bench5");
+/// sans interrompre le jugement (décision de l'utilisateur, 2026-11-02). Remise à `None` avec
+/// les règles 2026.11.7 (garde-fou de plausibilité des valeurs IGN).
+pub const BENCH_REVISION: Option<&str> = None;
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

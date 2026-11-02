@@ -29,7 +29,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.6"
+      "rules_version": "2026.11.7"
     },
     "points": [
       {
@@ -407,7 +407,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.6"
+      "rules_version": "2026.11.7"
     },
     "points": [
       {
@@ -602,7 +602,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.6"
+      "rules_version": "2026.11.7"
     },
     "points": [
       {

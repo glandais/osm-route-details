@@ -8,6 +8,7 @@
 //! (extension, doutes), correction des ouvrages, constructeur de tablier, comblement. Incrément 5 :
 //! sélection des points de rupture.
 
+use ord_domain::elevation::Plausibility;
 use ord_domain::request::GainPreset;
 use serde::Serialize;
 
@@ -34,7 +35,9 @@ use serde::Serialize;
 // 2026.11.6 : pont des tuiles au-dessus de la trace au sol, bosse du MNT LiDAR (tablier
 // interpolé) remplacée par la droite entre les approches (`gap_filled`,
 // `elevation_overpass_corrected`, api 1.3).
-pub const RULES_VERSION: &str = "2026.11.6";
+// 2026.11.7 : garde-fou de plausibilité des valeurs IGN (MNT et MNS) : plancher −50 m et pixels
+// mêlés de no-data par le WMS lus comme du no-data, repli comme sur un vrai no-data.
+pub const RULES_VERSION: &str = "2026.11.7";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -200,6 +203,37 @@ pub struct ElevationRules {
     /// [à calibrer].
     pub gap_fill_max_m: f64,
     pub breakpoints: BreakpointRules,
+    /// Garde-fou de plausibilité des valeurs IGN LiDAR HD (T02 §6.2, règles 2026.11.7).
+    pub ign_plausibility: IgnPlausibilityRules,
+}
+
+/// Garde-fou de plausibilité des couches IGN (décision de l'utilisateur, 2026-11-02 ; T02 §6.2) :
+/// une valeur rejetée est lue comme du no-data et se replie comme lui.
+///
+/// - Plancher −50 m, MNT et MNS : le terrain le plus bas de la couverture LiDAR HD (France
+///   métropolitaine) est de l'ordre de −3 m (Moëres, polders, Camargue) ; −50 m laisse de la marge
+///   aux carrières et au bruit sans laisser passer un pixel mêlé de no-data (`−9999`) au-delà
+///   d'environ 0,5 % de mélange sur un terrain au niveau de la mer.
+/// - Pixel mêlé au-dessus du plancher : le carré des 4 voisins s'écarte de plus de
+///   `mixed_spread_m` (plus haut − plus bas) **et** un no-data est à moins de 2 pixels du carré.
+///   Mesuré sur le cache de banc (11 892 tuiles MNT, 11 693 MNS, 2026-11-02) : tous les carrés
+///   d'écart > 20 m (MNT) ou > 50 m (MNS) proches d'un no-data en sont à 1 ou 2 pixels (563 MNT,
+///   522 MNS), aucun à 3–6 pixels ; les falaises, toits et arbres (écart > 20 m : 98 104 carrés
+///   MNT) en sont loin. Le MNS garde un seuil plus haut : bâti et arbres au bord de l'eau
+///   (no-data du MNS) y font des écarts de 20 à 50 m à 2–6 pixels du no-data.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct IgnPlausibilityRules {
+    pub dtm: Plausibility,
+    pub dsm: Plausibility,
+}
+
+impl Default for IgnPlausibilityRules {
+    fn default() -> Self {
+        Self {
+            dtm: Plausibility { floor_m: -50.0, mixed_spread_m: 20.0, mixed_ring_px: 2 },
+            dsm: Plausibility { floor_m: -50.0, mixed_spread_m: 50.0, mixed_ring_px: 2 },
+        }
+    }
 }
 
 impl ElevationRules {
@@ -237,6 +271,7 @@ impl Default for ElevationRules {
             deck: DeckBuilderRules::default(),
             gap_fill_max_m: 100.0,
             breakpoints: BreakpointRules::default(),
+            ign_plausibility: IgnPlausibilityRules::default(),
         }
     }
 }
@@ -447,6 +482,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.6", "eb5c8f44fe84934a".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.7", "de489f8f85618f6c".to_owned()));
     }
 }
