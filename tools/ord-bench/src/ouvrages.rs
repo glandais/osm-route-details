@@ -371,9 +371,9 @@ pub struct CaseProfile<'a> {
     /// Baro transporté, corrigé de son retard (README §4 ter.9), sans décalage (`NaN` = absent
     /// ou masqué).
     pub baro: &'a [f64],
-    /// Abscisses (grille `d`, celles de `baro.csv`, sans correction du retard) des points bruts
-    /// de baro gardés : hors points
-    /// insérés écartés et fenêtres masquées (points de baro d'E5, README §4 ter.7, 6bc77a5).
+    /// Abscisses (grille `d`) des points bruts de baro gardés, corrigées du retard (s_p − δ,
+    /// 085d26e) : hors points insérés écartés et fenêtres masquées (points de baro d'E5, README
+    /// §4 ter.7, 6bc77a5).
     pub baro_points: &'a [f64],
     /// Station sur un pont ou un tunnel du service.
     pub on_structure: &'a [bool],
@@ -1972,8 +1972,9 @@ pub struct E5Input<'a> {
     pub ign: Option<&'a [bool]>,
     /// Baro transporté d'une trace perso fiable (`None` sinon).
     pub baro: Option<&'a [f64]>,
-    /// Abscisses des points bruts de baro gardés (hors points insérés écartés et fenêtres
-    /// masquées), comptés par côté (minimum 3 entre 200 et 1 500 m ; 6bc77a5).
+    /// Abscisses corrigées du retard (s_p − δ, 085d26e) des points bruts de baro gardés (hors
+    /// points insérés écartés et fenêtres masquées), comptés par côté (minimum 3 entre 200 et
+    /// 1 500 m ; 6bc77a5).
     pub baro_points: &'a [f64],
     pub tiles: Option<&'a Tiles>,
     /// Point de croisement et station la plus proche.
@@ -3888,6 +3889,50 @@ mod e5_tests {
         assert!(matches!(e5_reference(&E5Input { baro_points: &three, ..x }), E5Reference::Baro { .. }));
         // Trace non fiable (baro absent de l'entrée) : MNT plat, référence MNT.
         assert_eq!(e5_reference(&E5Input { baro: None, ..x }), E5Reference::Mnt { z: 100.0 });
+    }
+
+    /// 085d26e : les points bruts d'un côté se comptent à leur abscisse corrigée du retard,
+    /// s_p − δ ; trois points juste après les 200 m du côté aval en sortent avec δ = 60 m (cas de
+    /// `nv-343` : 3 points à l'abscisse de `baro.csv`, 1 à l'abscisse corrigée). Les fenêtres
+    /// masquées se lisent à la même abscisse.
+    #[test]
+    fn baro_points_are_counted_at_their_lag_corrected_abscissa() {
+        let (d, pts, raw) = long_line();
+        let baro = vec![103.0; d.len()];
+        // Côté amont : un point tous les 50 m. Côté aval (croisement à 2 000 m) : 2 210, 2 230,
+        // 2 250 m puis rien avant 3 000 m.
+        let mut raw_points: Vec<f64> = (0..40).map(|k| k as f64 * 50.0).collect();
+        raw_points.extend([2_210.0, 2_230.0, 2_250.0, 3_000.0, 3_050.0]);
+        let count = |bd_corr: &[f64], masks: &[std::ops::Range<f64>]| {
+            let points = crate::campaign::e5_baro_points(bd_corr, masks, None);
+            let x = E5Input {
+                d: &d,
+                pts: &pts,
+                raw: &raw,
+                ign: None,
+                baro: Some(&baro),
+                baro_points: &points,
+                tiles: None,
+                at: pts[400],
+                im: 400,
+                ends: [400, 400],
+            };
+            e5_reference(&x)
+        };
+        // δ = 0 : 5 points en aval, référence baro.
+        assert!(matches!(count(&raw_points, &[]), E5Reference::Baro { sides, .. } if sides.points[1] == 5));
+        // δ = 60 m : 2 150, 2 170, 2 190, 2 940, 2 990 ; 2 en aval, incertaine.
+        let corrected: Vec<f64> = raw_points.iter().map(|s| s - 60.0).collect();
+        assert!(
+            matches!(count(&corrected, &[]), E5Reference::Incertaine { raison: "points_baro_insuffisants", sides: Some(s), .. }
+                if s.points[1] == 2),
+            "{:?}",
+            count(&corrected, &[])
+        );
+        // Fenêtre masquée [2 960, 3 020) : lue à l'abscisse corrigée, elle retire 2 990 (brut
+        // 3 050), pas 2 940 (brut 3 000, qui serait dedans à l'abscisse de `baro.csv`).
+        let kept = crate::campaign::e5_baro_points(&corrected, &[2_960.0..3_020.0], None);
+        assert!(kept.contains(&2_940.0) && !kept.contains(&2_990.0), "{kept:?}");
     }
 
     /// e9430ac : plage `O` de 80 m, approches de la bosse depuis ses bouts ; mesurées depuis le

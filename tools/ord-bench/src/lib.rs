@@ -141,8 +141,13 @@ impl BenchPaths {
 /// 6bc77a5) : retard du baro estimé par cas (δ de −50 à +200 m, écart robuste du résidu baro − MNT)
 /// et corrigé pour E1, E3 et E5, baro brut pour E2 et E2b ; points de baro d'un côté d'E5 comptés
 /// bruts (`baro.csv`), plus les stations de la grille ; côté sans décalage incertain, sans repli
-/// sur le MNT.
-pub const BENCH_REVISION: Option<&str> = Some("bench2");
+/// sur le MNT. `bench3` (règles 2026.11.6 inchangées, README §4 ter.7 et 9 après la calibration
+/// 2026.11.6-bench2 : 085d26e, 7dab276) : points de baro d'un côté d'E5 comptés à leur abscisse
+/// corrigée du retard (s_p − δ), fenêtres masquées lues à cette abscisse ; lectures du retard
+/// (dérive par médiane glissante de 5 km, MNT sans correction du mode `distance`, extraits au
+/// baro brut, traces tenues à l'écart en cas entiers au jugement) et d'E5 (baro corrigé au
+/// croisement, côté sans décalage incertain sans repli) vérifiées conformes.
+pub const BENCH_REVISION: Option<&str> = Some("bench3");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
