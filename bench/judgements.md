@@ -79,5 +79,14 @@ leur minimum, aucun cas sauté (43 cas). Premier passage de ce gel : le jugement
 s'était interrompu sans verdict (témoin `perso-44-s0` sauté), avant les corrections `c47114d`,
 `059fd4e` et `affc041` (décision de l'utilisateur, 2026-11-02).
 
+Note (2026-11-02, après la calibration 2026.11.10-bench1) : défaut de l'outil, sans effet sur le
+refus. Les témoins S2 `pl-e4-cajarc-s0` (342 m, `bati_ou_falaise`) et `pl-e4-cajarc-s1` (493 m,
+`remblai_deblai`), tronçons de l'itinéraire E4 `pl-e4-cajarc` avec extrémités, ont été mesurés sur
+tout l'itinéraire hors abords d'ouvrages (`longueur_m` 10 352,89 m chacun) au lieu de leur tronçon.
+Aucun faux positif sur l'itinéraire entier (`faux_positif_m` 0), donc aucun sur les tronçons : le
+verdict S2 (pass) reste juste ; seules les longueurs S2 sont gonflées (≈ 19,5 km). Un témoin avec
+extrémités se mesure entre elles, même sur un itinéraire planifié (§4 ter.6) ; correction dans
+ord-bench (bench2), après V1.
+
 L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
 
