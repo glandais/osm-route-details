@@ -1017,6 +1017,12 @@ inchangés.
    rendement observé. Les ponts des itinéraires planifiés, sans baro, n'ont que la référence MNS
    (cohérence seulement) et n'entrent pas en E3. Les autres minimums de V1.1 sont atteints
    (manifest `serie_v11.couverture`).
+   **Aucun masque au jugement V1.1** (décision de l'utilisateur, 2026-11-02). Les traces V1.1 sont
+   jugées entières, comme en V1 : les fenêtres des éléments de calibration (MVP, V1, corpus
+   versionné) qu'elles franchissent ne sont ni masquées dans leurs métriques de trace, ni tirées en
+   extraits de calibration ; E3 et E5 ne jugent que les éléments neufs de V1.1 (`nv-606` et
+   suivants). La colonne `fenetres_calibration` de `series-v11.csv` (éléments de calibration dont
+   tous les points sont à 40 m au plus de la trace) reste pour information ; le banc ne la lit pas.
 11. **Marche du baro, référence E1 incertaine** (décision de l'utilisateur, 2026-11-02, après la
    calibration 2026.11.10 ; toutes les séries ; définition rédigée par le banc). Une marche brutale
    du baro sans marche du MNT au même endroit rend la référence E1 de la trace incertaine :
