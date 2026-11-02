@@ -807,8 +807,16 @@ inchangés.
      (`nv-361` sur `perso-06`, bosse 1,9 m ; `nv-461`, 1,8 m ; `n05-canal-midi-platanes#1`, 1,5 m),
      dont les 2 échecs au MNT.
    Lecture de la règle (précisions de rédaction, 2026-11-01) :
-   - « trace perso fiable » = verdict `fiable` de `qualify_baro.py` ; une trace en plusieurs parties
-     se lit partie par partie ;
+   - « trace perso fiable » = verdict `fiable` de `qualify_baro.py`. Les tronçons `.partN` d'une
+     trace découpée pour le recalage restent recousus par abscisse (§2.1) : la trace se lit en entier ;
+     seuls les segments `.sN` (trace coupée après un transport) se lisent segment par segment
+     (décision de l'utilisateur, 2026-11-02) ;
+   - bosse MNT d'exactement 1,0 m : incertaine (décision de l'utilisateur, 2026-11-02) ; 2,0 m
+     exactement l'est aussi, l'indisponibilité ne commençant qu'au-delà (> 2,0 m) ;
+   - côté sans baro (moins de 3 points entre 200 et 1 500 m, d'un côté ou des deux) : référence
+     incertaine, **sans repli sur le MNT** (décision de l'utilisateur, 2026-11-02). Le repli sur le MNT
+     ne vaut que pour une trace qui n'est pas perso fiable ou dont le baro manque au croisement
+     (pas brut de plus de 100 m) ;
    - « trace sur un ouvrage » : couche `streets` de la tuile du croisement et de ses 8 voisines
      (voisinage du §4 bis.6), lignes `bridge` ou `tunnel` ; la couche `bridges` (polygones) n'y
      entre pas ;
