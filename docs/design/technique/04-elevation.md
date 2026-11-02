@@ -583,7 +583,9 @@ corde qui ne remplit pas ces conditions arrête la recherche sur sa plage (incr�
    petite distance).
 2. **Rattachement** : à moins de `snap_m = 5 m` [cal] d'un point d'entrée (le plus proche, le
    précédent en cas d'égalité), l'événement lui donne ses raisons sans créer de point ; le point
-   d'entrée n'est jamais déplacé (doc 01 §5.6).
+   d'entrée n'est jamais déplacé (doc 01 §5.6). Un `overpass_crossing` n'est rattaché qu'à moins de
+   `overpass_snap_m = 0,5 m` : à quelques mètres, la bosse ou la cuvette du MNT sous le tablier
+   change déjà l'altitude (`nv-423`, point d'entrée à ≈ 5 m du croisement, règles 2026.11.8).
 3. **Espacement** : un événement C à moins de `min_spacing_m = 5 m` [cal ; 20 m au départ, ramené à
    5 m sur `test1..4` à l'incrément 5, un sommet remplacé par un point d'entrée voisin faussant le D+
    des points] d'un point retenu (entrée,

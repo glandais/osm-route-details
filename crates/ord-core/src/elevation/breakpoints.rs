@@ -392,7 +392,14 @@ pub fn select_breakpoints(
     // Rattachement aux points d'entrée.
     let mut free: Vec<Cluster> = Vec::new();
     for c in clusters {
-        match snap(&input_d, c.d, r.snap_m) {
+        // Un croisement sous un pont n'est rattaché qu'à un point d'entrée presque confondu : à
+        // quelques mètres, la bosse ou la cuvette du MNT sous le tablier change déjà l'altitude.
+        let snap_m = if c.reasons.contains(&BreakpointReason::OverpassCrossing) {
+            r.snap_m.min(r.overpass_snap_m)
+        } else {
+            r.snap_m
+        };
+        match snap(&input_d, c.d, snap_m) {
             Some(k) => {
                 let reasons = &mut points[k].reasons;
                 reasons.extend(c.reasons);

@@ -286,6 +286,10 @@ pub struct BreakpointRules {
     pub merge_m: f64,
     /// Événement rattaché au point d'entrée le plus proche, sans créer de point.
     pub snap_m: f64,
+    /// Rattachement d'un croisement sous un pont (`overpass_crossing`, règles 2026.11.8) : un
+    /// point d'entrée à 5 m peut lire une autre altitude que le croisement (bosse ou cuvette du
+    /// MNT sous le tablier, `nv-423`) ; seul un point presque confondu le porte.
+    pub overpass_snap_m: f64,
     /// Extremum ou rupture de pente abandonné à moins de cette distance d'un point retenu
     /// (entrée, ouvrage, trou, terrain, revêtement). Calibré à 5 m sur `test1..4` (point de
     /// départ de T04 : 20 m) : à 20 m, un sommet remplacé par un point d'entrée voisin fausse
@@ -308,6 +312,7 @@ impl Default for BreakpointRules {
         Self {
             merge_m: 5.0,
             snap_m: 5.0,
+            overpass_snap_m: 0.5,
             min_spacing_m: 5.0,
             max_inserted_per_km: 20,
             max_inserted_total: 16_000,
@@ -484,6 +489,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.8", "de489f8f85618f6c".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.8", "a2629035ede49475".to_owned()));
     }
 }

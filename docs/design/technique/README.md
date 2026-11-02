@@ -80,7 +80,7 @@ vérifié par `ord-bench check` avant toute campagne.
       qui enjambe la trace au sol (critères de T04 §3.4), à l'altitude que rend le mode `distance`
       en ce point (échec E5 de `nv-423` : altitude interpolée entre deux points d'entrée, à 1,30 m
       de la référence). Nouvelle raison `overpass_crossing`, classe A (jamais retirée par le
-      plafond) ; la liste des raisons est ouverte : ajout au contrat, api 1.4, règles 2026.11.8,
+      plafond), rattachée à un point d'entrée à moins de 0,5 m seulement (`overpass_snap_m`) ; la liste des raisons est ouverte : ajout au contrat, api 1.4, règles 2026.11.8,
       T04 §6.1.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en

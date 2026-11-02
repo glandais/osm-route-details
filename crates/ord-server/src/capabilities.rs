@@ -117,10 +117,12 @@ pub struct BreakpointRulesV1 {
     pub merge_m: f64,
     /// A breakpoint this close to an input point is carried by it, without a new point.
     pub snap_m: f64,
+    /// The same for a bridge crossing above the route (`overpass_crossing`, api 1.4).
+    pub overpass_snap_m: f64,
     /// A summit, low point or grade change closer than this to a kept point is dropped.
     pub min_spacing_m: f64,
-    /// Inserted points over any sliding kilometre, at most; structure, gap, terrain and surface
-    /// breakpoints are never dropped.
+    /// Inserted points over any sliding kilometre, at most; structure, gap, terrain, overpass and
+    /// surface breakpoints are never dropped.
     pub max_inserted_per_km: usize,
     /// Inserted points over the whole route, at most.
     pub max_inserted_total: usize,
@@ -159,6 +161,7 @@ impl ElevationRulesV1 {
                 BreakpointRulesV1 {
                     merge_m: b.merge_m,
                     snap_m: b.snap_m,
+                    overpass_snap_m: b.overpass_snap_m,
                     min_spacing_m: b.min_spacing_m,
                     max_inserted_per_km: b.max_inserted_per_km,
                     max_inserted_total: b.max_inserted_total,

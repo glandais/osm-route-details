@@ -334,6 +334,7 @@
         "required": [
           "merge_m",
           "snap_m",
+          "overpass_snap_m",
           "min_spacing_m",
           "max_inserted_per_km",
           "max_inserted_total",
@@ -359,7 +360,7 @@
           },
           "max_inserted_per_km": {
             "type": "integer",
-            "description": "Inserted points over any sliding kilometre, at most; structure, gap, terrain and surface\nbreakpoints are never dropped.",
+            "description": "Inserted points over any sliding kilometre, at most; structure, gap, terrain, overpass and\nsurface breakpoints are never dropped.",
             "minimum": 0
           },
           "max_inserted_total": {
@@ -376,6 +377,11 @@
             "type": "number",
             "format": "double",
             "description": "A summit, low point or grade change closer than this to a kept point is dropped."
+          },
+          "overpass_snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "The same for a bridge crossing above the route (`overpass_crossing`, api 1.4)."
           },
           "snap_m": {
             "type": "number",

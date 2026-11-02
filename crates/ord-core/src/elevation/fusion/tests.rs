@@ -602,3 +602,23 @@ fn a_breakpoint_carries_the_distance_mode_altitude_where_a_bridge_crosses_above(
     assert_eq!(pts.len(), 1);
     assert!((pts[0].ele.unwrap() - 106.0).abs() < 0.5, "{:?}", pts[0].ele);
 }
+
+#[test]
+fn a_crossing_a_few_metres_from_an_input_point_is_still_inserted() {
+    use crate::elevation::PointOrigin;
+    // Point d'entrée à 3 m du croisement, sur la bosse de 6 m gardée (correction désactivée) : il
+    // ne porte pas le croisement (`overpass_snap_m`), un point est inséré au croisement.
+    let opts = RequestOptions { structure_correction: false, ..RequestOptions::default() };
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 3.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &opts,
+        |_| {},
+    );
+    let pts = crossing_points(&r);
+    assert_eq!(pts.len(), 1, "{pts:?}");
+    assert_eq!(pts[0].origin, Some(PointOrigin::Inserted));
+    assert!((pts[0].d_m - 300.0).abs() < 1.0, "{}", pts[0].d_m);
+    assert_eq!(pts[0].ele, r.profile.at(pts[0].d_m).ele);
+}
