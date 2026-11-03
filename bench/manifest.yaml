@@ -2288,7 +2288,7 @@ serie_v12:   # série tenue à l'écart V1.2 (décisions de l'utilisateur, 2026-
     v12/affectation-tirage.json: 85a04c691a9c4d8a9e5147c113e26c38aeb930a522ff7bfc1b48de79c732a989   # tirage.json jamais réécrit
     v12/planifies/specs.json: 4df3970f02c1c570a9f03043d5f27a8b38cf112ee6fe993a70210940eb98d72a
   recalage: {service: "Valhalla FOSSGIS trace_attributes", donnees_serveur: "2026-11-03T06:24:42Z", traces: 32, planifies_r: 5}
-  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, trouvees: 1140, revetement_dur_sur_non_revetu_valhalla: 0}
+  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24-42Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, trouvees: 1140, revetement_dur_sur_non_revetu_valhalla: 0}
   osm_tags_toutes:   # README §4 quater.1 et .5 ; --toutes, voies des 5 parcours R1_R2 de V1.2 ; --diff : 1 407 voies communes, 3 aux tags différents, 0 absente
     - {fichier: private/osm-tags/toutes-v12-2026-10-19T00-00Z.json, sha256: e610c7cf03ed687c1efece2c8811118f1e31fdf65ae86d2e68180918efb2cd3a, date: "2026-10-19T00:00:04Z", voies: 1407, trouvees: 1407}   # date OSM des tuiles (tuiles_2026_11_03)
     - {fichier: private/osm-tags/toutes-v12-2026-11-03T06-24Z.json, sha256: 6171ff653d0fa1e240addeabd043062ce2c56bb61f1177c36b8117c2fac4f414, date: "2026-11-03T06:24:42Z", voies: 1407, trouvees: 1407}   # date des données du serveur Valhalla de la référence V1.2
@@ -2317,7 +2317,7 @@ perso_v12:
   tuiles: tuiles_2026_11_03   # campagne de la série (README §4 quinquies.3)
   regle_serie: "tout tenu à l'écart (README §4 quinquies, serie_v12) ; MVP, V1 et V1.1 en calibration ; aucun masque au jugement, traces jugées entières ; E3 et E5 sur les éléments neufs seulement (nv-948 et suivants) ; fenetres_calibration pour information, non lues"
   recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-03", donnees_serveur: "2026-11-03T06:24:42Z", sorties: private/recales/}
-  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, revetement_dur_sur_non_revetu_valhalla: 0, outil: tools/osm_tags_reference.py, source: "Overpass daté (overpass-api.de)"}   # erreur de la référence R (README §4 bis.8)
+  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24-42Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, revetement_dur_sur_non_revetu_valhalla: 0, outil: tools/osm_tags_reference.py, source: "Overpass daté (overpass-api.de)"}   # erreur de la référence R (README §4 bis.8)
   osm_tags_toutes:   # README §4 quater.1 et .5 ; tools/osm_tags_reference.py --toutes, Overpass daté (overpass-api.de), 2026-11-03 ; voies_retenues: toutes
     - {fichier: private/osm-tags/toutes-v12-2026-10-19T00-00Z.json, sha256: e610c7cf03ed687c1efece2c8811118f1e31fdf65ae86d2e68180918efb2cd3a, date: "2026-10-19T00:00:04Z", voies: 1407, trouvees: 1407}   # date OSM des tuiles (tuiles_2026_11_03), voies des 5 parcours V1.2
     - {fichier: private/osm-tags/toutes-v12-2026-11-03T06-24Z.json, sha256: 6171ff653d0fa1e240addeabd043062ce2c56bb61f1177c36b8117c2fac4f414, date: "2026-11-03T06:24:42Z", voies: 1407, trouvees: 1407}   # date des données du serveur Valhalla de la référence V1.2
