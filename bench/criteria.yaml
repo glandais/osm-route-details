@@ -148,6 +148,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Référence R1/R2 des parcours planifiés : abscisse de l'itinéraire en haversine (R = 6 371 008,8 m, comme stadia_match) ; plage UNKNOWN là où s_origine saute (aller-retour) ; voie dont les tags diffèrent entre la date des tuiles et celle de la référence exclue de R1/R2, rapportée à part"
   - id: e5_baro_bruite   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "E5 : référence baro corrigé local incertaine, rapportée, non comptée, si le bruit baro de la trace (qualify_baro.py, noise_m) dépasse 1,0 m, comme en E1 plaine ; tous groupes ; sans repli sur le MNT"
+  - id: e1_pente_baro_sans_relief   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
+    decision: "E1 : zone masquée à ± 300 m là où la pente du baro dépasse 15 % sur 50 m alors que celle du MNT reste sous 10 %"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -303,6 +305,17 @@ criteres:
       ordre: [retard_baro, marche, decalage_et_tendance_E1]
       alors: {rapporte: [abscisse_km, delta_court_m, delta_long_m], juge: false}
       ne_touche_pas: [E2, E2b]
+    zone_masquee_si_pente_baro:   # README §4 quater.3, décision de l'utilisateur, 2026-11-03 ; à partir de V1.2, toutes strates
+      baro: "baro corrigé = baro(s + δ), référence E1 de la trace (§4 ter.9)"
+      mnt: "mode distance sans correction (§2.2)"
+      pente: {sur_m: 50, mesure: "|z(s + 50) − z(s)| / 50", grille_m: 5}
+      si: {pente_baro_min_exclu: 0.15, pente_mnt_max_exclu: 0.10}
+      stations_requises: [s, s_plus_50]   # avec baro et MNT, hors ouvrage et fenêtre masquée
+      masque: {de: "s − 300", a: "s + 50 + 300", zones_qui_se_chevauchent: reunies}
+      exclues_de: [decalage_global, retrait_de_tendance, rmse, p95, km_compares]
+      ordre: [retard_baro, marche, zones_de_pente, decalage_et_tendance_E1]   # la marche se calcule sans ces zones
+      rapporte: [zones, km_masques, abscisses_km]
+      ne_touche_pas: [E2, E2b, E3, E5]
     passe_si: toutes_les_traces
     bloquant: true
 
