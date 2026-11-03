@@ -1216,6 +1216,12 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    avait laissé 60 tuiles à télécharger hors campagne (note du 2026-11-03, `judgements.md`).
    Téléchargement par `tools/tuiles_v1.py`, jamais par `fill-cache` ; ensuite la campagne est
    verrouillée comme la première.
+4. **Un seul témoin S2 planifié** (décision de l'utilisateur, 2026-11-03, après le contrôle de
+   couverture de V1.2). Des trois témoins S2 planifiés, seul `pl12-s2-troncais` (couvert arboré,
+   confirmé par OSM sur 62 %) est gardé. `pl12-s2-isere` (digue déclarée : aucune voie
+   `man_made=dyke` dans l'emprise, 0 %) et `pl12-s2-nesque` (falaise déclarée : falaises OSM à
+   100 m au plus sur 7 %) sont retirés par la règle 00e500f, mention `retire:` au manifest, sans
+   remplacement. Rien d'autre ne change : le minimum S2 est atteint par les témoins des sorties.
 
 ---
 

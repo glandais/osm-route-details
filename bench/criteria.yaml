@@ -162,6 +162,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Série tenue à l'écart V1.2 : E3 bloquant, seuils inchangés, si la couverture de la série comptée avant toute mesure atteint le minimum E3 ; sinon minimum non atteint rapporté sans refus ; couverture du 2026-11-03 atteinte (122 ponts, 19 à MNH ≥ 10 m, 20 > 150 m) : E3 bloquant sur V1.2"
   - id: serie_v12_tuiles   # 2026-11-03, composition de V1.2
     decision: "Série V1.2 : campagne de tuiles datée sur ses seules zones neuves, déclarée et nommée par sa section, emprise calculée après la planification définitive ; calibration sur tuiles_2026_11_02 ; build et date OSM enregistrés par campagne, instantanés de tags V1.2 à la date de ses tuiles"
+  - id: serie_v12_s2_un_planifie   # 2026-11-03, après le contrôle de couverture de V1.2
+    decision: "Série V1.2 : un seul témoin S2 planifié gardé (pl12-s2-troncais) ; pl12-s2-isere et pl12-s2-nesque retirés (nature non confirmée par OSM, 00e500f), mention retire au manifest, sans remplacement"
   # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
   # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
   # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).
