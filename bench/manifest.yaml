@@ -2300,7 +2300,7 @@ serie_v12:   # série tenue à l'écart V1.2 (décisions de l'utilisateur, 2026-
     E5: {atteint: {sites: 115, croisements: 179}, minimum: {croisements: 8}}
     S2: {atteint: {temoins: 30, km: 61.2, natures: 4}, minimum: {temoins: 4, km: 40, natures: 3}}
     R1_R2: {atteint: {parcours: 5, km: 500, part_non_revetu: 0.254}, minimum: {parcours: 4, km: 400, part_non_revetu: 0.10}}
-    E3: {atteint: {ponts: 122, mnh_10m: 19, plus_de_150m: 20}, minimum: {ponts: 12, mnh_10m: 3, plus_de_150m: 3}}   # atteint : bloquant (README §4 quinquies.2)
+    E3: {atteint: {ponts: 122, ponts_mnh_10m_min: 19, ponts_plus_de_150m: 20}, minimum: {ponts: 12, ponts_mnh_10m_min: 3, ponts_plus_de_150m: 3}}   # atteint : bloquant (README §4 quinquies.2) ; clés de criteria.yaml (serie_tenue_a_l_ecart.couverture.minimums.E3)
     Q1: {atteint: {traces: 0}, minimum: {traces: 2}}   # rapporté (README §4 quinquies.1)
     reste: {atteint: {traces: 32, km: 6548, dplus: 5, plaine: 11, ouvrage: 16}, minimum: {traces: 8, km: 800, par_groupe: 3}}
     S1: {atteint: {ouvrages: 140, emprise_m: 18166}, minimum: {ouvrages: 15, emprise_m: 2000}}
