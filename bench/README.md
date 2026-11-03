@@ -1110,18 +1110,25 @@ nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.
    hors ouvrage et fenêtre masquée), les stations de [s − 300, s + 350] sont masquées pour E1 :
    hors du décalage global, du retrait de tendance, du RMSE, du P95 et des km comparés. Les zones
    qui se chevauchent sont réunies ; leur nombre, leur longueur et leurs abscisses sont rapportés
-   par trace. Ordre : δ, puis la marche du baro (point 11 du §4 ter, calculée sans ces zones),
-   puis les zones de pente, puis E1. E2, E2b, E3 et E5 ne changent pas. Motif : un baro clairsemé
+   par trace. Ordre : δ, puis les zones de pente, puis la marche du baro (point 11 du §4 ter),
+   détectée sur la trace hors de ces zones (leurs stations sont exclues du résidu comme celles
+   d'une fenêtre masquée), puis E1 (décision de l'utilisateur, 2026-11-03 ; la première rédaction,
+   `2744983`, plaçait la marche avant les zones). E2, E2b, E3 et E5 ne changent pas. Motif : un baro clairsemé
    (`perso-136` au jugement V1.1) monte de 20 à 35 m en 150 m au pied des montées, environ 300 m
    avant le MNT, et cet écart passe dans l'erreur E1 ; la marche ne le voit pas, car il ne dure pas.
    Effet, sans le service (profils de calibration de `dump-profils`, profils V1.1 du diagnostic) :
    calibration MVP + V1, 32 traces sur 130, 52,1 km masqués sur 11 893 km (0,44 %), au plus
    12,6 km sur une trace (`perso-14`, 12 zones, 11,5 %) ; V1.1, 8 des 13 traces du diagnostic,
    23,2 km, dont `perso-136` (4 zones, 2,8 km).
-   **Interaction avec la marche.** Avec les zones calculées avant la marche, une estimation
-   approchée sur les profils V1.1 ne trouve plus de marche sur `perso-135`, `perso-143`,
-   `perso-144` et `perso-147`, qui seraient jugées. L'ordre retenu garde la règle de la marche
-   telle quelle ; l'autre ordre demande une décision.
+   **Interaction avec la marche.** Les zones masquées avant la marche, deux traces semblables
+   (`perso-136`, `perso-137` au jugement V1.1) se lisent de la même façon. Effet, sans le service,
+   par une réimplémentation de la marche hors ord-bench (mêmes profils) : en calibration, la seule
+   marche, celle de `perso-44` (Δ court −31,1 m vers 16,1 km), tombe dans une zone de pente
+   (0,76 km masqués) et disparaît ; `perso-44` redevient jugée en E1, zone masquée, verdict à
+   mesurer. Sur les 13 traces V1.1 du diagnostic, les marches de `perso-135`, `perso-143`,
+   `perso-144` et `perso-147` disparaissent aussi, celle de `perso-145` (+16,3 m, hors zone)
+   reste. La réimplémentation ne retrouve pas la marche de `perso-137` (Δ long −10,0 m au
+   jugement, à la limite du seuil), ni avec ni sans zones : ord-bench tranchera.
 4. **E5 : un site physique, un cas** (décision de l'utilisateur, 2026-11-03 ; modalités rédigées
    par le banc ; toutes séries). Un même croisement physique était compté sous plusieurs ids :
    tabliers voisins d'un même franchissement (deux ou trois ponts OSM au même point de la trace),

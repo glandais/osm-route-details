@@ -150,6 +150,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : référence baro corrigé local incertaine, rapportée, non comptée, si le bruit baro de la trace (qualify_baro.py, noise_m) dépasse 1,0 m, comme en E1 plaine ; tous groupes ; sans repli sur le MNT"
   - id: e1_pente_baro_sans_relief   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "E1 : zone masquée à ± 300 m là où la pente du baro dépasse 15 % sur 50 m alors que celle du MNT reste sous 10 %"
+  - id: e1_zones_avant_marche   # 2026-11-03
+    decision: "E1 : zones de pente masquées avant la détection de la marche du baro ; ordre δ, zones, marche hors zones, E1"
   - id: e5_un_site_un_cas   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "E5 : un site physique = un cas ; les croisements comptés sous plusieurs ids (tabliers voisins, même pont repassé) sont réunis ; couverture et verdict par site"
 
@@ -299,12 +301,12 @@ criteres:
       - {strate: dplus, rmse_m_max: 3.0, p95_m_max: 8.0}
     reference_incertaine_si_marche_baro:   # README §4 ter.11, décision de l'utilisateur, 2026-11-02 ; toutes strates, toutes séries
       residu: "baro(s + δ) − MNT(s), grille 5 m, MNT mode distance sans correction, δ de la trace (§4 ter.9)"
-      stations_exclues: [ouvrage, fenetre_masquee, sans_baro]   # en s comme en s + δ
+      stations_exclues: [ouvrage, fenetre_masquee, sans_baro, zone_de_pente]   # en s comme en s + δ ; zone_de_pente (§4 quater.3) à partir de V1.2
       delta_court: {fenetres_m: 200, transition_m: 200, stations_min: 20}
       delta_long: {fenetres_m: 2000, transition_m: 200, stations_min: 20, bornees_a_la_trace: true}
       seuil_m: 10.0   # |Δ court| > 10 et |Δ long| > 10, même signe
       mnt_lisse: {amplitude_m_max: 30.0, sur_m: 600}   # [s − 300, s + 300]
-      ordre: [retard_baro, marche, decalage_et_tendance_E1]
+      ordre: [retard_baro, marche, decalage_et_tendance_E1]   # à partir de V1.2 : zones_de_pente entre retard_baro et marche (§4 quater.3)
       alors: {rapporte: [abscisse_km, delta_court_m, delta_long_m], juge: false}
       ne_touche_pas: [E2, E2b]
     zone_masquee_si_pente_baro:   # README §4 quater.3, décision de l'utilisateur, 2026-11-03 ; à partir de V1.2, toutes strates
@@ -315,7 +317,7 @@ criteres:
       stations_requises: [s, s_plus_50]   # avec baro et MNT, hors ouvrage et fenêtre masquée
       masque: {de: "s − 300", a: "s + 50 + 300", zones_qui_se_chevauchent: reunies}
       exclues_de: [decalage_global, retrait_de_tendance, rmse, p95, km_compares]
-      ordre: [retard_baro, marche, zones_de_pente, decalage_et_tendance_E1]   # la marche se calcule sans ces zones
+      ordre: [retard_baro, zones_de_pente, marche, decalage_et_tendance_E1]   # décision de l'utilisateur, 2026-11-03 : marche détectée hors des zones
       rapporte: [zones, km_masques, abscisses_km]
       ne_touche_pas: [E2, E2b, E3, E5]
     passe_si: toutes_les_traces
