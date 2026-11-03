@@ -143,6 +143,10 @@ pub async fn load_tiles(cache: &Path, keys: &[TileKey], offline: bool) -> anyhow
     let ctx =
         RequestCtx::new(RequestId("bench".into()), Deadline::after(std::time::Duration::from_secs(600)));
     let outcomes = chain.store().get_many(keys, &ctx).await;
+    // En ligne (fill-cache), campagne de tuiles verrouillée : tuile absente du cache = refus.
+    if !offline {
+        crate::service::ensure_streets_cached(&outcomes)?;
+    }
     Ok(keys
         .iter()
         .zip(outcomes)

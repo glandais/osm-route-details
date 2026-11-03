@@ -47,6 +47,63 @@ impl Marche {
     }
 }
 
+/// Zones de pente du baro sans relief (README §4 quater.3, 2744983 et 633255f ; criteria
+/// `E1.zone_masquee_si_pente_baro`) : longueur sur laquelle les pentes sont lues (m).
+pub const PENTE_SUR_M: f64 = 50.0;
+/// Pente du baro corrigé au-delà de laquelle (exclu) une zone est masquée.
+pub const PENTE_BARO_MIN: f64 = 0.15;
+/// Pente du MNT en deçà de laquelle (exclu) une zone est masquée.
+pub const PENTE_MNT_MAX: f64 = 0.10;
+/// Masque : [s − 300, s + 50 + 300].
+pub const ZONE_MARGE_M: f64 = 300.0;
+
+/// Zones de pente du baro sans relief, sur la grille `d` : là où |baro(s + 50) − baro(s)| / 50 >
+/// 15 % et |MNT(s + 50) − MNT(s)| / 50 < 10 %, baro = baro corrigé du δ (référence E1), MNT = mode
+/// `distance` sans correction ; les deux stations avec baro et MNT, hors ouvrage et fenêtre masquée
+/// (`excluded`). Zone = [s − 300, s + 350], zones qui se chevauchent réunies, bornées à la trace.
+pub fn slope_zones(d: &[f64], baro: &[f64], mnt: &[f64], excluded: &[bool]) -> Vec<std::ops::Range<f64>> {
+    let (Some(&start), Some(&end)) = (d.first(), d.last()) else { return Vec::new() };
+    let n = d.len();
+    let ok = |i: usize| !excluded[i] && baro[i].is_finite() && mnt[i].is_finite();
+    let mut out: Vec<std::ops::Range<f64>> = Vec::new();
+    for i in (0..n).filter(|&i| ok(i)) {
+        let x = d[i] + PENTE_SUR_M;
+        // Station de s + 50 : la plus proche, à un demi-pas (2,5 m) au plus.
+        let k = d.partition_point(|v| *v < x);
+        let j = [k.checked_sub(1), (k < n).then_some(k)]
+            .into_iter()
+            .flatten()
+            .filter(|&j| j > i && (d[j] - x).abs() <= 2.5)
+            .min_by(|&a, &b| (d[a] - x).abs().total_cmp(&(d[b] - x).abs()));
+        let Some(j) = j.filter(|&j| ok(j)) else { continue };
+        let slope = |z: &[f64]| (z[j] - z[i]).abs() / PENTE_SUR_M;
+        if slope(baro) > PENTE_BARO_MIN && slope(mnt) < PENTE_MNT_MAX {
+            let z = (d[i] - ZONE_MARGE_M).max(start)..(x + ZONE_MARGE_M).min(end);
+            match out.last_mut() {
+                Some(last) if z.start <= last.end => last.end = last.end.max(z.end),
+                _ => out.push(z),
+            }
+        }
+    }
+    out
+}
+
+/// Stations de la grille dans une des zones.
+pub fn in_zones(d: &[f64], zones: &[std::ops::Range<f64>]) -> Vec<bool> {
+    d.iter().map(|s| zones.iter().any(|z| z.start <= *s && *s <= z.end)).collect()
+}
+
+/// Zones rapportées par trace : nombre, km masqués, abscisses (km), stations comparées masquées.
+pub fn zones_json(zones: &[std::ops::Range<f64>], stations_comparees_masquees: usize) -> Value {
+    let r = |x: f64| (x * 1000.0).round() / 1000.0;
+    json!({
+        "zones": zones.len(),
+        "km_masques": r(zones.iter().map(|z| z.end - z.start).sum::<f64>() / 1000.0),
+        "abscisses_km": zones.iter().map(|z| [r(z.start / 1000.0), r(z.end / 1000.0)]).collect::<Vec<_>>(),
+        "stations_comparees_masquees": stations_comparees_masquees,
+    })
+}
+
 /// Résidu r(s) = baro corrigé − MNT aux stations gardées : `excluded[i]` (ouvrage, fenêtre
 /// masquée) s'applique en s comme en s + δ (`shift`, station la plus proche de la grille).
 pub fn residual(d: &[f64], baro_corr: &[f64], mnt: &[f64], excluded: &[bool], shift: f64) -> Vec<f64> {
@@ -155,6 +212,39 @@ mod tests {
         let step: Vec<f64> = d.iter().map(|s| if *s < 10_000.0 { 0.0 } else { 15.0 }).collect();
         assert!(find(&d, &step, &col).is_none(), "inversion de pente au col");
         assert!(find(&d, &step, &flat).is_some());
+    }
+
+    /// Zones de pente (README §4 quater.3) : baro qui monte de 30 m en 150 m (20 %) sur un MNT plat,
+    /// masqué sur [s − 300, s + 350] ; même montée lue par le MNT (relief réel) : pas de zone ;
+    /// station exclue (ouvrage, fenêtre masquée) en s ou en s + 50 : pas de zone ; zones voisines
+    /// réunies, bornées à la trace.
+    #[test]
+    fn baro_slope_without_relief_is_masked() {
+        let d = grid(10.0);
+        let n = d.len();
+        let ramp = |s: f64, at: f64| (((s - at) / 150.0).clamp(0.0, 1.0)) * 30.0;
+        let baro: Vec<f64> = d.iter().map(|s| 100.0 + ramp(*s, 5_000.0)).collect();
+        let flat = vec![100.0; n];
+        let none = vec![false; n];
+        let z = slope_zones(&d, &baro, &flat, &none);
+        assert_eq!(z.len(), 1, "{z:?}");
+        // Paires en pente (Δ > 7,5 m sur 50 m) : s de 4 990 à 5 110 ; masque [s − 300, s + 350].
+        assert_eq!(z[0], 4_690.0..5_460.0, "{z:?}");
+        let masked = in_zones(&d, &z);
+        assert!(masked[(5_000.0 / 5.0) as usize] && !masked[(4_000.0 / 5.0) as usize]);
+        // Relief réel : le MNT monte avec le baro.
+        assert!(slope_zones(&d, &baro, &baro, &none).is_empty());
+        // Montée sur un ouvrage : stations exclues.
+        let on: Vec<bool> = d.iter().map(|s| (4_900.0..=5_200.0).contains(s)).collect();
+        assert!(slope_zones(&d, &baro, &flat, &on).is_empty());
+        // Deux montées à 400 m : une zone ; près du début : bornée à la trace.
+        let two: Vec<f64> = d.iter().map(|s| 100.0 + ramp(*s, 100.0) + ramp(*s, 500.0)).collect();
+        let z = slope_zones(&d, &two, &flat, &none);
+        assert_eq!(z.len(), 1, "{z:?}");
+        assert_eq!(z[0].start, 0.0);
+        let j = zones_json(&z, 7);
+        assert_eq!(j["zones"], 1);
+        assert_eq!(j["stations_comparees_masquees"], 7);
     }
 
     /// Stations exclues en s ou en s + δ (ouvrage, masque), sans baro ou sans MNT : pas de résidu ;

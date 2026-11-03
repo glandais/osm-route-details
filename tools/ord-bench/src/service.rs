@@ -86,15 +86,75 @@ impl Variant {
     pub const MAPTERHORN: Self = Self { convention: PixelConvention::Center, ign: false };
 }
 
-/// Configuration du service pour le banc : cache disque = cache de banc.
+/// Campagne de tuiles de rues verrouillée pour ce processus (`fill-cache` d'un manifest qui déclare
+/// une campagne datée `tuiles_*`) : tuiles de rues lues sur disque seulement, entrées périmées
+/// comprises, jamais téléchargées ni revalidées ; l'altitude reste en ligne.
+static STREETS_LOCKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Verrouille les tuiles de rues pour le reste du processus (`fill-cache`).
+pub fn lock_streets() {
+    STREETS_LOCKED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Tuiles de rues verrouillées dans ce processus ?
+pub fn streets_locked() -> bool {
+    STREETS_LOCKED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Configuration du service pour le banc : cache disque = cache de banc ; tuiles de rues sur
+/// disque seulement si la campagne est verrouillée (`lock_streets`).
 pub fn bench_config(cache_dir: &Path, offline: bool, variant: Variant) -> Config {
+    bench_config_with(cache_dir, offline, variant, streets_locked())
+}
+
+/// `bench_config`, verrou des tuiles de rues explicite.
+pub fn bench_config_with(cache_dir: &Path, offline: bool, variant: Variant, streets_locked: bool) -> Config {
     let mut config = Config::default();
     config.cache.dir = cache_dir.to_path_buf();
     config.cache.offline = offline;
+    config.cache.offline_streets = streets_locked;
     config.elevation.ign.enabled = variant.ign;
     // VersaTiles public : peu de requêtes à la fois, jamais de rafale (exploration 06).
     config.typology.concurrency = 2;
     config
+}
+
+/// Tuiles de rues absentes du cache d'une campagne verrouillée (échec `Offline` d'une lecture en
+/// ligne) : refus bruyant, aucun téléchargement n'a eu lieu.
+pub fn ensure_streets_cached<T>(outcomes: &[ord_domain::tiles::TileOutcome<T>]) -> anyhow::Result<()> {
+    let missing = outcomes
+        .iter()
+        .filter(|o| {
+            matches!(o, ord_domain::tiles::TileOutcome::Failed(f) if f.kind == ord_domain::ctx::FailureKind::Offline)
+        })
+        .count();
+    if missing > 0 {
+        bail!(
+            "campagne de tuiles verrouillée : {missing} tuile(s) de rues hors de la campagne datée en \
+             cache, non téléchargée(s) ; fill-cache refusé (README §2.1, manifest tuiles_*)"
+        );
+    }
+    Ok(())
+}
+
+/// Campagne de tuiles de rues du manifest que `fill-cache` verrouille : celle dont l'espace de
+/// cache est l'espace des tuiles de rues du service. Aucune campagne déclarée : `None` (tuiles
+/// lues en ligne). Campagnes déclarées sans celle de cet espace, ou espace absent du cache : refus.
+pub fn locked_campaign<'a>(
+    manifest: &'a crate::manifest::Manifest,
+    cache_dir: &Path,
+) -> anyhow::Result<Option<&'a crate::manifest::TileCampaign>> {
+    if manifest.tuiles.is_empty() {
+        return Ok(None);
+    }
+    let ns = ord_server::wiring::streets_namespace(&bench_config_with(cache_dir, true, Variant::DEFAULT, true));
+    let Some(c) = manifest.tuiles.iter().rev().find(|c| c.espace_cache == ns) else {
+        bail!("campagne de tuiles du manifest sur un autre espace de cache que celui du service ({ns}) : refus");
+    };
+    if !cache_dir.join(&ns).is_dir() {
+        bail!("campagne de tuiles {} absente du cache de banc ({ns}) : à remplir par l'outil de la campagne", c.id);
+    }
+    Ok(Some(c))
 }
 
 impl Service {
@@ -280,6 +340,51 @@ pub fn resample(request: &[Pt], points: &[Value], step: f64) -> anyhow::Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Campagne de tuiles verrouillée, sans réseau : la configuration en ligne garde l'altitude en
+    /// ligne mais lit les rues sur disque seulement ; une tuile de rues absente du cache échoue
+    /// `Offline` avant tout transport (URL jamais appelée) et le remplissage est refusé ; sans
+    /// verrou, rien ne change. Le manifest désigne la campagne par son espace de cache.
+    #[tokio::test]
+    async fn a_locked_campaign_never_downloads_street_tiles() {
+        use ord_domain::tiles::{TileKey, TileOutcome};
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = bench_config_with(dir.path(), false, Variant::DEFAULT, true);
+        assert!(!config.cache.offline && config.cache.offline_streets);
+        assert!(!bench_config_with(dir.path(), false, Variant::DEFAULT, false).cache.offline_streets);
+        // URL injoignable par construction : un transport tenté échouerait `Network`, pas `Offline`.
+        config.typology.url = "http://127.0.0.1:9/{z}/{x}/{y}".into();
+        let chain = ord_server::wiring::typology_chain(&config).unwrap();
+        let ctx = ord_domain::ctx::RequestCtx::new(
+            ord_domain::budget::RequestId("test".into()),
+            ord_domain::budget::Deadline::after(std::time::Duration::from_secs(5)),
+        );
+        let keys = [TileKey { z: 14, x: 8000, y: 5700 }];
+        let outcomes = chain.store().get_many(&keys, &ctx).await;
+        assert!(
+            matches!(&outcomes[0], TileOutcome::Failed(f) if f.kind == ord_domain::ctx::FailureKind::Offline),
+            "tuile de rues hors du cache lue hors ligne"
+        );
+        let e = ensure_streets_cached(&outcomes).unwrap_err();
+        assert!(e.to_string().contains("campagne de tuiles verrouillée"), "{e}");
+        assert!(ensure_streets_cached::<()>(&[]).is_ok());
+        // Campagne du manifest : espace du service exigé, présent dans le cache.
+        let ns = ord_server::wiring::streets_namespace(&bench_config_with(dir.path(), true, Variant::DEFAULT, true));
+        let campaign = |espace: &str| crate::manifest::Manifest {
+            tuiles: vec![crate::manifest::TileCampaign {
+                id: "tuiles_2026_11_02".into(),
+                espace_cache: espace.into(),
+                date_osm: None,
+            }],
+            ..Default::default()
+        };
+        assert!(locked_campaign(&crate::manifest::Manifest::default(), dir.path()).unwrap().is_none());
+        assert!(locked_campaign(&campaign("autre"), dir.path()).is_err());
+        let e = locked_campaign(&campaign(&ns), dir.path()).unwrap_err();
+        assert!(e.to_string().contains("absente du cache"), "{e}");
+        std::fs::create_dir_all(dir.path().join(&ns)).unwrap();
+        assert_eq!(locked_campaign(&campaign(&ns), dir.path()).unwrap().unwrap().id, "tuiles_2026_11_02");
+    }
 
     #[test]
     fn breakpoint_output_is_resampled_on_the_grid() {

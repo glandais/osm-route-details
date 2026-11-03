@@ -118,6 +118,12 @@ pub struct PersoV1 {
     /// Instantané des tags OSM des voies de ces références (`osm_tags_reference` : fichier,
     /// empreinte, date ; README §4 bis.8).
     pub osm_tags: Option<(String, String, String)>,
+    /// Instantanés de toutes les voies des références R1/R2 (`osm_tags_toutes` : fichier, empreinte,
+    /// date ; README §4 quater.1, d6fd42c) : un à la date OSM des tuiles de la campagne, un à la date
+    /// des données du serveur Valhalla. Vide : règle `tags_differents` non appliquée.
+    pub osm_tags_toutes: Vec<(String, String, String)>,
+    /// Campagne de tuiles de la série (`tuiles: tuiles_<date>`), sinon la dernière du manifest.
+    pub tuiles: Option<String>,
     pub planifies: Vec<Planned>,
     pub traces: BTreeSet<String>,
     /// Série V1 jugée (README §2, point 3 ; `with_v1_judged`) : ses éléments tenus à l'écart
@@ -126,9 +132,22 @@ pub struct PersoV1 {
     pub judged: bool,
 }
 
+/// Campagne de tuiles de rues datée (`tuiles_<date>` du manifest ; décision de l'utilisateur,
+/// 2026-11-02) : espace du cache de banc et date OSM des tuiles (TileJSON,
+/// `planetiler_osm_osmosisreplicationtime`). Déclarée, elle verrouille les tuiles de rues :
+/// `fill-cache` n'en télécharge aucune (README §2.1).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TileCampaign {
+    pub id: String,
+    pub espace_cache: String,
+    pub date_osm: Option<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Manifest {
     pub sha256: String,
+    /// Campagnes de tuiles de rues datées (`tuiles_*`), dans l'ordre des clés.
+    pub tuiles: Vec<TileCampaign>,
     pub vcyclist: Vec<FileEntry>,
     pub osm_surface: Vec<FileEntry>,
     pub copies: Vec<ExternalCopy>,
@@ -289,6 +308,17 @@ fn parse_section(
             }
             None => None,
         },
+        osm_tags_toutes: match local("osm_tags_toutes") {
+            Some(Value::Sequence(items)) => items
+                .iter()
+                .map(|e| {
+                    let (fichier, sum) = pair_of(e, "osm_tags_toutes")?;
+                    Ok((fichier, sum, req(e, "date", "osm_tags_toutes")?))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            _ => Vec::new(),
+        },
+        tuiles: local("tuiles").and_then(|v| v.as_str().map(str::to_owned)),
         planifies,
         traces: ids,
         judged: false,
@@ -337,8 +367,23 @@ impl Manifest {
                 .collect::<anyhow::Result<Vec<_>>>()?,
             _ => Vec::new(),
         };
+        let tuiles = match &root {
+            Value::Mapping(m) => m
+                .iter()
+                .filter_map(|(k, v)| {
+                    let id = k.as_str().filter(|k| k.starts_with("tuiles_"))?;
+                    Some(TileCampaign {
+                        id: id.to_owned(),
+                        espace_cache: s(v, "espace_cache")?,
+                        date_osm: v.get("date_osm").and_then(|d| s(d, "planetiler_osm_osmosisreplicationtime")),
+                    })
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         Ok(Self {
             hors_git,
+            tuiles,
             sha256: sha256_bytes(text.as_bytes()),
             vcyclist: files(&root, "vcyclist")?,
             osm_surface: files(&root, "osm_surface")?,
@@ -445,6 +490,14 @@ impl Manifest {
             "incrément {increment} : traces tenues à l'écart hors de sa section"
         );
         Ok(sec)
+    }
+
+    /// Campagne de tuiles d'une section : celle qu'elle nomme (`tuiles`), sinon la dernière.
+    pub fn tile_campaign(&self, sec: &PersoV1) -> Option<&TileCampaign> {
+        match &sec.tuiles {
+            Some(id) => self.tuiles.iter().find(|t| &t.id == id),
+            None => self.tuiles.last(),
+        }
     }
 
     /// Trace de la section `perso_v1`.

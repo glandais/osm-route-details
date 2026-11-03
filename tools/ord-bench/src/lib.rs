@@ -10,6 +10,9 @@
 //! privé des profils de traces de calibration, `bench/private/profils/`) ; scénarios golden sur des ouvrages de calibration.
 //! Les rapports n'écrivent **aucune coordonnée** (T05 §3.4).
 
+// `json!` du rapport de campagne (notes des règles du banc) : au-delà de la limite par défaut.
+#![recursion_limit = "256"]
+
 pub mod campaign;
 pub mod check;
 pub mod coherence;
@@ -189,8 +192,22 @@ impl BenchPaths {
 /// date du recalage de chaque cas. `bench2` (règles 2026.11.10 inchangées, après la campagne
 /// `2026-11-02-2026.11.10-bench1` ; README §4 ter.6, affc041) : un témoin S2 à extrémités (`debut`,
 /// `fin`) se mesure entre elles, même sur un itinéraire planifié (`pl-e4-cajarc-s0`, `-s1`) ; seul
-/// un témoin sans extrémités couvre tout l'itinéraire.
-pub const BENCH_REVISION: Option<&str> = Some("bench2");
+/// un témoin sans extrémités couvre tout l'itinéraire. `bench3` (règles 2026.11.11 : service
+/// 8510a0b, goldens ff60cfd ; règles du banc pour V1.2, README §4 quater, décisions de
+/// l'utilisateur du 2026-11-03 : d6fd42c, f8f81a6, 2744983, 633255f, 8559a21), révision gardée à
+/// la montée des règles sur décision de l'utilisateur : E1, zones de pente du baro sans relief
+/// masquées sur [s − 300, s + 350] (baro corrigé du δ > 15 % sur 50 m, MNT < 10 %), hors du
+/// décalage, de la tendance, du RMSE, du P95 et des km comparés, et avant la marche, détectée hors
+/// de ces zones ; E5, référence baro incertaine (`baro_bruite`) si le bruit baro de la trace
+/// dépasse 1,0 m, après le retrait, avant les côtés ; E5 jugé et couvert par site (ids réunis s'ils
+/// sont le même ouvrage ou croisés par un même passage à 40 m au plus l'un de l'autre, de proche en
+/// proche ; un passage compté en échec met le site en échec) ; R1/R2, voies aux tags `highway`,
+/// `surface` ou `tracktype` différents entre la date des tuiles et celle de la référence (deux
+/// instantanés `osm_tags_toutes` du manifest) exclues et rapportées (`tags_differents`), avant
+/// l'erreur de la référence, plages d'erreur coupées aux sauts de s_origine ; défauts d'outil
+/// corrigés : itinéraire `par_cas` d'une série jugée passé en calibration, `fill-cache` sans
+/// téléchargement de tuile de rue hors de la campagne datée du manifest (`tuiles_*`).
+pub const BENCH_REVISION: Option<&str> = Some("bench3");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

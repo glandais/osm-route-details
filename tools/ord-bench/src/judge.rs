@@ -215,7 +215,17 @@ fn aux_summary(key: &str, v: &Value) -> Option<String> {
     let groups: Vec<String> = items
         .iter()
         .map(|g| {
-            let name = g["groupe"].as_str().unwrap_or("?");
+            // Cas (E1 : `id`), témoin, ouvrage, site (ouvrages réunis), sinon groupe (E2).
+            let joined = g["ouvrages"].as_array().map(|o| {
+                o.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("+")
+            });
+            let name = g["id"]
+                .as_str()
+                .or_else(|| g["temoin"].as_str())
+                .or_else(|| g["ouvrage"].as_str())
+                .or(joined.as_deref())
+                .or_else(|| g["groupe"].as_str())
+                .unwrap_or("?");
             let mut cell = match g["mediane"].as_f64() {
                 Some(m) => format!("{name} {}", fr(m, 3)),
                 None => name.to_owned(),
@@ -683,6 +693,7 @@ mod tests {
         };
         let m = Manifest {
             sha256: String::new(),
+            tuiles: Vec::new(),
             vcyclist: Vec::new(),
             osm_surface: Vec::new(),
             copies: Vec::new(),
@@ -857,6 +868,21 @@ mod tests {
         assert!(err.to_string().contains("2025-01-01-2025.01.1-bench2-jugement-MVP"), "{err}");
         assert!(!bench.join("judgements.md").exists());
         assert!(!bench.join("reports/j").exists());
+    }
+
+    /// Résumé des annexes : E1 nomme les traces (pas leur groupe), E5 ses sites, S2 ses témoins ;
+    /// E2 garde ses médianes par groupe.
+    #[test]
+    fn aux_summary_names_cases_sites_and_controls() {
+        let e1 = json!([{"id": "perso-44", "groupe": "plaine", "rmse_m": 2.78, "p95_m": 5.0},
+            {"id": "perso-136", "groupe": "dplus", "rmse_m": 3.2, "p95_m": 9.0}]);
+        assert_eq!(aux_summary("E1_echecs", &e1).unwrap(), "echecs : perso-44 ; perso-136");
+        let sites = json!([{"ouvrages": ["nv-1", "nv-2"], "cas": ["perso-131"]}]);
+        assert_eq!(aux_summary("E5_echecs", &sites).unwrap(), "echecs : nv-1+nv-2");
+        assert_eq!(aux_summary("E5_echecs", &json!(["nv-1+nv-2"])).unwrap(), "nv-1+nv-2");
+        assert_eq!(aux_summary("S2_echecs", &json!(["pl-x-s0", "perso-56-s1"])).unwrap(), "pl-x-s0, perso-56-s1");
+        let e2 = json!([{"groupe": "dplus", "mediane": 0.98, "mediane_dans_bornes": true, "traces_hors_bornes": []}]);
+        assert_eq!(aux_summary("E2_indicatif", &e2).unwrap(), "indicatif : dplus 0,980");
     }
 
     #[test]

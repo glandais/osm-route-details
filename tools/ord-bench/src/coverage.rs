@@ -76,7 +76,11 @@ pub fn measure(
     step_m: f64,
 ) -> Value {
     let num = |v: &Value| v.as_f64().unwrap_or(f64::NAN);
-    let km_compared = |c: &Value| num(&c["diagnostics"]["stations_comparees"]) * step_m / 1000.0;
+    // Km comparés d'E1 : stations comparées hors zones de pente du baro (README §4 quater.3).
+    let km_compared = |c: &Value| {
+        let masked = c["zones_pente_baro"]["stations_comparees_masquees"].as_f64().unwrap_or(0.0);
+        (num(&c["diagnostics"]["stations_comparees"]) - masked) * step_m / 1000.0
+    };
     let km_total = |c: &Value| num(&c["diagnostics"]["stations"]) * step_m / 1000.0;
     let groupe = |c: &Value| c["groupe"].as_str().unwrap_or("").to_owned();
     // E1 : traces dplus / plaine dont E1 est mesuré.
@@ -108,7 +112,8 @@ pub fn measure(
     let len = |o: &String| info.get(o).map_or(0.0, |x| x.0);
     let mnh = |o: &String| info.get(o).and_then(|x| x.1).unwrap_or(f64::NAN);
     let e4: BTreeSet<String> = by("E4").filter(|i| !limited(i) && i["pass"].is_boolean()).map(id).collect();
-    let e5: BTreeSet<String> = by("E5").filter(|i| i["pass"].is_boolean()).map(id).collect();
+    // E5 en sites (README §4 quater.4) : sites avec un passage compté ; clé `croisements` gardée.
+    let e5 = crate::ouvrages::e5_sites(items).iter().filter(|s| s.pass().is_some()).count();
     let mut s1: BTreeMap<String, f64> = BTreeMap::new();
     for i in items.iter().filter(|i| !limited(i)) {
         if let Some(e) = i["S1.emprise_m"].as_f64().or_else(|| i["_S1.emprise_m"].as_f64()) {
@@ -129,7 +134,7 @@ pub fn measure(
         "E3": {"ponts": e3.len(), "ponts_mnh_10m_min": e3.iter().filter(|o| mnh(o) >= 10.0).count(),
             "ponts_plus_de_150m": e3.iter().filter(|o| len(o) > 150.0).count()},
         "E4": {"tunnels_osm": e4.len(), "tunnels_plus_de_300m": e4.iter().filter(|o| len(o) > 300.0).count()},
-        "E5": {"croisements": e5.len()},
+        "E5": {"croisements": e5},
         "S1": {"ouvrages": s1.len(), "emprise_m": r(s1.values().sum(), 1)},
         "S2": {"temoins": s2.len(), "km": r(s2.iter().map(|i| num(&i["longueur_m"])).filter(|x| x.is_finite()).sum::<f64>() / 1000.0, 3),
             "natures_min": natures.len()},

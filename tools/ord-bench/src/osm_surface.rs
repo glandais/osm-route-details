@@ -31,6 +31,10 @@ pub struct OsRoute {
     /// les parcours d'osm-surface, dont la référence est la leur. `reference` vide : longueurs
     /// seulement.
     pub erreur_reference: Option<crate::reference_error::Exclusion>,
+    /// Voies aux tags différents entre la date des tuiles et celle de la référence (README §4
+    /// quater.1), parcours planifiés seulement : longueurs, et plages retirées (abscisse de
+    /// l'itinéraire), que l'erreur de la référence ne voit plus.
+    pub tags_differents: Option<(crate::reference_error::Exclusion, Vec<std::ops::Range<f64>>)>,
 }
 
 impl std::fmt::Debug for OsRoute {
@@ -91,7 +95,24 @@ pub fn exclude_reference_errors(
     route: &mut OsRoute,
     tags: &crate::reference_error::OsmTags,
 ) -> anyhow::Result<()> {
-    use crate::reference_error::{check_on_unpaved, error_ranges, exclude, to_origin};
+    use crate::reference_error::{check_on_unpaved, error_ranges, exclude, minus, to_origin};
+    let (surface, baro) = read_sources(paths, p)?;
+    let cut = to_origin(&error_ranges(&surface, tags), &baro)?;
+    // Plages déjà retirées pour tags différents entre dates (README §4 quater.1) : plus vues ici.
+    let cut = match &route.tags_differents {
+        Some((_, done)) => minus(&cut, done),
+        None => cut,
+    };
+    check_on_unpaved(&cut, &route.reference).with_context(|| p.id.clone())?;
+    let x = exclude(std::mem::take(&mut route.reference), &cut);
+    route.reference = x.reference.clone();
+    route.erreur_reference = Some(crate::reference_error::Exclusion { reference: Vec::new(), ..x });
+    Ok(())
+}
+
+/// `<id>.surface.csv` et `<id>.baro.csv` d'un parcours planifié, lus contre leur empreinte du
+/// manifest : absente ou différente, refus.
+fn read_sources(paths: &crate::BenchPaths, p: &crate::manifest::Planned) -> anyhow::Result<(String, String)> {
     let [surface, baro] = planned_sources(paths, p)?.map(|(path, sum)| {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let bytes = std::fs::read(&path).with_context(|| format!("{name} absent"))?;
@@ -102,11 +123,25 @@ pub fn exclude_reference_errors(
         );
         String::from_utf8(bytes).with_context(|| format!("{name} illisible"))
     });
-    let cut = to_origin(&error_ranges(&surface?, tags), &baro?)?;
-    check_on_unpaved(&cut, &route.reference).with_context(|| p.id.clone())?;
+    Ok((surface?, baro?))
+}
+
+/// Voies aux tags différents entre la date des tuiles et celle de la référence (README §4
+/// quater.1, d6fd42c ; criteria `reference_R1_R2_v12.tags_differents`) : plages de
+/// `<id>.surface.csv` (toutes classes) ramenées à l'itinéraire et retirées de la référence de R1 et
+/// R2, avant l'erreur de la référence ; longueur et part rapportées à part.
+pub fn exclude_tags_differents(
+    paths: &crate::BenchPaths,
+    p: &crate::manifest::Planned,
+    route: &mut OsRoute,
+    tags: &crate::reference_error::TagsBetweenDates,
+) -> anyhow::Result<()> {
+    use crate::reference_error::{differing_ranges, exclude, to_origin};
+    let (surface, baro) = read_sources(paths, p)?;
+    let cut = to_origin(&differing_ranges(&surface, tags).with_context(|| p.id.clone())?, &baro)?;
     let x = exclude(std::mem::take(&mut route.reference), &cut);
     route.reference = x.reference.clone();
-    route.erreur_reference = Some(crate::reference_error::Exclusion { reference: Vec::new(), ..x });
+    route.tags_differents = Some((crate::reference_error::Exclusion { reference: Vec::new(), ..x }, cut));
     Ok(())
 }
 
@@ -132,7 +167,7 @@ fn parse(id: &str, v: &Value) -> anyhow::Result<OsRoute> {
         })
         .collect();
     reference.sort_by(|a, b| a.from.total_cmp(&b.from));
-    Ok(OsRoute { id: id.to_owned(), points, dist, reference, erreur_reference: None })
+    Ok(OsRoute { id: id.to_owned(), points, dist, reference, erreur_reference: None, tags_differents: None })
 }
 
 /// Distance cumulée du service (haversine, comme `prepare`).
@@ -161,6 +196,9 @@ pub async fn measure(service: &Service, route: &OsRoute) -> anyhow::Result<Value
     let mut typo = metrics_json(&a, "R1");
     if let Some(x) = &route.erreur_reference {
         x.json_into(&mut typo, "R1");
+    }
+    if let Some((x, _)) = &route.tags_differents {
+        x.tags_json_into(&mut typo, "R1");
     }
     let mut warnings: std::collections::BTreeMap<String, usize> = Default::default();
     for c in r["quality"]["warnings"].as_array().into_iter().flatten().filter_map(|w| w["code"].as_str()) {
@@ -284,6 +322,29 @@ mod tests {
         let kept: Vec<(f64, f64)> = route.reference.iter().map(|r| (r.from, r.to)).collect();
         assert_eq!(kept.len(), 3);
         assert!((kept[1].0 - 220.0).abs() < 1e-9);
+        // Voie 2 aux tags différents entre dates (README §4 quater.1) : retirée avant l'erreur de la
+        // référence, qui ne la voit plus ; rapportée à part.
+        let mut route = parse("pl-x", &reference).unwrap();
+        let toutes = |date: &str, grade: &str| {
+            crate::reference_error::WayTags::from_json(
+                format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1,2,3],"tags":{{"2":{{"highway":"track","tracktype":"{grade}"}}}}}}"#)
+                    .as_bytes(),
+                date,
+            )
+            .unwrap()
+        };
+        let between = crate::reference_error::TagsBetweenDates::new(
+            toutes("2026-10-19T00:00:04Z", "grade1"),
+            toutes("2026-11-01T13:01:00Z", "grade2"),
+        );
+        exclude_tags_differents(&paths, &pl, &mut route, &between).unwrap();
+        exclude_reference_errors(&paths, &pl, &mut route, &snapshot("asphalt")).unwrap();
+        let (t, _) = route.tags_differents.as_ref().unwrap();
+        assert!((t.excluded_m - 110.0).abs() < 1e-9 && t.reference_m == 300.0, "{t:?}");
+        assert_eq!(route.erreur_reference.as_ref().unwrap().excluded_m, 0.0);
+        let mut typo = json!({});
+        t.tags_json_into(&mut typo, "R1");
+        assert_eq!(typo["R1.tags_differents"], json!({"longueur_m": 110.0, "part": 0.3667}));
         // Voie 2 en `paved` (ambigu), voie 3 absente de l'instantané : rien n'est retiré.
         let mut route = parse("pl-x", &reference).unwrap();
         exclude_reference_errors(&paths, &pl, &mut route, &snapshot("paved")).unwrap();

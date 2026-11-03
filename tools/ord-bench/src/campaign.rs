@@ -1302,20 +1302,28 @@ pub async fn measure_case(
     let svc_e1: Vec<f64> = (0..n).map(|i| keep_with(&baro_corr, &p.ele, i)).collect();
     let bar_e1: Vec<f64> = (0..n).map(|i| keep_with(&baro_corr, &baro_corr, i)).collect();
 
-    // Marche du baro (README §4 ter.11, 3f8a810) : après δ, avant le décalage et la tendance d'E1 ;
-    // résidu baro(s + δ) − MNT (mode distance sans correction), hors ouvrage, masque et sans baro
-    // en s comme en s + δ. Une marche rend la référence E1 incertaine (rapportée, non jugée).
-    let excluded_marche: Vec<bool> =
-        (0..n).map(|i| masked[i] || p.on_structure[i] || p.corrected[i]).collect();
+    // Zones de pente du baro sans relief (README §4 quater.3, 2744983, 633255f) : après δ, avant la
+    // marche ; baro corrigé et MNT du mode distance sans correction, stations hors ouvrage et
+    // fenêtre masquée. Masquées pour E1 (décalage, tendance, RMSE, P95, km comparés).
+    let excluded_e1: Vec<bool> = (0..n).map(|i| masked[i] || p.on_structure[i] || p.corrected[i]).collect();
+    let slope_zones = crate::marche::slope_zones(&p.d, &baro_corr, &ref_raw, &excluded_e1);
+    let in_slope_zone = crate::marche::in_zones(&p.d, &slope_zones);
+    // Marche du baro (README §4 ter.11, 3f8a810) : après δ et les zones de pente, avant le décalage
+    // et la tendance d'E1 ; résidu baro(s + δ) − MNT (mode distance sans correction), hors ouvrage,
+    // masque, zone de pente et sans baro en s comme en s + δ. Une marche rend la référence E1
+    // incertaine (rapportée, non jugée).
+    let excluded_marche: Vec<bool> = (0..n).map(|i| excluded_e1[i] || in_slope_zone[i]).collect();
     let marche = crate::marche::find(
         &p.d,
         &crate::marche::residual(&p.d, &baro_corr, &ref_raw, &excluded_marche, shift),
         &ref_raw,
     );
     // E1 hors ouvrage (stations `ground`) : ni segment pont ou tunnel, ni altitude d'ouvrage
-    // (tablier, interpolation, rampes jusqu'aux sondes).
+    // (tablier, interpolation, rampes jusqu'aux sondes) ; hors zones de pente du baro.
     let off_structure = |v: &[f64]| -> Vec<f64> {
-        (0..n).map(|i| if p.on_structure[i] || p.corrected[i] { f64::NAN } else { v[i] }).collect()
+        (0..n)
+            .map(|i| if p.on_structure[i] || p.corrected[i] || in_slope_zone[i] { f64::NAN } else { v[i] })
+            .collect()
     };
     let m1 = e1(
         &p.d,
@@ -1433,12 +1441,15 @@ pub async fn measure_case(
     let step = rules.grid_step_m;
     let masked_m = masked.iter().filter(|m| **m).count() as f64 * step;
     let compared = bar.iter().filter(|x| !x.is_nan()).count();
+    // Stations comparées (baro brut) des zones de pente : hors des km comparés d'E1.
+    let compared_in_zones = (0..n).filter(|&i| in_slope_zone[i] && !bar[i].is_nan()).count();
     let case_json = json!({
         "id": case.id,
         "serie": case.serie,
         "groupe": case.groupe,
         "bruit_baro_m": case.baro_noise_m,
         "marche_baro": marche.map(|m| m.to_json()),
+        "zones_pente_baro": crate::marche::zones_json(&slope_zones, compared_in_zones),
         "retard_baro": retard.to_json(),
         "mode": "distance",
         "cache": "disque",
@@ -1531,6 +1542,7 @@ pub async fn measure_case(
         raw_gps: Some(&raw_gps),
         tiles: Some(&tiles),
         baro_fiable: case.baro_fiable,
+        baro_noise_m: case.baro_noise_m,
     };
     let mut items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     // Témoins négatifs V1 portés par ce cas (README §4 ter.4–6) ; plages hors graphe vélo en
@@ -1847,6 +1859,18 @@ fn judge_typology(os_cases: &[Value], perso: &[Value]) -> (Value, Value) {
         json!({"par_cas": err, "longueur_m": round(err_m, 1), "reference_m": round(ref_m, 1),
             "part": round(if ref_m > 0.0 { err_m / ref_m } else { 0.0 }, 4)}),
     );
+    // Voies aux tags différents entre dates (README §4 quater.1) : parcours planifiés R1/R2, par
+    // parcours (longueur, part) ; `instantanes_absents_du_manifest` si la règle n'a pas tourné.
+    let tags: serde_json::Map<String, Value> = os_cases
+        .iter()
+        .filter(|c| c["groupe"] == "planifie_R1_R2")
+        .filter(|c| !c["typologie"]["R1.tags_differents"].is_null())
+        .filter_map(|c| Some((c["id"].as_str()?.to_owned(), c["typologie"]["R1.tags_differents"].clone())))
+        .collect();
+    if !tags.is_empty() {
+        let total: f64 = tags.values().filter_map(|v| v["longueur_m"].as_f64()).sum();
+        agg.insert("tags_differents".into(), json!({"par_cas": tags, "longueur_m": round(total, 1)}));
+    }
     for (g, list) in &per_group {
         let mut a = serde_json::Map::new();
         for k in [
@@ -2194,6 +2218,7 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 if let Some(m) = c.as_object_mut() {
                     m.remove("metriques");
                     m.remove("retard_baro");
+                    m.remove("zones_pente_baro");
                 }
                 if let Some(d) = c["diagnostics"].as_object_mut() {
                     d.retain(|k, _| {
@@ -2241,11 +2266,30 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
                 continue;
             }
         };
+        // Voies aux tags différents entre la date des tuiles et celle de la référence (README §4
+        // quater.1) : avant l'erreur de la référence. Instantanés absents du manifest : règle non
+        // appliquée en calibration (rapporté), refus au jugement.
+        let between = match manifest.recalage_section(&pl.id) {
+            Some(sec) => crate::reference_error::TagsBetweenDates::load_for(paths, manifest, sec)?,
+            None => None,
+        };
+        match &between {
+            Some(t) => crate::osm_surface::exclude_tags_differents(paths, pl, &mut route, t)?,
+            None if target == Serie::TenueALEcart => bail!(
+                "{} : tags différents entre dates (README §4 quater.1) : instantanés osm_tags_toutes \
+                 absents du manifest, jugement refusé",
+                pl.id
+            ),
+            None => {}
+        }
         // Empreintes de surface.csv et baro.csv, cohérence avec la référence : refus de la campagne.
         crate::osm_surface::exclude_reference_errors(paths, pl, &mut route, tags)?;
         match crate::osm_surface::measure(service, &route).await {
             Ok(mut c) => {
                 eprintln!("{} : mesuré", pl.id);
+                if between.is_none() {
+                    c["typologie"]["R1.tags_differents"] = json!("instantanes_absents_du_manifest");
+                }
                 c["serie"] = json!(target);
                 c["groupe"] = json!("planifie_R1_R2");
                 os_cases.push(c);
@@ -2454,7 +2498,7 @@ pub async fn run_series(
             "increment": increment,
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8) ; après le jugement V1 (décisions de l'utilisateur, 2026-11-02) : E5, approche sur un autre ouvrage (§4 ter.7 : f38b745, validé en 2e511e5), erreur de la référence Valhalla de R1, R2 et R3 hors décompte (§4 bis.8 : 562d729)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8) ; après le jugement V1 (décisions de l'utilisateur, 2026-11-02) : E5, approche sur un autre ouvrage (§4 ter.7 : f38b745, validé en 2e511e5), erreur de la référence Valhalla de R1, R2 et R3 hors décompte (§4 bis.8 : 562d729) ; README §4 quater, règles pour V1.2 (décisions de l'utilisateur, 2026-11-03, après le jugement V1.1) : référence R1/R2, tags différents entre dates et sauts de s_origine (§4 quater.1 : d6fd42c), E5 baro bruité (§4 quater.2 : f8f81a6), E1 zones de pente du baro avant la marche (§4 quater.3 : 2744983, 633255f), E5 par site (§4 quater.4 : 8559a21)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -2507,6 +2551,11 @@ pub async fn run_series(
                 "S2 des témoins V1 (README §4 ter.4–6, lecture du banc) : tronçon entre les stations les plus proches (≤ 40 m) de debut et fin, sur une sortie comme sur un itinéraire planifié, ou itinéraire planifié entier pour un témoin sans extrémités (README §4 ter.6, affc041) ; retirés de la longueur, des ouvrages fictifs et de la longueur typée : plages hors graphe vélo (§4 ter.5) et abords à 100 m de tout pont ou tunnel des tuiles de la campagne (ouvrage réel, jamais fictif) ; ouvrage fictif = suite de stations typées pont ou tunnel par le service hors de ces plages ; covered et avalanche_protector (absents du schéma des tuiles) non lus sur ces témoins ; témoin non retrouvé : cas_sautes",
                 "S2_ouvrage_reel covered=yes (README §4 ter.6, cc59b18) : ecart_max_m = max |service − MNT| aux stations de la plage (reference mnt_aux_stations), rapporté sans seuil dans agregats.ouvrages.limite_donnees",
                 "couverture (par mode) : comptes après exclusions du banc par critère à minimum de jugement (criteria.yaml serie_tenue_a_l_ecart.couverture.minimums) ; informative en calibration ; au jugement V1, un critère sous son minimum prend le verdict sous_minimum (refus, README §2 point 3)",
+                "E1, zones de pente du baro sans relief (README §4 quater.3, 2744983, 633255f), toutes strates : sur la grille de 5 m, baro corrigé du δ et MNT du mode distance sans correction, là où |baro(s + 50) − baro(s)| / 50 > 0,15 et |MNT(s + 50) − MNT(s)| / 50 < 0,10 (deux stations avec baro et MNT, hors ouvrage et fenêtre masquée), stations de [s − 300, s + 350] masquées pour E1 (décalage, tendance, RMSE, P95, km comparés de la couverture), zones réunies, bornées à la trace ; ordre δ, zones, marche (détectée hors zones, stations exclues en s comme en s + δ), E1 ; cas.zones_pente_baro (zones, km_masques, abscisses_km, stations_comparees_masquees) ; E2, E2b, E3, E5 inchangés",
+                "E5 baro bruité (README §4 quater.2, f8f81a6) : bruit baro de la trace (noise_m de qualify_baro.py, trace entière pour ses segments .sN) > 1,0 m, tous groupes : référence baro corrigé local incertaine (e5_reference_incertaine, raison baro_bruite), non comptée, sans repli sur le MNT ; testée après le retrait, avant les côtés",
+                "E5 par site (README §4 quater.4, 8559a21) : passages E5 et e5_* (comptés ou non) réunis en sites, deux ids du même site s'ils sont le même ouvrage ou croisés par un même cas à 40 m au plus l'un de l'autre (d_milieu_m), de proche en proche, toutes traces ; site en échec si un passage compté échoue, réussi si tous ses passages comptés réussissent, sans passage compté non compté (marques) ; verdicts.E5 et E5_echecs par site (ids joints par +), agregats.ouvrages.E5.par_site (ouvrages, cas, passages, passages_comptes, ecart_max_m) ; couverture.E5.croisements = sites avec un passage compté",
+                "R1/R2 des parcours planifiés (README §4 quater.1, d6fd42c) : voies de <id>.surface.csv (toutes classes, hors discontinuités) dont highway, surface ou tracktype diffèrent entre l'instantané à la date OSM des tuiles (tuiles_*.date_osm) et celui de la date des données du serveur Valhalla, ou présentes à une seule date, retirées de R1 et R2 avant l'erreur de la référence (qui ne les voit plus) et rapportées par parcours (typologie R1.tags_differents : longueur_m, part de la référence classée) ; instantanés osm_tags_toutes de la section du manifest (voies_retenues: toutes, empreinte vérifiée) ; absents du manifest : non appliqué en calibration (R1.tags_differents = instantanes_absents_du_manifest), refus au jugement ; plages ramenées à l'itinéraire coupées aux sauts de s_origine (Δs_origine − Δs_recale > 100 m)",
+                "fill-cache : campagne de tuiles datée du manifest (tuiles_*, espace de cache des tuiles de rues) verrouillée : tuiles de rues lues dans le cache seulement, sans revalidation ni téléchargement ; une tuile manquante refuse le remplissage",
                 "Q1 : négatifs de la série mesurée ; négatif d'une série nouvelle compté seulement si son défaut est attesté (D+ enregistré < 0,6 ou > 1,6 × D+ MNT, 930f6e8, 305abd7) ; campagne.q1"
             ]
         },
@@ -2564,6 +2613,37 @@ pub async fn fill_cache(
     let report = crate::check::check_series(paths, target)?;
     ensure_check(&report)?;
     let manifest = Manifest::load(&paths.bench)?;
+    // Campagne de tuiles datée du manifest (`tuiles_*`) : tuiles de rues verrouillées, lues dans le
+    // cache seulement, jamais téléchargées ni revalidées ; une tuile manquante refuse le remplissage.
+    let campaign = crate::service::locked_campaign(&manifest, &paths.cache)?.map(|c| c.id.clone());
+    if let Some(id) = &campaign {
+        crate::service::lock_streets();
+        eprintln!("campagne de tuiles {id} verrouillée : aucune tuile de rues téléchargée");
+    }
+    fill_cache_inner(paths, &manifest, groupes, ids, coherence_routes, hors_git, goldens, extra_gpx, target)
+        .await
+        .with_context(|| match &campaign {
+            Some(id) => format!(
+                "fill-cache, campagne de tuiles {id} verrouillée (une réponse 503 data_unavailable \
+                 signale une tuile de rues hors de la campagne)"
+            ),
+            None => "fill-cache".to_owned(),
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fill_cache_inner(
+    paths: &BenchPaths,
+    manifest: &Manifest,
+    groupes: &[String],
+    ids: &[String],
+    coherence_routes: &[String],
+    hors_git: &[String],
+    goldens: &[String],
+    extra_gpx: &[PathBuf],
+    target: Serie,
+) -> anyhow::Result<Value> {
+    let manifest = manifest.clone();
     let selection = select_series(&manifest, groupes, ids, target);
     let v1 = v1_ctx(paths, &manifest, ids, target)?;
     // Série tenue à l'écart (avant `judge`) : ses traces entières et les extraits des traces de
@@ -2896,6 +2976,13 @@ mod tests {
         assert!(e["par_cas"].get("os-a").is_none());
         assert_eq!((e["longueur_m"].as_f64(), e["reference_m"].as_f64()), (Some(300.0), Some(15_000.0)));
         assert_eq!((verdicts["R1_R2"].as_str(), verdicts["R3"].as_str()), (Some("pass"), Some("pass")));
+        assert!(agg.get("tags_differents").is_none(), "osm-surface et parcours sans la règle : rien");
+        // Tags différents entre dates (README §4 quater.1) : rapportés par parcours planifié.
+        let mut os = os;
+        os[1]["typologie"]["R1.tags_differents"] = json!({"longueur_m": 120.0, "part": 0.012});
+        let (agg, _) = judge_typology(&os, &perso);
+        assert_eq!(agg["tags_differents"]["par_cas"]["pl-r-a"]["longueur_m"], 120.0);
+        assert_eq!(agg["tags_differents"]["longueur_m"], 120.0);
     }
 
     /// Point 6 de 7dab276 (README §4 ter.9) : au jugement, une trace de la série tenue à l'écart
@@ -2920,6 +3007,7 @@ mod tests {
         };
         let m = Manifest {
             sha256: String::new(),
+            tuiles: Vec::new(),
             vcyclist: Vec::new(),
             osm_surface: Vec::new(),
             copies: Vec::new(),

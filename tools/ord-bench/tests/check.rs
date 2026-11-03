@@ -39,6 +39,19 @@ fn held_out_cases_are_excluded_before_any_read() {
     assert_eq!(all.cases.iter().filter(|t| v11.traces.contains(&t.id)).count(), 36);
     assert!(all.cases.iter().all(|t| t.serie == ord_bench::manifest::Serie::Calibration));
     assert!(all.cases.iter().all(|t| t.groupe != "negatif"));
+    // Campagne de tuiles datée (`tuiles_2026_11_02`) : lue, rattachée à V1.1, date OSM du TileJSON.
+    let campaign = manifest.tile_campaign(v11).expect("campagne de tuiles");
+    assert_eq!(campaign.id, "tuiles_2026_11_02");
+    assert_eq!(campaign.date_osm.as_deref(), Some("2026-10-19T00:00:04Z"));
+    assert_eq!(manifest.tile_campaign(manifest.v1.as_ref().unwrap()), Some(campaign));
+    // Son espace de cache est celui des tuiles de rues du service : `fill-cache` la verrouille.
+    let config = ord_bench::service::bench_config_with(
+        std::path::Path::new("/nulle-part"),
+        true,
+        ord_bench::service::Variant::DEFAULT,
+        true,
+    );
+    assert_eq!(ord_server::wiring::streets_namespace(&config), campaign.espace_cache);
 }
 
 /// Retard du baro gelé (README §4 ter.9, manifest `perso_v1.retard_baro_gele`, 48ca44a) : le

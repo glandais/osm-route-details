@@ -127,6 +127,162 @@ impl OsmTags {
     }
 }
 
+/// Tags comparés entre les deux dates (README §4 quater.1, criteria
+/// `reference_R1_R2_v12.tags_differents.tags`).
+pub const COMPARED_TAGS: [&str; 3] = ["highway", "surface", "tracktype"];
+
+/// Instantané de toutes les voies d'une référence (`osm_tags_reference.py --toutes`) : voies
+/// demandées et tags comparés de celles trouvées. Pas de `Debug` dérivé (identifiants privés).
+pub struct WayTags {
+    date: String,
+    asked: BTreeSet<u64>,
+    tags: std::collections::BTreeMap<u64, [Option<String>; 3]>,
+}
+
+impl std::fmt::Debug for WayTags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WayTags").field("date", &self.date).field("voies", &self.asked.len()).finish()
+    }
+}
+
+impl WayTags {
+    /// Instantané lu depuis son JSON (`{date, voies_retenues: toutes, demandees, tags}`), daté `date`.
+    pub fn from_json(bytes: &[u8], date: &str) -> anyhow::Result<Self> {
+        let v: Value = serde_json::from_slice(bytes).context("instantané des tags OSM illisible")?;
+        let own = v["date"].as_str().context("instantané des tags OSM sans date")?;
+        if date_key(own) != date_key(date) {
+            bail!("instantané des tags OSM daté {own}, pas {date}");
+        }
+        if v["voies_retenues"] != "toutes" {
+            bail!("instantané des tags OSM du {own} : voies_retenues ≠ toutes (osm_tags_reference.py --toutes)");
+        }
+        let asked = v["demandees"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+        let tags = v["tags"]
+            .as_object()
+            .context("instantané des tags OSM sans `tags`")?
+            .iter()
+            .filter_map(|(k, t)| {
+                Some((k.parse().ok()?, COMPARED_TAGS.map(|n| t[n].as_str().map(str::to_owned))))
+            })
+            .collect();
+        Ok(Self { date: date_key(date), asked, tags })
+    }
+
+    /// Instantané d'une date parmi les entrées `osm_tags_toutes` d'une section, empreinte vérifiée.
+    fn load(paths: &crate::BenchPaths, entries: &[(String, String, String)], date: &str) -> anyhow::Result<Self> {
+        let Some((f, sum, _)) = entries.iter().find(|(_, _, d)| date_key(d) == date_key(date)) else {
+            bail!(
+                "tags différents entre dates (README §4 quater.1) : aucun instantané osm_tags_toutes au \
+                 manifest à la date {date}"
+            );
+        };
+        let bytes = std::fs::read(paths.resolve(f)).with_context(|| format!("{f} : instantané absent"))?;
+        if crate::hash::sha256_bytes(&bytes) != *sum {
+            bail!("{f} : empreinte différente de celle du manifest");
+        }
+        Self::from_json(&bytes, date)
+    }
+}
+
+/// Les deux instantanés de toutes les voies d'une section : date OSM des tuiles de la campagne et
+/// date des données du serveur Valhalla de la référence (README §4 quater.1, d6fd42c).
+pub struct TagsBetweenDates {
+    tiles: WayTags,
+    reference: WayTags,
+}
+
+impl std::fmt::Debug for TagsBetweenDates {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TagsBetweenDates")
+            .field("tuiles", &self.tiles.date)
+            .field("reference", &self.reference.date)
+            .finish_non_exhaustive()
+    }
+}
+
+impl TagsBetweenDates {
+    pub fn new(tiles: WayTags, reference: WayTags) -> Self {
+        Self { tiles, reference }
+    }
+
+    /// Instantanés d'une section (`osm_tags_toutes`) : `None` si la section n'en déclare aucun
+    /// (règle non appliquée, rapportée) ; déclarés mais celui d'une des deux dates absent, illisible
+    /// ou d'empreinte différente : refus. Date des tuiles = campagne de la section.
+    pub fn load_for(
+        paths: &crate::BenchPaths,
+        manifest: &crate::manifest::Manifest,
+        sec: &crate::manifest::PersoV1,
+    ) -> anyhow::Result<Option<Self>> {
+        if sec.osm_tags_toutes.is_empty() {
+            return Ok(None);
+        }
+        let tiles = manifest
+            .tile_campaign(sec)
+            .and_then(|c| c.date_osm.clone())
+            .context("tags différents entre dates : date OSM des tuiles absente du manifest (tuiles_*.date_osm)")?;
+        let reference = sec
+            .donnees_serveur
+            .as_deref()
+            .context("tags différents entre dates : date des données du serveur Valhalla absente du manifest")?;
+        Ok(Some(Self {
+            tiles: WayTags::load(paths, &sec.osm_tags_toutes, &tiles)?,
+            reference: WayTags::load(paths, &sec.osm_tags_toutes, reference)?,
+        }))
+    }
+
+    /// La voie diffère-t-elle entre les deux dates (un des tags comparés, ou absente d'une seule) ?
+    /// Voie non demandée à l'une des dates : instantané incomplet, refus.
+    fn differs(&self, way: u64) -> anyhow::Result<bool> {
+        if !self.tiles.asked.contains(&way) || !self.reference.asked.contains(&way) {
+            bail!("tags différents entre dates : voie de la référence absente d'un instantané (non demandée)");
+        }
+        Ok(self.tiles.tags.get(&way) != self.reference.tags.get(&way))
+    }
+}
+
+/// Plages de `<id>.surface.csv` (abscisse du fichier, toutes classes, hors discontinuités) dont la
+/// voie diffère entre les deux dates, triées, contiguës réunies.
+pub fn differing_ranges(csv: &str, tags: &TagsBetweenDates) -> anyhow::Result<Vec<Range<f64>>> {
+    let mut lines = csv.lines();
+    let header: Vec<&str> = lines.next().unwrap_or("").split(',').map(str::trim).collect();
+    let col = |name: &str| header.iter().position(|h| *h == name);
+    let (Some(a), Some(b), Some(way)) = (col("s_debut_m"), col("s_fin_m"), col("way_id")) else {
+        bail!("surface.csv sans s_debut_m, s_fin_m ou way_id");
+    };
+    let usage = col("use");
+    let mut out = Vec::new();
+    for l in lines {
+        let f: Vec<&str> = l.split(',').map(str::trim).collect();
+        if usage.and_then(|u| f.get(u)).is_some_and(|u| *u == "discontinuite") {
+            continue;
+        }
+        let Some(w) = f.get(way).and_then(|w| w.parse::<f64>().ok()).filter(|w| w.is_finite() && *w >= 0.0)
+        else {
+            continue;
+        };
+        if !tags.differs(w as u64)? {
+            continue;
+        }
+        let (Some(from), Some(to)) =
+            (f.get(a).and_then(|x| x.parse::<f64>().ok()), f.get(b).and_then(|x| x.parse::<f64>().ok()))
+        else {
+            continue;
+        };
+        if to > from {
+            out.push(from..to);
+        }
+    }
+    out.sort_by(|x: &Range<f64>, y| x.start.total_cmp(&y.start));
+    let mut merged: Vec<Range<f64>> = Vec::new();
+    for r in out {
+        match merged.last_mut() {
+            Some(last) if r.start <= last.end + 1e-6 => last.end = last.end.max(r.end),
+            _ => merged.push(r),
+        }
+    }
+    Ok(merged)
+}
+
 /// Plages d'erreur de la référence dans `<id>.surface.csv` (abscisse du fichier), triées,
 /// contiguës réunies. Colonnes lues par leur en-tête (`s_debut_m`, `s_fin_m`, `surface`, `use`,
 /// `way_id`) ; les discontinuités n'ont pas de référence et ne sont jamais une erreur.
@@ -212,6 +368,13 @@ impl Exclusion {
         typo[format!("{prefix}.erreur_reference_part")] = serde_json::json!(round(self.part(), 4));
         typo[format!("{prefix}.reference_m")] = serde_json::json!(round(self.reference_m, 1));
     }
+
+    /// Voies aux tags différents entre dates (README §4 quater.1) : `<prefix>.tags_differents`
+    /// (longueur et part de la référence classée avant exclusion).
+    pub fn tags_json_into(&self, typo: &mut Value, prefix: &str) {
+        typo[format!("{prefix}.tags_differents")] =
+            serde_json::json!({"longueur_m": round(self.excluded_m, 1), "part": round(self.part(), 4)});
+    }
 }
 
 fn round(x: f64, digits: i32) -> f64 {
@@ -275,7 +438,40 @@ pub fn to_origin(cut: &[Range<f64>], baro_csv: &str) -> anyhow::Result<Vec<Range
         let t = if b > a { (x - a) / (b - a) } else { 0.0 };
         xo[i - 1] + t * (xo[i] - xo[i - 1])
     };
-    Ok(cut.iter().map(|c| orig(c.start)..orig(c.end)).filter(|c| c.end > c.start).collect())
+    // Sauts de s_origine (README §4 quater.1, d6fd42c) : la référence y est `UNKNOWN`, une plage
+    // ramenée ne s'y étire pas.
+    let jumps: Vec<Range<f64>> = (1..xr.len())
+        .filter(|&i| (xo[i] - xo[i - 1]) - (xr[i] - xr[i - 1]) > S_ORIGINE_JUMP_M)
+        .map(|i| xo[i - 1]..xo[i])
+        .collect();
+    let mapped: Vec<Range<f64>> =
+        cut.iter().map(|c| orig(c.start)..orig(c.end)).filter(|c| c.end > c.start).collect();
+    Ok(minus(&mapped, &jumps))
+}
+
+/// Saut de s_origine entre deux points appariés consécutifs (Δs_origine − Δs_recale, m) au-delà
+/// duquel la plage de l'itinéraire est `UNKNOWN` (`baro_gap_max_m`, README §4 quater.1).
+pub const S_ORIGINE_JUMP_M: f64 = 100.0;
+
+/// Plages `cut` privées des plages `holes` (triées en sortie, vides retirées).
+pub fn minus(cut: &[Range<f64>], holes: &[Range<f64>]) -> Vec<Range<f64>> {
+    let mut out = Vec::new();
+    for c in cut {
+        let mut from = c.start;
+        let mut hs: Vec<&Range<f64>> = holes.iter().filter(|h| h.start < c.end && h.end > c.start).collect();
+        hs.sort_by(|a, b| a.start.total_cmp(&b.start));
+        for h in hs {
+            if h.start > from {
+                out.push(from..h.start);
+            }
+            from = from.max(h.end);
+        }
+        if c.end > from {
+            out.push(from..c.end);
+        }
+    }
+    out.sort_by(|a, b| a.start.total_cmp(&b.start));
+    out
 }
 
 /// Contrôle d'un parcours planifié : chaque plage d'erreur ramenée à l'itinéraire tombe sur une
@@ -394,6 +590,97 @@ mod tests {
         check_on_unpaved(&cut, &reference).unwrap();
         let reference = vec![Ref { from: 0.0, to: 300.0, class: Class::Paved }];
         assert!(check_on_unpaved(&cut, &reference).is_err());
+    }
+
+    /// Saut de s_origine (README §4 quater.1) : Δs_origine − Δs_recale > 100 m, la plage ramenée
+    /// ne s'étire pas sur l'aller-retour ; 100 m tout juste : pas un saut.
+    #[test]
+    fn mapped_ranges_stop_at_s_origine_jumps() {
+        let baro = "s_recale_m,s_origine_m,insere\n0,0,0\n100,100,0\n113,588,0\n300,775,0\n400,975,0\n";
+        let cut = to_origin(&[50.0..200.0], baro).unwrap();
+        assert_eq!(cut.len(), 2, "{cut:?}");
+        assert_eq!(cut[0], 50.0..100.0);
+        assert!((cut[1].start - 588.0).abs() < 1e-9 && (cut[1].end - 675.0).abs() < 1e-9, "{cut:?}");
+        let baro = "s_recale_m,s_origine_m,insere\n0,0,0\n100,100,0\n110,210,0\n";
+        assert_eq!(to_origin(&[50.0..110.0], baro).unwrap(), vec![50.0..210.0]);
+        assert_eq!(minus(&[0.0..10.0, 20.0..30.0], &[5.0..25.0]), vec![0.0..5.0, 25.0..30.0]);
+    }
+
+    fn way_tags(date: &str, tags: &str) -> WayTags {
+        let json = format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1,2,3,4,5],"tags":{tags}}}"#);
+        WayTags::from_json(json.as_bytes(), date).unwrap()
+    }
+
+    /// Tags différents entre dates (README §4 quater.1) : `tracktype` changé, voie absente d'une
+    /// seule date ; mêmes tags ou absente des deux : gardée ; toutes classes ; discontinuités
+    /// ignorées ; voie non demandée : refus ; instantané sans `--toutes` : refus.
+    #[test]
+    fn ways_whose_tags_differ_between_dates_leave_r1_r2() {
+        let tiles = way_tags(
+            "2026-10-19T00:00:04Z",
+            r#"{"1":{"highway":"track","tracktype":"grade1"},"2":{"highway":"tertiary","surface":"asphalt"},"3":{"highway":"path"}}"#,
+        );
+        let reference = way_tags(
+            "2026-11-01T13:01:00Z",
+            r#"{"1":{"highway":"track","tracktype":"grade2"},"2":{"highway":"tertiary","surface":"asphalt","name":"x"},"4":{"highway":"service"}}"#,
+        );
+        let t = TagsBetweenDates::new(tiles, reference);
+        let csv = "s_debut_m,s_fin_m,surface,road_class,use,way_id\n0,100,gravel,track,road,1\n\
+                   100,200,paved,tertiary,road,2\n200,250,dirt,path,road,3\n250,300,paved,service,road,4\n\
+                   300,350,,,discontinuite,\n350,400,paved,tertiary,road,5\n";
+        assert_eq!(differing_ranges(csv, &t).unwrap(), vec![0.0..100.0, 200.0..300.0]);
+        let e = differing_ranges("s_debut_m,s_fin_m,surface,way_id\n0,10,paved,9\n", &t).unwrap_err();
+        assert!(e.to_string().contains("non demandée"), "{e}");
+        let e = WayTags::from_json(SNAPSHOT.as_bytes(), "2026-11-01T13:01Z").unwrap_err();
+        assert!(e.to_string().contains("toutes"), "{e}");
+        assert_eq!(
+            format!("{t:?}"),
+            "TagsBetweenDates { tuiles: \"2026-10-19T00:00:04Z\", reference: \"2026-11-01T13:01Z\", .. }"
+        );
+    }
+
+    /// Instantanés `osm_tags_toutes` d'une section : aucun déclaré, règle non appliquée (`None`) ;
+    /// déclarés, celui de la date des tuiles (campagne `tuiles_*`) et celui de la date de la
+    /// référence lus et vérifiés ; l'un des deux absent : refus.
+    #[test]
+    fn both_dated_snapshots_come_from_the_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let private = dir.path().join("private");
+        std::fs::create_dir_all(private.join("osm-tags")).unwrap();
+        let body = |date: &str| {
+            format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1],"tags":{{"1":{{"highway":"track"}}}}}}"#)
+        };
+        let (a, b) = (body("2026-10-19T00:00:04Z"), body("2026-11-01T13:01:00Z"));
+        std::fs::write(private.join("osm-tags/a.json"), &a).unwrap();
+        std::fs::write(private.join("osm-tags/b.json"), &b).unwrap();
+        let paths = crate::BenchPaths::new(dir.path(), Some(dir.path()), Some(&private));
+        let entry = |f: &str, body: &str, date: &str| {
+            (format!("private/osm-tags/{f}.json"), crate::hash::sha256_bytes(body.as_bytes()), date.to_owned())
+        };
+        let manifest = crate::manifest::Manifest {
+            tuiles: vec![crate::manifest::TileCampaign {
+                id: "tuiles_2026_11_02".into(),
+                espace_cache: "versatiles".into(),
+                date_osm: Some("2026-10-19T00:00:04Z".into()),
+            }],
+            ..Default::default()
+        };
+        let sec = |toutes: Vec<(String, String, String)>| crate::manifest::PersoV1 {
+            donnees_serveur: Some("2026-11-01T13:01Z".into()),
+            osm_tags_toutes: toutes,
+            ..Default::default()
+        };
+        assert!(TagsBetweenDates::load_for(&paths, &manifest, &sec(Vec::new())).unwrap().is_none());
+        let both =
+            sec(vec![entry("a", &a, "2026-10-19T00:00:04Z"), entry("b", &b, "2026-11-01T13:01:00Z")]);
+        let t = TagsBetweenDates::load_for(&paths, &manifest, &both).unwrap().unwrap();
+        assert!(!t.differs(1).unwrap());
+        let one = sec(vec![entry("b", &b, "2026-11-01T13:01:00Z")]);
+        let e = TagsBetweenDates::load_for(&paths, &manifest, &one).unwrap_err();
+        assert!(e.to_string().contains("2026-10-19"), "{e}");
+        let wrong = sec(vec![entry("a", &b, "2026-10-19T00:00:04Z"), entry("b", &b, "2026-11-01T13:01:00Z")]);
+        let e = TagsBetweenDates::load_for(&paths, &manifest, &wrong).unwrap_err();
+        assert!(e.to_string().contains("empreinte"), "{e}");
     }
 
     /// Instantané lu par le manifest : empreinte fausse refusée, date sans instantané refusée.

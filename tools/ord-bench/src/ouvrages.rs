@@ -406,6 +406,9 @@ pub struct CaseProfile<'a> {
     pub tiles: Option<&'a Tiles>,
     /// Trace perso fiable : le baro corrigé localement est la référence d'E5 (README §4 ter.7).
     pub baro_fiable: bool,
+    /// Bruit baro de la trace (`noise_m`) : référence baro d'E5 incertaine au-delà de 1,0 m
+    /// (README §4 quater.2).
+    pub baro_noise_m: Option<f64>,
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -1189,6 +1192,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         at: o.pts[1],
                         im,
                         ends: [im, im],
+                        baro_noise_m: p.baro_noise_m,
                     };
                     let bump = e5_bump(p.d, p.raw, im, [im, im]);
                     let svc = p.svc[im];
@@ -1196,7 +1200,9 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                     let ecart_mnt = Some((svc - p.raw[im]).abs());
                     match e5_item(&o.id, case, e5_reference(&input), &ecart, ecart_mnt, bump) {
                         Ok(fields) => item.extend(fields),
-                        Err(v) => {
+                        Err(mut v) => {
+                            // Abscisse du croisement : sites d'E5 (README §4 quater.4).
+                            v["d_milieu_m"] = r2(dm);
                             out.push(v);
                             continue;
                         }
@@ -1539,6 +1545,10 @@ impl Tiles {
             .into_iter()
             .collect();
         let outcomes = chain.store().get_many(&keys, &ctx).await;
+        // En ligne (fill-cache), campagne de tuiles verrouillée : tuile absente du cache = refus.
+        if !offline {
+            crate::service::ensure_streets_cached(&outcomes)?;
+        }
         // Couche `bridges` lue dans le corps brut des mêmes tuiles du cache (le service ne la décode
         // pas) ; tuile illisible ou absente : aucun polygone.
         let disk = ord_data::disk::DiskStore::new(cache, &ord_server::wiring::streets_namespace(&config));
@@ -2031,6 +2041,9 @@ pub const E5_TOL_BARO_M: f64 = 2.0;
 /// Baro incertain (f1bfda3, e9430ac) : décalages des deux côtés (200–1 500 m chacun) à plus de
 /// 2 m l'un de l'autre, ou un côté à moins de 3 points de baro.
 const E5_SIDE_OFFSETS_MAX_M: f64 = 2.0;
+/// Bruit baro de la trace au-delà duquel (exclu) la référence baro est incertaine (criteria
+/// `E5.reference.baro_incertaine_si_bruit`, comme E1 plaine).
+const E5_BARO_NOISE_MAX_M: f64 = 1.0;
 const E5_SIDE_POINTS_MIN: usize = 3;
 /// Demi-fenêtre de la direction de la trace au croisement (test « trace sur un ouvrage »).
 const E5_DIRECTION_HALF_M: f64 = 10.0;
@@ -2090,6 +2103,9 @@ pub struct E5Input<'a> {
     /// Stations d'où partent les approches 20–50 m de la bosse : `[im, im]` au point de croisement,
     /// bouts de la plage pour les plages `O` des témoins vcyclist (README §4 ter.7, e9430ac).
     pub ends: [usize; 2],
+    /// Bruit baro de la trace (`qualify_baro.py`, `noise_m` de la trace entière, segments `.sN`
+    /// compris) : référence baro incertaine au-delà de 1,0 m (README §4 quater.2).
+    pub baro_noise_m: Option<f64>,
 }
 
 /// Bosse du MNT au croisement : MNT(croisement) − moyenne des médianes du MNT entre 20 et 50 m
@@ -2194,6 +2210,11 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
             offset_m,
             sides: Some(sides),
         };
+        // Baro bruité (README §4 quater.2, f8f81a6) : après le retrait, avant les côtés ; tous
+        // groupes, sans repli sur le MNT.
+        if x.baro_noise_m.is_some_and(|b| b > E5_BARO_NOISE_MAX_M) {
+            return uncertain("baro_bruite");
+        }
         if sides.points.iter().any(|&n| n < E5_SIDE_POINTS_MIN) {
             return uncertain("points_baro_insuffisants");
         }
@@ -2603,6 +2624,7 @@ pub async fn vc_items(
                     at: pts[im],
                     im,
                     ends: [i0, i1],
+                    baro_noise_m: None,
                 };
                 let bump = e5_bump(&r.d, &r.raw.ele, im, [i0, i1]);
                 // Référence MNT : écart max sur la plage, contre le MNT de chaque station.
@@ -2737,6 +2759,113 @@ pub async fn vc_items(
     Ok(out)
 }
 
+/// Passages d'E5, comptés (`E5`) ou rapportés non comptés : réunis en sites (README §4 quater.4).
+const E5_FAMILY: [&str; 4] = ["E5", "e5_reference_incertaine", "e5_reference_indisponible", "e5_trace_sur_ouvrage"];
+/// Deux croisements d'un même passage à 40 m au plus l'un de l'autre (abscisse du croisement sur la
+/// trace ; tolérance d'un passage, README §2.1) sont du même site.
+pub const E5_SITE_TOL_M: f64 = 40.0;
+
+/// Site physique d'E5 (README §4 quater.4, 8559a21 ; criteria `E5.site`) : ids réunis s'ils sont
+/// le même ouvrage ou si un même passage les croise à 40 m au plus l'un de l'autre, de proche en
+/// proche, toutes traces confondues.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct E5Site {
+    pub ouvrages: BTreeSet<String>,
+    pub cas: BTreeSet<String>,
+    pub passages: usize,
+    /// Passages comptés : référence baro ou MNT, ni retiré, ni incertain, ni indisponible.
+    pub comptes: usize,
+    pub echecs: usize,
+    /// Écart max des passages comptés (m).
+    pub ecart_max_m: f64,
+    /// Marques des passages non comptés (`metrique`, raison).
+    pub marques: BTreeSet<String>,
+}
+
+impl E5Site {
+    /// Verdict du site : `None` sans passage compté (non compté), échec dès un passage compté en
+    /// échec (lecture stricte, comme `passe_si: tous`).
+    pub fn pass(&self) -> Option<bool> {
+        (self.comptes > 0).then_some(self.echecs == 0)
+    }
+
+    pub fn label(&self) -> String {
+        self.ouvrages.iter().cloned().collect::<Vec<_>>().join("+")
+    }
+
+    pub fn to_json(&self) -> Value {
+        let mut v = json!({"ouvrages": self.ouvrages, "cas": self.cas, "passages": self.passages,
+            "passages_comptes": self.comptes, "pass": self.pass()});
+        if self.comptes > 0 {
+            v["ecart_max_m"] = r2(self.ecart_max_m);
+        } else {
+            v["marques"] = json!(self.marques);
+        }
+        v
+    }
+}
+
+/// Sites d'E5 des passages `items` (toutes traces de la passe), triés par leur premier id.
+pub fn e5_sites(items: &[Value]) -> Vec<E5Site> {
+    let family: Vec<&Value> =
+        items.iter().filter(|i| i["metrique"].as_str().is_some_and(|m| E5_FAMILY.contains(&m))).collect();
+    let ids: BTreeSet<&str> = family.iter().filter_map(|i| i["ouvrage"].as_str()).collect();
+    let index: BTreeMap<&str, usize> = ids.iter().enumerate().map(|(k, id)| (*id, k)).collect();
+    let mut parent: Vec<usize> = (0..ids.len()).collect();
+    fn root(p: &mut [usize], mut x: usize) -> usize {
+        while p[x] != x {
+            p[x] = p[p[x]];
+            x = p[x];
+        }
+        x
+    }
+    // Croisements de chaque passage (même cas), dans l'ordre de l'abscisse : voisins à 40 m reliés.
+    let mut by_case: BTreeMap<&str, Vec<(f64, usize)>> = BTreeMap::new();
+    for i in &family {
+        if let (Some(c), Some(d), Some(id)) = (i["cas"].as_str(), i["d_milieu_m"].as_f64(), i["ouvrage"].as_str()) {
+            by_case.entry(c).or_default().push((d, index[id]));
+        }
+    }
+    for list in by_case.values_mut() {
+        list.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for w in list.windows(2) {
+            if w[1].0 - w[0].0 <= E5_SITE_TOL_M + 1e-9 {
+                let (a, b) = (root(&mut parent, w[0].1), root(&mut parent, w[1].1));
+                parent[a] = b;
+            }
+        }
+    }
+    let mut sites: BTreeMap<usize, E5Site> = BTreeMap::new();
+    for i in &family {
+        let Some(id) = i["ouvrage"].as_str() else { continue };
+        let r = root(&mut parent, index[id]);
+        let s = sites.entry(r).or_insert_with(|| E5Site { ecart_max_m: f64::NAN, ..E5Site::default() });
+        s.ouvrages.insert(id.to_owned());
+        if let Some(c) = i["cas"].as_str() {
+            s.cas.insert(c.to_owned());
+        }
+        s.passages += 1;
+        match i["pass"].as_bool().filter(|_| i["metrique"] == "E5") {
+            Some(pass) => {
+                s.comptes += 1;
+                s.echecs += usize::from(!pass);
+                let e = i["ecart_croisement_m"].as_f64().unwrap_or(f64::NAN);
+                s.ecart_max_m = s.ecart_max_m.max(e);
+            }
+            None => {
+                let m = i["metrique"].as_str().unwrap_or("");
+                s.marques.insert(match i["raison"].as_str() {
+                    Some(r) => format!("{m}:{r}"),
+                    None => m.to_owned(),
+                });
+            }
+        }
+    }
+    let mut out: Vec<E5Site> = sites.into_values().collect();
+    out.sort_by(|a, b| a.ouvrages.first().cmp(&b.ouvrages.first()));
+    out
+}
+
 /// Verdicts E3, E4, E5, S1, S2 et S3 (rapporté), `hors_graphe_velo` (rapporté).
 pub fn judge(items: &[Value]) -> (Value, Value) {
     let by = |m: &str| -> Vec<&Value> { items.iter().filter(|i| i["metrique"] == m).collect() };
@@ -2817,9 +2946,11 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
             i
         })
         .collect();
-    let (e5_ok, e5_n) = rate(&by("E5"));
-    let e5_fail: Vec<&Value> =
-        by("E5").into_iter().filter(|i| i["pass"] == false).map(|i| &i["ouvrage"]).collect();
+    // E5 par site (README §4 quater.4) : un site physique, un cas ; lecture stricte.
+    let e5_sites = e5_sites(items);
+    let e5_counted: Vec<&E5Site> = e5_sites.iter().filter(|s| s.pass().is_some()).collect();
+    let (e5_ok, e5_n) = (e5_counted.iter().filter(|s| s.pass() == Some(true)).count(), e5_counted.len());
+    let e5_fail: Vec<String> = e5_counted.iter().filter(|s| s.pass() == Some(false)).map(|s| s.label()).collect();
     let sum = |k: &str| -> f64 {
         items
             .iter()
@@ -2834,6 +2965,15 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     let s2_fp: f64 = s2.iter().filter_map(|i| i["faux_positif_m"].as_f64()).sum();
     let s2_fict: u64 = s2.iter().filter_map(|i| i["ouvrages_fictifs"].as_u64()).sum();
     let s2_share = s2_fp / s2_len.max(1e-9);
+    let s2_ok = s2_fict == 0 && s2_share <= 0.005;
+    let s2_fail: Vec<&Value> = s2
+        .iter()
+        .filter(|i| {
+            i["ouvrages_fictifs"].as_u64().is_some_and(|n| n > 0)
+                || i["faux_positif_m"].as_f64().is_some_and(|x| x > 0.0)
+        })
+        .map(|i| if i["temoin"].is_string() { &i["temoin"] } else { &i["cas"] })
+        .collect();
     let hg = by("hors_graphe_velo");
     let hg_ok = hg.iter().filter(|i| i["controle"] == true).count();
     let verdict = |ok: bool, n: usize| {
@@ -2853,7 +2993,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "E4": {"tunnels": e4_n, "tunnels_ok": e4_ok, "part": r4(e4_ok as f64 / e4_n.max(1) as f64), "seuil": 0.857, "reference_ambigue": e4_amb, "reference_indisponible": e4_unavailable},
         "E4_non_couverts": not_covered("E4_non_couvert"),
         "limite_donnees": limits,
-        "E5": {"croisements": e5_n, "ok": e5_ok,
+        "E5": {"croisements": by("E5").len(), "sites": e5_n, "sites_ok": e5_ok,
+            "par_site": e5_sites.iter().map(E5Site::to_json).collect::<Vec<_>>(),
             "par_reference": {
                 "baro_corrige_local": by("E5").into_iter().filter(|i| i["reference"] == "baro_corrige_local").count(),
                 "mnt": by("E5").into_iter().filter(|i| i["reference"] == "mnt").count()},
@@ -2881,7 +3022,9 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "E5": verdict(e5_ok == e5_n, e5_n),
         "E5_echecs": e5_fail,
         "S1": verdict(s1 >= 0.95, usize::from(s1_ref > 0.0)),
-        "S2": verdict(s2_fict == 0 && s2_share <= 0.005, s2.len()),
+        "S2": verdict(s2_ok, s2.len()),
+        // Témoins qui portent le faux positif d'un S2 en échec (ouvrage fictif ou longueur typée).
+        "S2_echecs": if s2_ok { Vec::new() } else { s2_fail },
         "S3": if by("S3").is_empty() { "skipped" } else { "reported" },
         "hors_graphe_velo": if hg.is_empty() { "skipped" } else { "reported" },
     });
@@ -2937,6 +3080,54 @@ mod tests {
         assert_eq!(v["E3"], "pass");
         assert_eq!(v["S2"], "pass");
         assert_eq!(v["E4"], "skipped");
+    }
+
+    /// Sites d'E5 (README §4 quater.4) : tabliers voisins d'un même passage (≤ 40 m) réunis, même
+    /// pont repassé par une autre trace réuni de proche en proche ; un passage compté en échec met
+    /// le site en échec ; un site sans passage compté porte ses marques et n'est pas compté.
+    #[test]
+    fn e5_is_judged_and_covered_by_site() {
+        let e5 = |o: &str, cas: &str, d: f64, pass: bool| {
+            json!({"ouvrage": o, "cas": cas, "metrique": "E5", "d_milieu_m": d, "pass": pass,
+                "ecart_croisement_m": if pass { 0.5 } else { 2.5 }, "reference": "mnt"})
+        };
+        let items = vec![
+            // Trois tabliers au même point d'une trace, dont un en échec.
+            e5("nv-664", "perso-131", 1_000.0, true),
+            e5("nv-795", "perso-131", 1_020.0, false),
+            json!({"ouvrage": "nv-836", "cas": "perso-131", "metrique": "e5_reference_incertaine",
+                "raison": "baro_bruite", "d_milieu_m": 1_055.0}),
+            // nv-795 repassé sur une autre trace, réussi : même site.
+            e5("nv-795", "perso-153", 300.0, true),
+            // Pont à 45 m d'un autre sur la même trace : site distinct.
+            e5("nv-900", "perso-131", 1_100.0, true),
+            // Site sans passage compté.
+            json!({"ouvrage": "nv-901", "cas": "perso-140", "metrique": "e5_reference_indisponible",
+                "raison": "mnt_sans_donnee", "d_milieu_m": 10.0}),
+            json!({"ouvrage": "nv-902", "cas": "perso-140", "metrique": "E5_passage_dessus", "d_milieu_m": 20.0}),
+            json!({"temoin": "pl-x-s0", "cas": "pl-x-s0", "metrique": "S2", "longueur_m": 1000.0,
+                "faux_positif_m": 30.0, "ouvrages_fictifs": 1}),
+            json!({"temoin": "pl-y-s0", "cas": "pl-y-s0", "metrique": "S2", "longueur_m": 1000.0,
+                "faux_positif_m": 0.0, "ouvrages_fictifs": 0}),
+        ];
+        let sites = e5_sites(&items);
+        assert_eq!(sites.len(), 3, "{sites:?}");
+        let first = &sites[0];
+        assert_eq!(first.label(), "nv-664+nv-795+nv-836");
+        assert_eq!((first.passages, first.comptes, first.pass()), (4, 3, Some(false)));
+        assert_eq!(first.cas.len(), 2);
+        assert!((first.ecart_max_m - 2.5).abs() < 1e-9);
+        assert_eq!(sites[1].pass(), Some(true));
+        assert_eq!(sites[2].pass(), None);
+        assert_eq!(sites[2].to_json()["marques"], json!(["e5_reference_indisponible:mnt_sans_donnee"]));
+        let (agg, v) = judge(&items);
+        assert_eq!((agg["E5"]["croisements"].as_u64(), agg["E5"]["sites"].as_u64()), (Some(4), Some(2)));
+        assert_eq!(v["E5"], "fail");
+        assert_eq!(v["E5_echecs"], json!(["nv-664+nv-795+nv-836"]));
+        assert_eq!(v["S2"], "fail");
+        assert_eq!(v["S2_echecs"], json!(["pl-x-s0"]));
+        let cov = crate::coverage::measure(&[], &[], &items, &BTreeMap::new(), 0, 5.0);
+        assert_eq!(cov["E5"]["croisements"], 2, "couverture en sites comptés");
     }
 
     #[test]
@@ -3272,6 +3463,7 @@ mod tests {
             raw_gps: Some(&footbridge),
             tiles: Some(&tiles),
             baro_fiable: true,
+            baro_noise_m: None,
         };
         let items = perso_items("c", &p, std::slice::from_ref(&o), 40.0);
         assert_eq!(items.len(), 1);
@@ -3361,6 +3553,7 @@ mod tests {
                 tiles: Some(&tiles),
                 // Sans baro fiable : référence MNT (le baro n'a pas ici de stations à 200–1 500 m).
                 baro_fiable: false,
+                baro_noise_m: None,
             };
             perso_items("c", &p, std::slice::from_ref(&o), 40.0)
         };
@@ -3558,6 +3751,7 @@ mod tests {
                 raw_gps: None,
                 tiles: None,
                 baro_fiable: true,
+                baro_noise_m: None,
             };
             approach_offset(&p, 100, 120, others)
         };
@@ -3643,6 +3837,7 @@ mod tests {
                 raw_gps: None,
                 tiles: None,
                 baro_fiable: true,
+                baro_noise_m: None,
             };
             perso_items("c", &p, &[o(mnh)], 40.0)
         };
@@ -3719,6 +3914,7 @@ mod tests {
                 raw_gps: None,
                 tiles: None,
                 baro_fiable: true,
+                baro_noise_m: None,
             };
             perso_items("c", &p, &os, 40.0)
         };
@@ -3860,7 +4056,7 @@ mod e5_tests {
         baro: Option<&'a [f64]>,
         tiles: Option<&'a Tiles>,
     ) -> E5Input<'a> {
-        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40] }
+        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40], baro_noise_m: None }
     }
 
     /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.
@@ -3928,10 +4124,25 @@ mod e5_tests {
             at: pts[400],
             im: 400,
             ends: [400, 400],
+            baro_noise_m: None,
         };
         // 261 stations de 200 à 1 500 m de chaque côté.
         let sides = BaroSides { offset_m: [Some(3.0), Some(3.0)], points: [261, 261] };
         assert_eq!(e5_reference(&x), E5Reference::Baro { z: 100.0, offset_m: 3.0, sides });
+        // Baro bruité (README §4 quater.2) : bruit de 1,0 m gardé, au-delà incertain, sans repli
+        // sur le MNT, avant les côtés (ici trop peu de points d'un côté).
+        assert!(matches!(e5_reference(&E5Input { baro_noise_m: Some(1.0), ..x }), E5Reference::Baro { .. }));
+        let noisy = E5Input { baro_noise_m: Some(1.02), baro_points: &d[..300], ..x };
+        assert_eq!(
+            e5_reference(&noisy),
+            E5Reference::Incertaine {
+                reference: "baro_corrige_local",
+                raison: "baro_bruite",
+                z: 100.0,
+                offset_m: Some(3.0),
+                sides: Some(BaroSides { offset_m: [Some(3.0), Some(3.0)], points: [200, 0] }),
+            }
+        );
         // Baro absent au croisement (pas brut de plus de 100 m) : MNT, ici indisponible.
         let mut gap = baro.clone();
         gap[400] = f64::NAN;
@@ -3986,6 +4197,7 @@ mod e5_tests {
                 at: pts[400],
                 im: 400,
                 ends: [400, 400],
+                baro_noise_m: None,
             };
             e5_reference(&x)
         };
@@ -4039,6 +4251,7 @@ mod e5_tests {
             at: pts[400],
             im: 400,
             ends: [400, 400],
+            baro_noise_m: None,
         };
         let r = e5_reference(&x);
         assert!(
@@ -4070,6 +4283,7 @@ mod e5_tests {
             at: pts[400],
             im: 400,
             ends: [400, 400],
+            baro_noise_m: None,
         };
         let r = e5_reference(&x);
         assert!(
@@ -4111,6 +4325,7 @@ mod e5_tests {
                 at: pts[400],
                 im: 400,
                 ends: [400, 400],
+                baro_noise_m: None,
             };
             e5_reference(&x)
         };
@@ -4268,6 +4483,7 @@ mod e5_tests {
             at: mid,
             im: 400,
             ends: [400, 400],
+            baro_noise_m: None,
         };
         assert!(matches!(e5_reference(&x), E5Reference::Baro { .. }), "{:?}", e5_reference(&x));
         assert_eq!(e5_reference(&E5Input { baro: None, ..x }), approche_sur_ouvrage(100.0));
