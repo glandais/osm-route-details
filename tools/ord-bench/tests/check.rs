@@ -13,10 +13,10 @@ fn bench_fingerprints_and_q1() {
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     assert!(report.verified > 100, "{}", report.verified);
     assert!(!report.private_present);
-    // 4 négatifs du MVP et 3 de V1, en calibration depuis le jugement V1 (README §2, point 3) ;
-    // 2 négatifs de V1.1 (neg-08, neg-09), défaut attesté, tenus à l'écart.
-    assert_eq!(report.q1.negatives, 7);
-    assert_eq!(report.q1_tenue.negatives, 2);
+    // 4 négatifs du MVP, 3 de V1 et 2 de V1.1 (neg-08, neg-09), tous en calibration depuis le
+    // jugement V1.1 (README §2, point 3 ; bench/judgements.md) : plus aucun tenu à l'écart.
+    assert_eq!(report.q1.negatives, 9);
+    assert_eq!(report.q1_tenue.negatives, 0);
     assert!(report.q1.pass(), "{:?}", report.q1);
 }
 
@@ -24,7 +24,8 @@ fn bench_fingerprints_and_q1() {
 fn held_out_cases_are_excluded_before_any_read() {
     let manifest = ord_bench::manifest::Manifest::load(&BenchPaths::repo_bench()).expect("manifest");
     let all = ord_bench::campaign::select(&manifest, &[], &[]);
-    // Série tenue à l'écart du manifest (V1.1) : exclue, négatifs à part.
+    // Série tenue à l'écart du manifest : exclue, négatifs à part. Depuis le jugement V1.1
+    // (bench/judgements.md), ses 36 traces sont en calibration et la série est vide.
     let held: Vec<&str> = manifest
         .traces
         .iter()
@@ -32,8 +33,10 @@ fn held_out_cases_are_excluded_before_any_read() {
         .map(|t| t.id.as_str())
         .collect();
     assert_eq!(all.excluded_held_out, held);
-    assert_eq!(held.len(), 36);
-    assert!(held.iter().all(|id| manifest.v11.as_ref().is_some_and(|v| v.traces.contains(*id))));
+    assert!(held.is_empty(), "{held:?}");
+    let v11 = manifest.v11.as_ref().expect("section perso_v11");
+    assert!(v11.judged);
+    assert_eq!(all.cases.iter().filter(|t| v11.traces.contains(&t.id)).count(), 36);
     assert!(all.cases.iter().all(|t| t.serie == ord_bench::manifest::Serie::Calibration));
     assert!(all.cases.iter().all(|t| t.groupe != "negatif"));
 }
