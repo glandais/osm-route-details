@@ -154,6 +154,9 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E1 : zones de pente masquées avant la détection de la marche du baro ; ordre δ, zones, marche hors zones, E1"
   - id: e5_un_site_un_cas   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "E5 : un site physique = un cas ; les croisements comptés sous plusieurs ids (tabliers voisins, même pont repassé) sont réunis ; couverture et verdict par site"
+  # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
+  # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
+  # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -266,7 +269,11 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
       dates: [tuiles.date_osm.planetiler_osm_osmosisreplicationtime, reference.donnees_serveur]
       si: [tag_different, voie_absente_a_une_date]
       alors: {decompte: exclue, rapporte: {cle: tags_differents, par: parcours, mesure: [longueur_m, part]}}
-      source: {outil: tools/osm_tags_reference.py, instantanes: 2, hors_git: true, empreinte: manifest, reseau_pendant_le_banc: false, absent: campagne_refusee}
+      source: {outil: tools/osm_tags_reference.py, instantanes: 2, hors_git: true, empreinte: manifest, reseau_pendant_le_banc: false,
+               manifest: {cle: osm_tags_toutes, entree: [fichier, sha256, date], dans: [section_calibration, "serie_<clé>"], voies_retenues: toutes},
+               absent: {calibration: non_appliquee_rapportee, jugement: refuse}}   # §4 quater.5
+      voie_absente_aux_deux_dates: pas_differente
+      voie_non_demandee_dans_un_instantane: refus   # instantané incomplet
       avant: erreur_reference_R
       s_applique_a: [R1, R2]   # pas R3
 
@@ -320,6 +327,9 @@ criteres:
       ordre: [retard_baro, zones_de_pente, marche, decalage_et_tendance_E1]   # décision de l'utilisateur, 2026-11-03 : marche détectée hors des zones
       rapporte: [zones, km_masques, abscisses_km]
       ne_touche_pas: [E2, E2b, E3, E5]
+      lecture:   # §4 quater.5
+        km_compares: "stations comparées au baro brut, moins les zones de pente"
+        hors_ouvrage: ouvrages_du_service
     passe_si: toutes_les_traces
     bloquant: true
 
@@ -439,6 +449,11 @@ criteres:
       ecart_rapporte: max_des_passages_comptes
       rapporte: [ouvrages, passages, cas]
       couverture: {compte: sites_avec_un_passage_compte, minimum: 8}
+      lecture:   # §4 quater.5
+        relient: passages_comptes_et_non_comptes   # E5_passage_dessus exclu
+        ecart: d_milieu_m
+        sans_abscisse: par_id_seulement   # extraits et témoins vcyclist
+        tirage: distance_entre_points_de_croisement   # couverture_v1.py, approche d_milieu_m par excès
     seuils:
       - {abs_m_max: 1.0, reference: mnt}
       - {abs_m_max: 2.0, reference: baro_corrige_local}   # comme E3 ; 2026-11-01, après 2026.11.6

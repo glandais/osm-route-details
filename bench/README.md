@@ -1147,6 +1147,33 @@ nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.
    (au-dessus du minimum de 8), 20 lignes en échec → **10** sites. Le diagnostic en comptait 11 :
    ici, `nv-664`, `nv-795` et `nv-836` (même point de `perso-131`) et `nv-795` sur `perso-153` ne
    font qu'un site, qui a aussi 2 lignes réussies.
+5. **Précisions de lecture** (rédaction du banc, 2026-11-03, à la demande de l'implémenteur de
+   `bench3`, `7181db8` ; aucune ne change un seuil ni une décision) :
+   - **portée** : « à partir de V1.2 » désigne la révision du banc, pas la série. Sous `bench3`,
+     les points 1 à 4 s'appliquent sans condition, calibration MVP, V1 et V1.1 comprise ; les
+     verdicts déjà rendus (V1, V1.1) ne sont pas revus. Seul le tirage garde son compte d'origine
+     pour V1 et V1.1 (`couverture_v1.py`, tirages figés) ;
+   - **instantanés de tags (point 1)** : clé `osm_tags_toutes` du manifest, liste de
+     `{fichier, sha256, date}`, dans la section de calibration ou dans `serie_<clé>` ; chaque
+     fichier porte `voies_retenues: toutes`. Absents du manifest : règle non appliquée en
+     calibration (rapporté `instantanes_absents_du_manifest`), jugement refusé ; « campagne
+     refusée » se lit ainsi. Une voie de la référence absente des deux instantanés n'est pas
+     différente ; une voie que l'instantané n'a pas demandée (absente de sa liste de voies
+     demandées) fait refuser, car l'instantané est incomplet ;
+   - **km comparés d'E1 (point 3)** : stations comparées au baro brut, moins celles des zones de
+     pente ;
+   - **« hors ouvrage » dans les zones (point 3)** : ouvrages du service, ceux qu'E1 exclut déjà de
+     ses stations, et non ceux des tuiles ; c'est la lecture des mesures d'effet ci-dessus ;
+   - **sites E5 (point 4)** : les passages non comptés (retirés, incertains, indisponibles)
+     appartiennent aux sites et peuvent les relier ; les lignes `E5_passage_dessus` non. L'écart de
+     40 m se lit sur `d_milieu_m` (abscisse du milieu du croisement sur la trace). Les extraits et
+     témoins vcyclist sans abscisse ne se relient que par id. Le tirage (`couverture_v1.py`), qui
+     n'a pas encore de passages, approche cette abscisse par la distance entre les points de
+     croisement d'une même trace : il peut réunir un peu plus que le jugement (la distance à vol
+     d'oiseau ne dépasse pas l'écart d'abscisse), jamais moins ;
+   - **campagne de tuiles** : dès qu'une campagne `tuiles_*` est déclarée au manifest, tout
+     `fill-cache` la respecte (tuiles de rues lues sur disque seulement, tuile manquante = refus),
+     quelle que soit la série.
 
 ---
 
