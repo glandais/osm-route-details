@@ -2252,8 +2252,12 @@ tuiles_2026_11_03:   # campagne de tuiles datée de la série V1.2, sur ses seul
   source: "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}"
   z: 14
   espace_cache: versatiles-shortbread-z14-d2e31ed09602913b   # même espace que tuiles_2026_11_02
-  emprise: {fichier: private/v12/emprise.txt, sha256: 12a97d723dec43dbe0f82aa5d5bbe5dd2f7c4cf151b76ebf3b1f73665a200983, tuiles: 12866}   # calculée après la planification définitive des parcours V1.2
-  tuiles: 7837   # téléchargées, toutes avec corps, aucune vide, aucun échec ; ETag distincts : 7 808
+  emprise: {fichier: private/v12/emprise.txt, sha256: 12a97d723dec43dbe0f82aa5d5bbe5dd2f7c4cf151b76ebf3b1f73665a200983, tuiles: 12921}   # calculée après la planification définitive des parcours V1.2 ; 12 866 tuiles avant le complément (points espacés de 50 m), 12 921 sur les segments des traces (67906e6)
+  tuiles: 7880   # téléchargées, toutes avec corps, aucune vide, aucun échec ; 7 837 le 2026-11-03 de 13:45Z à 14:11Z (ETag distincts : 7 808), 43 au complément
+  complement:   # décision de l'utilisateur, 2026-11-03 : fill-cache du gel d944376 refusé (10 tuiles de rues hors campagne, perso-168), emprise corrigée (67906e6), même fichier d'emprise
+    telechargement: {debut: "2026-11-03T20:12:44Z", fin: "2026-11-03T20:12:56Z"}
+    tuiles: 43   # toutes avec corps, aucune vide, aucun échec, ETag distincts : 43 ; 12 de l'emprise corrigée déjà en cache
+    meta_avant_apres: "meta.json identique octet pour octet avant et après (sha256 43ad4b7d…, même build, même date OSM)"
   deja_en_cache: 5029   # tuiles de l'emprise déjà téléchargées par tuiles_2026_11_02 (2026-11-02), non retéléchargées
   telechargement: {debut: "2026-11-03T13:45Z", fin: "2026-11-03T14:11Z", premiere_echeance: "2026-11-10T13:45Z", ttl_jours: 7, max_age_serveur_s: 21600}
   date_osm:   # même build que tuiles_2026_11_02 : meta.json identique octet pour octet
