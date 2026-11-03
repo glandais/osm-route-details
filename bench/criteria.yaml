@@ -158,6 +158,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Série tenue à l'écart V1.2 : Q1 rapporté, non bloquant (aucun négatif attesté jamais utilisé) ; reste mesuré en calibration"
   - id: serie_v12_e3_rapporte   # 2026-11-03, composition de V1.2
     decision: "Série tenue à l'écart V1.2 : E3 rapporté, non bloquant, seuils inchangés (règle de V1.1 reconduite) ; E3 calibré sur MVP + V1 + V1.1"
+  - id: serie_v12_tuiles   # 2026-11-03, composition de V1.2
+    decision: "Série V1.2 : campagne de tuiles datée sur ses seules zones neuves, déclarée et nommée par sa section, emprise calculée après la planification définitive ; calibration sur tuiles_2026_11_02 ; build et date OSM enregistrés par campagne, instantanés de tags V1.2 à la date de ses tuiles"
   # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
   # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
   # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).
@@ -259,6 +261,12 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
   serie_v12:   # README §4 quinquies, décisions de l'utilisateur, 2026-11-03 ; série V1.2 seulement
     Q1: {bloquant: false, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}
     E3: {bloquant: false, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}   # comme serie_v11
+    tuiles:
+      campagne: {cle: "tuiles_<date>", emprise: zones_neuves_de_la_serie, absentes_de: tuiles_2026_11_02, nommee_par: "serie_v12.tuiles", outil: tools/tuiles_v1.py, fill_cache: false}
+      emprise_calculee: apres_planification_definitive
+      enregistre: [build, date_osm]   # TileJSON lu après les tuiles
+      calibration: {campagne: tuiles_2026_11_02, nommee_par_ses_sections: true}
+      instantanes_tags: [date_osm_de_la_campagne_v12, donnees_serveur_valhalla_des_references_v12]
   erreur_reference_R:   # README §4 bis.8, décision de l'utilisateur, 2026-11-02 ; R1, R2 (référence Valhalla) et R3
     s_applique_a: {R1_R2: parcours_planifies_reference_valhalla, R3: traces_perso, osm_surface: false}
     si: {classe_valhalla: [compacted, dirt, gravel, path, impassable], surface_osm: [asphalt, concrete, "concrete:lanes", "concrete:plates", paving_stones]}

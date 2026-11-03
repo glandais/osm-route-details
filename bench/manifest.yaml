@@ -716,6 +716,7 @@ serie_v1:
 # private/v1/perso-map-v1.csv. La série tenue à l'écart n'entre dans aucune campagne avant le gel V1.
 perso_v1:
   hors_git: true
+  tuiles: tuiles_2026_11_02   # campagne de calibration nommée explicitement (README §4 quinquies.3)
   regle_serie: "tirage figé V1 (README §4 ter.4, serie_v1) ; fenêtres ± 500 m des ouvrages, croisements et témoins d'une autre série masquées (passages_masques)"
   recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-01", donnees_serveur: "2026-11-01T13:01Z", sorties: private/recales/}
   ouvrages_v1: {fichier: private/v1/ouvrages-v1.json, sha256: d2d7e45e085127d87db0568ad8ae9a7c338f991dee3c014e4e61e11bff3b78ab, nombre: 554, ponts_tunnels: 213, croisements_e5: 341, tenus_a_l_ecart: 177}
@@ -1802,6 +1803,7 @@ serie_v11:   # série tenue à l'écart V1.1 (décision de l'utilisateur, 2026-1
 # private/v11/perso-map-v11.csv. Aucune trace V1.1 ne passe dans le service avant le gel et le jugement V1.1.
 perso_v11:
   hors_git: true
+  tuiles: tuiles_2026_11_02   # campagne de calibration nommée explicitement (README §4 quinquies.3)
   regle_serie: "tout tenu à l'écart (README §4 ter.10, serie_v11) ; aucun masque au jugement, traces jugées entières ; E3 et E5 sur les éléments neufs seulement (nv-606 et suivants) ; fenetres_calibration pour information, non lues"
   recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-02", donnees_serveur: "2026-11-02T09:32Z", sorties: private/recales/}
   osm_tags_reference: {fichier: private/osm-tags/2026-11-02T09-32Z.json, sha256: 3f1c5b34772272efaf7385f13602950fd7ef09a04ce3018d7266a68637952896, date: "2026-11-02T09:32:00Z", voies: 1848, revetement_dur_sur_non_revetu_valhalla: 7, outil: tools/osm_tags_reference.py, source: "Overpass daté (overpass-api.de)"}   # erreur de la référence R (README §4 bis.8)

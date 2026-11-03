@@ -1193,6 +1193,18 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    non atteint est rapporté sans refuser l'incrément. E3 reste calibré sur MVP, V1 et V1.1. Motif :
    en V1.1, 274 des 279 ponts franchis étaient déjà en calibration ; avec V1.1 passé en
    calibration, les ponts neufs franchis par une trace baro seront encore plus rares.
+3. **Campagne de tuiles de V1.2** (décision de l'utilisateur, 2026-11-03). Une nouvelle campagne
+   datée `tuiles_<date>`, limitée aux zones neuves de V1.2 (tuiles des traces, parcours planifiés
+   et témoins de la série absentes de la campagne `tuiles_2026_11_02`), est déclarée au manifest
+   et nommée par la section de la série (`tuiles:`). La calibration (MVP, V1, V1.1) reste sur la
+   campagne verrouillée `tuiles_2026_11_02`, que ses sections nomment explicitement. Chaque
+   campagne enregistre son build et sa date OSM (TileJSON du serveur, lu juste après les tuiles) ;
+   les instantanés de tags de V1.2 (§4 quater.1) se prennent à la date OSM de sa campagne et à
+   celle des données du serveur Valhalla de ses références. L'emprise se calcule **après** la
+   planification définitive des parcours : l'emprise de V1.1, calculée avant la replanification,
+   avait laissé 60 tuiles à télécharger hors campagne (note du 2026-11-03, `judgements.md`).
+   Téléchargement par `tools/tuiles_v1.py`, jamais par `fill-cache` ; ensuite la campagne est
+   verrouillée comme la première.
 
 ---
 
