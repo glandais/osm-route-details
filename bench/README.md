@@ -1017,6 +1017,11 @@ inchangés.
    rendement observé. Les ponts des itinéraires planifiés, sans baro, n'ont que la référence MNS
    (cohérence seulement) et n'entrent pas en E3. Les autres minimums de V1.1 sont atteints
    (manifest `serie_v11.couverture`).
+   *Note (rédaction, 2026-11-03).* Ce motif était faux. `couverture_v1.py` comptait les traces de
+   la série contrôlée, déjà écrites dans `private/traces/`, parmi les traces de calibration : un
+   ouvrage était « déjà vu » par sa propre trace V1.1. 150 des 287 exclusions
+   `deja_vu_calibration` de V1.1 étaient fausses (131 ponts, dont 19 de plus de 150 m, et 10
+   tunnels) ; V1 n'est pas touchée. Défaut corrigé en 6b5a1c0. Le verdict V1.1 rendu n'est pas revu.
    **Aucun masque au jugement V1.1** (décision de l'utilisateur, 2026-11-02). Les traces V1.1 sont
    jugées entières, comme en V1 : les fenêtres des éléments de calibration (MVP, V1, corpus
    versionné) qu'elles franchissent ne sont ni masquées dans leurs métriques de trace, ni tirées en
