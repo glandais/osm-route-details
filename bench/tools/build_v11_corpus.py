@@ -21,7 +21,10 @@ Sorties, hors git (bench/private/v11/) :
 Sortie standard : fragment YAML du manifest (section perso_v11), sans identifiant Strava, de voie
 ni coordonnée ; département et mois seulement.
 
-Usage : uv run --with pyyaml tools/build_v11_corpus.py private/
+Série : variable d'environnement SERIE (v11 par défaut ; v12 : V1.2, décision de l'utilisateur,
+2026-11-03, MVP, V1 et V1.1 en calibration, nv-NN à la suite de V1.1).
+
+Usage : [SERIE=v12] uv run --with pyyaml tools/build_v11_corpus.py private/
 """
 import csv
 import hashlib
@@ -34,6 +37,8 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOL_M = 40.0
+SERIE = os.environ.get("SERIE", "v11")
+CALIB = {"v11": ["v1"], "v12": ["v1", "v11"]}[SERIE]   # séries passées en calibration
 
 
 def sha256(path):
@@ -60,22 +65,23 @@ def calibration_elements(B):
     for o in yaml.safe_load(open(f"{B}/../data/ouvrages.yaml"))["ouvrages"]:
         if o.get("points"):
             out.append((o["id"], [tuple(p) for p in o["points"].values()]))
-    for f in (f"{B}/ouvrages-perso.json", f"{B}/v1/ouvrages-v1.json"):
+    for f in [f"{B}/ouvrages-perso.json"] + [f"{B}/{d}/ouvrages-{d}.json" for d in CALIB]:
         out += [(o["id"], [tuple(p) for p in o["pts"].values()]) for o in json.load(open(f))]
-    out += [(t["id"], [tuple(t["debut"]), tuple(t["fin"])]) for t in json.load(open(f"{B}/v1/temoins-v1.json"))
-            if not t["planifie"] and "debut" in t]
+    for d in CALIB:
+        out += [(t["id"], [tuple(t["debut"]), tuple(t["fin"])]) for t in json.load(open(f"{B}/{d}/temoins-{d}.json"))
+                if not t["planifie"] and "debut" in t]
     return out
 
 
 def main(B):
     B = B.rstrip("/")
-    C = json.load(open(f"{B}/v11/couverture-cas.json"))
-    G = json.load(open(f"{B}/v11/couverture-ign.json"))
-    A = json.load(open(f"{B}/v11/affectation.json"))
-    pm = list(csv.DictReader(open(f"{B}/v11/perso-map-v11.csv")))
+    C = json.load(open(f"{B}/{SERIE}/couverture-cas.json"))
+    G = json.load(open(f"{B}/{SERIE}/couverture-ign.json"))
+    A = json.load(open(f"{B}/{SERIE}/affectation.json"))
+    pm = list(csv.DictReader(open(f"{B}/{SERIE}/perso-map-{SERIE}.csv")))
     pseudo = {r["strava_id"]: r["pseudo"] for r in pm}
-    n_nv = max(int(o["id"].split("-")[1]) for o in json.load(open(f"{B}/v1/ouvrages-v1.json")))
-    resume = json.load(open(f"{B}/v11/planifies/resume.json"))
+    n_nv = max(int(o["id"].split("-")[1]) for o in json.load(open(f"{B}/{CALIB[-1]}/ouvrages-{CALIB[-1]}.json")))
+    resume = json.load(open(f"{B}/{SERIE}/planifies/resume.json"))
     planifies = {t["id"]: t for t in C["traces"] if t["zone"] == "planifie" and t["id"] in resume}
 
     # ouvrages comptés → nv-NN, à la suite de V1
@@ -104,19 +110,19 @@ def main(B):
                     "cross": [c["way"], None], "pts_from": [], "length_m": 0, "mid": c["pt"], "pts": {"croisement": c["pt"]},
                     "tags": {}, "rail": c["rail"], "trace": pseudo.get(c["traces"][0], c["traces"][0]),
                     "serie": A["croisements"][cid], "groupe_tirage": A["groupes_ouvrages"].get(cid)})
-    json.dump(ouv, open(f"{B}/v11/ouvrages-v11.json", "w"), ensure_ascii=False)
+    json.dump(ouv, open(f"{B}/{SERIE}/ouvrages-{SERIE}.json", "w"), ensure_ascii=False)
     tem = [dict(t, trace=pseudo.get(t["trace"], t["trace"]), serie=A["temoins"][t["id"]],
                 id=(t["id"] if t["planifie"] else t["id"].replace(t["trace"], pseudo.get(t["trace"], t["trace"]))))
            for t in C["temoins"] if t["id"] in A["temoins"]]
-    json.dump(tem, open(f"{B}/v11/temoins-v11.json", "w"), ensure_ascii=False)
+    json.dump(tem, open(f"{B}/{SERIE}/temoins-{SERIE}.json", "w"), ensure_ascii=False)
 
     # traces : GPX de traces_v11.py, empreintes revérifiées
     rows = []
     for r in pm:
         for k, f in (("sha256_gpx", f"{B}/traces/{r['pseudo']}.gpx"), ("sha256_gpx_trim", f"{B}/traces/{r['pseudo']}.trim1km.gpx"),
-                     ("sha256_stream", f"{B}/strava/streams-v11/{r['strava_id']}.json")):
+                     ("sha256_stream", f"{B}/strava/streams-{SERIE}/{r['strava_id']}.json")):
             if sha256(f) != r[k]:
-                raise SystemExit(f"{r['pseudo']} : empreinte {k} différente de perso-map-v11.csv")
+                raise SystemExit(f"{r['pseudo']} : empreinte {k} différente de perso-map-{SERIE}.csv")
         rows.append(dict(r, groupe=A["groupes_traces"].get(r["strava_id"], "negatif"), serie=A["traces"][r["strava_id"]]))
 
     # fenêtres : éléments à moins de TOL_M de tous leurs points
@@ -125,14 +131,14 @@ def main(B):
     cal = calibration_elements(B)
     series_rows = []
     for r in rows:
-        track = [tuple(p) for p in json.load(open(f"{B}/strava/streams-v11/{r['strava_id']}.json"))["location"] if p]
+        track = [tuple(p) for p in json.load(open(f"{B}/strava/streams-{SERIE}/{r['strava_id']}.json"))["location"] if p]
         own = [t["id"] for t in tem if t["trace"] == r["pseudo"]]
         r["masques"] = sorted(e for e, s, pts in elems if s != r["serie"] and pts and
                               (e in own or all(near_track(track, p, TOL_M) for p in pts)))
         r["fenetres_calibration"] = sorted(e for e, pts in cal if pts and all(near_track(track, p, TOL_M) for p in pts))
         series_rows.append({"id": r["pseudo"], "type": "trace", "groupe": r["groupe"], "serie": r["serie"],
                             "passages_masques": " ".join(r["masques"]), "fenetres_calibration": " ".join(r["fenetres_calibration"])})
-    tir = json.load(open(f"{B}/v11/affectation-tirage.json"))["serie"]
+    tir = json.load(open(f"{B}/{SERIE}/affectation-tirage.json"))["serie"]
     for i, t in sorted(planifies.items()):
         series_rows.append({"id": i, "type": "planifie", "groupe": t["role"], "serie": tir.get(i, "tenue_a_l_ecart"),
                             "passages_masques": "", "fenetres_calibration": ""})
@@ -142,19 +148,19 @@ def main(B):
     for t in tem:
         series_rows.append({"id": t["id"], "type": "temoin", "groupe": t["nature"], "serie": t["serie"],
                             "passages_masques": "", "fenetres_calibration": ""})
-    with open(f"{B}/v11/series-v11.csv", "w", newline="") as f:
+    with open(f"{B}/{SERIE}/series-{SERIE}.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(series_rows[0])); w.writeheader(); w.writerows(series_rows)
 
     # fragment de manifest : sans identifiant Strava ni coordonnée
     n_x = len(xs)
-    print("perso_v11:")
-    print(f"  ouvrages_v11: {{fichier: private/v11/ouvrages-v11.json, sha256: {sha256(f'{B}/v11/ouvrages-v11.json')}, nombre: {len(ouv)}, "
+    print(f"perso_{SERIE}:")
+    print(f"  ouvrages_{SERIE}: {{fichier: private/{SERIE}/ouvrages-{SERIE}.json, sha256: {sha256(f'{B}/{SERIE}/ouvrages-{SERIE}.json')}, nombre: {len(ouv)}, "
           f"ponts_tunnels: {len(comptes)}, croisements_e5: {n_x}, premier: nv-{n_nv + 1}, dernier: nv-{n_nv + len(ouv)}}}")
-    print(f"  temoins_v11: {{fichier: private/v11/temoins-v11.json, sha256: {sha256(f'{B}/v11/temoins-v11.json')}, nombre: {len(tem)}}}")
-    print(f"  series_v11: {{fichier: private/v11/series-v11.csv, sha256: {sha256(f'{B}/v11/series-v11.csv')}}}")
+    print(f"  temoins_{SERIE}: {{fichier: private/{SERIE}/temoins-{SERIE}.json, sha256: {sha256(f'{B}/{SERIE}/temoins-{SERIE}.json')}, nombre: {len(tem)}}}")
+    print(f"  series_{SERIE}: {{fichier: private/{SERIE}/series-{SERIE}.csv, sha256: {sha256(f'{B}/{SERIE}/series-{SERIE}.csv')}}}")
     print("  planifies:")
     for i, t in sorted(planifies.items()):
-        g = f"{B}/v11/planifies/{i}.gpx"
+        g = f"{B}/{SERIE}/planifies/{i}.gpx"
         extra = f", nature: {t['nature']}" if t["role"] == "S2" else ""
         retenue = {x["nature"] for x in tem if x["id"] == i and x["nature"]}
         if retenue and retenue != {t["nature"]}:
@@ -162,10 +168,10 @@ def main(B):
         if t["role"] == "S2" and not any(x["id"] == i and x["nature"] for x in tem):
             extra += ", retire: \"nature non confirmée par OSM (00e500f)\""
         if t["role"] == "R1_R2":
-            ref, sf, bo = (f"{B}/v11/r12/reference/{i}.reference.json", f"{B}/v11/r12/{i}.surface.csv", f"{B}/v11/r12/{i}.baro.csv")
-            extra += (f", reference: private/v11/r12/reference/{i}.reference.json, sha256_reference: {sha256(ref)}, "
+            ref, sf, bo = (f"{B}/{SERIE}/r12/reference/{i}.reference.json", f"{B}/{SERIE}/r12/{i}.surface.csv", f"{B}/{SERIE}/r12/{i}.baro.csv")
+            extra += (f", reference: private/{SERIE}/r12/reference/{i}.reference.json, sha256_reference: {sha256(ref)}, "
                       f"sha256_surface: {sha256(sf)}, sha256_baro: {sha256(bo)}")
-        print(f"    - {{id: {i}, role: {t['role']}, km: {t['km']}, fichier: private/v11/planifies/{i}.gpx, sha256: {sha256(g)}{extra}}}")
+        print(f"    - {{id: {i}, role: {t['role']}, km: {t['km']}, fichier: private/{SERIE}/planifies/{i}.gpx, sha256: {sha256(g)}{extra}}}")
     print("  traces:")
     for r in rows:
         print(f"    - id: {r['pseudo']}")
@@ -173,7 +179,7 @@ def main(B):
         print(f"      serie: {r['serie']}")
         if r["masques"]:
             print(f"      passages_masques: [{', '.join(r['masques'])}]")
-        print(f"      fenetres_calibration: {len(r['fenetres_calibration'])}   # series-v11.csv")
+        print(f"      fenetres_calibration: {len(r['fenetres_calibration'])}   # series-{SERIE}.csv")
         print(f"      region: \"{r['lieu']}\"")
         print(f"      mois: \"{r['mois']}\"")
         print(f"      dist_km: {r['dist_km']}")

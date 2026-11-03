@@ -13,7 +13,8 @@ fin: [lat, lon], longueur_m}]}} ; tag ∈ covered, avalanche_protector, bridge, 
 dans private/v1/overpass/temoin-<id>.json. Sortie standard : comptes par tag, sans coordonnées.
 
 Série : variable d'environnement SERIE (v1 par défaut ; v11 : private/v11/, base 2026-11-02T09:32Z, date
-des données du recalage de V1.1). Usage : [SERIE=v11] temoins_v1_tags.py private/
+des données du recalage de V1.1 ; v12 : private/v12/, base 2026-11-03T06:24:42Z, tileset_last_modified du
+serveur Valhalla au recalage de V1.2). Usage : [SERIE=v11|v12] temoins_v1_tags.py private/
 """
 import csv
 import glob
@@ -27,7 +28,7 @@ import urllib.parse
 import urllib.request
 
 SERIE = os.environ.get("SERIE", "v1")
-BASE = {"v1": "2026-11-01T13:00:00Z", "v11": "2026-11-02T09:32:00Z"}[SERIE]
+BASE = {"v1": "2026-11-01T13:00:00Z", "v11": "2026-11-02T09:32:00Z", "v12": "2026-11-03T06:24:42Z"}[SERIE]
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 STEP_M = 5.0
 TOL_M = 10.0
