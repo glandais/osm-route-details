@@ -270,6 +270,10 @@ pub struct CacheConfig {
     pub memory_elevation_mb: u64,
     pub memory_streets_mb: u64,
     pub offline: bool,
+    /// Tuiles de rues lues sur disque seulement, entrées périmées comprises, sans revalidation
+    /// (campagne de tuiles figée du banc) ; les sources d'altitude restent en ligne. `offline`
+    /// l'implique.
+    pub offline_streets: bool,
 }
 
 impl Default for CacheConfig {
@@ -283,6 +287,7 @@ impl Default for CacheConfig {
             memory_elevation_mb: 512,
             memory_streets_mb: 512,
             offline: false,
+            offline_streets: false,
         }
     }
 }

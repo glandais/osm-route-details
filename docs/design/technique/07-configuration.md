@@ -26,7 +26,7 @@ configuration effective est journalisée au démarrage, sans secret (osm-surface
 | `elevation.ign` | `enabled` (true), `wms_url` (Géoplateforme WMS-R), couches MNT / MNS, `zoom` (15), `rate_per_s` (20, cadence **du processus**, §3), `max_attempts` (6), `mode` = `direct` \| `sober` (doc 01 §5.1, défaut `direct`) |
 | `elevation.mapterhorn` | `url` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`), `zoom` (12), `concurrency` (4), `version` |
 | `coverage` | chemins des fichiers de couverture Mapterhorn (`coverage-index.pmtiles`, `coverage.pmtiles`) ; le contour LiDAR HD, qui sert aussi de zone France, est **embarqué** dans le binaire (T02 §7.1–7.2), pas configurable |
-| `cache` | `dir` (`/var/cache/osm-route-details`), `disk_max_gb_ign` (20), `ttl` par source (VersaTiles 7 j **[M]**, IGN avec no-data 30 j **[C]**, Mapterhorn immuable), `negative_ttl_s` (60), `memory_elevation_mb` (512), `memory_streets_mb` (512), `offline` (false) — détail T02 §5 |
+| `cache` | `dir` (`/var/cache/osm-route-details`), `disk_max_gb_ign` (20), `ttl` par source (VersaTiles 7 j **[M]**, IGN avec no-data 30 j **[C]**, Mapterhorn immuable), `negative_ttl_s` (60), `memory_elevation_mb` (512), `memory_streets_mb` (512), `offline` (false), `offline_streets` (false : tuiles de rues sur disque seulement, sans revalidation, altitude en ligne ; campagne de tuiles figée du banc) — détail T02 §5 |
 | `http_client` | `user_agent`, `connect_timeout_s` (4 **[M]**, `OS/src/tiles.rs:38`), `fetch_timeout_s` (8 **[M]**, `OS/src/config.rs:27-28`) |
 | `log` | `format` = `json` \| `text`, `filter` (`RUST_LOG` respecté) |
 

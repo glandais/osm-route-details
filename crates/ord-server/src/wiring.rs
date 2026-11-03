@@ -278,6 +278,7 @@ impl<'a> Builder<'a> {
         let ns = source.descriptor().namespace.clone();
         let settings = ReaderSettings {
             memory_bytes: self.config.cache.memory_streets_mb.saturating_mul(1024 * 1024),
+            offline: self.settings.offline || self.config.cache.offline_streets,
             ..self.settings.clone()
         };
         let store: Arc<dyn TileStore<StreetTile>> = Arc::new(TileReader::new(
