@@ -1188,6 +1188,11 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    il reste mesuré en calibration. Motif : parmi les 22 sorties qualifiées `suspect` jamais
    utilisées, aucune n'a de défaut attesté (930f6e8) ; en trouver demanderait de qualifier de
    nouvelles sorties, streams téléchargés.
+2. **E3 rapporté** (décision de l'utilisateur, 2026-11-03 ; règle de V1.1 reconduite, §4 ter.10).
+   Sur la série V1.2 seulement, E3 est mesuré avec ses seuils inchangés ; un échec ou un minimum
+   non atteint est rapporté sans refuser l'incrément. E3 reste calibré sur MVP, V1 et V1.1. Motif :
+   en V1.1, 274 des 279 ponts franchis étaient déjà en calibration ; avec V1.1 passé en
+   calibration, les ponts neufs franchis par une trace baro seront encore plus rares.
 
 ---
 
