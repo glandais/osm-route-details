@@ -118,7 +118,13 @@ vérifié par `ord-bench check` avant toute campagne.
       d'un ouvrage emprunté par la trace (stations `interpolated_structure` ou `dsm_deck`, passage
       OSM compris) : l'approche est la première station `dem` au-delà ; elle reste rejetée si
       l'ouvrage atteint le croisement (échec E5 de `perso-155`, `nv-772`). Règles 2026.11.11,
-      contrat inchangé, T04 §3.4.
+      contrat inchangé, T04 §3.4 ;
+    - limites acceptées en 2026.11.11 : sur Mapterhorn (12 à 14 m par pixel), rien ne distingue
+      une vraie bosse sous un pont d'une bosse de tablier, et la correction aplatit une bosse
+      réelle de 2,1 m (`perso-145`, `nv-698`, nouvel échec E5 en calibration ; bilan net de 5
+      échecs en moins). Pas de seuil de bosse propre à Mapterhorn. Quand un tunnel heuristique
+      est refusé par le profil en travers, le MNT reste dans le profil, sans correction
+      d'altitude seule (`perso-157` : RMSE E1 de 0,72 à 0,99 m, toujours réussi).
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.
