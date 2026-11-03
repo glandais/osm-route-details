@@ -23,6 +23,7 @@ use crate::classification::StructureVerdict;
 use crate::rules::Rules;
 use crate::typology::TypologyOutput;
 use derive::{gain_turns_on_runs, smooth_profile, AdaptedRange, GainParams, GainResult};
+use fusion::heuristic::TunnelCross;
 use fusion::plan::StructurePlan;
 use fusion::{StructureCorrectionReport, StructureOutcome};
 
@@ -52,6 +53,9 @@ pub struct RawProfile {
     /// une valeur par station, `NoData` hors du terrain IGN mesuré sans repli ; `None` sans
     /// heuristiques (MVP, `structure_correction: false`).
     pub dsm: Option<Vec<DsmSample>>,
+    /// MNT lu en travers de l'axe des tunnels candidats (heuristiques V1, T04 §4.2, règles
+    /// 2026.11.11) ; `None` sans heuristiques : aucun tunnel détecté n'est alors gardé.
+    pub tunnel_cross: Option<TunnelCross>,
 }
 
 /// Lectures de l'étape 4c, dans l'ordre du plan : MNS aux stations des ponts, MNT et MNS hors du
@@ -339,6 +343,7 @@ pub fn fuse(
             &raw.terrain,
             raw.structures.as_ref(),
             raw.dsm.as_deref(),
+            raw.tunnel_cross.as_ref(),
             t,
             rules,
             &mut ele,
@@ -543,7 +548,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &no_fill(),
@@ -575,7 +580,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -596,7 +601,7 @@ pub(crate) mod tests {
             .collect();
         let q = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -614,7 +619,7 @@ pub(crate) mod tests {
             .collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &no_fill(),
@@ -655,7 +660,7 @@ pub(crate) mod tests {
                 }
             })
             .collect();
-        let raw = RawProfile { terrain, structures: None, dsm: None };
+        let raw = RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None };
         let opts = RequestOptions { gain_preset: GainPreset::Barometric, ..RequestOptions::default() };
         let p = fuse(&route, &raw, None, &opts, &Rules::default()).unwrap();
         assert_eq!(p.gain.params.adapted.len(), 1);
@@ -705,7 +710,7 @@ pub(crate) mod tests {
         let terrain = (0..n).map(|i| glo(10.0, DemKind::Dtm, (3..=5).contains(&i))).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -730,8 +735,14 @@ pub(crate) mod tests {
             })
             .collect();
         let opts = RequestOptions { smoothing_m: 20.0, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain, structures: None, dsm: None }, None, &opts, &no_fill())
-            .unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
+            None,
+            &opts,
+            &no_fill(),
+        )
+        .unwrap();
         let s = p.ele_smoothed.as_ref().unwrap();
         assert!(s[10].is_nan());
         assert!(s.iter().enumerate().all(|(i, v)| i == 10 || v.is_finite()));

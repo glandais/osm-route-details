@@ -100,6 +100,25 @@ vérifié par `ord-bench check` avant toute campagne.
       `access=private`. Sur une route, `bicycle=no` garde l'état « hors graphe » et
       `bicycle_forbidden`. Les classes fermées par défaut le restent (pedestrian, bridleway,
       motorway, trunk, busway). Règles 2026.11.10, contrat inchangé, T03 §4.2.
+  - Décisions de l'utilisateur (2026-11-03, après le jugement V1.1, refusé : `bench/judgements.md`) :
+    - un tunnel détecté sur le MNT hors de tout tunnel OSM n'est gardé que si le terrain monte des
+      deux côtés de l'axe : le MNT est lu en travers de l'axe (10, 20 et 30 m de chaque côté, tous
+      les 10 m entre les portails) et, de chaque côté, la médiane de `MNT − droite entre portails`
+      doit atteindre 5 m (gabarit et voûte d'un tube). Au pied d'une falaise ou d'un talus, sous un
+      surplomb, le MNT ne remonte que d'un côté (échecs S2 de `perso-157-s1` et `pl11-s2-verdon` :
+      tunnels fictifs `heuristic`, `structure_untagged`). Lecture dans la branche terrain, en
+      parallèle de la typologie (`sample_tunnel_cross`). Règles 2026.11.11, contrat inchangé,
+      T04 §4.2 ;
+    - la correction de la bosse sous un pont qui enjambe la trace (T04 §3.4) s'applique aussi au
+      terrain Mapterhorn mesuré (repli compris), avec une sonde de 28 m (2 pixels de Mapterhorn z12)
+      au lieu de 10 m dès que la fenêtre n'est pas entièrement lue à l'IGN (échecs E5 de
+      `perso-148` et `perso-155`, croisement trouvé mais tronçon en repli Mapterhorn). GLO-30 reste
+      exclu. Règles 2026.11.11, contrat inchangé, T04 §3.4 ;
+    - la fenêtre de cette correction est rognée, au lieu d'être rejetée, quand elle touche la rampe
+      d'un ouvrage emprunté par la trace (stations `interpolated_structure` ou `dsm_deck`, passage
+      OSM compris) : l'approche est la première station `dem` au-delà ; elle reste rejetée si
+      l'ouvrage atteint le croisement (échec E5 de `perso-155`, `nv-772`). Règles 2026.11.11,
+      contrat inchangé, T04 §3.4.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

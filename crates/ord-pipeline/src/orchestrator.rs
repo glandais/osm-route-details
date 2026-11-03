@@ -20,7 +20,7 @@ use tokio::sync::Semaphore;
 
 use crate::admission::{Admission, AdmissionLimits, CancelOnDrop};
 use crate::decision::{decide_outcome, out_of_coverage};
-use crate::elevation::{sample_dsm_hull, sample_raw, sample_structures};
+use crate::elevation::{sample_dsm_hull, sample_raw, sample_structures, sample_tunnel_cross};
 use crate::typology::TypologyChain;
 use crate::{Outcome, PipelineError};
 
@@ -225,6 +225,17 @@ impl Orchestrator {
                             r = Err(e);
                         }
                         stage("dsm_hull", dsm_started);
+                    }
+                    // Profil en travers des tunnels candidats (T04 §4.2, règles 2026.11.11).
+                    if let Ok(raw) = r.as_mut() {
+                        let cross_started = Instant::now();
+                        if let Err(e) =
+                            sample_tunnel_cross(raw, &route, self.sources.terrain.as_ref(), ctx, &self.rules)
+                                .await
+                        {
+                            r = Err(e);
+                        }
+                        stage("tunnel_cross", cross_started);
                     }
                 }
                 r

@@ -252,18 +252,28 @@ de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (b
     ligne de pont (way découpé au-dessus de la voie) n'est pas une culée (T03 §6.4) ;
   - sonde : `abutment_probe_min_m = 10 m` au-delà de l'emprise, comme les culées (§3.1) : la
     droite va de l'approche au sol amont à l'approche aval, soit 25 m de part et d'autre à 90°,
-    ≈ 54 m à 20° ;
+    ≈ 54 m à 20° ; `mapterhorn_probe_m = 28 m` dès qu'une station de la fenêtre (sonde IGN
+    comprise) n'est pas lue à l'IGN (règles 2026.11.11) : Mapterhorn z12 (pixel de 12 à 14 m en
+    France métropolitaine) étale la bosse d'un pixel de part et d'autre par l'interpolation
+    bilinéaire ; 2 pixels de 14 m, comme la sonde de culée `max(min, pixels × pixel lu)` (§3.1) ;
   - `min_bump_m = 1 m` : rugosité du MNT LiDAR d'une chaussée (approche lisse à 1 m du détecteur
     de couverture, §4.2 bis). Une bosse moindre n'est pas distinguable du bruit ; rien n'est
     réécrit. Pas de borne haute : sous un pont, la chaussée ne peut pas monter vers le tablier ;
     le gabarit (≥ 4,5 m) et l'épaisseur du tablier bornent la bosse lue, sans servir de seuil.
-- **Garde-fous** : aucune correction si la fenêtre (approche à approche) touche un passage
-  d'ouvrage OSM (la trace sur un pont ou dans un tunnel garde la correction de son ouvrage ; un
-  pont `kept_ground` compte), une plage sans typologie, une station déjà corrigée (tablier,
-  ouvrage heuristique : seules les stations `dem` sont lues et réécrites), ou une station hors IGN
-  LiDAR HD (le défaut est celui de ce MNT ; Mapterhorn et GLO-30 ne sont pas corrigés). **Seule la
-  bosse est retirée** : une station sous la droite (cuvette, passage creusé sous l'ouvrage) garde
-  son altitude ; un vrai relief sans pont au-dessus n'est jamais lu.
+- **Garde-fous** : aucune correction si la fenêtre (approche à approche) touche une plage sans
+  typologie, ou si un passage d'ouvrage OSM ou une station déjà corrigée (tablier, ouvrage
+  heuristique, rampe ou marge de sonde d'un ouvrage) atteint un croisement (la trace sur un pont ou
+  dans un tunnel garde la correction de son ouvrage ; un pont `kept_ground` compte) ; seules les
+  stations `dem` sont lues et réécrites. **Rognage** (règles 2026.11.11, décision de l'utilisateur
+  du 2026-11-03) : un ouvrage emprunté par la trace juste avant ou après le croisement ne rejette
+  plus la fenêtre ; elle s'arrête à la fin de son passage OSM et de sa rampe (stations
+  `interpolated_structure` ou `dsm_deck`), et l'approche est la première station `dem` au-delà
+  (cas déclencheur : `nv-772`, jugement V1.1). **Terrain** : IGN LiDAR HD ou Mapterhorn mesuré,
+  repli compris, de l'approche à l'approche (règles 2026.11.11, décision de l'utilisateur du
+  2026-11-03 : le repli Mapterhorn lit la même bosse, lissée ; cas déclencheurs `nv-683`, `nv-719`,
+  `nv-741`, `nv-804`, `nv-805`, jugement V1.1) ; jamais GLO-30 (MNS de 30 m). **Seule la bosse
+  est retirée** : une station sous la droite (cuvette, passage creusé sous l'ouvrage) garde son
+  altitude ; un vrai relief sans pont au-dessus n'est jamais lu.
 - **Écriture : altitude seule**, après les ouvrages OSM et heuristiques, **avant** les
   couvertures (§4.2 bis) : une couverture qui touche, approches comprises, une fenêtre corrigée est
   écartée (le pont OSM confirme ce que la couverture devine). Stations au-dessus de la droite
@@ -271,7 +281,9 @@ de ce type n'est pas corrigé au MVP : il se verra en E3 contre le baromètre (b
   la plage réécrite ; ni ouvrage, ni verdict, ni changement de `structure`. Désactivée avec
   `structure_correction: false` (MNT brut, comme les ouvrages).
 - **Tests** : unitaires sur le réseau `overpass` (bosse retirée ; cuvette, vraie bosse sans pont,
-  trace sur le pont, bosse sous 1 m, correction désactivée, terrain hors LiDAR : rien) ; golden
+  trace sur le pont, bosse sous 1 m, correction désactivée, GLO-30 : rien ; Mapterhorn mesuré :
+  bosse retirée, fenêtre de 15 + 28 m ; sortie de tunnel OSM juste avant le croisement : fenêtre
+  rognée ; tunnel qui atteint le croisement : rien) ; golden
   `tt04-sous-pont` (témoin `tt04-tuileries` de vcyclist, calibration : bosse de 2,6 m retirée).
   Cas du banc qui ont motivé la règle (calibration 2026.11.5-bench1, non utilisés pour régler les
   bornes) : 14 croisements à bosse de 2,5 à 11 m (README §4 ter.7).
@@ -320,6 +332,24 @@ pub struct CorrectionPatch { pub target: GroupRef, pub from_m: f64, pub to_m: f6
   portail + 100 m]` doivent être mesurées (`vc:E/path/TunnelStep.kt:72, 136-141`), sinon le tunnel
   est seulement journalisé. Un tunnel qui contient un tablier (OSM ou heuristique) est abandonné :
   piles gardées par le MNT (`:132-133`). Écriture : droite entre MNT des portails (`:178-187`).
+- **Profil en travers** (règles 2026.11.11 ; décision de l'utilisateur du 2026-11-03, après le
+  jugement V1.1 : tunnels fictifs de `perso-157-s1` et `pl11-s2-verdon`, S2). Au pied d'une
+  falaise ou d'un talus, sous un surplomb, le MNT lit une bosse sur l'axe que le détecteur prend
+  pour une montagne ; vu depuis l'axe, le terrain ne remonte alors que d'un côté. Un tunnel
+  détecté qui ne touche aucun tunnel OSM n'est gardé que si le MNT est **au-dessus de la route des
+  deux côtés**. Lecture : le pipeline relance le détecteur sur le profil brut
+  (`fusion::heuristic::tunnel_cross_points`, mêmes candidats que la fusion) et lit le MNT, avec
+  repli, en parallèle de la typologie après le MNS de l'enveloppe (`sample_tunnel_cross`,
+  `RawProfile::tunnel_cross`) : stations uniformes entre les portails au pas de 10 m, points sur la
+  normale à l'axe (tangente sur ± 10 m) à 10, 20 et 30 m de chaque côté. Jugement : route = droite
+  entre le MNT des portails ; de chaque côté, médiane de `MNT − droite` ≥ 5 m, avec au moins la
+  moitié des lectures lues ; sinon (ou sans profil lu) le tunnel est écarté. Bornes
+  (`TunnelCrossRules`), physiques : 10 m dépasse la demi-largeur d'un tube bidirectionnel (≈ 5 m)
+  et l'écart de position de la ligne OSM ; 30 m reste dans la couverture que le détecteur exige
+  (15 m dès 100 m des portails) ; 5 m = gabarit routier (4,5 m) et voûte : le terrain dépasse la
+  clé d'un tube. Un tunnel détecté qui touche un tunnel OSM (Combe Laval, tunnels courts de
+  falaise) est confirmé par l'ouvrage OSM et n'a pas à prouver son profil. Coût : quelques
+  dizaines de lectures par candidat, dans les tuiles déjà lues pour l'essentiel.
 - Mesuré par vcyclist : 7/8 en réglage (IGN), 6/7 hors échantillon, 0 faux tunnel, 0 station de sol
   déplacée sur les négatifs ; Grands Goulets à 0,9 m au lieu de 220 m.
 - Les heuristiques ne tournent que si `structure_correction = true` et là où la typologie a été lue
@@ -421,11 +451,14 @@ Invariant 8 : deux détections de passages différents à moins de 20 m partout 
   sans repli, dans la branche « terrain » de l'étape 4b, après le MNT et **en parallèle de la
   typologie** ; seulement si `structure_correction = true`. Valeurs dans `RawProfile::dsm`, une par
   station (`NoData` ailleurs). Le MNS des ponts OSM (étape 4c) reste lu par `sample_structures`.
+  Ensuite, dans la même branche, le MNT en travers de l'axe des tunnels candidats
+  (`sample_tunnel_cross`, `RawProfile::tunnel_cross`, §4.2, règles 2026.11.11).
 - Détecteurs (`ord-core::elevation::heuristics`) sur les stations uniformes (`k × 5 m`, à 1 cm) du
   profil **brut** ; MNS `NaN` hors IGN mesuré sans repli (invariant 10). Détections qui touchent
   une plage `TypologyCoverage` écartées. Tunnel gardé si toutes les stations à ± 100 m de chaque
-  portail sont mesurées (`ign_lidar_hd`, `mapterhorn_measured`) et s'il ne contient ni pont OSM ni
-  tablier détecté. Couverture gardée hors de tout passage OSM et de tout tablier (approches
+  portail sont mesurées (`ign_lidar_hd`, `mapterhorn_measured`), s'il ne contient ni pont OSM ni
+  tablier détecté, et, hors de tout tunnel OSM, si son profil en travers est au-dessus de la route
+  des deux côtés (§4.2, règles 2026.11.11). Couverture gardée hors de tout passage OSM et de tout tablier (approches
   comprises) et de tout tunnel détecté, corrigée en altitude seule (§4.2 bis, règles 2026.11.5).
 - `reconcile` (T03 §7.1) : confirmation `osm_heuristic` à 50 % ; nature opposée écartée ; parts
   d'une détection hors des passages OSM qu'elle touche gardées au-delà de 40 m

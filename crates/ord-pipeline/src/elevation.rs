@@ -2,6 +2,7 @@
 //! puis, après la typologie, lectures des ouvrages (étape 4c) : MNS aux stations des ponts
 //! appariés, MNT et MNS hors du parcours (extensions de l'axe, sondes au-delà d'une culée).
 
+use ord_core::elevation::fusion::heuristic::{tunnel_cross_points, TunnelCross};
 use ord_core::elevation::fusion::plan::plan;
 use ord_core::elevation::{ElevationError, RawProfile, StructureSamples};
 use ord_core::typology::TypologyOutput;
@@ -27,7 +28,7 @@ pub async fn sample_raw(
             pts.len()
         )));
     }
-    Ok(RawProfile { terrain, structures: None, dsm: None })
+    Ok(RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None })
 }
 
 /// Portée de la lecture du MNS (T04 §7.1).
@@ -70,6 +71,29 @@ pub async fn sample_dsm_hull(
         }
     }
     raw.dsm = Some(dsm);
+    Ok(())
+}
+
+/// MNT en travers de l'axe des tunnels candidats du profil brut (heuristiques V1, T04 §4.2,
+/// règles 2026.11.11) : quelques points de part et d'autre de chaque candidat, lus avec repli
+/// comme les stations. Une tuile en échec donne un échantillon sans altitude, jamais une erreur ;
+/// la fusion écarte alors le candidat si trop de lectures manquent.
+pub async fn sample_tunnel_cross(
+    raw: &mut RawProfile,
+    route: &PreparedRoute,
+    reader: &dyn TerrainReader,
+    ctx: &RequestCtx,
+    rules: &Rules,
+) -> Result<(), ElevationError> {
+    let points = tunnel_cross_points(route, &raw.terrain, rules);
+    let pts: Vec<LatLon> = points.iter().map(|p| p.at).collect();
+    let terrain = if pts.is_empty() { Vec::new() } else { reader.sample_terrain(&pts, ctx).await };
+    if terrain.len() != pts.len() {
+        return Err(ElevationError::Internal(
+            "terrain reader returned a wrong number of cross-section samples".into(),
+        ));
+    }
+    raw.tunnel_cross = Some(TunnelCross { points, terrain });
     Ok(())
 }
 

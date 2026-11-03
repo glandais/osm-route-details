@@ -353,13 +353,14 @@ pub fn correct(
     raw: &[TerrainSample],
     samples: Option<&StructureSamples>,
     dsm: Option<&[DsmSample]>,
+    cross: Option<&heuristic::TunnelCross>,
     typo: &TypologyOutput,
     rules: &Rules,
     ele: &mut [f64],
     method: &mut [EleMethod],
 ) -> Correction {
     // Heuristiques V1 (T04 §4) : détections sur le profil brut, réconciliées avec les passages OSM.
-    let detected = heuristic::detect(route, raw, dsm, typo, rules);
+    let detected = heuristic::detect(route, raw, dsm, cross, typo, rules);
     let verdicts = reconcile(&typo.passages, &typo.structures, &detected.structures);
     let source_of = |pid: u32| {
         verdicts.iter().find(|v| v.passage == Some(pid)).map_or(StructureSource::Osm, |v| v.source)

@@ -43,7 +43,11 @@ use serde::Serialize;
 // (`classification::tables::RAW_SURFACE`, source `tagged`) ; `bicycle` normalisé yes/limited/no.
 // 2026.11.10 : `bicycle=no` ne ferme plus que les routes motorisées ; sur une voie non routière
 // (track, path, cycleway, footway, steps…), accès par défaut de la classe.
-pub const RULES_VERSION: &str = "2026.11.10";
+// 2026.11.11 : tunnel heuristique gardé seulement si le MNT, lu en travers de l'axe, est au-dessus
+// de la route des deux côtés ; correction sous un pont au-dessus de la trace étendue au terrain
+// Mapterhorn mesuré (sonde de 28 m) ; fenêtre de cette correction rognée à la rampe d'un ouvrage
+// emprunté au lieu d'être rejetée.
+pub const RULES_VERSION: &str = "2026.11.11";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -199,6 +203,9 @@ pub struct ElevationRules {
     pub deck_detector: crate::elevation::heuristics::DeckDetectorOptions,
     /// Détecteur de tunnel (profil MNT, T04 §4.2), `TunnelDetectorOptions.DEFAULT` de vcyclist.
     pub tunnel_detector: crate::elevation::heuristics::TunnelDetectorOptions,
+    /// Profil en travers d'un tunnel détecté (T04 §4.2, règles 2026.11.11) : MNT lu de part et
+    /// d'autre de l'axe, tunnel gardé si le terrain est au-dessus de la route des deux côtés.
+    pub tunnel_cross: TunnelCrossRules,
     /// Détecteur de couvertures (galeries, passages inférieurs lus dans le MNT : plateau bas du
     /// MNT, MNS ≈ MNT, T04 §4.2 bis), altitude seule.
     pub gallery_detector: crate::elevation::heuristics::GalleryDetectorOptions,
@@ -260,6 +267,20 @@ impl ElevationRules {
         if !valid {
             return Err("overpass angle must be in (0, 90] degrees and deck half width positive".into());
         }
+        if o.mapterhorn_probe_m.is_nan() || o.mapterhorn_probe_m < self.structures.abutment_probe_min_m {
+            return Err("overpass Mapterhorn probe must be at least the abutment probe".into());
+        }
+        let x = &self.tunnel_cross;
+        let stride = x.step_m / self.station_step_m;
+        if !(x.step_m > 0.0 && (stride - stride.round()).abs() < 1e-9) {
+            return Err("tunnel cross step must be a positive whole number of stations".into());
+        }
+        if x.offsets_m.is_empty() || x.offsets_m.iter().any(|o| o.is_nan() || *o <= 0.0) {
+            return Err("tunnel cross offsets must be positive".into());
+        }
+        if !(x.min_readable_share > 0.0 && x.min_readable_share <= 1.0) {
+            return Err("tunnel cross readable share must be in (0, 1]".into());
+        }
         Ok(())
     }
 }
@@ -271,6 +292,7 @@ impl Default for ElevationRules {
             heuristics: true,
             deck_detector: Default::default(),
             tunnel_detector: Default::default(),
+            tunnel_cross: TunnelCrossRules::default(),
             gallery_detector: Default::default(),
             gain: GainRules::default(),
             structures: CorrectionRules::default(),
@@ -279,6 +301,36 @@ impl Default for ElevationRules {
             breakpoints: BreakpointRules::default(),
             ign_plausibility: IgnPlausibilityRules::default(),
         }
+    }
+}
+
+/// Profil en travers d'un tunnel détecté sur le MNT (T04 §4.2 ; décision de l'utilisateur,
+/// 2026-11-03, après le jugement V1.1). Le détecteur lit une bosse sur l'axe ; au pied d'une
+/// falaise, d'un talus ou sous un surplomb, le MNT remonte d'un seul côté de la route, et la bosse
+/// n'est pas une montagne au-dessus d'un tunnel. Un tunnel est sous le terrain des deux côtés :
+/// tunnel gardé seulement si, de chaque côté, le MNT lu en travers de l'axe dépasse la droite entre
+/// les portails (la route) d'au moins `min_height_m`. Bornes physiques, jamais tirées des cas du banc.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TunnelCrossRules {
+    /// Distances à l'axe des lectures, de chaque côté : 10 m dépasse la demi-largeur d'un tube
+    /// bidirectionnel (≈ 5 m) et l'écart de position de la ligne OSM ; 30 m reste dans la
+    /// couverture d'un tunnel que le détecteur exige (15 m au-dessus de la corde dès 100 m des
+    /// portails, flancs à 30 %).
+    pub offsets_m: Vec<f64>,
+    /// Pas des stations lues le long du tunnel, entre ses portails (nombre entier de stations).
+    pub step_m: f64,
+    /// Hauteur minimale de la médiane d'un côté (MNT − droite entre portails) : gabarit routier
+    /// (4,5 m) et voûte, soit le terrain au-dessus de la clé d'un tube ; une route au pied d'un
+    /// versant ou d'une falaise a, du côté aval, un terrain au niveau de la route ou plus bas.
+    pub min_height_m: f64,
+    /// Part minimale de lectures avec altitude de chaque côté ; en deçà, le profil en travers est
+    /// illisible et le tunnel n'est pas gardé.
+    pub min_readable_share: f64,
+}
+
+impl Default for TunnelCrossRules {
+    fn default() -> Self {
+        Self { offsets_m: vec![10.0, 20.0, 30.0], step_m: 10.0, min_height_m: 5.0, min_readable_share: 0.5 }
     }
 }
 
@@ -366,11 +418,22 @@ pub struct OverpassRules {
     /// Bosse minimale au-dessus de la droite entre approches pour corriger : rugosité du MNT LiDAR
     /// sur une chaussée (≈ 1 m, comme l'approche lisse du détecteur de couverture, T04 §4.2 bis).
     pub min_bump_m: f64,
+    /// Sonde au-delà de l'emprise sur le terrain Mapterhorn mesuré (règles 2026.11.11) : le MNT
+    /// de Mapterhorn (z12, pixel de 12 à 14 m en France métropolitaine) étale la bosse d'un pixel
+    /// de part et d'autre par l'interpolation bilinéaire ; sonde de `abutment_probe_pixels` (2)
+    /// pixels de 14 m, comme les culées (`max(min, pixels × pixel lu)`, T04 §3.1).
+    pub mapterhorn_probe_m: f64,
 }
 
 impl Default for OverpassRules {
     fn default() -> Self {
-        Self { deck_half_width_m: 15.0, min_angle_deg: 20.0, end_clearance_m: 1.0, min_bump_m: 1.0 }
+        Self {
+            deck_half_width_m: 15.0,
+            min_angle_deg: 20.0,
+            end_clearance_m: 1.0,
+            min_bump_m: 1.0,
+            mapterhorn_probe_m: 28.0,
+        }
     }
 }
 
@@ -493,6 +556,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.10", "83efb33de65af1be".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.11", "0c0fa503293f2593".to_owned()));
     }
 }

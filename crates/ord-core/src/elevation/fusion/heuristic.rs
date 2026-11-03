@@ -13,8 +13,12 @@
 //! - une détection qui touche une plage sans typologie (`TypologyCoverage`) est écartée (doc 01
 //!   §6 : élévation non corrigée là où la typologie manque) ;
 //! - un tunnel détecté n'est gardé que si toutes les stations de `[portail − 100 m, portail +
-//!   100 m]` sont sur terrain mesuré (`tunnelScope = measured-terrain`), et s'il ne contient aucun
-//!   tablier (pont OSM ou détecté) ;
+//!   100 m]` sont sur terrain mesuré (`tunnelScope = measured-terrain`), s'il ne contient aucun
+//!   tablier (pont OSM ou détecté), et, s'il ne touche aucun tunnel OSM, si le MNT lu en travers
+//!   de l'axe (`TunnelCross`, lu par le pipeline aux points de `tunnel_cross_points`) est
+//!   au-dessus de la route des deux côtés (règles 2026.11.11) : au pied d'une falaise ou d'un
+//!   talus, sous un surplomb, le terrain ne remonte que d'un côté. Sans profil en travers lu,
+//!   aucun tunnel détecté hors OSM n'est gardé ;
 //! - une couverture détectée n'est gardée que si ses approches sont sur terrain IGN LiDAR HD (MNS
 //!   lu, le détecteur l'exige), si elle ne touche, approches comprises, aucun passage OSM (pont ou
 //!   tunnel : l'ouvrage OSM prime) ni tablier détecté, et ne recouvre aucun tunnel détecté ;
@@ -26,11 +30,13 @@
 //!   réécrit.
 
 use ord_domain::elevation::{DsmSample, TerrainOrigin, TerrainSample};
+use ord_domain::geo::EARTH_RADIUS_M;
 use ord_domain::report::{Warning, WarningCode};
 use ord_domain::route::PreparedRoute;
+use ord_domain::LatLon;
 
 use crate::classification::{DetectedStructure, StructureSource, StructureVerdict};
-use crate::elevation::heuristics::{detect_decks, detect_galleries, detect_tunnels};
+use crate::elevation::heuristics::{detect_decks, detect_galleries, detect_tunnels, TunnelSpan};
 use crate::rules::Rules;
 use crate::typology::{StructureKind, TypologyOutput};
 
@@ -64,11 +70,160 @@ fn measured(t: &TerrainSample) -> bool {
         && !t.fallback_after_error
 }
 
-/// Détections des heuristiques sur le profil brut, en distance de parcours.
+/// Côté d'une lecture en travers de l'axe, dans le sens du parcours.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrossSide {
+    Left,
+    Right,
+}
+
+/// Point où lire le MNT en travers de l'axe d'un tunnel candidat (T04 §4.2, règles 2026.11.11).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CrossPoint {
+    /// Station du parcours (rang dans `route.samples`) dont la normale porte la lecture.
+    pub station: usize,
+    pub side: CrossSide,
+    pub at: LatLon,
+}
+
+/// Profil en travers des tunnels candidats : points de `tunnel_cross_points` et terrain lu à
+/// chacun (même ordre), par le pipeline avant la fusion.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TunnelCross {
+    pub points: Vec<CrossPoint>,
+    pub terrain: Vec<TerrainSample>,
+}
+
+/// Entrées du détecteur de tunnel : stations uniformes, MNT, latitudes et longitudes. Partagées
+/// par `detect` et `tunnel_cross_points`, qui voient ainsi les mêmes candidats.
+struct TunnelInputs {
+    u: Vec<usize>,
+    mnt: Vec<f64>,
+    lat: Vec<f64>,
+    lon: Vec<f64>,
+}
+
+fn tunnel_inputs(route: &PreparedRoute, terrain: &[TerrainSample], rules: &Rules) -> Option<TunnelInputs> {
+    let u = uniform_stations(route, rules.elevation.station_step_m)?;
+    if u.len() < 3 {
+        return None;
+    }
+    Some(TunnelInputs {
+        mnt: u.iter().map(|&i| terrain[i].ele.map_or(f64::NAN, f64::from)).collect(),
+        lat: u.iter().map(|&i| route.samples[i].at.lat).collect(),
+        lon: u.iter().map(|&i| route.samples[i].at.lon).collect(),
+        u,
+    })
+}
+
+fn candidate_tunnels(x: &TunnelInputs, rules: &Rules) -> Vec<TunnelSpan> {
+    detect_tunnels(&x.mnt, &x.lat, &x.lon, &rules.elevation.tunnel_detector)
+}
+
+/// Points du profil en travers des tunnels candidats du profil brut (T04 §4.2, règles
+/// 2026.11.11) : stations uniformes entre les portails, au pas `tunnel_cross.step_m`, et, de chaque
+/// côté, un point à chaque distance de `tunnel_cross.offsets_m` sur la normale à l'axe (tangente
+/// entre les stations uniformes à ± 2 pas). Vide sans heuristiques ni candidat.
+pub fn tunnel_cross_points(
+    route: &PreparedRoute,
+    terrain: &[TerrainSample],
+    rules: &Rules,
+) -> Vec<CrossPoint> {
+    let r = &rules.elevation;
+    if !r.heuristics || terrain.len() != route.samples.len() {
+        return Vec::new();
+    }
+    let Some(x) = tunnel_inputs(route, terrain, rules) else { return Vec::new() };
+    let stride = ((r.tunnel_cross.step_m / r.station_step_m).round() as usize).max(1);
+    let n = x.u.len();
+    let mut out = Vec::new();
+    for t in candidate_tunnels(&x, rules) {
+        let mut k = t.first + stride;
+        while k < t.last {
+            let (a, b) = (k.saturating_sub(2), (k + 2).min(n - 1));
+            let c = route.samples[x.u[k]].at;
+            let cos = c.lat.to_radians().cos();
+            let north = (x.lat[b] - x.lat[a]).to_radians() * EARTH_RADIUS_M;
+            let east = (x.lon[b] - x.lon[a]).to_radians() * EARTH_RADIUS_M * cos;
+            let norm = (north * north + east * east).sqrt();
+            if norm > 1e-6 {
+                // Normale à gauche (est, nord) = tangente tournée de +90°.
+                let (ne, nn) = (-north / norm, east / norm);
+                for (side, sign) in [(CrossSide::Left, 1.0), (CrossSide::Right, -1.0)] {
+                    for &o in &r.tunnel_cross.offsets_m {
+                        let (de, dn) = (sign * o * ne, sign * o * nn);
+                        let at = LatLon::new(
+                            c.lat + (dn / EARTH_RADIUS_M).to_degrees(),
+                            c.lon + (de / (EARTH_RADIUS_M * cos)).to_degrees(),
+                        );
+                        out.push(CrossPoint { station: x.u[k], side, at });
+                    }
+                }
+            }
+            k += stride;
+        }
+    }
+    out
+}
+
+/// Médiane des valeurs finies.
+fn median(mut v: Vec<f64>) -> f64 {
+    v.sort_by(f64::total_cmp);
+    let n = v.len();
+    if n == 0 {
+        f64::NAN
+    } else if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        0.5 * (v[n / 2 - 1] + v[n / 2])
+    }
+}
+
+/// Le MNT lu en travers de l'axe est-il au-dessus de la route des deux côtés, entre les portails
+/// `ia` et `ib` (rangs dans `route.samples`) ? Route = droite entre le MNT des portails ; de chaque
+/// côté, médiane de `MNT − droite` sur les lectures d'altitude, au moins `min_height_m`, avec au
+/// moins `min_readable_share` des lectures lues. Sans profil en travers : non.
+fn above_on_both_sides(
+    cross: Option<&TunnelCross>,
+    route: &PreparedRoute,
+    terrain: &[TerrainSample],
+    (ia, ib): (usize, usize),
+    rules: &Rules,
+) -> bool {
+    let Some(cross) = cross else { return false };
+    let r = &rules.elevation.tunnel_cross;
+    let z = |i: usize| terrain[i].ele.map_or(f64::NAN, f64::from);
+    let (da, db) = (route.samples[ia].d_m, route.samples[ib].d_m);
+    let (za, zb) = (z(ia), z(ib));
+    if !(za.is_finite() && zb.is_finite() && db > da) {
+        return false;
+    }
+    [CrossSide::Left, CrossSide::Right].into_iter().all(|side| {
+        let mut total = 0usize;
+        let mut above = Vec::new();
+        for (p, t) in cross.points.iter().zip(&cross.terrain) {
+            if p.side != side || p.station <= ia || p.station >= ib {
+                continue;
+            }
+            total += 1;
+            if let Some(v) = t.ele {
+                let d = route.samples[p.station].d_m;
+                above.push(f64::from(v) - (za + (zb - za) * (d - da) / (db - da)));
+            }
+        }
+        total > 0
+            && above.len() as f64 >= r.min_readable_share * total as f64
+            && median(above) >= r.min_height_m
+    })
+}
+
+/// Détections des heuristiques sur le profil brut, en distance de parcours. `cross` : profil en
+/// travers des tunnels candidats (`tunnel_cross_points`) ; sans lui, aucun tunnel n'est gardé.
 pub fn detect(
     route: &PreparedRoute,
     terrain: &[TerrainSample],
     dsm: Option<&[DsmSample]>,
+    cross: Option<&TunnelCross>,
     typo: &TypologyOutput,
     rules: &Rules,
 ) -> Detections {
@@ -76,12 +231,10 @@ pub fn detect(
     if !r.heuristics {
         return Detections::default();
     }
-    let Some(u) = uniform_stations(route, r.station_step_m) else { return Detections::default() };
-    if u.len() < 3 {
-        return Detections::default();
-    }
+    let Some(inputs) = tunnel_inputs(route, terrain, rules) else { return Detections::default() };
+    let u = &inputs.u;
     let d: Vec<f64> = u.iter().map(|&i| route.samples[i].d_m).collect();
-    let mnt: Vec<f64> = u.iter().map(|&i| terrain[i].ele.map_or(f64::NAN, f64::from)).collect();
+    let mnt = &inputs.mnt;
     let mns: Vec<f64> = u
         .iter()
         .map(|&i| match dsm.and_then(|v| v.get(i)) {
@@ -93,7 +246,7 @@ pub fn detect(
         typo.coverage.missing.iter().chain(&typo.coverage.unavailable).map(|g| (g.start, g.end)).collect();
     let touches_gap = |a: f64, b: f64| gaps.iter().any(|g| g.1 > a && g.0 < b);
     let mut out: Vec<DetectedStructure> = Vec::new();
-    let decks = detect_decks(&mnt, &mns, &r.deck_detector);
+    let decks = detect_decks(mnt, &mns, &r.deck_detector);
     let mut deck_spans: Vec<(f64, f64)> = Vec::new();
     for c in &decks.accepted {
         let (a, b) = (d[c.first], d[c.last]);
@@ -108,26 +261,34 @@ pub fn detect(
         }
     }
     // Ponts OSM (passages dont l'élément au milieu est un pont) : un tunnel qui en contient un est
-    // abandonné (piles gardées par le MNT).
+    // abandonné (piles gardées par le MNT). Tunnels OSM : un tunnel détecté qui en touche un n'a
+    // pas à prouver son profil en travers (l'ouvrage OSM le confirme).
+    let mut osm_tunnels: Vec<(f64, f64)> = Vec::new();
     for p in &typo.passages {
         let kind = typo
             .structures
             .iter()
             .find(|s| s.id == p.structure)
             .map(|s| s.kind_at(p.chainage_at(0.5 * (p.from_m + p.to_m))));
-        if kind == Some(StructureKind::Bridge) {
-            deck_spans.push((p.from_m, p.to_m));
+        match kind {
+            Some(StructureKind::Bridge) => deck_spans.push((p.from_m, p.to_m)),
+            Some(StructureKind::Tunnel) => osm_tunnels.push((p.from_m, p.to_m)),
+            None => {}
         }
     }
-    let lat: Vec<f64> = u.iter().map(|&i| route.samples[i].at.lat).collect();
-    let lon: Vec<f64> = u.iter().map(|&i| route.samples[i].at.lon).collect();
     let meas: Vec<bool> = u.iter().map(|&i| measured(&terrain[i])).collect();
-    for t in detect_tunnels(&mnt, &lat, &lon, &r.tunnel_detector) {
+    for t in candidate_tunnels(&inputs, rules) {
         let (ia, ib) = (t.first, t.last);
         let (a, b) = (d[ia], d[ib]);
         let scope =
             |p: usize| (0..d.len()).filter(|&k| (d[k] - d[p]).abs() <= TUNNEL_SCOPE_M).all(|k| meas[k]);
         if !scope(ia) || !scope(ib) || touches_gap(a, b) || deck_spans.iter().any(|s| s.1 > a && s.0 < b) {
+            continue;
+        }
+        // Profil en travers (règles 2026.11.11) : hors de tout tunnel OSM, terrain au-dessus de la
+        // route des deux côtés.
+        let on_osm_tunnel = osm_tunnels.iter().any(|s| s.1 > a && s.0 < b);
+        if !on_osm_tunnel && !above_on_both_sides(cross, route, terrain, (u[ia], u[ib]), rules) {
             continue;
         }
         out.push(DetectedStructure { id: out.len() as u32, kind: StructureKind::Tunnel, from_m: a, to_m: b });
@@ -142,7 +303,7 @@ pub fn detect(
         out.iter().filter(|x| x.kind == StructureKind::Tunnel).map(|x| (x.from_m, x.to_m)).collect();
     let osm: Vec<(f64, f64)> = typo.passages.iter().map(|p| (p.from_m, p.to_m)).collect();
     let mut covers = Vec::new();
-    for g in detect_galleries(&mnt, &mns, &r.gallery_detector) {
+    for g in detect_galleries(mnt, &mns, &r.gallery_detector) {
         let (a, b) = (d[g.first], d[g.last]);
         if touches_gap(a, b)
             || deck_spans.iter().chain(&osm).any(|s| s.1 > a - reach && s.0 < b + reach)
@@ -571,6 +732,95 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, WarningCode::ElevationCoverCorrected);
         assert_eq!(warnings[0].range, Some(250.0..350.0));
+    }
+
+    /// Parcours de 1 km vers le nord, route à 5 %, paroi de 40 m sur l'axe entre 300 et 700 m.
+    fn walled(route: &PreparedRoute) -> Vec<TerrainSample> {
+        route
+            .samples
+            .iter()
+            .map(|s| {
+                let x = s.d_m;
+                ign_sample(100.0 + 0.05 * x + if (x - 500.0).abs() < 200.0 { 40.0 } else { 0.0 })
+            })
+            .collect()
+    }
+
+    /// Profil en travers : `left` et `right` ajoutés à la route (5 %) de chaque côté.
+    fn cross_with(route: &PreparedRoute, left: f64, right: f64, read: bool) -> TunnelCross {
+        let points = tunnel_cross_points(route, &walled(route), &Rules::default());
+        let terrain = points
+            .iter()
+            .map(|p| {
+                let road = 100.0 + 0.05 * route.samples[p.station].d_m;
+                let mut t = ign_sample(road + if p.side == CrossSide::Left { left } else { right });
+                if !read {
+                    t.ele = None;
+                }
+                t
+            })
+            .collect();
+        TunnelCross { points, terrain }
+    }
+
+    #[test]
+    fn cross_points_lie_on_both_sides_of_each_candidate() {
+        let route = line(1_000.0);
+        let rules = Rules::default();
+        let points = tunnel_cross_points(&route, &walled(&route), &rules);
+        assert!(!points.is_empty());
+        let offsets = rules.elevation.tunnel_cross.offsets_m.len();
+        assert_eq!(points.len() % (2 * offsets), 0);
+        for p in &points {
+            let c = route.samples[p.station];
+            // Entre les portails.
+            assert!(c.d_m > 280.0 && c.d_m < 720.0, "{}", c.d_m);
+            // Vers le nord : la gauche est à l'ouest, à 10, 20 ou 30 m de l'axe.
+            let dx = (p.at.lon - c.at.lon).to_radians() * EARTH_RADIUS_M * c.at.lat.to_radians().cos();
+            assert!((p.at.lat - c.at.lat).abs() < 1e-7);
+            assert_eq!(p.side == CrossSide::Left, dx < 0.0);
+            assert!([10.0, 20.0, 30.0].iter().any(|o| (dx.abs() - o).abs() < 0.01), "{dx}");
+        }
+        // Stations au pas de 10 m.
+        let mut d: Vec<f64> = points.iter().map(|p| route.samples[p.station].d_m).collect();
+        d.dedup();
+        assert!(d.windows(2).all(|w| (w[1] - w[0] - 10.0).abs() < 1e-6), "{d:?}");
+        // Sans heuristiques : rien à lire.
+        let mut off = Rules::default();
+        off.elevation.heuristics = false;
+        assert!(tunnel_cross_points(&route, &walled(&route), &off).is_empty());
+    }
+
+    #[test]
+    fn a_tunnel_needs_terrain_above_the_road_on_both_sides() {
+        let route = line(1_000.0);
+        let terrain = walled(&route);
+        let typo = TypologyOutput {
+            runs: Vec::new(),
+            coverage: Default::default(),
+            classes: Vec::new().into(),
+            stats: Default::default(),
+            structures: Vec::new(),
+            passages: Vec::new(),
+            overpasses: Vec::new(),
+        };
+        let rules = Rules::default();
+        let tunnels = |cross: Option<&TunnelCross>| {
+            detect(&route, &terrain, None, cross, &typo, &rules)
+                .structures
+                .into_iter()
+                .filter(|s| s.kind == StructureKind::Tunnel)
+                .count()
+        };
+        // Montagne des deux côtés : tunnel gardé.
+        assert_eq!(tunnels(Some(&cross_with(&route, 30.0, 25.0, true))), 1);
+        // Pied de falaise : paroi d'un côté, vallée de l'autre ; écarté.
+        assert_eq!(tunnels(Some(&cross_with(&route, 40.0, -8.0, true))), 0);
+        // Talus d'un côté, terrain au niveau de la route de l'autre (sous la clé d'un tube) : écarté.
+        assert_eq!(tunnels(Some(&cross_with(&route, 40.0, 3.0, true))), 0);
+        // Profil en travers illisible, ou non lu : écarté.
+        assert_eq!(tunnels(Some(&cross_with(&route, 30.0, 25.0, false))), 0);
+        assert_eq!(tunnels(None), 0);
     }
 
     #[test]

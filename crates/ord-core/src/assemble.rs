@@ -444,8 +444,14 @@ mod tests {
             .collect();
         let opts =
             RequestOptions { sampling: Sampling::Distance { step_m: 10.0 }, ..RequestOptions::default() };
-        let p = fuse(&route, &RawProfile { terrain, structures: None, dsm: None }, None, &opts, &no_fill())
-            .unwrap();
+        let p = fuse(
+            &route,
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
+            None,
+            &opts,
+            &no_fill(),
+        )
+        .unwrap();
         let pts = sample_output(&route, &p, &opts.sampling, &[], &Default::default());
         let (out, segs) = typology(&route, &[]);
         assemble(&route, &CoverageRanges::default(), part(&out, &segs), p, pts, versions(), Vec::new())
@@ -487,7 +493,7 @@ mod tests {
         let opts = RequestOptions::default();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &opts,
             &Rules::default(),
@@ -509,7 +515,7 @@ mod tests {
         let opts = RequestOptions::default();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &opts,
             &Rules::default(),
@@ -561,7 +567,7 @@ mod tests {
         let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
         let p = fuse(
             &route,
-            &RawProfile { terrain, structures: None, dsm: None },
+            &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
             None,
             &RequestOptions::default(),
             &Rules::default(),
@@ -603,7 +609,7 @@ mod tests {
             let terrain = (0..route.samples.len()).map(|_| sample(Some(1.0), None)).collect();
             let p = fuse(
                 &route,
-                &RawProfile { terrain, structures: None, dsm: None },
+                &RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None },
                 None,
                 &RequestOptions::default(),
                 &Rules::default(),

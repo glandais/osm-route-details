@@ -13,7 +13,7 @@ use ord_domain::ctx::RequestCtx;
 use ord_domain::elevation::DsmSample;
 use ord_domain::request::RequestOptions;
 use ord_domain::LatLon;
-use ord_pipeline::elevation::{sample_dsm_hull, sample_raw, sample_structures};
+use ord_pipeline::elevation::{sample_dsm_hull, sample_raw, sample_structures, sample_tunnel_cross};
 use serde_json::{json, Value};
 
 use crate::service::{Pt, Service, Variant};
@@ -107,6 +107,7 @@ pub async fn diagnose_structures(
     // MNS de l'enveloppe LiDAR, comme l'orchestrateur quand les heuristiques sont actives.
     if rules.elevation.heuristics {
         sample_dsm_hull(&mut raw, &route, sources.terrain.as_ref(), &ctx).await?;
+        sample_tunnel_cross(&mut raw, &route, sources.terrain.as_ref(), &ctx, &rules).await?;
     }
     sample_structures(&mut raw, &route, &typo, sources.terrain.as_ref(), &ctx, &rules).await?;
     let profile = fuse(&route, &raw, Some(&typo), &RequestOptions::default(), &rules)?;

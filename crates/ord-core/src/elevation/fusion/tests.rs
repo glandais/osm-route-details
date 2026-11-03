@@ -8,8 +8,9 @@ use ord_domain::request::RequestOptions;
 use ord_domain::route::PreparedRoute;
 use ord_domain::LatLon;
 
+use super::heuristic::{tunnel_cross_points, TunnelCross};
 use super::plan::{plan, AxisPoint};
-use super::OutcomeMethod;
+use super::{overpass, OutcomeMethod};
 use crate::classification::StructureSource;
 use crate::elevation::{fuse, EleMethod, ElevationProfile, RawProfile, StructureSamples};
 use crate::rules::Rules;
@@ -81,7 +82,7 @@ fn run_with(
     let (route, typo) = typology_of(net, pts);
     let rules = Rules::default();
     let terrain: Vec<TerrainSample> = route.samples.iter().map(|s| sample(s.at, t)).collect();
-    let mut raw = RawProfile { terrain, structures: None, dsm: None };
+    let mut raw = RawProfile { terrain, structures: None, dsm: None, tunnel_cross: None };
     if opts.structure_correction {
         let pixel = |_: LatLon, _| 3.0;
         let plan = plan(&route, &raw.terrain, &typo, &rules, &pixel);
@@ -96,6 +97,10 @@ fn run_with(
         let off_terrain = plan.off_route.iter().map(|o| sample(o.at, t)).collect();
         let off_dsm = plan.off_route.iter().map(|o| o.dsm.then(|| dsm(o.at))).collect();
         raw.structures = Some(StructureSamples { plan, route_dsm, off_terrain, off_dsm });
+        // Profil en travers des tunnels candidats, lu sur le même terrain (comme le pipeline).
+        let points = tunnel_cross_points(&route, &raw.terrain, &rules);
+        let terrain = points.iter().map(|p| sample(p.at, t)).collect();
+        raw.tunnel_cross = Some(TunnelCross { points, terrain });
     }
     edit(&mut raw);
     let profile = fuse(&route, &raw, Some(&typo), opts, &rules).expect("fusion");
@@ -385,6 +390,45 @@ fn tunnels_further_apart_are_corrected_one_by_one() {
     assert!(r.profile.warnings.iter().any(|w| w.code == WarningCode::StructureUntagged));
 }
 
+/// Pied de falaise : sur l'axe et au nord, le MNT lit la paroi (40 m) entre −200 et +200 m ; au
+/// sud, la vallée est 10 m sous la route.
+fn cliff_foot(p: LatLon) -> f64 {
+    let (e, n) = en(p);
+    let road = 100.0 + 0.05 * e;
+    if n <= -5.0 {
+        road - 10.0
+    } else if e.abs() < 200.0 {
+        road + 40.0
+    } else {
+        road
+    }
+}
+
+#[test]
+fn a_bump_against_a_cliff_on_one_side_is_no_untagged_tunnel() {
+    let net = || Net::new().add(with_surface("tertiary", PavedGroup::Paved), &[(-600.0, 0.0), (600.0, 0.0)]);
+    let pts = [(-500.0, 0.0), (500.0, 0.0)];
+    let r = run_with(
+        net(),
+        &pts,
+        Terrain { origin: ign, ground: cliff_foot },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    // Le détecteur lit la bosse sur l'axe, mais le terrain ne remonte qu'au nord : ni ouvrage, ni
+    // avertissement, MNT gardé.
+    assert!(r.profile.structures.is_empty(), "{:?}", r.profile.structures);
+    assert!(!codes(&r).contains(&WarningCode::StructureUntagged));
+    let (z, m) = at_d(&r, 500.0);
+    assert_eq!(m, EleMethod::Dem);
+    assert!((z - 140.0).abs() < 0.5, "{z}");
+    // La même paroi des deux côtés (montagne au-dessus d'un tunnel) : tunnel `heuristic` corrigé.
+    let r = run_with(net(), &pts, Terrain { origin: ign, ground: cliff }, &RequestOptions::default(), |_| {});
+    assert_eq!(r.profile.structures.len(), 1);
+    assert_eq!(r.profile.structures[0].source, StructureSource::Heuristic);
+    assert_eq!(at_d(&r, 500.0).1, EleMethod::InterpolatedStructure);
+}
+
 #[test]
 fn a_doubt_on_one_tunnel_leaves_the_whole_series_uncorrected() {
     let (route, mut typo) = typology_of(tunnel_series(100.0), &[(-500.0, 0.0), (500.0, 0.0)]);
@@ -522,18 +566,97 @@ fn the_overpass_correction_keeps_real_relief_and_its_own_bridge() {
 }
 
 #[test]
-fn the_overpass_correction_needs_the_lidar_dtm() {
-    fn mapterhorn(_: LatLon) -> TerrainOrigin {
+fn the_overpass_correction_needs_a_measured_dtm() {
+    // GLO-30 (Mapterhorn non mesuré) : rien n'est corrigé.
+    fn glo30(_: LatLon) -> TerrainOrigin {
         TerrainOrigin::Mapterhorn
     }
     let r = run_with(
         overpass(),
         &[(0.0, -300.0), (0.0, 300.0)],
-        Terrain { origin: mapterhorn, ground: bump_under_deck },
+        Terrain { origin: glo30, ground: bump_under_deck },
         &RequestOptions::default(),
         |_| {},
     );
     assert_eq!(overpass_codes(&r), 0);
+}
+
+#[test]
+fn the_overpass_correction_reads_mapterhorn_with_a_wider_probe() {
+    // Repli Mapterhorn mesuré (règles 2026.11.11) : bosse retirée, approches à 15 + 28 m.
+    fn measured(_: LatLon) -> TerrainOrigin {
+        TerrainOrigin::MapterhornMeasured
+    }
+    let r = run_with(
+        overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: measured, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert_eq!(overpass_codes(&r), 1, "{:?}", codes(&r));
+    let (z, m) = at_d(&r, 300.0);
+    assert_eq!(m, EleMethod::GapFilled);
+    assert!((z - 100.0).abs() < 0.01, "{z}");
+    let window = overpass::correct_overpasses(
+        &r.typo,
+        &r.route,
+        &r.raw.terrain,
+        &Rules::default(),
+        &mut r.raw.terrain.iter().map(|t| f64::from(t.ele.unwrap())).collect::<Vec<_>>(),
+        &mut vec![EleMethod::Dem; r.route.samples.len()],
+        &mut Vec::new(),
+    );
+    assert_eq!(window.len(), 1);
+    assert!((window[0].0 - 257.0).abs() < 2.6 && (window[0].1 - 343.0).abs() < 2.6, "{window:?}");
+}
+
+/// Trace nord-sud qui sort d'un tunnel OSM (−80 à −30 m nord) puis passe sous le pont est-ouest de
+/// `overpass()` : la marge de sonde du tunnel, déjà corrigée, touche la fenêtre du croisement.
+fn tunnel_then_overpass() -> Net {
+    Net::new()
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, -80.0)])
+        .add(tunnel("residential"), &[(0.0, -80.0), (0.0, -30.0)])
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -30.0), (0.0, 400.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (-60.0, 0.0)])
+        .add(bridge("tertiary"), &[(-60.0, 0.0), (0.0, 0.0), (60.0, 0.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(60.0, 0.0), (400.0, 0.0)])
+}
+
+#[test]
+fn the_overpass_window_is_trimmed_at_the_ramp_of_a_structure_on_the_route() {
+    let r = run_with(
+        tunnel_then_overpass(),
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    // Le tunnel est corrigé, sa marge de sonde aussi (jusqu'à 280 m).
+    assert_eq!(r.profile.structures.len(), 1, "{:?}", r.profile.structures);
+    assert_eq!(at_d(&r, 275.0).1, EleMethod::InterpolatedStructure);
+    // La fenêtre (275–325 m) est rognée à 280 m au lieu d'être rejetée : bosse retirée.
+    assert_eq!(overpass_codes(&r), 1, "{:?}", codes(&r));
+    let (z, m) = at_d(&r, 300.0);
+    assert_eq!(m, EleMethod::GapFilled);
+    assert!((z - 100.0).abs() < 0.01, "{z}");
+    // Un ouvrage emprunté qui atteint le croisement : rien n'est corrigé (la trace y est sur
+    // l'ouvrage, ou n'en est pas sortie).
+    let net = Net::new()
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -400.0), (0.0, -80.0)])
+        .add(tunnel("residential"), &[(0.0, -80.0), (0.0, -2.0)])
+        .add(with_surface("residential", PavedGroup::Paved), &[(0.0, -2.0), (0.0, 400.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (-60.0, 0.0)])
+        .add(bridge("tertiary"), &[(-60.0, 0.0), (0.0, 0.0), (60.0, 0.0)])
+        .add(with_surface("tertiary", PavedGroup::Paved), &[(60.0, 0.0), (400.0, 0.0)]);
+    let r = run_with(
+        net,
+        &[(0.0, -300.0), (0.0, 300.0)],
+        Terrain { origin: ign, ground: bump_under_deck },
+        &RequestOptions::default(),
+        |_| {},
+    );
+    assert_eq!(overpass_codes(&r), 0, "{:?}", codes(&r));
 }
 
 /// Points `input_with_breakpoints` d'un passage, au croisement d'un pont qui enjambe la trace.
