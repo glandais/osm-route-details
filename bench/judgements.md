@@ -140,4 +140,40 @@ Anomalies constatées sans analyse de la série (en-têtes du rapport et du cach
    (§4 ter.11), contre 1 en calibration (`perso-44`) ; 2 marches à moins de 1 m du seuil de 10 m
    (`perso-135`, +10,2 / +10,1 m ; `perso-144`, Δ long −10,8 m).
 
+Note (2026-11-03, diagnostic des échecs en lecture seule, après accord de l'utilisateur) : le
+refus reste acquis ; V1.1 n'est pas rejugée et passe en calibration pour V1.2. Rien n'a été corrigé
+sur un cas tenu à l'écart ; les règles qui suivent valent à partir de V1.2 (README §4 quater).
+- **R1_R2, `pl11-r-millevaches` : la référence a tort.** Abscisse de l'itinéraire en distance
+  équirectangulaire contre la haversine de `stadia_match.py` (rapport 1,00112, + 125 m au km 107 ;
+  corrigée seule, accord estimé 0,978) ; aller-retour vers le km 31,6 sans point apparié, plage
+  revêtue étirée sur environ 490 m ; piste des km 17,9 à 19,7 `grade1` dans les tuiles (OSM du
+  2026-10-19) et `grade2` chez Valhalla et dans l'instantané du 2026-11-02. Règles : §4 quater.1.
+- **S2, `perso-157-s1` et `pl11-s2-verdon` : le service a tort.** Tunnel heuristique sur le MNT
+  là où le terrain ne monte que d'un côté de l'axe ; les témoins sont bien posés. Correction du
+  service (tunnel heuristique seulement si le terrain monte des deux côtés), nouvelle version de
+  règles.
+- **E1, `perso-136` : surtout la référence.** Baro clairsemé, en avance d'environ 300 m au pied
+  des montées (+ 20 à + 35 m en 150 m) ; sans deux zones, RMSE 2,86 m. `perso-137` montre le même
+  motif mais a été écartée par la marche du baro : traitement incohérent de deux cas semblables.
+  Règle : §4 quater.3.
+- **E5 : 20 lignes en échec, 11 sites au diagnostic (10 selon §4 quater.4), 7 imputés au service
+  et 13 à la référence.** Service : correction de l'overpass absente hors LiDAR (repli
+  Mapterhorn), et fenêtre rejetée près d'une rampe au lieu d'être rognée (correction du service,
+  nouvelle version de règles). Référence : baro bruité (6 ; règle §4 quater.2) ; retard résiduel
+  du baro (1) ; et un groupe de 6 (`perso-131` / `nv-704`, `perso-140` / `nv-798`, `nv-799` et
+  `nv-800` à ses deux passages) où la référence présente une bosse de + 3 à + 4 m sur un MNT plat,
+  et où les deux passages de `perso-140` aux mêmes ponts diffèrent de 3 m alors que le MNT concorde
+  à 0,8 m : un point GPS aberrant isolé par croisement (un point à plus de 30 m de la trace recalée,
+  deux sur `perso-131` ; sur `perso-140`, son s_origine recule), pas un trajet parallèle. Ces 6 références
+  restent suspectes, confiance moyenne ; la garde géométrique « trace brute / trace recalée »
+  envisagée a été abandonnée (décision de l'utilisateur, 2026-11-03). Doublons : croisements
+  comptés sous plusieurs ids ; règle §4 quater.4.
+- **Anomalie 2, défaut de sélection** : les itinéraires `par_cas` de V1 ne passent pas en
+  calibration une fois V1 jugée (`v1.rs`) ; correction dans ord-bench, hors banc.
+- **Anomalie 1, 60 tuiles hors campagne** : l'emprise de `tuiles_v1.py` a été calculée à 14:23Z,
+  avant la replanification de `pl11-r-millevaches`, `pl11-r-ardennes` et `pl11-r-larzac` (14:24Z à
+  14:25Z) ; le fill-cache du jugement a complété. Impact jugé faible ; rattachement au build non
+  vérifiable hors ligne. Corrections d'outil : campagne de tuiles verrouillée (GPX modifié après
+  le calcul de l'emprise refusé ; téléchargement hors campagne refusé ou signalé au jugement).
+
 L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
