@@ -266,7 +266,7 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
     E2b: {groupes_exiges: [dplus, plaine], ouvrage: rapporte}
   serie_v12:   # README §4 quinquies, décisions de l'utilisateur, 2026-11-03 ; série V1.2 seulement
     Q1: {bloquant: false, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}
-    E3: {bloquant: si_couverture_atteinte, couverture: comptee_avant_toute_mesure, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}   # serie_v12_e3_si_couverture ; couverture 2026-11-03 atteinte : bloquant
+    E3: {bloquant: si_couverture_atteinte, couverture: comptee_avant_toute_mesure, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}   # serie_v12_e3_si_couverture ; couverture 2026-11-03 atteinte : bloquant ; sous_minimum vise la couverture comptée avant mesure, un sous-minimum mesuré au jugement refuse (bloquant_sous_minimum, README §4 quinquies.2)
     tuiles:
       campagne: {cle: "tuiles_<date>", emprise: zones_neuves_de_la_serie, absentes_de: tuiles_2026_11_02, nommee_par: "serie_v12.tuiles", outil: tools/tuiles_v1.py, fill_cache: false}
       emprise_calculee: apres_planification_definitive

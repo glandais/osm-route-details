@@ -1215,6 +1215,11 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    sans refuser l'incrément. E3 reste calibré sur MVP, V1 et V1.1. Le contrôle de couverture de
    V1.2 du 2026-11-03 (`couverture_v1.py`, SERIE=v12, sans le service) l'atteint : 122 ponts, dont
    19 à MNH ≥ 10 m et 20 de plus de 150 m (minimum 12, 3, 3) ; **E3 est donc bloquant sur V1.2.**
+   *Note de rédaction (2026-11-03).* Le « sous_minimum rapporté » de cette règle ne vise que la
+   couverture comptée avant toute mesure. E3 étant bloquant parce que cette couverture est
+   atteinte, la règle ordinaire s'applique au jugement : un minimum non atteint *mesuré* (ponts
+   sortis par les exclusions du banc, `bloquant_sous_minimum`) refuse l'incrément, comme un échec
+   ou un critère sauté. C'est ce que fait `ord-bench` (e37e60e).
 3. **Campagne de tuiles de V1.2** (décision de l'utilisateur, 2026-11-03). Une nouvelle campagne
    datée `tuiles_<date>`, limitée aux zones neuves de V1.2 (tuiles des traces, parcours planifiés
    et témoins de la série absentes de la campagne `tuiles_2026_11_02`), est déclarée au manifest
