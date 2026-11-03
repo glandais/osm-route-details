@@ -2246,3 +2246,20 @@ perso_v11:
       sha256: 6275819ac9dde7d5e4eb891474fa57faa5a9f7539cb49a8e03577e7082884892
       sha256_trim1km: 0b0733beea8971255e14934d68c58d1c4117536ccc71c07e0a0c6b3ddcf23928
       qualification: {verdict: suspect, offset_m: 0.98, drift_m: 68.4, noise_m: 3.37, p95_abs_m: 21.2, gain_baro_m: 825, gain_mnt_m: 1507}
+
+tuiles_2026_11_03:   # campagne de tuiles datée de la série V1.2, sur ses seules zones neuves (décision de l'utilisateur, 2026-11-03, README §4 quinquies.3) ; tools/tuiles_v1.py
+  source: "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}"
+  z: 14
+  espace_cache: versatiles-shortbread-z14-d2e31ed09602913b   # même espace que tuiles_2026_11_02
+  emprise: {fichier: private/v12/emprise.txt, sha256: 12a97d723dec43dbe0f82aa5d5bbe5dd2f7c4cf151b76ebf3b1f73665a200983, tuiles: 12866}   # calculée après la planification définitive des parcours V1.2
+  tuiles: 7837   # téléchargées, toutes avec corps, aucune vide, aucun échec ; ETag distincts : 7 808
+  deja_en_cache: 5029   # tuiles de l'emprise déjà téléchargées par tuiles_2026_11_02 (2026-11-02), non retéléchargées
+  telechargement: {debut: "2026-11-03T13:45Z", fin: "2026-11-03T14:11Z", premiere_echeance: "2026-11-10T13:45Z", ttl_jours: 7, max_age_serveur_s: 21600}
+  date_osm:   # même build que tuiles_2026_11_02 : meta.json identique octet pour octet
+    planetiler_osm_osmosisreplicationtime: "2026-10-19T00:00:04Z"
+    planetiler_buildtime: "2026-10-27T09:36:13.063Z"
+    planetiler: {version: 0.10.3-SNAPSHOT, githash: 1a164371b993a6146789bd07ab45dbef301a366e}
+    tile_schema: shortbread@1.1
+    lu_le: "2026-11-03T14:11Z"   # lu après les tuiles ; rattachement au build non vérifié tuile par tuile
+    fichier: private/tuiles/versatiles-meta-v12.json   # copie de https://tiles.versatiles.org/tiles/osm/meta.json
+    sha256: 43ad4b7dc72a4bb109974f0489592015f11474ddb242ee7d8021e15bb9cbae90
