@@ -146,6 +146,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Série tenue à l'écart V1.1 : E3 rapporté, non bloquant, seuils inchangés (échec ou minimum non atteint sans refus) ; minimum E2b sur les groupes dplus et plaine seulement, groupe ouvrage rapporté ; E3 reste calibré sur MVP + V1"
   - id: reference_r12_v12   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "Référence R1/R2 des parcours planifiés : abscisse de l'itinéraire en haversine (R = 6 371 008,8 m, comme stadia_match) ; plage UNKNOWN là où s_origine saute (aller-retour) ; voie dont les tags diffèrent entre la date des tuiles et celle de la référence exclue de R1/R2, rapportée à part"
+  - id: e5_baro_bruite   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
+    decision: "E5 : référence baro corrigé local incertaine, rapportée, non comptée, si le bruit baro de la trace (qualify_baro.py, noise_m) dépasse 1,0 m, comme en E1 plaine ; tous groupes ; sans repli sur le MNT"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -400,6 +402,13 @@ criteres:
       baro_corrige_local: {si: trace_perso_fiable, decalage: "médiane baro − MNT, 200 à 1 500 m de part et d'autre", grille_m: 5, pas_brut_max_m: 100,
                            incertaine_si: {ecart_decalages_cotes_m_min: 2.0, cotes_m: [200, 1500], points_baro_par_cote_min: 3, points_baro: bruts_hors_inseres_ecartes_et_fenetres_masquees, abscisse_points: corrigee_du_retard, fenetres_masquees_lues_a: abscisse_corrigee, repli_mnt: false}, marque: e5_reference_incertaine,
                            traces_en_parties: {partN: recousues_par_abscisse, sN: segment_par_segment}}   # 2026-11-01, après 2026.11.6
+      baro_incertaine_si_bruit:   # README §4 quater.2, décision de l'utilisateur, 2026-11-03 ; à partir de V1.2
+        noise_m_baro_min_exclu: 1.0   # comme E1 plaine (§4 ter.8)
+        source: qualify_baro.py   # noise_m de la trace entière ; segments .sN : celui de la trace
+        groupes: tous
+        repli_mnt: false
+        marque: e5_reference_incertaine
+        raison: baro_bruite
       sinon_mnt:
         indisponible_si: [{mnt_sans_donnee_a_m: 10}, {mnt_lit_le_tablier: {bosse_m_min: 2.0, approches_m: [20, 50], mesure: "MNT(croisement) − moyenne des médianes MNT des approches"}}]
         marque: e5_reference_indisponible

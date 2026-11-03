@@ -1088,6 +1088,20 @@ nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.
    Les deux premières règles changent la construction de la référence, la troisième sa lecture
    par le banc. Estimation sur `pl11-r-millevaches`, abscisse corrigée seule : accord revêtu / non
    revêtu 0,978 au lieu de 0,9667.
+2. **E5 : baro bruité, référence incertaine** (décision de l'utilisateur, 2026-11-03). La référence
+   baro corrigé localement (§4 ter.7) d'un passage est **incertaine** (rapportée
+   `e5_reference_incertaine`, raison `baro_bruite`, non comptée) si le bruit baro de la trace
+   (`qualify_baro.py`, `noise_m`, celui de la trace entière pour ses segments `.sN`) dépasse
+   **1,0 m**, comme en E1 plaine (§4 ter.8), quel que soit le groupe de la trace ; sans repli sur
+   le MNT, comme les autres références baro incertaines. Se teste après le retrait (trace sur un
+   ouvrage), avant les côtés. Motif : la tolérance d'E5 au baro (2 m) est du même ordre que ce
+   bruit ; au jugement V1.1, 6 des 13 échecs imputés à la référence venaient d'un baro bruité.
+   Effet, sans le service (`noise_m` des fiches, passages E5 au baro des rapports 2026.11.10-bench2) :
+   calibration MVP + V1, 65 des 325 passages (21 traces), aucun en échec ; série V1.1, 54 des 145
+   passages (10 traces), dont 14 des 20 lignes en échec (`perso-131`, `perso-136`, `perso-140`,
+   `perso-145`, `perso-148`). Des 21 traces de calibration visées, 13 sont `dplus`, 5 `ouvrage`,
+   3 `plaine` (bruit de 1,02 à 2,14 m) ; en calibration, la règle ne retire que des passages
+   réussis.
 
 ---
 
