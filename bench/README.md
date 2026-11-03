@@ -1122,6 +1122,24 @@ nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.
    approchée sur les profils V1.1 ne trouve plus de marche sur `perso-135`, `perso-143`,
    `perso-144` et `perso-147`, qui seraient jugées. L'ordre retenu garde la règle de la marche
    telle quelle ; l'autre ordre demande une décision.
+4. **E5 : un site physique, un cas** (décision de l'utilisateur, 2026-11-03 ; modalités rédigées
+   par le banc ; toutes séries). Un même croisement physique était compté sous plusieurs ids :
+   tabliers voisins d'un même franchissement (deux ou trois ponts OSM au même point de la trace),
+   et même pont repassé (deux passages d'une trace, ou deux traces). Les croisements E5 sont
+   réunis en **sites** : deux ids sont du même site s'ils sont le même ouvrage, ou si un même
+   passage les croise à 40 m au plus l'un de l'autre (abscisse du croisement sur la trace ; 40 m,
+   la tolérance d'un passage, §2.1), de proche en proche, toutes traces confondues. Un site est
+   **en échec** si l'un de ses passages comptés (référence baro ou MNT, ni retiré, ni incertain,
+   ni indisponible) échoue, **réussi** si tous ses passages comptés réussissent ; sans passage
+   compté, il porte la marque de ses passages et n'est pas compté. L'écart rapporté est le max de
+   ses passages comptés, avec ses ouvrages, ses passages et ses cas. Le minimum de couverture
+   d'E5 (8) compte des sites, et le tirage des séries suivantes aussi. Lecture stricte retenue
+   (un passage en échec suffit), comme `passe_si: tous` ; la médiane des passages d'E3 (§4 bis.3)
+   serait l'autre lecture. Effet sur les rapports 2026.11.10-bench2, sans le service :
+   calibration MVP + V1, 227 croisements comptés → 155 sites ; série V1.1, 140 → **83** sites
+   (au-dessus du minimum de 8), 20 lignes en échec → **10** sites. Le diagnostic en comptait 11 :
+   ici, `nv-664`, `nv-795` et `nv-836` (même point de `perso-131`) et `nv-795` sur `perso-153` ne
+   font qu'un site, qui a aussi 2 lignes réussies.
 
 ---
 

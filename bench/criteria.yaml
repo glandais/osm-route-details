@@ -150,6 +150,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E5 : référence baro corrigé local incertaine, rapportée, non comptée, si le bruit baro de la trace (qualify_baro.py, noise_m) dépasse 1,0 m, comme en E1 plaine ; tous groupes ; sans repli sur le MNT"
   - id: e1_pente_baro_sans_relief   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
     decision: "E1 : zone masquée à ± 300 m là où la pente du baro dépasse 15 % sur 50 m alors que celle du MNT reste sous 10 %"
+  - id: e5_un_site_un_cas   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
+    decision: "E5 : un site physique = un cas ; les croisements comptés sous plusieurs ids (tabliers voisins, même pont repassé) sont réunis ; couverture et verdict par site"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -208,7 +210,7 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
       E2b: {traces_par_groupe: 3, groupes: [dplus, plaine, ouvrage]}
       E3: {ponts: 12, ponts_mnh_10m_min: 3, ponts_plus_de_150m: 3}
       E4: {tunnels_osm: 7, tunnels_plus_de_300m: 2}
-      E5: {croisements: 8}
+      E5: {croisements: 8}   # à partir de V1.2 : 8 sites (criteres E5.site, README §4 quater.4)
       S1: {ouvrages: 15, emprise_m: 2000}
       S2: {temoins: 4, km: 40, natures_min: 3, natures: [remblai_deblai, couvert_arbore, bati_ou_falaise, digue]}
       R1_R2: {parcours: 4, km: 400, part_non_revetu_min: 0.10, regions: hors_osm_surface}
@@ -428,6 +430,13 @@ criteres:
         incertaine_si: {mnt_bosse_m: [1.0, 2.0], bornes: incluses, marque: e5_reference_incertaine}   # 2026-11-01, après 2026.11.6
         incertaine_si_approche_sur_ouvrage: {approches_m: [20, 50], couche: streets, attributs: [bridge, tunnel], tuiles: [station, 8_voisines], distance_m_max: 10, angle_deg_max: 20, hors: voies_de_l_ouvrage_du_dessus, avant: bosse, raison: approche_sur_ouvrage, marque: e5_reference_incertaine}   # 2026-11-02, après le jugement V1
         plages_o_vcyclist: {croisement: milieu_de_la_plage, ecart: max_sur_la_plage, approches_depuis: bouts_de_la_plage}   # 2026-11-01
+    site:   # README §4 quater.4, décision de l'utilisateur, 2026-11-03 ; à partir de V1.2, toutes séries
+      relie: [meme_ouvrage, {meme_passage: true, ecart_d_milieu_m_max: 40.0}]   # composantes connexes, toutes traces
+      passage_compte: "référence baro ou MNT, ni retiré, ni incertain, ni indisponible"
+      verdict: {echec_si: un_passage_compte_en_echec, sinon_si_un_passage_compte: reussi, sinon: marque_du_site_non_compte}
+      ecart_rapporte: max_des_passages_comptes
+      rapporte: [ouvrages, passages, cas]
+      couverture: {compte: sites_avec_un_passage_compte, minimum: 8}
     seuils:
       - {abs_m_max: 1.0, reference: mnt}
       - {abs_m_max: 2.0, reference: baro_corrige_local}   # comme E3 ; 2026-11-01, après 2026.11.6
