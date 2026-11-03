@@ -1188,11 +1188,17 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    il reste mesuré en calibration. Motif : parmi les 22 sorties qualifiées `suspect` jamais
    utilisées, aucune n'a de défaut attesté (930f6e8) ; en trouver demanderait de qualifier de
    nouvelles sorties, streams téléchargés.
-2. **E3 rapporté** (décision de l'utilisateur, 2026-11-03 ; règle de V1.1 reconduite, §4 ter.10).
-   Sur la série V1.2 seulement, E3 est mesuré avec ses seuils inchangés ; un échec ou un minimum
-   non atteint est rapporté sans refuser l'incrément. E3 reste calibré sur MVP, V1 et V1.1. Motif :
-   en V1.1, 274 des 279 ponts franchis étaient déjà en calibration ; avec V1.1 passé en
-   calibration, les ponts neufs franchis par une trace baro seront encore plus rares.
+2. ~~**E3 rapporté**~~ (décision de l'utilisateur, 2026-11-03 ; règle de V1.1 reconduite, §4 ter.10 ;
+   **remplacée** le même jour, voir ci-dessous). Sur la série V1.2 seulement, E3 était mesuré avec
+   ses seuils inchangés, un échec ou un minimum non atteint rapporté sans refuser l'incrément. Motif
+   d'alors : en V1.1, 274 des 279 ponts franchis étaient déjà en calibration ; ce motif était faux
+   (§4 ter.10, note).
+   **E3 bloquant si sa couverture est atteinte** (décision de l'utilisateur, 2026-11-03, remplace la
+   précédente). Sur la série V1.2, E3 est bloquant, seuils inchangés, si la couverture de la série,
+   comptée avant toute mesure, atteint le minimum E3 ; sinon le minimum non atteint est rapporté
+   sans refuser l'incrément. E3 reste calibré sur MVP, V1 et V1.1. Le contrôle de couverture de
+   V1.2 du 2026-11-03 (`couverture_v1.py`, SERIE=v12, sans le service) l'atteint : 122 ponts, dont
+   19 à MNH ≥ 10 m et 20 de plus de 150 m (minimum 12, 3, 3) ; **E3 est donc bloquant sur V1.2.**
 3. **Campagne de tuiles de V1.2** (décision de l'utilisateur, 2026-11-03). Une nouvelle campagne
    datée `tuiles_<date>`, limitée aux zones neuves de V1.2 (tuiles des traces, parcours planifiés
    et témoins de la série absentes de la campagne `tuiles_2026_11_02`), est déclarée au manifest
