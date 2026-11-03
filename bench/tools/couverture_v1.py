@@ -28,6 +28,9 @@ calibration et l'API altimétrie de l'IGN ; ne lit jamais le service. Trois éta
    (composante à moins de NEAR_M) est un seul cas ; un cas affecté garde son affectation. E3 ne
    compte que les ponts passés par une trace baro fiable ; Q1 les négatifs au défaut attesté hors
    du qualificateur (930f6e8, 305abd7) ; groupe E2b par 13e0ed1.
+   À partir de V1.2 (SERIE hors FIGES), E5 se compte en sites (README §4 quater.4) : croisements
+   d'une même trace à SITE_M au plus l'un de l'autre, de proche en proche ; V1 et V1.1 gardent le
+   compte en croisements de leur tirage figé.
 
 Non contrôlé ici : bandes de portail E4, référence incertaine ; la campagne peut encore exclure.
 
@@ -51,6 +54,8 @@ import urllib.request
 
 TOL_M = 40.0
 NEAR_M = 150.0
+SITE_M = 40.0   # E5 par site (README §4 quater.4, à partir de V1.2) : croisements d'une même trace à 40 m au plus
+FIGES = ("v1", "v11")   # tirages figés : E5 compté en croisements, comme à leur tirage
 MASK_M = 500.0
 MIN_LEN_M = 50.0
 MIN_MNH_M = 3.0
@@ -70,7 +75,7 @@ FERMES = {"motorway", "motorway_link", "trunk", "trunk_link", "pedestrian", "bri
 OUVERT_VELO = {"yes", "designated", "permissive", "destination", "official"}
 MINIMUMS = {
     "E1": {"traces": 8, "km": 800}, "E2b": {"par_groupe": 3}, "E3": {"ponts": 12, "mnh_10m": 3, "plus_de_150m": 3},
-    "E4": {"tunnels": 7, "plus_de_300m": 2}, "E5": {"croisements": 8}, "S1": {"ouvrages": 15, "emprise_m": 2000},
+    "E4": {"tunnels": 7, "plus_de_300m": 2}, "E5": {"croisements": 8}, "S1": {"ouvrages": 15, "emprise_m": 2000},   # E5 : sites à partir de V1.2 (§4 quater.4)
     "S2": {"temoins": 4, "km": 40, "natures": 3}, "R1_R2": {"parcours": 4, "km": 400}, "M1": {"km": 800},
     "Q1": {"traces": 2},
 }
@@ -889,8 +894,20 @@ def tirage(B):
                         "plus_de_300m": sum(1 for k in members(held) if k in compte and compte[k]["type"] == "tunnel" and compte[k]["L"] > LONG_TUNNEL_M)}
     res["E4"] = assign("E4", tun_cases, mE4, lambda m: m["tunnels"] >= cible(7) and m["plus_de_300m"] >= cible(2))
     x_cases = sorted({gname[groupe[k]] for k in xs})
-    mE5 = lambda held: {"croisements": sum(1 for k in members(held) if k in xs)}
-    res["E5"] = assign("E5", x_cases, mE5, lambda m: m["croisements"] >= cible(8))
+    if SERIE in FIGES:
+        mE5 = lambda held: {"croisements": sum(1 for k in members(held) if k in xs)}
+        res["E5"] = assign("E5", x_cases, mE5, lambda m: m["croisements"] >= cible(8))
+    else:
+        # un site physique = un cas (§4 quater.4) : croisements d'une même trace à SITE_M au plus, de proche en proche
+        us = UF(); xk = sorted(xs)
+        for a_i, a in enumerate(xk):
+            for b in xk[a_i + 1:]:
+                if set(xs[a]["traces"]) & set(xs[b]["traces"]) and hav(xs[a]["pt"], xs[b]["pt"]) <= SITE_M:
+                    us.union(a, b)
+        site = {k: us.find(k) for k in xk}
+        mE5 = lambda held: {"sites": len({site[k] for k in members(held) if k in xs}),
+                            "croisements": sum(1 for k in members(held) if k in xs)}
+        res["E5"] = assign("E5", x_cases, mE5, lambda m: m["sites"] >= cible(8))
     tem = [t for t in C["temoins"] if t["nature"]]   # témoin planifié sans nature confirmée : retiré
     temd = {t["id"]: t for t in tem}
     mS2 = lambda held: {"temoins": len(held), "km": round(sum(temd[c]["length_m"] for c in held) / 1000, 1),
@@ -954,6 +971,7 @@ def tirage(B):
                                            "tunnel": sum(1 for v in compte.values() if v["type"] == "tunnel")},
                       "exclusions": {f"{a}:{b}": n for (a, b), n in sorted(raisons.items())},
                       "croisements_comptes": len(xs), "croisements_exclus": len(C["croisements"]) - len(xs),
+                      **({} if SERIE in FIGES else {"sites_e5": len(set(site.values()))}),
                       "temoins": {n: {"nb": sum(1 for t in tem if t["nature"] == n), "km": round(sum(t["length_m"] for t in tem if t["nature"] == n) / 1000, 1)}
                                   for n in ("remblai_deblai", "couvert_arbore", "bati_ou_falaise", "digue")}},
         "tenue_a_l_ecart": {s: {"atteint": v[0], "cas_de_la_strate": v[1]} for s, v in res.items()},
