@@ -2,8 +2,11 @@
 """Remplit le cache du banc avec les tuiles VersaTiles z14 (Shortbread) de l'emprise d'une série,
 sans lancer le service (README §4 ter.4 : tuiles de la campagne V1, datées ici).
 
-Tuiles : celle de chaque point des traces données (rééchantillonnées tous les STEP_M m) et ses
-8 voisines, comme le voisinage lu par le banc (§4 bis.6). Une tuile déjà en cache n'est pas
+Tuiles : celle de chaque point des traces données, segments compris (interpolés tous les STEP_M m,
+comme le rééchantillonnage du service), et ses 8 voisines, comme le voisinage lu par le banc
+(§4 bis.6). Avant le 2026-11-03 (V1.2), seuls des points espacés de 50 m étaient pris : un trou
+de la trace (points distants de plus d'une tuile) ou un point écarté proche d'un bord laissait
+des tuiles hors de l'emprise, que `fill-cache` demandait ensuite. Une tuile déjà en cache n'est pas
 retéléchargée. Écriture au format du cache disque du service (crates/ord-data/src/disk.rs) :
 `ORDT` + version 1 + longueur (u32 LE) + en-tête JSON + corps MVT décompressé, somme xxh3 ;
 200 → body, 204 → empty (politique VERSATILES), 404 et erreurs → rien d'écrit.
@@ -34,7 +37,7 @@ URL = "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}"
 NAMESPACE = "versatiles-shortbread-z14-d2e31ed09602913b"   # espace de noms du service pour cette URL
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 Z = 14
-STEP_M = 50.0
+STEP_M = 2.0
 TTL_S = 604800
 
 
@@ -52,13 +55,15 @@ def tile_of(lat, lon):
 def tiles(paths):
     out = set()
     for p in paths:
-        last = None
-        for q in points(p):
-            if last and math.hypot((q[0] - last[0]) * 111320, (q[1] - last[1]) * 111320 * math.cos(math.radians(q[0]))) < STEP_M:
-                continue
-            last = q
-            x, y = tile_of(*q)
-            out |= {(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+        pts, seen = points(p), set()
+        for a, b in zip(pts, pts[1:] + pts[-1:]):
+            d = math.hypot((b[0] - a[0]) * 111320, (b[1] - a[1]) * 111320 * math.cos(math.radians(a[0])))
+            n = max(1, math.ceil(d / STEP_M))
+            for i in range(n + 1):
+                t = tile_of(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)
+                if t not in seen:
+                    seen.add(t)
+                    out |= {(t[0] + dx, t[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
     return out
 
 
