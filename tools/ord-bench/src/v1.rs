@@ -89,10 +89,12 @@ pub fn series_rows(paths: &BenchPaths, v1: &PersoV1) -> anyhow::Result<Vec<Serie
     Ok(rows)
 }
 
-/// Série V1 jugée (README §2, point 3) : les lignes tenues à l'écart passent en calibration ; un
-/// itinéraire `par_cas` le reste (tous ses éléments sont désormais de calibration).
+/// Série V1 jugée (README §2, point 3) : les lignes tenues à l'écart passent en calibration, et un
+/// itinéraire `par_cas` aussi (tous ses éléments sont désormais de calibration). Une série jugée
+/// n'a plus aucun élément tenu à l'écart : un `par_cas` resté tel quel entrerait dans la campagne
+/// de toute série (`PlannedSerie::in_series`), jugement de la série suivante compris.
 pub fn judged_rows(rows: &mut [SeriesRow]) {
-    for r in rows.iter_mut().filter(|r| r.serie == "tenue_a_l_ecart") {
+    for r in rows.iter_mut().filter(|r| matches!(r.serie.as_str(), "tenue_a_l_ecart" | "par_cas")) {
         r.serie = "calibration".into();
     }
 }
@@ -579,6 +581,12 @@ mod tests {
         let cal = select_planned(&m, &rows, &[], Serie::Calibration);
         assert_eq!(cal.cases.iter().map(|c| c.0.id.as_str()).collect::<Vec<_>>(), ["pl-r-a", "pl-s2-b"]);
         assert!(cal.excluded.is_empty());
+        // Un itinéraire `par_cas` d'une série jugée est de calibration seulement : il n'entre plus
+        // dans la campagne de la série tenue à l'écart suivante.
+        assert_eq!(planned_serie(&rows, "pl-s2-b"), Some(PlannedSerie::Serie(Serie::Calibration)));
+        let held = select_planned(&m, &rows, &[], Serie::TenueALEcart);
+        assert!(held.cases.is_empty(), "plus aucun itinéraire tenu à l'écart");
+        assert_eq!(held.excluded, ["pl-r-a", "pl-s2-b"]);
         assert!(
             other_series_on(&pts, &refs, &rows, Serie::Calibration, "pl-s2-b").is_empty(),
             "plus de masques"
