@@ -8,7 +8,10 @@ la suite de V1 par date de départ puis identifiant ; négatifs Q1 du tirage fig
 à chaque bout) et private/v11/perso-map-v11.csv (pseudonyme → identifiant Strava, qualification,
 empreintes). Sortie standard : comptes seulement.
 
-Usage : traces_v11.py private/
+Série : variable d'environnement SERIE (v11 par défaut ; v12 : private/v12/, streams-v12,
+qualif_v12.csv, perso-NN à la suite de V1.1).
+
+Usage : [SERIE=v12] traces_v11.py private/
 """
 import csv
 import hashlib
@@ -18,6 +21,9 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SERIE = os.environ.get("SERIE", "v11")
+AVANT = {"v11": ["perso-map.csv", "v1/perso-map-v1.csv"],
+         "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"]}[SERIE]
 
 
 def sha256(path):
@@ -26,7 +32,7 @@ def sha256(path):
 
 def last(prefix, B):
     n = 0
-    for f in (f"{B}/perso-map.csv", f"{B}/v1/perso-map-v1.csv"):
+    for f in (f"{B}/{x}" for x in AVANT):
         for r in csv.DictReader(open(f)):
             if r["pseudo"].startswith(prefix):
                 n = max(n, int(r["pseudo"].split("-")[1]))
@@ -36,8 +42,8 @@ def last(prefix, B):
 def main(B):
     B = B.rstrip("/")
     inv = {str(a["id"]): a for a in json.load(open(f"{B}/strava/inventaire.json"))}
-    t = json.load(open(f"{B}/v11/tirage.json"))
-    qual = {r["id"]: r for r in csv.DictReader(open(f"{B}/strava/qualif_v11.csv"))}
+    t = json.load(open(f"{B}/{SERIE}/tirage.json"))
+    qual = {r["id"]: r for r in csv.DictReader(open(f"{B}/strava/qualif_{SERIE}.csv"))}
     for f in ("qualif_lot1.csv", "qualif_lot2.csv", "qualif_lot3.csv", "qualif_lot4.csv", "qualif_q1.csv", "qualif_v1.csv"):
         if os.path.exists(f"{B}/strava/{f}"):
             qual.update({r["id"]: r for r in csv.DictReader(open(f"{B}/strava/{f}")) if r["id"] in t["q1"]})
@@ -49,7 +55,7 @@ def main(B):
     rows = []
     for i in fiables + negs:
         p = pseudo[i]
-        src = f"{B}/strava/streams-v11/{i}.json"
+        src = f"{B}/strava/streams-{SERIE}/{i}.json"
         full, trim = f"{B}/traces/{p}.gpx", f"{B}/traces/{p}.trim1km.gpx"
         for out, extra in ((full, []), (trim, ["--trim-m", "1000"])):
             subprocess.run([sys.executable, "-I", os.path.join(HERE, "stream_to_gpx.py"), src, out, "--name", p, *extra], check=True)
@@ -60,7 +66,7 @@ def main(B):
                      "drift_m": q.get("drift_m"), "noise_m": q.get("noise_m"), "p95_abs_m": q.get("p95_abs_m"),
                      "gain_rec_m": q.get("gain_rec_m"), "gain_dem_m": q.get("gain_dem_m"), "sha256_stream": sha256(src),
                      "sha256_gpx": sha256(full), "sha256_gpx_trim": sha256(trim)})
-    with open(f"{B}/v11/perso-map-v11.csv", "w", newline="") as f:
+    with open(f"{B}/{SERIE}/perso-map-{SERIE}.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)

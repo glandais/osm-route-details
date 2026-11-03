@@ -16,7 +16,11 @@ D+ MNT, 930f6e8) ; les Q1 premiers attestés.
 Sortie (hors git, identifiants Strava) : private/v11/tirage.json. Sortie standard : comptes et km, sans
 identifiant ni coordonnée, et l'empreinte du fichier.
 
-Usage : tirage_v11.py private/ [N] [Q1]
+Série : variable d'environnement SERIE (v11 par défaut ; v12 : V1.2, décision de l'utilisateur,
+2026-11-03, sel osm-route-details:v1.2:, jamais utilisées ni MVP, ni V1, ni V1.1, sortie
+private/v12/tirage.json ; Q1 rapporté sur V1.2, README §4 quinquies.1 : Q1 = 0 par défaut).
+
+Usage : [SERIE=v12] tirage_v11.py private/ [N] [Q1]
 """
 import csv
 import glob
@@ -26,7 +30,10 @@ import math
 import os
 import sys
 
-SEL = "osm-route-details:v1.1:"
+SERIE = os.environ.get("SERIE", "v11")
+SEL = {"v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE]
+DEJA = {"v11": ["perso-map.csv", "v1/perso-map-v1.csv"],
+        "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"]}[SERIE]
 DEBUT = "2014-01-01"
 TYPES = {"Ride", "GravelRide", "MountainBikeRide"}
 MIN_INEDIT_KM = 50.0
@@ -83,12 +90,12 @@ def en_france(a, pts):
     return bool(a.get("location_summary")) and pays not in ETRANGER and 41.0 <= pts[0][0] <= 51.6 and -5.5 <= pts[0][1] <= 9.8
 
 
-def main(B, n=45, q1=2):
+def main(B, n=45, q1=2 if SERIE == "v11" else 0):
     B = B.rstrip("/")
     n, q1 = int(n), int(q1)
     inv = json.load(open(f"{B}/strava/inventaire.json"))
     used = set()
-    for f in (f"{B}/perso-map.csv", f"{B}/v1/perso-map-v1.csv"):
+    for f in (f"{B}/{x}" for x in DEJA):
         used |= {r["strava_id"] for r in csv.DictReader(open(f))}
     grid = set()
     for a in inv:
@@ -121,11 +128,12 @@ def main(B, n=45, q1=2):
         return x < 0.6 or x > 1.6
     negatifs = [i for i in sus if atteste(qual[i])][:q1]
     out = {"sel": SEL, "criteres": {"debut": DEBUT, "types": sorted(TYPES), "france": True, "min_inedit_km": MIN_INEDIT_KM,
-                                    "cellule_m": CELL_M, "jamais_utilisees": ["perso-map.csv", "v1/perso-map-v1.csv"]},
+                                    "cellule_m": CELL_M, "jamais_utilisees": DEJA},
            "ordre": [v["id"] for v in vivier], "vivier": vivier, "selection": [v["id"] for v in vivier[:n]],
            "q1_ordre": sus, "q1": negatifs}
-    os.makedirs(f"{B}/v11", exist_ok=True)
-    path = f"{B}/v11/tirage.json"
+    os.makedirs(f"{B}/{SERIE}", exist_ok=True)
+    path = f"{B}/{SERIE}/tirage.json"
+    assert not os.path.exists(path), f"{path} existe : tirage figé, jamais réécrit"
     json.dump(out, open(path, "w"), indent=1)
     sel = vivier[:n]
     print(json.dumps({"vivier": len(vivier), "vivier_km": round(sum(v["km"] for v in vivier)),

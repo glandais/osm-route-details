@@ -68,7 +68,7 @@ STEP_M = 10.0
 # Série contrôlée (README §4 ter.4) : v1 (tirage stratifié) ou v11 (V1.1, décision de l'utilisateur,
 # 2026-11-02 : tout le nouveau matériau tenu à l'écart, MVP et V1 en calibration).
 SERIE = os.environ.get("SERIE", "v1")
-SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:"}[SERIE]
+SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE]
 ALTI = "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json"
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 FERMES = {"motorway", "motorway_link", "trunk", "trunk_link", "pedestrian", "bridleway", "busway"}
@@ -209,12 +209,17 @@ def calibration_refs(B):
             refs += [tuple(p) for p in o["pts"].values()]
     tracks = sorted(glob.glob(f"{B}/traces/*.gpx")) + sorted(glob.glob(f"{B}/../data/vcyclist/**/*.gpx", recursive=True)) \
         + sorted(glob.glob(f"{B}/../data/osm-surface/*.gpx"))
-    if SERIE != "v1":
-        # V1 est en calibration : ses ouvrages, croisements et itinéraires planifiés
-        for o in json.load(open(f"{B}/v1/ouvrages-v1.json")):
+    # séries passées en calibration : leurs ouvrages, croisements et itinéraires planifiés
+    for d in {"v1": [], "v11": ["v1"], "v12": ["v1", "v11"]}[SERIE]:
+        for o in json.load(open(f"{B}/{d}/ouvrages-{d}.json")):
             refs += [tuple(p) for p in o["pts"].values()]
-        tracks += sorted(glob.glob(f"{B}/v1/planifies/*.gpx"))
-    tracks = [t for t in tracks if ".trim1km." not in t]
+        tracks += sorted(glob.glob(f"{B}/{d}/planifies/*.gpx"))
+    # les traces de la série contrôlée, déjà écrites dans traces/ (traces_v11.py), ne sont pas de la
+    # calibration : sans ce filtre, un ouvrage était « déjà vu » par sa propre trace (V1.1 :
+    # 150 des 287 ouvrages deja_vu_calibration, contrôle de 2026-11-02 ; relevé le 2026-11-03)
+    own = f"{B}/{SERIE}/perso-map-{SERIE}.csv"
+    own = {r["pseudo"] for r in csv.DictReader(open(own))} if os.path.exists(own) else set()
+    tracks = [t for t in tracks if ".trim1km." not in t and os.path.basename(t).split(".")[0] not in own]
     cg = {}
     for n, t in enumerate(tracks):
         for q in gpx_points(t):
