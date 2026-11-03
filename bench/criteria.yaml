@@ -144,6 +144,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Contrôle M1 hors graphe vélo satisfait aussi si la plage est appariée à une voie du graphe vélo distincte de la route fermée (voie parallèle), comme pour les ouvrages ; appariée à la route fermée = échec"
   - id: serie_v11_e3_rapporte   # 2026-11-02, après le contrôle de couverture de V1.1
     decision: "Série tenue à l'écart V1.1 : E3 rapporté, non bloquant, seuils inchangés (échec ou minimum non atteint sans refus) ; minimum E2b sur les groupes dplus et plaine seulement, groupe ouvrage rapporté ; E3 reste calibré sur MVP + V1"
+  - id: reference_r12_v12   # 2026-11-03, après le jugement V1.1 ; à partir de V1.2
+    decision: "Référence R1/R2 des parcours planifiés : abscisse de l'itinéraire en haversine (R = 6 371 008,8 m, comme stadia_match) ; plage UNKNOWN là où s_origine saute (aller-retour) ; voie dont les tags diffèrent entre la date des tuiles et celle de la référence exclue de R1/R2, rapportée à part"
 
 perimetre:   # README §4 bis.1
   hors_graphe_velo:
@@ -244,6 +246,21 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
     si: {classe_valhalla: [compacted, dirt, gravel, path, impassable], surface_osm: [asphalt, concrete, "concrete:lanes", "concrete:plates", paving_stones]}
     tags: {source: "instantané Overpass à la date des données du serveur Valhalla", fichier: "private/osm-tags/<date>.json", outil: tools/osm_tags_reference.py, empreinte: manifest, reseau_pendant_le_banc: false, voie_absente: pas_d_exclusion}
     alors: {decompte: exclue, rapportee: true}
+  reference_R1_R2_v12:   # README §4 quater.1, décision de l'utilisateur, 2026-11-03 ; à partir de V1.2, toutes séries
+    abscisse_itineraire: {distance: haversine, rayon_m: 6371008.8, comme: tools/stadia_match.py}
+    saut_s_origine:
+      points: {fichier: "<id>.baro.csv", insere: 0, tri: s_recale_m}
+      si: "Δs_origine − Δs_recale > 100 m entre deux points consécutifs"   # baro_gap_max_m
+      alors: {plage: "[s_origine(i), s_origine(i + 1)]", surface: UNKNOWN, comme: discontinuite_du_recalage}
+    tags_differents:
+      voies: {fichier: "<id>.surface.csv", colonne: way_id, classes: toutes}
+      tags: [highway, surface, tracktype]
+      dates: [tuiles.date_osm.planetiler_osm_osmosisreplicationtime, reference.donnees_serveur]
+      si: [tag_different, voie_absente_a_une_date]
+      alors: {decompte: exclue, rapporte: {cle: tags_differents, par: parcours, mesure: [longueur_m, part]}}
+      source: {outil: tools/osm_tags_reference.py, instantanes: 2, hors_git: true, empreinte: manifest, reseau_pendant_le_banc: false, absent: campagne_refusee}
+      avant: erreur_reference_R
+      s_applique_a: [R1, R2]   # pas R3
 
 preparation:
   recalage: {outil: tools/stadia_match.py, service: "Valhalla FOSSGIS trace_attributes (valhalla1.openstreetmap.de)", debit_max: "1 req/s, en séquence", donnees_serveur: "2026-11-01T13:01Z", costing: bicycle, pas_m: 25, entree: "*.trim1km.gpx", toutes_les_traces: true}   # décision de l'utilisateur, 2026-11-01 (Stadia Maps jusqu'au MVP)

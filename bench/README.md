@@ -1049,6 +1049,46 @@ inchangés.
    tuiles) : `perso-44` seule (Δ court −30,1 m, Δ long −30,1 m, amplitude 5 m) ; la marche
    suivante est de 9,2 m (`perso-09`).
 
+**§4 quater. Règles pour V1.2 et les séries suivantes** (décisions de l'utilisateur, 2026-11-03,
+après le diagnostic des échecs du jugement V1.1, `32477fe`, refusé ; commits dédiés, avant toute
+nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.2, en calibration
+(MVP, V1, V1.1) comme sur la série tenue à l'écart suivante. Seuils inchangés.
+
+1. **Référence R1/R2 des parcours planifiés** (décision de l'utilisateur, 2026-11-03). La référence
+   (`tools/reference_r12_v1.py`) ramène les plages de revêtement de Valhalla de l'abscisse recalée
+   à celle de l'itinéraire par les points appariés (`<id>.baro.csv`, s_recale_m → s_origine_m).
+   Trois règles, dans cet ordre :
+   - **abscisse** : l'abscisse de l'itinéraire (`tracks[0].line`) est calculée avec la même
+     haversine que `stadia_match.py` (rayon 6 371 008,8 m), qui calcule s_origine_m. Motif : avec
+     la distance équirectangulaire (k = 111 320 m/°) de la référence V1.1, les deux abscisses
+     dérivaient l'une de l'autre (rapport 1,00112 sur `pl11-r-millevaches`, + 125 m au km 107) ;
+   - **saut de s_origine** : entre deux points appariés consécutifs (points insérés écartés, tri
+     par s_recale_m), si s_origine avance de plus de **100 m** de plus que s_recale
+     (Δs_origine − Δs_recale > 100 m, le `baro_gap_max_m` du §4 ter.7), la plage
+     [s_origine(i), s_origine(i + 1)] de l'itinéraire est `UNKNOWN`, comme une discontinuité du
+     recalage, au lieu de recevoir la plage recalée étirée. Cas déclencheur : aller-retour de
+     `pl11-r-millevaches` (Δs_recale 13 m, Δs_origine 475 m), où une plage revêtue était étirée
+     sur environ 490 m. Effet sur les références de V1 et V1.1, sans le service : 5 plages,
+     1 675 m (`pl-r-gers`, `pl-r-orient`, `pl-r-sologne`, `pl11-r-larzac`,
+     `pl11-r-millevaches`) ; les sauts de 50 à 100 m (4, sur 4 parcours) ne sont pas visés ;
+   - **tags différents entre les deux dates** : une voie de la référence (`way_id` de
+     `<id>.surface.csv`, toutes classes) dont les tags `highway`, `surface` ou `tracktype`
+     diffèrent entre la date OSM des tuiles de la campagne (`planetiler_osm_osmosisreplicationtime`
+     du TileJSON, manifest) et la date des données du serveur Valhalla de la référence, ou qui est
+     absente à l'une des deux dates, sort du décompte de R1 et R2 (ni accord ni désaccord, ni dans
+     la longueur comparée) et est rapportée à part par parcours (`tags_differents` : longueur et
+     part). Ce n'est un défaut ni du service ni de la référence : leurs données ne décrivent pas la
+     même voie. Cas déclencheur : piste de `pl11-r-millevaches` (km 17,9 à 19,7), `grade1` dans
+     les tuiles (OSM du 2026-10-19), `grade2` chez Valhalla et dans l'instantané du 2026-11-02.
+     Tags lus dans deux instantanés Overpass datés (`[date:…]`, `tools/osm_tags_reference.py`),
+     hors git (identifiants de voies), empreintés au manifest ; aucun appel réseau pendant le banc.
+     Instantané manquant : campagne refusée, comme au §4 bis.8. Se teste avant l'erreur de la
+     référence (§4 bis.8), qui ne voit plus les plages exclues ici. R3 n'est pas visé.
+
+   Les deux premières règles changent la construction de la référence, la troisième sa lecture
+   par le banc. Estimation sur `pl11-r-millevaches`, abscisse corrigée seule : accord revêtu / non
+   revêtu 0,978 au lieu de 0,9667.
+
 ---
 
 ## 5. Protocole : MNS lu sur la trace GPS ou sur la géométrie OSM du pont (§11.2 du doc 01)
