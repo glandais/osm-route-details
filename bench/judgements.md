@@ -177,3 +177,60 @@ sur un cas tenu à l'écart ; les règles qui suivent valent à partir de V1.2 (
   le calcul de l'emprise refusé ; téléchargement hors campagne refusé ou signalé au jugement).
 
 L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
+## Jugement V1.2 (2026-11-03)
+
+- Commit du code mesuré (`crates/`, `tools/ord-bench/`, `Cargo.*`) : `04467ae`
+- HEAD au jugement : `68aee72` ; commit de gel : `68aee72`
+- `rules_version` : 2026.11.11 ; `api_version` : 1.4
+- Révision du banc (`revision_banc`) : `bench4`
+- `data_versions` : `{"elevation":[{"date":"2026-10-31","indicative":true,"products":["mnt","mns"],"role":"primary","source":"ign-lidar-hd","zoom":15}],"typology":{"indicative":true,"role":"primary","source":"versatiles-shortbread","zoom":14}}`
+- Empreintes : manifest `83205d1761caaacfe0405552f48e814a62566be4697f483d42ba60f73237c615`, critères `dfcbe5f384cd45a955fdba53c343e6a72ea8aad5a31d09c2b325c3b5a8d50d37`, règles du banc `ea7c9f203dab75744e65f211d4534f1e076576ac55262685d684a0ea5b73fb85`, données `c12049c8e5368df31a5a8b2e7ac99491846e1d23d448edb91f662a61e6392cd8`
+- Rapport : `reports/2026-11-03-2026.11.11-bench4-jugement-V1.2/results.json`
+- Résultat : **refusé** (en échec, sautés ou sous leur minimum de couverture : E2b, E3)
+- Non bloquants en échec ou sautés, rapportés sans refuser : E3_hors_france, Q1, S3, hors_graphe_velo
+
+| Critère | bloquant | distance | input_with_breakpoints | ids en échec |
+|---|---|---|---|---|
+| E1 | oui | pass | pass | references incertaines : perso-173 ; perso-166 ; perso-171 ; perso-182 ; perso-184 ; perso-185 ; perso-186 ; perso-194 |
+| E2 | non | reported | reported | distance : indicatif : dplus 1,003 ; ouvrage 0,982 ; plaine 1,021 ; input_with_breakpoints : indicatif : dplus 1,004 ; ouvrage 0,980 ; plaine 1,016 |
+| E2b | oui | fail | fail | ouvrage |
+| E3 | oui | fail | fail | distance : nv-1001, nv-1013, nv-1022, nv-1023, nv-1024, nv-1031, nv-1037, nv-1038, nv-1039, nv-1040, nv-1041, nv-1042, nv-1043, nv-1051, nv-1060, nv-1070, nv-966, nv-968, nv-970, nv-971, nv-973, nv-974, nv-983, nv-984, nv-985, nv-986, nv-989, nv-992 ; input_with_breakpoints : nv-1001, nv-1013, nv-1022, nv-1024, nv-1031, nv-1037, nv-1038, nv-1039, nv-1040, nv-1041, nv-1042, nv-1043, nv-1051, nv-1060, nv-1070, nv-966, nv-968, nv-970, nv-971, nv-973, nv-974, nv-984, nv-985, nv-986, nv-989 |
+| E3_hors_france | non | skipped | skipped | — |
+| E4 | oui | pass | pass | — |
+| E5 | oui | pass | pass | — |
+| M1 | oui | pass | pass | — |
+| Q1 | non | sous_minimum | sous_minimum | traces_negatives 0 < 2 |
+| R1_R2 | oui | pass | pass | — |
+| R3 | non | pass | pass | — |
+| S1 | oui | pass | pass | — |
+| S2 | oui | pass | pass | — |
+| S3 | non | skipped | skipped | — |
+| hors_graphe_velo | non | skipped | skipped | — |
+
+Aucun cas sauté ; gel `68aee72`, code mesuré `04467ae` (bench4), un seul passage mesuré, jusqu'au
+bout (2026-11-03, 20:34:20Z à 20:43:40Z). Lignes du tableau telles qu'écrites par `judge`.
+
+Anomalies constatées sans analyse de la série (en-têtes du rapport, du cache et des outils) :
+1. **fill-cache refusé sur le premier gel** (`d944376`, 20:01Z) : 10 tuiles de rues absentes de la
+   campagne `tuiles_2026_11_03` (toutes de `perso-168`), aucune téléchargée, `judge` non lancé.
+   Cause : emprise de `tools/tuiles_v1.py` sur des points espacés de 50 m, sans les segments
+   (trous de trace de plus d'une tuile) ; 20 tuiles manquaient sur la série (11 cas), aucune sur
+   les traces de calibration. Emprise corrigée (`67906e6`), campagne complétée de 43 tuiles
+   (20:12Z, même build, `meta.json` identique avant et après), gel refait (`98aef65`, décision de
+   l'utilisateur). Avant le refus, environ 290 tuiles IGN MNS et autant de MNT écrites pour
+   `perso-166` et `perso-167` ; aucune tuile Mapterhorn ni de rues.
+2. **judge arrêté au démarrage sur le deuxième gel** (`98aef65`, 20:26:42Z, 5 s, rien mesuré ni
+   consigné, aucun rapport) : instantané des tags OSM de référence attendu sous
+   `2026-11-03T06-24-42Z.json` (date des données du serveur Valhalla à la seconde), nommé au
+   manifest `2026-11-03T06-24Z.json`. Fichier renommé hors git, contenu inchangé, chemins du
+   manifest mis à jour après contrôle en lecture seule de tous les fichiers chargés par `judge`
+   (un seul écart), gel refait (`68aee72`, décision de l'utilisateur). Le seul passage mesuré est
+   celui de cette entrée.
+3. **Témoins S2 planifiés retirés mesurés** : `pl12-s2-isere` et `pl12-s2-nesque`, retirés au
+   manifest (`retire:`, §4 quinquies.4), sont remplis par `fill-cache`, mesurés par `judge` et
+   présents dans le rapport (série `tenue_a_l_ecart`) ; S2 passe, le verdict n'en dépend donc pas.
+   Couverture S2 du rapport : 30 témoins, 62,6 km (contrôle de couverture d'avant mesure :
+   30 témoins, 61,2 km) ; l'écart n'est pas analysé.
+
+L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
+
