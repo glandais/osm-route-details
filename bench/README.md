@@ -1022,6 +1022,17 @@ inchangés.
    ouvrage était « déjà vu » par sa propre trace V1.1. 150 des 287 exclusions
    `deja_vu_calibration` de V1.1 étaient fausses (131 ponts, dont 19 de plus de 150 m, et 10
    tunnels) ; V1 n'est pas touchée. Défaut corrigé en 6b5a1c0. Le verdict V1.1 rendu n'est pas revu.
+   **Ouvrages V1.1 exclus à tort, ajoutés à la calibration** (décision de l'utilisateur,
+   2026-11-03 ; verdict V1.1 non revu). `tools/complement_v11.py` relit la couverture V1.1 gelée,
+   recalcule `deja_vu_calibration` avec la règle corrigée (traces de calibration et ouvrages de
+   calibration à 500 m) et passe les ouvrages dont c'était la seule exclusion par les contrôles et
+   la règle de compte de `couverture_v1.py` (MNH, niveau, passages). Les retenus sont numérotés à
+   la suite de V1.1 (`nv-840` et suivants, avant tout corpus V1.2, qui commence après eux) et
+   ajoutés à `ouvrages-v11.json` et `series-v11.csv`, en calibration comme le reste de V1.1 ; un
+   ouvrage de V1.2 commun avec eux est « déjà vu en calibration » et sort de V1.2. Le relevé du
+   défaut (141, contrôle par les traces seules) passe à 133 exclusions fausses avec la règle
+   entière ; 9 restent exclues hors graphe vélo, 16 par les contrôles IGN, 108 ouvrages sont
+   ajoutés (102 ponts, 6 tunnels ; manifest `perso_v11.ouvrages_v11.complement`).
    **Aucun masque au jugement V1.1** (décision de l'utilisateur, 2026-11-02). Les traces V1.1 sont
    jugées entières, comme en V1 : les fenêtres des éléments de calibration (MVP, V1, corpus
    versionné) qu'elles franchissent ne sont ni masquées dans leurs métriques de trace, ni tirées en
