@@ -1175,6 +1175,20 @@ nouvelle mesure). V1.1 reste refusé : ces règles s'appliquent à partir de V1.
      `fill-cache` la respecte (tuiles de rues lues sur disque seulement, tuile manquante = refus),
      quelle que soit la série.
 
+**§4 quinquies. Série tenue à l'écart V1.2** (décisions de l'utilisateur, 2026-11-03, composition
+proposée par le banc et validée : 45 sorties tirées au sel `osm-route-details:v1.2:` dans le
+vivier des sorties jamais utilisées, ni MVP, ni V1, ni V1.1, à 50 km inédits au moins, réserve lue
+dans l'ordre ; 2 à 3 parcours E4 par des tunnels jamais vus ; 3 à 4 témoins S2 planifiés ; 4 à 5
+parcours R1_R2, 400 km au moins, hors des régions déjà utilisées, références construites sous le
+§4 quater.1 ; E5 en sites ; tout tenu à l'écart, E3 et E5 sur les éléments neufs ; inventaire
+Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
+
+1. **Q1 rapporté** (décision de l'utilisateur, 2026-11-03). Sur la série V1.2 seulement, Q1 est
+   mesuré s'il a des cas et rapporté sans refuser l'incrément, ni en échec ni sous le minimum ;
+   il reste mesuré en calibration. Motif : parmi les 22 sorties qualifiées `suspect` jamais
+   utilisées, aucune n'a de défaut attesté (930f6e8) ; en trouver demanderait de qualifier de
+   nouvelles sorties, streams téléchargés.
+
 ---
 
 ## 5. Protocole : MNS lu sur la trace GPS ou sur la géométrie OSM du pont (§11.2 du doc 01)
