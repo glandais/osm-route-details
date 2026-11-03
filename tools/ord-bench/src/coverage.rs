@@ -55,6 +55,71 @@ pub fn minimums_for(bench: &Path, increment: &str) -> anyhow::Result<Value> {
     Ok(m)
 }
 
+/// Valeur de `bloquant` d'un critère de série conditionné à sa couverture (`serie_v12.E3`,
+/// README §4 quinquies.2, criteria `serie_v12_e3_si_couverture`).
+pub const BLOQUANT_SI_COUVERTURE: &str = "si_couverture_atteinte";
+
+/// Couverture d'un critère comptée **avant toute mesure** (manifest `serie_<clé>.couverture.<crit>`,
+/// écrite par `tools/couverture_v1.py`, sans le service), comparée au minimum de jugement de
+/// l'incrément (`minimums_for`). Renvoie `(atteinte, détail)` ; le détail (comptes du manifest et
+/// minimum, aucun identifiant) est rapporté au jugement.
+///
+/// Les clés du manifest ne sont pas celles de `criteria.yaml` (E3 : `mnh_10m` pour
+/// `ponts_mnh_10m_min`) : chaque minimum se lit sur la clé du manifest de même nom, sinon sur la
+/// plus longue qui y est contenue. Aucun refus deviné : couverture absente du manifest, minimum
+/// sans clé correspondante ou minimum du manifest différent de celui de `criteria.yaml` = erreur,
+/// le gel et le jugement s'arrêtent.
+pub fn coverage_before_measure(
+    bench: &Path,
+    increment: &str,
+    criterion: &str,
+) -> anyhow::Result<(bool, Value)> {
+    let manifest = std::fs::read_to_string(bench.join("manifest.yaml")).context("manifest.yaml")?;
+    let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&manifest).context("manifest.yaml illisible")?;
+    let key = increment_key(increment);
+    let cov: Value = serde_json::to_value(&root[key.as_str()]["couverture"][criterion])?;
+    let reached = &cov["atteint"];
+    anyhow::ensure!(
+        reached.is_object(),
+        "{criterion} de {increment} : couverture comptée avant toute mesure absente du manifest \
+         ({key}.couverture.{criterion}.atteint) : bloquant ou non, indécidable"
+    );
+    let mins = minimums_for(bench, increment)?;
+    let mins = mins[criterion].as_object().with_context(|| {
+        format!("{criterion} : minimum de jugement absent de criteria.yaml (couverture.minimums)")
+    })?;
+    let lookup = |obj: &Value, k: &str| -> Option<(String, f64)> {
+        let o = obj.as_object()?;
+        if let Some(v) = o.get(k).and_then(Value::as_f64) {
+            return Some((k.to_owned(), v));
+        }
+        o.iter()
+            .filter(|(m, v)| k.contains(m.as_str()) && v.is_number())
+            .max_by_key(|(m, _)| m.len())
+            .and_then(|(m, v)| Some((m.clone(), v.as_f64()?)))
+    };
+    let mut ok = true;
+    let mut detail = serde_json::Map::new();
+    for (k, min) in mins {
+        let Some(min) = min.as_f64() else { continue };
+        let (mk, got) = lookup(reached, k).with_context(|| {
+            format!("{criterion} de {increment} : minimum {k} sans compte au manifest ({key}.couverture)")
+        })?;
+        if let Some((_, declared)) = lookup(&cov["minimum"], k) {
+            anyhow::ensure!(
+                (declared - min).abs() < 1e-9,
+                "{criterion} de {increment} : minimum {k} du manifest ({declared}) différent de criteria.yaml ({min})"
+            );
+        }
+        ok &= got >= min;
+        detail.insert(k.clone(), json!({"manifest": mk, "atteint": got, "minimum": min}));
+    }
+    Ok((
+        ok,
+        json!({"source": format!("manifest {key}.couverture.{criterion}"), "atteinte": ok, "comptes": detail}),
+    ))
+}
+
 /// Groupes E2b exigés d'une série (`E2b.groupes_exiges`) reportés dans les minimums.
 pub fn apply_series_rules(minimums: &mut Value, rules: &Value) {
     if let Some(groups) = rules["E2b"]["groupes_exiges"].as_array() {

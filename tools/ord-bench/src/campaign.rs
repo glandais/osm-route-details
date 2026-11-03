@@ -69,7 +69,7 @@ pub fn select_series<'a>(
 
 /// Traces de l'autre série lues en extraits autour des éléments de la série mesurée
 /// (`passages_masques`, README §2) : traces exclues de la sélection qui en ont. En calibration,
-/// jamais une trace d'une série nouvelle tenue à l'écart (V1, V1.1) : seul `judge` l'ouvre.
+/// jamais une trace d'une série nouvelle tenue à l'écart (V1, V1.1, V1.2) : seul `judge` l'ouvre.
 pub fn extract_sources<'a>(
     manifest: &'a Manifest,
     selection: &Selection<'_>,
@@ -94,8 +94,8 @@ pub fn ouvrage_refs(paths: &BenchPaths) -> anyhow::Result<BTreeMap<String, Vec<L
         files.push(paths.private.join("ouvrages-perso.json"));
     }
     if paths.private_present() {
-        // Séries V1 et V1.1 : ouvrages, croisements et extrémités des témoins des deux séries
-        // (masques), index seulement.
+        // Séries V1, V1.1 et V1.2 : ouvrages, croisements et extrémités des témoins des deux
+        // séries (masques), index seulement.
         let manifest = Manifest::load(&paths.bench)?;
         for sec in manifest.sections() {
             out.extend(crate::v1::refs(paths, sec)?);
@@ -1928,7 +1928,7 @@ struct Pass {
     planned: Vec<Value>,
 }
 
-/// Séries V1 et V1.1 d'une campagne (manifest `perso_v1`, `perso_v11`) : séries par cas, témoins
+/// Séries V1, V1.1 et V1.2 d'une campagne (manifest `perso_v1`, `perso_v11`, `perso_v12`) : séries par cas, témoins
 /// de la série mesurée, itinéraires planifiés retenus. Vide sans `bench/private/` ou sans section.
 #[derive(Clone, Debug, Default)]
 pub struct V1Ctx {
@@ -1937,9 +1937,9 @@ pub struct V1Ctx {
     pub planned: crate::v1::PlannedSelection,
 }
 
-/// Contexte V1 et V1.1 d'une campagne de la série `target` : l'autre série est retirée des index
-/// ici, avant tout calcul ; chaque section est lue avec son propre index (`series-v1.csv`,
-/// `series-v11.csv`), empreinte vérifiée.
+/// Contexte V1, V1.1 et V1.2 d'une campagne de la série `target` : l'autre série est retirée des
+/// index ici, avant tout calcul ; chaque section est lue avec son propre index (`series-v1.csv`,
+/// `series-v11.csv`, `series-v12.csv`), empreinte vérifiée.
 pub fn v1_ctx(
     paths: &BenchPaths,
     manifest: &Manifest,
@@ -1966,16 +1966,19 @@ impl V1Ctx {
     }
 }
 
-/// Cas V1.1 au jugement V1.1 (README §4 ter.10, 22dbba7) : jugé entier, sans aucun masque ; les
-/// fenêtres des éléments de calibration qu'il franchit ne sont ni masquées ni tirées en extraits
-/// (`fenetres_calibration` de `series-v11.csv` n'est jamais lue). En calibration, ses éléments
-/// restent masqués sur les traces de calibration.
+/// Cas d'une série tenue à l'écart entière (V1.1 : README §4 ter.10, 22dbba7 ; V1.2 : README
+/// §4 quinquies, manifest `perso_v12.regle_serie`) à son jugement : jugé entier, sans aucun
+/// masque ; les fenêtres des éléments de calibration qu'il franchit ne sont ni masquées ni tirées
+/// en extraits (`fenetres_calibration` de `series-v11.csv` ou `series-v12.csv` n'est jamais lue).
+/// En calibration, ses éléments restent masqués sur les traces de calibration. Une série déjà jugée
+/// (calibration) et V1 (jugée avec masques et extraits) ne sont pas concernées.
 pub fn judged_whole(manifest: &Manifest, target: Serie, id: &str) -> bool {
     target == Serie::TenueALEcart
-        && manifest
-            .v11
-            .as_ref()
-            .is_some_and(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
+        && [manifest.v11.as_ref(), manifest.v12.as_ref()]
+            .into_iter()
+            .flatten()
+            .filter(|v| !v.judged)
+            .any(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
 }
 
 /// Masques ajoutés à un cas : éléments V1 de l'autre série sur son parcours (index seulement).
@@ -2139,7 +2142,7 @@ async fn measure_pass(service: &Service, ctx: &PassCtx<'_>) -> anyhow::Result<Pa
     // passages des ouvrages de la série mesurée seulement (`passages_masques`), sur des extraits
     // (README §2 ; aucune métrique de trace, rien hors des fenêtres de ± 500 m).
     let mut held_out_measured = Vec::new();
-    // Traces V1 et V1.1 tenues à l'écart : jamais ouvertes en calibration (seul `judge` les lit),
+    // Traces V1, V1.1 et V1.2 tenues à l'écart : jamais ouvertes en calibration (seul `judge` les lit),
     // leurs ouvrages de calibration perdent ces passages.
     for t in extract_sources(manifest, selection, target).into_iter().filter(|_| paths.private_present()) {
         let Ok(loaded) = load_perso(paths, t, &rules) else {
@@ -2478,7 +2481,7 @@ pub async fn run_series(
     let rules_fingerprint = sha256_bytes(serde_json::to_string(&rules_core)?.as_bytes());
     let bench_rules_sha256 = sha256_bytes(serde_json::to_string(&rules)?.as_bytes());
     // Traces de l'autre série : exclues (et lues en extraits autour des ouvrages mesurés).
-    // Incrément : V1 en calibration ; au jugement, la série nouvelle tenue à l'écart (V1.1).
+    // Incrément : V1 en calibration ; au jugement, la série nouvelle tenue à l'écart (V1.2).
     let increment = match target {
         Serie::Calibration => "V1",
         Serie::TenueALEcart => {
@@ -2546,6 +2549,7 @@ pub async fn run_series(
                 "Tronçons .partN recollés en un cas (E1 sur la grille entière, D+ du profil recollé) ; segments .sN : un cas chacun",
                 "Série V1 (README §4 ter.4) : série tenue à l'écart du MVP jugée (judgements.md), devenue calibration avec ses ouvrages, fenêtres masquées du MVP retirées ; traces perso_v1 selon leur série ; ouvrages et croisements de ouvrages-v1.json, témoins de temoins-v1.json et itinéraires de series-v1.csv (par_cas : cas de la calibration pour ses seuls éléments de calibration) ; index lus, vérifiés par empreinte et l'autre série retirée avant tout calcul ; fichiers des cas de l'autre série jamais ouverts en calibration (traces, recalages, itinéraires, références ; ni extraits des traces V1 tenues à l'écart) ; éléments V1 de l'autre série dont tous les points sont à ≤ 40 m d'un cas masqués comme les passages_masques (masques_v1_implicites) ; fenêtre d'un témoin = tout son tronçon ± 500 m",
                 "Série V1.1 (manifest perso_v11, serie_v11 ; README §4 ter.10, 7b1a4e9, 22dbba7), tenue à l'écart entière : en calibration, traces, itinéraires, témoins et extraits V1.1 jamais ouverts (index ouvrages-v11.json, temoins-v11.json, series-v11.csv lus, vérifiés par empreinte, la série retirée avant tout calcul) ; éléments V1.1 (nv-606 et suivants) dont tous les points sont à ≤ 40 m d'une trace ou d'un itinéraire de calibration masqués ; au jugement V1.1, traces et itinéraires V1.1 jugés entiers, sans aucun masque, sans extrait de calibration, E3 et E5 sur les seuls éléments V1.1 ; colonne fenetres_calibration jamais lue ; R1, R2 et R3 : instantané OSM de la date du recalage de chaque cas (perso_v1.osm_tags_reference pour MVP et V1, perso_v11 ou serie_v11.osm_tags_reference pour V1.1), empreinte vérifiée, absent ou faux = refus ; au jugement V1.1, E3 rapporté non bloquant et minimum E2b sur dplus et plaine seulement (criteria serie_tenue_a_l_ecart.serie_v11)",
+                "Série V1.2 (manifest perso_v12, serie_v12 ; README §4 quinquies), tenue à l'écart entière, MVP, V1 et V1.1 en calibration (ouvrages complement_v11 nv-840 à nv-947 compris, V1.1 jugée) : en calibration, traces, itinéraires, témoins et extraits V1.2 jamais ouverts (index ouvrages-v12.json, temoins-v12.json, temoins-v12-tags.json, series-v12.csv lus, vérifiés par empreinte, la série retirée avant tout calcul) ; éléments V1.2 (nv-948 et suivants) dont tous les points sont à ≤ 40 m d'une trace ou d'un itinéraire de calibration masqués ; au jugement V1.2, traces et itinéraires V1.2 jugés entiers, sans aucun masque, sans extrait de calibration, E3 et E5 sur les seuls éléments V1.2 ; colonne fenetres_calibration jamais lue ; instantanés de la section (recalage et osm_tags_reference de serie_v12, osm_tags_toutes, campagne tuiles_2026_11_03) ; au jugement V1.2, Q1 rapporté non bloquant, E3 bloquant si la couverture comptée avant toute mesure (manifest serie_v12.couverture.E3, couverture_v1.py) atteint le minimum de jugement, sinon rapporté sans refus (criteria serie_tenue_a_l_ecart.serie_v12 : bloquant si_couverture_atteinte)",
                 "Itinéraires planifiés (README §4 ter.4) : GPX tel quel, sans baro ni recalage, rééchantillonné à 25 m ; E4 / S2 mesurés comme une trace sans baro (pas d'E1, E2, E2b ; M1 rapporté dans agregats.planifies, non jugé) ; trace brute de l'attribution = l'itinéraire ; R1/R2 comme les parcours d'osm-surface (référence Valhalla FOSSGIS au format osm-surface, ligne rééchantillonnée à 25 m), M1 jugé comme pour osm-surface",
                 "Croisements E5 V1 (point de croisement seul, voie du dessous lue dans les tuiles : périmètre et voie = voie au sol la plus proche, §4 bis.1) : passage = trace à ≤ 40 m du croisement ; compté seulement si, à ± 25 m du croisement, la trace suit la voie du dessous au moins aussi bien que tout pont ou tunnel des tuiles (même lecture que l'attribution, §4 ter.2), sinon E5_passage_dessus, rapporté (agregats.ouvrages.E5.passages_dessus), non compté ; voie ou tuile absente : attribution_indeterminee, compté",
                 "S2 des témoins V1 (README §4 ter.4–6, lecture du banc) : tronçon entre les stations les plus proches (≤ 40 m) de debut et fin, sur une sortie comme sur un itinéraire planifié, ou itinéraire planifié entier pour un témoin sans extrémités (README §4 ter.6, affc041) ; retirés de la longueur, des ouvrages fictifs et de la longueur typée : plages hors graphe vélo (§4 ter.5) et abords à 100 m de tout pont ou tunnel des tuiles de la campagne (ouvrage réel, jamais fictif) ; ouvrage fictif = suite de stations typées pont ou tunnel par le service hors de ces plages ; covered et avalanche_protector (absents du schéma des tuiles) non lus sur ces témoins ; témoin non retrouvé : cas_sautes",
@@ -2685,7 +2689,7 @@ async fn fill_cache_inner(
     // (fenêtre ± 1 km, README §2), jamais de la trace entière.
     if paths.private_present() {
         let refs = ouvrage_refs(paths)?;
-        // Traces V1 et V1.1 tenues à l'écart : jamais ouvertes en calibration.
+        // Traces V1, V1.1 et V1.2 tenues à l'écart : jamais ouvertes en calibration.
         for t in extract_sources(&manifest, &selection, target) {
             let Ok(loaded) = load_perso(paths, t, &rules) else { continue };
             for case in loaded {
@@ -3020,6 +3024,7 @@ mod tests {
             hors_git: Vec::new(),
             v1: None,
             v11: None,
+            v12: None,
             mvp_judged: false,
         };
         // Jugement : la trace tenue à l'écart est dans les cas mesurés en entier, pas dans la

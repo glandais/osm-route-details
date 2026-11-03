@@ -25,7 +25,8 @@ fn held_out_cases_are_excluded_before_any_read() {
     let manifest = ord_bench::manifest::Manifest::load(&BenchPaths::repo_bench()).expect("manifest");
     let all = ord_bench::campaign::select(&manifest, &[], &[]);
     // Série tenue à l'écart du manifest : exclue, négatifs à part. Depuis le jugement V1.1
-    // (bench/judgements.md), ses 36 traces sont en calibration et la série est vide.
+    // (bench/judgements.md), ses 36 traces sont en calibration ; la série tenue à l'écart est
+    // V1.2 (`perso_v12`, README §4 quinquies) : ses 32 traces, perso-166 à perso-197, aucun négatif.
     let held: Vec<&str> = manifest
         .traces
         .iter()
@@ -33,7 +34,13 @@ fn held_out_cases_are_excluded_before_any_read() {
         .map(|t| t.id.as_str())
         .collect();
     assert_eq!(all.excluded_held_out, held);
-    assert!(held.is_empty(), "{held:?}");
+    let v12 = manifest.v12.as_ref().expect("section perso_v12");
+    assert!(!v12.judged);
+    let expected: Vec<String> = (166..=197).map(|k| format!("perso-{k}")).collect();
+    assert_eq!(held, expected);
+    assert!(held.iter().all(|id| v12.traces.contains(*id)));
+    assert!(!all.cases.iter().any(|t| v12.traces.contains(&t.id)));
+    assert_eq!(manifest.tile_campaign(v12).map(|c| c.id.as_str()), Some("tuiles_2026_11_03"));
     let v11 = manifest.v11.as_ref().expect("section perso_v11");
     assert!(v11.judged);
     assert_eq!(all.cases.iter().filter(|t| v11.traces.contains(&t.id)).count(), 36);

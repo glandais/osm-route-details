@@ -96,7 +96,8 @@ pub struct Planned {
     pub retire: Option<String>,
 }
 
-/// Section d'une série nouvelle du manifest (`perso_v1` pour V1, `perso_v11` pour V1.1) : index
+/// Section d'une série nouvelle du manifest (`perso_v1` pour V1, `perso_v11` pour V1.1,
+/// `perso_v12` pour V1.2) : index
 /// des ouvrages, témoins et séries (hors git, par empreinte), itinéraires planifiés et
 /// identifiants des traces de la série. Le recalage et l'instantané OSM de ses références sont lus
 /// dans la section, sinon dans `serie_<clé>` (V1.1 : `serie_v11.recalage`,
@@ -161,6 +162,10 @@ pub struct Manifest {
     /// Section `perso_v11` (série V1.1, tenue à l'écart entière ; décision de l'utilisateur,
     /// 2026-11-02), absente avant sa constitution : ses cas ne sont alors jamais lus.
     pub v11: Option<PersoV1>,
+    /// Section `perso_v12` (série V1.2, tenue à l'écart entière ; décisions de l'utilisateur,
+    /// 2026-11-03, README §4 quinquies), absente avant sa constitution : ses cas ne sont alors
+    /// jamais lus.
+    pub v12: Option<PersoV1>,
     /// Série tenue à l'écart du MVP jugée (`judgements.md`) : devenue calibration (README §2,
     /// point 3) ; ses traces, ses ouvrages et leurs fenêtres masquées le sont pour V1.
     pub mvp_judged: bool,
@@ -242,8 +247,18 @@ pub const SECTION_V1: SectionKeys =
     SectionKeys { perso: "perso_v1", serie: "serie_v1", suffix: "v1", name: "V1" };
 pub const SECTION_V11: SectionKeys =
     SectionKeys { perso: "perso_v11", serie: "serie_v11", suffix: "v11", name: "V1.1" };
+pub const SECTION_V12: SectionKeys =
+    SectionKeys { perso: "perso_v12", serie: "serie_v12", suffix: "v12", name: "V1.2" };
 
-/// Section d'une série nouvelle (`perso_v1`, `perso_v11`) ; ses traces sont ajoutées à `traces`.
+/// Séries nouvelles du manifest, dans l'ordre des incréments.
+pub const SECTIONS: [&SectionKeys; 3] = [&SECTION_V1, &SECTION_V11, &SECTION_V12];
+
+/// Clés d'un incrément (`V1`, `V1.1`, `V1.2`).
+pub fn section_keys(name: &str) -> Option<&'static SectionKeys> {
+    SECTIONS.into_iter().find(|k| k.name == name)
+}
+
+/// Section d'une série nouvelle (`perso_v1`, `perso_v11`, `perso_v12`) ; ses traces sont ajoutées à `traces`.
 /// Absente : `None`, ses cas ne sont jamais lus.
 fn parse_section(
     root: &Value,
@@ -353,6 +368,7 @@ impl Manifest {
         let mut traces = parse_traces(root.get("perso"), "perso")?;
         let v1 = parse_section(&root, &SECTION_V1, &mut traces)?;
         let v11 = parse_section(&root, &SECTION_V11, &mut traces)?;
+        let v12 = parse_section(&root, &SECTION_V12, &mut traces)?;
         let hors_git = match root.get("hors_git") {
             Some(Value::Sequence(items)) => items
                 .iter()
@@ -393,15 +409,16 @@ impl Manifest {
             traces,
             v1,
             v11,
+            v12,
             mvp_judged: false,
         })
     }
 
     /// Série MVP jugée (README §2, point 3) : ses traces et ses ouvrages tenus à l'écart deviennent
     /// calibration, et les fenêtres masquées des traces du MVP (ouvrages d'une autre série au MVP)
-    /// n'ont plus lieu d'être. Les traces V1 et V1.1 gardent leur série et leurs fenêtres.
+    /// n'ont plus lieu d'être. Les traces V1, V1.1 et V1.2 gardent leur série et leurs fenêtres.
     pub fn with_mvp_judged(mut self) -> Self {
-        // Traces des séries nouvelles (V1, V1.1) : leur série et leurs fenêtres restent.
+        // Traces des séries nouvelles (V1, V1.1, V1.2) : leur série et leurs fenêtres restent.
         let new: BTreeSet<String> = self.sections().flat_map(|v| v.traces.iter().cloned()).collect();
         for t in self.traces.iter_mut().filter(|t| !new.contains(&t.id)) {
             t.serie = Serie::Calibration;
@@ -421,11 +438,13 @@ impl Manifest {
         self.with_judged("V1")
     }
 
-    /// Série nouvelle `name` (`V1`, `V1.1`) jugée (README §2, point 3) : comme `with_v1_judged`.
+    /// Série nouvelle `name` (`V1`, `V1.1`, `V1.2`) jugée (README §2, point 3) : comme
+    /// `with_v1_judged`.
     pub fn with_judged(mut self, name: &str) -> Self {
         let slot = match name {
             n if n == SECTION_V1.name => self.v1.as_mut(),
             n if n == SECTION_V11.name => self.v11.as_mut(),
+            n if n == SECTION_V12.name => self.v12.as_mut(),
             _ => None,
         };
         let Some(sec) = slot else { return self };
@@ -438,24 +457,28 @@ impl Manifest {
     }
 
     /// Sections des séries nouvelles présentes au manifest, avec leur incrément, dans l'ordre (V1,
-    /// puis V1.1).
+    /// V1.1, puis V1.2).
     pub fn named_sections(&self) -> impl Iterator<Item = (&'static str, &PersoV1)> {
-        [(SECTION_V1.name, self.v1.as_ref()), (SECTION_V11.name, self.v11.as_ref())]
-            .into_iter()
-            .filter_map(|(n, v)| Some((n, v?)))
+        [
+            (SECTION_V1.name, self.v1.as_ref()),
+            (SECTION_V11.name, self.v11.as_ref()),
+            (SECTION_V12.name, self.v12.as_ref()),
+        ]
+        .into_iter()
+        .filter_map(|(n, v)| Some((n, v?)))
     }
 
-    /// Sections des séries nouvelles présentes au manifest (V1, puis V1.1).
+    /// Sections des séries nouvelles présentes au manifest (V1, V1.1, puis V1.2).
     pub fn sections(&self) -> impl Iterator<Item = &PersoV1> {
         self.named_sections().map(|(_, v)| v)
     }
 
-    /// Section d'un incrément (`V1`, `V1.1`).
+    /// Section d'un incrément (`V1`, `V1.1`, `V1.2`).
     pub fn section(&self, name: &str) -> Option<&PersoV1> {
         self.named_sections().find(|(n, _)| *n == name).map(|(_, v)| v)
     }
 
-    /// Trace ou itinéraire d'une série nouvelle (V1, V1.1) : ses fichiers ne sont jamais ouverts
+    /// Trace ou itinéraire d'une série nouvelle (V1, V1.1, V1.2) : ses fichiers ne sont jamais ouverts
     /// tant que la série est tenue à l'écart, extraits compris.
     pub fn is_new_series(&self, id: &str) -> bool {
         self.sections().any(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
@@ -475,7 +498,7 @@ impl Manifest {
     /// de la série tenue à l'écart mesure tout ce qui l'est).
     pub fn held_out_increment(&self, increment: &str) -> anyhow::Result<&PersoV1> {
         let sec = self.section(increment).with_context(|| {
-            format!("incrément {increment} : section de ses cas absente du manifest (perso_v1, perso_v11)")
+            format!("incrément {increment} : section de ses cas absente du manifest (perso_v1, perso_v11, perso_v12)")
         })?;
         anyhow::ensure!(!sec.judged, "incrément {increment} déjà jugé (judgements.md)");
         let others: Vec<&str> =
@@ -518,9 +541,9 @@ impl Manifest {
         } else {
             manifest
         };
-        // De même pour V1 (README §2, point 3), jugée le 2026-11-02, puis V1.1.
+        // De même pour V1 (README §2, point 3), jugée le 2026-11-02, puis V1.1 et V1.2.
         let mut manifest = manifest;
-        for name in [SECTION_V1.name, SECTION_V11.name] {
+        for name in SECTIONS.map(|k| k.name) {
             if crate::judge::already_judged(&judgements, name) {
                 manifest = manifest.with_judged(name);
             }

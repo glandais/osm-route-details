@@ -41,6 +41,8 @@ pub mod typology;
 pub mod v1;
 #[cfg(test)]
 mod v11_tests;
+#[cfg(test)]
+mod v12_tests;
 
 use std::path::{Path, PathBuf};
 
@@ -206,7 +208,12 @@ impl BenchPaths {
 /// instantanés `osm_tags_toutes` du manifest) exclues et rapportées (`tags_differents`), avant
 /// l'erreur de la référence, plages d'erreur coupées aux sauts de s_origine ; défauts d'outil
 /// corrigés : itinéraire `par_cas` d'une série jugée passé en calibration, `fill-cache` sans
-/// téléchargement de tuile de rue hors de la campagne datée du manifest (`tuiles_*`).
+/// téléchargement de tuile de rue hors de la campagne datée du manifest (`tuiles_*`). Sous
+/// `bench3`, série tenue à l'écart V1.2 lue (`perso_v12`, `serie_v12` ; README §4 quinquies) comme
+/// V1.1 : en calibration (MVP, V1, V1.1), aucun cas V1.2 ouvert, ses éléments (`nv-948` et
+/// suivants) masqués sur les cas de calibration ; au jugement V1.2, cas jugés entiers sans masque
+/// ni extrait, Q1 non bloquant, E3 bloquant si la couverture comptée avant toute mesure (manifest
+/// `serie_v12.couverture.E3`) atteint son minimum, sinon rapporté sans refus.
 pub const BENCH_REVISION: Option<&str> = Some("bench3");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`

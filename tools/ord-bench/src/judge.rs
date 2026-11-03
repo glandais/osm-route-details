@@ -40,6 +40,9 @@ pub fn current_gel(paths: &crate::BenchPaths, increment: &str) -> anyhow::Result
     held_out_increment(paths, increment)?;
     let report = crate::check::check(paths)?;
     crate::campaign::ensure_check(&report)?;
+    // Critères bloquants de l'incrément décidables avant le gel (README §4 quinquies.2 : couverture
+    // comptée avant toute mesure, au manifest) ; indécidable = refus, plutôt qu'au jugement.
+    blocking_criteria_for(&paths.bench, increment)?;
     let rules = crate::BenchRules::default();
     Ok(Gel {
         increment: increment.to_owned(),
@@ -280,13 +283,45 @@ pub fn blocking_criteria(bench: &Path) -> anyhow::Result<BTreeSet<String>> {
 /// Critères bloquants au jugement d'un incrément : ceux de `criteria.yaml`, moins ceux que les
 /// règles de sa série déclarent non bloquants (`serie_tenue_a_l_ecart.serie_v11.E3.bloquant:
 /// false`, README §4 ter.10, 7b1a4e9 : E3 rapporté sur V1.1, échec ou minimum non atteint sans
-/// refus).
+/// refus ; `serie_v12.Q1.bloquant: false`, README §4 quinquies.1), et moins ceux dont le caractère
+/// bloquant dépend de la couverture comptée avant toute mesure quand elle n'atteint pas le minimum
+/// (`serie_v12.E3.bloquant: si_couverture_atteinte`, README §4 quinquies.2 ; `conditional_blocking`).
 pub fn blocking_criteria_for(bench: &Path, increment: &str) -> anyhow::Result<BTreeSet<String>> {
     let mut out = blocking_criteria(bench)?;
     let rules = crate::coverage::series_rules(bench, increment)?;
     for (crit, r) in rules.as_object().into_iter().flatten() {
         if r["bloquant"] == false {
             out.remove(crit);
+        }
+    }
+    for (crit, (reached, _)) in conditional_blocking(bench, increment)? {
+        if !reached {
+            out.remove(&crit);
+        }
+    }
+    Ok(out)
+}
+
+/// Critères d'une série bloquants sous condition de couverture (`bloquant: si_couverture_atteinte`,
+/// README §4 quinquies.2, criteria `serie_v12_e3_si_couverture`) : pour chacun, la couverture de la
+/// série comptée avant toute mesure (manifest `serie_<clé>.couverture`, `couverture_v1.py`) atteint-
+/// elle le minimum de jugement ? Atteinte : le critère reste bloquant, avec ses règles ordinaires
+/// (échec, sauté ou sous le minimum mesuré au jugement = refus, `refus_si`) ; non atteinte : il est
+/// rapporté sans refuser (`sous_minimum: rapporte`). Une autre valeur textuelle de `bloquant` est
+/// refusée plutôt que devinée.
+pub fn conditional_blocking(
+    bench: &Path,
+    increment: &str,
+) -> anyhow::Result<std::collections::BTreeMap<String, (bool, Value)>> {
+    let rules = crate::coverage::series_rules(bench, increment)?;
+    let mut out = std::collections::BTreeMap::new();
+    for (crit, r) in rules.as_object().into_iter().flatten() {
+        match &r["bloquant"] {
+            Value::String(v) if v == crate::coverage::BLOQUANT_SI_COUVERTURE => {
+                out.insert(crit.clone(), crate::coverage::coverage_before_measure(bench, increment, crit)?);
+            }
+            Value::String(v) => bail!("criteria.yaml : {crit}.bloquant = {v} inconnu pour {increment}"),
+            _ => {}
         }
     }
     Ok(out)
@@ -428,6 +463,7 @@ where
 {
     preflight(repo, bench, increment, gel_commit, current, armed)?;
     let blocking = blocking_criteria_for(bench, increment)?;
+    let conditional = conditional_blocking(bench, increment)?;
     let out = report_dir.join("results.json");
     ensure!(!out.exists(), "{} existe déjà : rapport non réécrit", out.display());
     let mut results = measure().await?;
@@ -447,6 +483,19 @@ where
         let minimums = crate::coverage::minimums_for(bench, increment)?;
         crate::coverage::apply_minimums(&mut results, &minimums);
         results["campagne"]["couverture_minimums"] = minimums;
+    }
+    // Critères bloquants sous condition de couverture (README §4 quinquies.2) : décision et
+    // comptes d'avant toute mesure, rapportés.
+    if !conditional.is_empty() {
+        results["campagne"]["bloquant_si_couverture"] = conditional
+            .iter()
+            .map(|(c, (reached, detail))| {
+                let mut d = detail.clone();
+                d["bloquant"] = Value::Bool(*reached);
+                (c.clone(), d)
+            })
+            .collect::<serde_json::Map<_, _>>()
+            .into();
     }
     std::fs::create_dir_all(&report_dir)?;
     std::fs::write(&out, serde_json::to_string_pretty(&results)? + "\n")?;
@@ -707,6 +756,7 @@ mod tests {
             hors_git: Vec::new(),
             v1: None,
             v11: None,
+            v12: None,
             mvp_judged: false,
         };
         let held = crate::campaign::select_series(&m, &[], &[], Serie::TenueALEcart);
