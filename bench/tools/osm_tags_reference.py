@@ -13,7 +13,16 @@ highway, tracktype}}}. Le banc la lit sans appel réseau ; son empreinte va au m
 sortie existant est complété (voies déjà présentes non redemandées).
 Sortie standard : nombre de voies demandées, trouvées, et de voies en revêtement dur sans ambiguïté.
 
-Usage : osm_tags_reference.py DATE sortie.json fichier.surface.csv ...
+Avec --toutes (README §4 quater.1, décision de l'utilisateur, 2026-11-03, à partir de V1.2) : toutes
+les voies des fichiers, quelle que soit leur classe, pour comparer les tags `highway`, `surface` et
+`tracktype` entre la date OSM des tuiles de la campagne et celle des données du serveur Valhalla
+(un instantané par date, même liste de voies). Le fichier de sortie note `voies_retenues: toutes`,
+et un fichier écrit sans l'option n'est pas complété avec elle (ni l'inverse).
+Avec --diff A.json B.json : nombre de voies dont ces tags diffèrent entre les deux instantanés, ou
+absentes de l'un des deux (sans identifiant à la sortie standard).
+
+Usage : osm_tags_reference.py [--toutes] DATE sortie.json fichier.surface.csv ...
+        osm_tags_reference.py --diff A.json B.json
 """
 import csv
 import json
@@ -45,15 +54,32 @@ def query(date, ids):
     raise RuntimeError("Overpass indisponible")
 
 
-def main(date, out, *paths):
+def diff(a, b):
+    da, db = json.load(open(a)), json.load(open(b))
+    ids = set(map(int, da.get("demandees", []))) & set(map(int, db.get("demandees", [])))
+    ta, tb = da["tags"], db["tags"]
+    absentes = sum(1 for i in ids if (str(i) in ta) != (str(i) in tb))
+    differentes = sum(1 for i in ids if str(i) in ta and str(i) in tb and ta[str(i)] != tb[str(i)])
+    print(json.dumps({"dates": [da["date"], db["date"]], "voies_communes": len(ids), "tags_differents": differentes,
+                      "absentes_d_un_instantane": absentes}))
+
+
+def main(*args):
+    if args and args[0] == "--diff":
+        return diff(*args[1:])
+    toutes = bool(args) and args[0] == "--toutes"
+    date, out, *paths = args[1:] if toutes else args
     ids = set()
     for p in paths:
         for r in csv.DictReader(open(p)):
-            if r.get("way_id") and r.get("surface") in NON_REVETU:
+            if r.get("way_id") and (toutes or r.get("surface") in NON_REVETU):
                 ids.add(int(float(r["way_id"])))
-    doc = json.load(open(out)) if os.path.exists(out) else {"date": date, "source": URL, "tags": {}}
+    retenues = "toutes" if toutes else "non_revetues"
+    doc = json.load(open(out)) if os.path.exists(out) else {"date": date, "source": URL, "voies_retenues": retenues, "tags": {}}
     if doc["date"] != date:
         raise SystemExit(f"{out} est daté {doc['date']}, pas {date}")
+    if doc.get("voies_retenues", "non_revetues") != retenues:
+        raise SystemExit(f"{out} retient les voies {doc.get('voies_retenues', 'non_revetues')}, pas {retenues}")
     asked = set(map(int, doc.get("demandees", [])))
     todo = sorted(ids - asked)
     for k in range(0, len(todo), BATCH):
