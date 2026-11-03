@@ -2264,3 +2264,425 @@ tuiles_2026_11_03:   # campagne de tuiles datée de la série V1.2, sur ses seul
     lu_le: "2026-11-03T14:11Z"   # lu après les tuiles ; rattachement au build non vérifié tuile par tuile
     fichier: private/tuiles/versatiles-meta-v12.json   # copie de https://tiles.versatiles.org/tiles/osm/meta.json
     sha256: 43ad4b7dc72a4bb109974f0489592015f11474ddb242ee7d8021e15bb9cbae90
+
+serie_v12:   # série tenue à l'écart V1.2 (décisions de l'utilisateur, 2026-11-03, README §4 quinquies) ; MVP, V1 et V1.1 en calibration
+  date_tirage: "2026-11-03"
+  sel: "osm-route-details:v1.2:"
+  outil: tools/tirage_v11.py   # SERIE=v12
+  vivier: {source: "private/strava/inventaire.json (polylignes réduites, sans téléchargement, non rafraîchi)", types: [Ride, GravelRide, MountainBikeRide], depuis: "2014-01-01", france: true,
+           jamais_utilisees: "ni MVP, ni V1, ni V1.1, négatifs compris", min_inedit_km: 50, cellule_m: 200, sorties: 117, km: 21822}
+  selection: {sorties: 45, km: 8588, reserve: "suite de l'ordre sha256(sel + id), lue dans l'ordre si un minimum n'est pas atteint (non lue)"}
+  q1: {suspectes_jamais_utilisees: 22, retenus: 0, regle: "défaut attesté (930f6e8) : aucune ; Q1 rapporté (README §4 quinquies.1)"}
+  planifies_prevus: {e4: "2 à 3, tunnels jamais vus", s2: "3 à 4", r1_r2: "4 à 5, 400 km au moins, hors des régions déjà utilisées"}
+  planifies_retenus: {e4: 3, s2: 1, s2_retires: 2, r1_r2: 5}   # README §4 quinquies.4
+  tout_tenu_a_l_ecart: true
+  empreintes:   # fichiers de bench/private/
+    v12/tirage.json: 557fd34ec505d9008a22c74c6aeec347e56f15efa83ded11ada465f67e751c60
+    v12/selection.json: ccd77b7106d64d5a1e3eb031227e03dcb376f67fae7e535aa886b5f894b98fee
+    v12/perso-map-v12.csv: ac463ec8a3d0f929deca0a853306c536e53235e74d91b8d79463f0416f3b174f   # tools/traces_v11.py (SERIE=v12) : perso-166 à perso-197
+    v12/couverture-cas.json: da9bcd0999fee5eeec995f2ff6d6ac639a095ac5cde1b5453519e8723a012ebd
+    v12/affectation-tirage.json: 85a04c691a9c4d8a9e5147c113e26c38aeb930a522ff7bfc1b48de79c732a989   # tirage.json jamais réécrit
+    v12/planifies/specs.json: 4df3970f02c1c570a9f03043d5f27a8b38cf112ee6fe993a70210940eb98d72a
+  recalage: {service: "Valhalla FOSSGIS trace_attributes", donnees_serveur: "2026-11-03T06:24:42Z", traces: 32, planifies_r: 5}
+  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, trouvees: 1140, revetement_dur_sur_non_revetu_valhalla: 0}
+  osm_tags_toutes:   # README §4 quater.1 et .5 ; --toutes, voies des 5 parcours R1_R2 de V1.2 ; --diff : 1 407 voies communes, 3 aux tags différents, 0 absente
+    - {fichier: private/osm-tags/toutes-v12-2026-10-19T00-00Z.json, sha256: e610c7cf03ed687c1efece2c8811118f1e31fdf65ae86d2e68180918efb2cd3a, date: "2026-10-19T00:00:04Z", voies: 1407, trouvees: 1407}   # date OSM des tuiles (tuiles_2026_11_03)
+    - {fichier: private/osm-tags/toutes-v12-2026-11-03T06-24Z.json, sha256: 6171ff653d0fa1e240addeabd043062ce2c56bb61f1177c36b8117c2fac4f414, date: "2026-11-03T06:24:42Z", voies: 1407, trouvees: 1407}   # date des données du serveur Valhalla de la référence V1.2
+  tuiles: tuiles_2026_11_03
+  couverture:   # 2026-11-03, tools/couverture_v1.py (SERIE=v12), sans le service, calibration V1.1 complétée (ee5d7c1) ; tout tenu à l'écart ; atteint / minimum de jugement
+    statut: complete
+    traces: {selection: 45, streams: 44, sans_altitude: 1, fiables: 32, km_fiables: 6548, suspectes: 11, hors_ign: 1, negatifs_q1: 0}
+    planifies: {e4: 3, s2: 1, r1_r2: 5, s2_retires: 2}
+    exclusions_candidats:
+      ponts: {deja_vu_calibration: 157, hors_graphe_velo: 27, pas_un_tablier: 11, absent_des_donnees: 2, passage_sur_ouvrage_parallele: 2, hors_lidar: 1, passage_retire_niveau: 1}
+      tunnels: {deja_vu_calibration: 9, hors_graphe_velo: 5, absent_des_donnees: 1}
+    E4: {atteint: {tunnels: 12, plus_de_300m: 5}, minimum: {tunnels: 7, plus_de_300m: 2}}
+    E5: {atteint: {sites: 115, croisements: 179}, minimum: {croisements: 8}}
+    S2: {atteint: {temoins: 30, km: 61.2, natures: 4}, minimum: {temoins: 4, km: 40, natures: 3}}
+    R1_R2: {atteint: {parcours: 5, km: 500, part_non_revetu: 0.254}, minimum: {parcours: 4, km: 400, part_non_revetu: 0.10}}
+    E3: {atteint: {ponts: 122, mnh_10m: 19, plus_de_150m: 20}, minimum: {ponts: 12, mnh_10m: 3, plus_de_150m: 3}}   # atteint : bloquant (README §4 quinquies.2)
+    Q1: {atteint: {traces: 0}, minimum: {traces: 2}}   # rapporté (README §4 quinquies.1)
+    reste: {atteint: {traces: 32, km: 6548, dplus: 5, plaine: 11, ouvrage: 16}, minimum: {traces: 8, km: 800, par_groupe: 3}}
+    S1: {atteint: {ouvrages: 140, emprise_m: 18166}, minimum: {ouvrages: 15, emprise_m: 2000}}
+    E1: {atteint: {traces: 32, km: 6548}}
+    M1: {atteint: {traces: 41, km: 7101}, minimum: {km: 800}}
+    effet_complement_v11: "avant ee5d7c1 : E5 116 sites, 180 croisements ; le reste inchangé"
+
+perso_v12:
+  hors_git: true
+  tuiles: tuiles_2026_11_03   # campagne de la série (README §4 quinquies.3)
+  regle_serie: "tout tenu à l'écart (README §4 quinquies, serie_v12) ; MVP, V1 et V1.1 en calibration ; aucun masque au jugement, traces jugées entières ; E3 et E5 sur les éléments neufs seulement (nv-948 et suivants) ; fenetres_calibration pour information, non lues"
+  recalage: {source: "Valhalla FOSSGIS trace_attributes", date: "2026-11-03", donnees_serveur: "2026-11-03T06:24:42Z", sorties: private/recales/}
+  osm_tags_reference: {fichier: private/osm-tags/2026-11-03T06-24Z.json, sha256: 1c27bf93aeacdaa3b5ff350331503a4de223228c5b1d39c5203d01dadcd88b0c, date: "2026-11-03T06:24:42Z", voies: 1140, revetement_dur_sur_non_revetu_valhalla: 0, outil: tools/osm_tags_reference.py, source: "Overpass daté (overpass-api.de)"}   # erreur de la référence R (README §4 bis.8)
+  osm_tags_toutes:   # README §4 quater.1 et .5 ; tools/osm_tags_reference.py --toutes, Overpass daté (overpass-api.de), 2026-11-03 ; voies_retenues: toutes
+    - {fichier: private/osm-tags/toutes-v12-2026-10-19T00-00Z.json, sha256: e610c7cf03ed687c1efece2c8811118f1e31fdf65ae86d2e68180918efb2cd3a, date: "2026-10-19T00:00:04Z", voies: 1407, trouvees: 1407}   # date OSM des tuiles (tuiles_2026_11_03), voies des 5 parcours V1.2
+    - {fichier: private/osm-tags/toutes-v12-2026-11-03T06-24Z.json, sha256: 6171ff653d0fa1e240addeabd043062ce2c56bb61f1177c36b8117c2fac4f414, date: "2026-11-03T06:24:42Z", voies: 1407, trouvees: 1407}   # date des données du serveur Valhalla de la référence V1.2
+  temoins_v12_tags: {fichier: private/v12/temoins-v12-tags.json, sha256: 247c072c2d72f89054287cd43fae4da6047d467c76a7ace1b5a0d94718b72e4b, temoins: 30, avec_plage: 1, plages: 2, outil: "tools/temoins_v1_tags.py (SERIE=v12)", osm_date: "2026-11-03T06:24:42Z"}   # ouvrages réels sur la voie des témoins (README §4 ter.6)
+  ouvrages_v12: {fichier: private/v12/ouvrages-v12.json, sha256: 09820a3dfb6dba9cac276b8f54f65aa8565cbffa7d8c3f8af108003b9c08a998, nombre: 319, ponts_tunnels: 140, croisements_e5: 179, premier: nv-948, dernier: nv-1266}
+  temoins_v12: {fichier: private/v12/temoins-v12.json, sha256: 3172516a4f00778e6938df9a72a9ef39609815d70f4752ba04bfc40505c03f33, nombre: 30}
+  series_v12: {fichier: private/v12/series-v12.csv, sha256: 66e78339c6d2d6cae0bfbf63dada468606ad1d528a657c9fb31ecceb730f0c7a}
+  planifies:
+    - {id: pl12-e4-gadilhe, role: E4, km: 7.56, fichier: private/v12/planifies/pl12-e4-gadilhe.gpx, sha256: ed1c3504056073c7c756259c5878624b574ec6c18ea17ae6e5d99ad603c06591}
+    - {id: pl12-e4-parensol, role: E4, km: 13.01, fichier: private/v12/planifies/pl12-e4-parensol.gpx, sha256: 36ec0f9259a605780f6347acb534d6bcabdeeaebc1ec39adaee7503ff53294a4}
+    - {id: pl12-e4-taulhac, role: E4, km: 7.32, fichier: private/v12/planifies/pl12-e4-taulhac.gpx, sha256: b41934faf1b2dadf75a59046b29b6058268f8be3081aabaf2ed5f554d03bc9ab}
+    - {id: pl12-r-brenne, role: R1_R2, km: 107.73, fichier: private/v12/planifies/pl12-r-brenne.gpx, sha256: 15f48d133d71d7da45acf4ff9855a47c455be884fe6a14da3950e392ca3961c4, reference: private/v12/r12/reference/pl12-r-brenne.reference.json, sha256_reference: 2b00fe28d279c347df28901b5e0f5e909d0daef43cc27de9e32f38ff34a029f9, sha256_surface: 7436f51cfd2808e9889b641708d362173a09097fd46781dcd8212879c982fca4, sha256_baro: 016c6671e13f877982b1969d20979492229e10ef2911d2acf6928079d045d538}
+    - {id: pl12-r-broceliande, role: R1_R2, km: 108.24, fichier: private/v12/planifies/pl12-r-broceliande.gpx, sha256: a99891c0a4a0dfabbcd98b53cbdaf38c8ea445401ac7967cc746c8f267634f54, reference: private/v12/r12/reference/pl12-r-broceliande.reference.json, sha256_reference: 569bfa734f1d58534ae87fb802aa8741d196f44f5ceb84584405aa675c4b281c, sha256_surface: b5efee5f5f553ce8f39e5b79d13e1a7a852dd56df00cc57c9e5e88310157f66a, sha256_baro: 63bf970c551e3a38244e781dfe5f69ae938cff3e0c17266400cbaecb998de840}
+    - {id: pl12-r-jura, role: R1_R2, km: 92.49, fichier: private/v12/planifies/pl12-r-jura.gpx, sha256: bc5e182e2d40a158cb8dc48b2c9dfefecb243272a7daae259de9a439ce8bc684, reference: private/v12/r12/reference/pl12-r-jura.reference.json, sha256_reference: 8512733c011c424a577726f54a6d0184e42e8141be72177545d9ba55371e5f93, sha256_surface: b776a0b7a6f148a75ca06f126b6628d1d924f7a8e41fa634fcff1f750ec9c26b, sha256_baro: 174b4e5fb2db19c9693d0963a6271e8237b981d54ba26cd5feedef09da4e38fe}
+    - {id: pl12-r-marais, role: R1_R2, km: 114.97, fichier: private/v12/planifies/pl12-r-marais.gpx, sha256: 128ed1c232ed57d493649efcbd3da3b65cda01008954fa7ce17132360c8b294b, reference: private/v12/r12/reference/pl12-r-marais.reference.json, sha256_reference: 3ab3cb8d3a919e637253e5054577da2ce1b35cec7fe46cd6b8098fcdd986d7dc, sha256_surface: 2374005c4129d7d0635e71495f1a454a5f2ce8c7056437508fb5a99178641dca, sha256_baro: 549c189f7a010f63f91ae0746740921d163f48b8ae82db2958541bb0d224f89a}
+    - {id: pl12-r-reims, role: R1_R2, km: 76.91, fichier: private/v12/planifies/pl12-r-reims.gpx, sha256: 6910eab9d4adb052d82347469d8e4277c89df266394850501ba61a6e1d79183e, reference: private/v12/r12/reference/pl12-r-reims.reference.json, sha256_reference: 2cb53adcbaa0e90a0b850af08081bbe78bced9778081e9421182fb1f05edefa2, sha256_surface: dc2996c767f81fd042fc54ac8539f29766f64032f7d9b2ac878414e4da2649bd, sha256_baro: 55cbf0a7ef63b4a308e4248aa6e156addcfa4896a0e6c5df128dee42a011e3c1}
+    - {id: pl12-s2-isere, role: S2, km: 18.0, fichier: private/v12/planifies/pl12-s2-isere.gpx, sha256: b3d91f19db4e9fa3c15072224e9460a4e6f17b54b0d8706d78983862d0991c0e, nature: digue, retire: "nature non confirmée par OSM (00e500f)"}
+    - {id: pl12-s2-nesque, role: S2, km: 22.51, fichier: private/v12/planifies/pl12-s2-nesque.gpx, sha256: 8e6e9ad603ee40c58562aed4bec2ae6bfec3c22b6081c4b21bc81f79b82692be, nature: bati_ou_falaise, retire: "nature non confirmée par OSM (00e500f)"}
+    - {id: pl12-s2-troncais, role: S2, km: 24.64, fichier: private/v12/planifies/pl12-s2-troncais.gpx, sha256: 6dae1eeb95d19158d804a9cd082461a0c611907fc7313d56def8ff92d0dd6c1c, nature: couvert_arbore}
+  traces:
+    - id: perso-166
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 1   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2014-06"
+      dist_km: 167.2
+      fichier: private/traces/perso-166.gpx
+      sha256: 433b46c5ba69583577f82b369eb2c58bb8defb00b6ef9c88d8957772591a5616
+      sha256_trim1km: 805e61cacf8101edb4711c8e970ff3ead74ee2a6ce84533c8744301a1d8e683c
+      qualification: {verdict: fiable, offset_m: -0.89, drift_m: 4.8, noise_m: 1.19, p95_abs_m: 3.8, gain_baro_m: 869, gain_mnt_m: 706}
+    - id: perso-167
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Vendée"
+      mois: "2015-06"
+      dist_km: 144.7
+      fichier: private/traces/perso-167.gpx
+      sha256: 4e8cf833034a43449084fc011998d22b8e411006ed19a015bd2de5d2528e3994
+      sha256_trim1km: e0a4ed35f29c0fd40c2df7c0b4469b41a11d73b47540a0a935e64635aafee39e
+      qualification: {verdict: fiable, offset_m: -12.65, drift_m: 5.9, noise_m: 0.58, p95_abs_m: 1.5, gain_baro_m: 887, gain_mnt_m: 835}
+    - id: perso-168
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 1   # series-v12.csv
+      region: "Maine-et-Loire"
+      mois: "2015-07"
+      dist_km: 697.9
+      fichier: private/traces/perso-168.gpx
+      sha256: 0baa8009bfbc09660b1f014a60a9bf1c5b83eb112bc04ddfcba968fdb4f8cdae
+      sha256_trim1km: 6135a3b516dc8f971c1f2d66564bfa6aeed981856fc48fa1b413809fd5bca575
+      qualification: {verdict: fiable, offset_m: -0.38, drift_m: 13.2, noise_m: 2.18, p95_abs_m: 7.9, gain_baro_m: 7893, gain_mnt_m: 6860}
+    - id: perso-169
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Gironde"
+      mois: "2016-05"
+      dist_km: 122.0
+      fichier: private/traces/perso-169.gpx
+      sha256: f957cc258b4f8b6b783e373083acef93f6c30ab293d0980dc0af1d2d1a943269
+      sha256_trim1km: 3248708009fcce27cbe746915e05eb088f1d2cdcc840bf427edff314713fe8a5
+      qualification: {verdict: fiable, offset_m: 0.74, drift_m: 18.4, noise_m: 2.25, p95_abs_m: 7.2, gain_baro_m: 1298, gain_mnt_m: 1195}
+    - id: perso-170
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2016-08"
+      dist_km: 103.9
+      fichier: private/traces/perso-170.gpx
+      sha256: aaff2c93c13ff8ebb776f4eaa60627d4527afc1120ced96c2dcb9195c5826e6f
+      sha256_trim1km: 157ddc2515161b8721bb3a1bd600adfd9ff82c48804348f9cab8b25ffbe44ee6
+      qualification: {verdict: fiable, offset_m: -0.05, drift_m: 4.6, noise_m: 1.72, p95_abs_m: 4.8, gain_baro_m: 903, gain_mnt_m: 713}
+    - id: perso-171
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 7   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2016-11"
+      dist_km: 217.0
+      fichier: private/traces/perso-171.gpx
+      sha256: e75241a8997e9bdf59bb6083858daf8ca59be45d9f5d4f0aad03517b6c977c51
+      sha256_trim1km: a4ed39536ef9c8a4c1d8af49dbeb0620233c4d7167a5e630aa5034e6f7f13412
+      qualification: {verdict: fiable, offset_m: -0.69, drift_m: 5.8, noise_m: 1.4, p95_abs_m: 3.9, gain_baro_m: 1668, gain_mnt_m: 1760}
+    - id: perso-172
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 2   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2017-05"
+      dist_km: 128.7
+      fichier: private/traces/perso-172.gpx
+      sha256: 155a33c61f316d5b84a584047e7913006bf6123483e3bfb3e9f0fbe027fb0898
+      sha256_trim1km: 7fdb50d429198b864e08eb042f3c3d1019e501a644eddef55bc3a8c1cc57e929
+      qualification: {verdict: fiable, offset_m: -0.63, drift_m: 6.3, noise_m: 1.78, p95_abs_m: 5.5, gain_baro_m: 861, gain_mnt_m: 990}
+    - id: perso-173
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Côte-d'Or"
+      mois: "2017-05"
+      dist_km: 116.4
+      fichier: private/traces/perso-173.gpx
+      sha256: 361c229bb9cae297c71980d31cedd2689fe4a9e042df6581bab8d8de9e3ee4fd
+      sha256_trim1km: 8db719aaa28449c5d2c965ed01919b5dd892c1f5b53dacc68791da7d294db580
+      qualification: {verdict: fiable, offset_m: -1.56, drift_m: 13.2, noise_m: 2.25, p95_abs_m: 8.0, gain_baro_m: 1339, gain_mnt_m: 1292}
+    - id: perso-174
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 1   # series-v12.csv
+      region: "Vendée"
+      mois: "2017-06"
+      dist_km: 146.4
+      fichier: private/traces/perso-174.gpx
+      sha256: b6df05a9fd05835361dd9e96e6b436c7a6f0c4d042cb6a2cad9a976b96f11a7c
+      sha256_trim1km: 16ddc582ed458d01ceced2961a3962dd55c9fcc2f28a2d64726fe29c3900bb03
+      qualification: {verdict: fiable, offset_m: -4.51, drift_m: 13.4, noise_m: 1.36, p95_abs_m: 5.2, gain_baro_m: 924, gain_mnt_m: 843}
+    - id: perso-175
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2017-06"
+      dist_km: 128.5
+      fichier: private/traces/perso-175.gpx
+      sha256: d2f160ae34fb803676243a261568529b27e2e29da6677276421b89acc0964635
+      sha256_trim1km: 6989778ac5c85966c94131b781187d7d2b701730ec4c997b44e8fcab3545a5f6
+      qualification: {verdict: fiable, offset_m: -1.21, drift_m: 12.2, noise_m: 2.07, p95_abs_m: 5.1, gain_baro_m: 1126, gain_mnt_m: 1162}
+    - id: perso-176
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 5   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2017-07"
+      dist_km: 411.2
+      fichier: private/traces/perso-176.gpx
+      sha256: f4fe79026f2d09e165efe9107c81802f762da4535ac1c6d608b963f54e3f82c5
+      sha256_trim1km: 1129985a2c4b100408e1f549d927c6e3d9ecbba7d83ba8406f19cdc07bc7af8a
+      qualification: {verdict: fiable, offset_m: -2.95, drift_m: 44.9, noise_m: 1.03, p95_abs_m: 3.5, gain_baro_m: 2450, gain_mnt_m: 2573}
+    - id: perso-177
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 12   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2017-11"
+      dist_km: 261.5
+      fichier: private/traces/perso-177.gpx
+      sha256: 457ee6383e8f722a0dc8dc2d271da542f86d254e852eb25cf3d38ccaa61241ab
+      sha256_trim1km: 24431f1e3e44b7bc446cb017e8291cd0469957ba89dc7b988722e748f7c5480d
+      qualification: {verdict: fiable, offset_m: -0.03, drift_m: 10.0, noise_m: 1.97, p95_abs_m: 5.7, gain_baro_m: 1903, gain_mnt_m: 1416}
+    - id: perso-178
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 2   # series-v12.csv
+      region: "Vendée"
+      mois: "2018-05"
+      dist_km: 167.2
+      fichier: private/traces/perso-178.gpx
+      sha256: f3c5f9058acbfc426ee54079b2e25d148724c9205a10016820523e3cda6ed107
+      sha256_trim1km: c1b6e75b17301f8fd3150b43b3661ed8f4ebfc26951d75ad078f8d245100edde
+      qualification: {verdict: fiable, offset_m: -3.95, drift_m: 10.1, noise_m: 2.36, p95_abs_m: 6.1, gain_baro_m: 1991, gain_mnt_m: 1983}
+    - id: perso-179
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 2   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2019-03"
+      dist_km: 201.7
+      fichier: private/traces/perso-179.gpx
+      sha256: 38b14398e138bb1ab26cbcd32f22eae9f23984a0a6b9acf7df69e776503ab7a7
+      sha256_trim1km: 04663195d1440d27825f88740535cd08fc116be95a3327e51feb65b147e9e863
+      qualification: {verdict: fiable, offset_m: -0.4, drift_m: 9.2, noise_m: 1.19, p95_abs_m: 3.6, gain_baro_m: 1387, gain_mnt_m: 1360}
+    - id: perso-180
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Paris"
+      mois: "2019-04"
+      dist_km: 89.0
+      fichier: private/traces/perso-180.gpx
+      sha256: 95cea10d39978c9d84428c5d68df7eeb56be4ffc212dac361205ce8c7092acd6
+      sha256_trim1km: 213a764fbe59642031eaf3c815ee3daaa3a16f81899c230056280779380ed9f6
+      qualification: {verdict: fiable, offset_m: 12.56, drift_m: 4.4, noise_m: 0.82, p95_abs_m: 2.3, gain_baro_m: 250, gain_mnt_m: 252}
+    - id: perso-181
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 1   # series-v12.csv
+      region: "Haute-Garonne"
+      mois: "2019-05"
+      dist_km: 600.6
+      fichier: private/traces/perso-181.gpx
+      sha256: a5d4730b56a2e185f01cab972fe9eb416541935b8a39a0e1d2f0b49961f87f55
+      sha256_trim1km: 96abcd946722643d91ca52252cf20bfe72b8f2e262cd09c365f6559432cbb78e
+      qualification: {verdict: fiable, offset_m: 1.64, drift_m: 19.5, noise_m: 1.94, p95_abs_m: 7.7, gain_baro_m: 5507, gain_mnt_m: 6028}
+    - id: perso-182
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 7   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2019-06"
+      dist_km: 152.6
+      fichier: private/traces/perso-182.gpx
+      sha256: 4a3e5d8f555ad2d3d3754e5477ddd60db69c2e4bab554b5e9402eb8e045bfdaa
+      sha256_trim1km: 722a89282f43ae11510afaca7b2a4a019fbaf3d47931cff6e885b7e8b2b88eb6
+      qualification: {verdict: fiable, offset_m: -0.08, drift_m: 5.2, noise_m: 1.35, p95_abs_m: 4.0, gain_baro_m: 807, gain_mnt_m: 794}
+    - id: perso-183
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Ille-et-Vilaine"
+      mois: "2019-08"
+      dist_km: 54.0
+      fichier: private/traces/perso-183.gpx
+      sha256: 242a20d522f914e0c726c5f2ae12503cb8b5fc722060c2c2a19dbef960cfff42
+      sha256_trim1km: cd1509a304dedf87e6fc794724446cdce344181c7c1ed2eedfa30b45a744f6b3
+      qualification: {verdict: fiable, offset_m: 0.14, drift_m: 5.2, noise_m: 1.5, p95_abs_m: 4.8, gain_baro_m: 347, gain_mnt_m: 370}
+    - id: perso-184
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Côtes-d'Armor"
+      mois: "2019-08"
+      dist_km: 86.9
+      fichier: private/traces/perso-184.gpx
+      sha256: 36bc3b83a10c4f284ae44a87f83522513d00812db6f8df9748cc9fb5f0b414b2
+      sha256_trim1km: 93fdff3464b2186118a0513e712b4585e43c571ddd8924d9c8626e7cf2788c46
+      qualification: {verdict: fiable, offset_m: -1.07, drift_m: 9.3, noise_m: 1.77, p95_abs_m: 4.3, gain_baro_m: 667, gain_mnt_m: 697}
+    - id: perso-185
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Ille-et-Vilaine"
+      mois: "2019-08"
+      dist_km: 54.4
+      fichier: private/traces/perso-185.gpx
+      sha256: 0d3d3cfe7dd983b08e2bb515012818400935ec74a412446f617b363816fa2430
+      sha256_trim1km: 22f8cb4d9858cac8a62a4041048920751e078b862a5f4dd119eaccc9a46b2f88
+      qualification: {verdict: fiable, offset_m: 1.97, drift_m: 6.3, noise_m: 1.43, p95_abs_m: 3.8, gain_baro_m: 417, gain_mnt_m: 438}
+    - id: perso-186
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Orne"
+      mois: "2019-08"
+      dist_km: 77.5
+      fichier: private/traces/perso-186.gpx
+      sha256: 789670afc600106eaa2bbea9b8837648662f8eb7967fda41c137b7e3351ee196
+      sha256_trim1km: 1bc1ab3d5cf9adb99d643b65725f22855e7024a69ac8858e86c649f760e412be
+      qualification: {verdict: fiable, offset_m: -1.77, drift_m: 3.4, noise_m: 1.16, p95_abs_m: 5.7, gain_baro_m: 490, gain_mnt_m: 546}
+    - id: perso-187
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Calvados"
+      mois: "2020-01"
+      dist_km: 92.5
+      fichier: private/traces/perso-187.gpx
+      sha256: 78502df4a252985bfff01bc37918388fb265f811bdb2e1fb22be82369f57bbf0
+      sha256_trim1km: e06fa0863f71a35e147dfbae63ce489119d192c1ecae57cacc0d2360cac364ce
+      qualification: {verdict: fiable, offset_m: -4.46, drift_m: 17.9, noise_m: 1.75, p95_abs_m: 6.3, gain_baro_m: 1561, gain_mnt_m: 1645}
+    - id: perso-188
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 2   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2020-06"
+      dist_km: 199.3
+      fichier: private/traces/perso-188.gpx
+      sha256: 1313db81a91873f6cec7f799622497e27d9cee21661ff70ab98981a9a89310f2
+      sha256_trim1km: 92425fad2c7d9792c94e590f5b0371b056f8505fd441aa40f77066e278f5edd2
+      qualification: {verdict: fiable, offset_m: -3.83, drift_m: 16.9, noise_m: 1.46, p95_abs_m: 5.4, gain_baro_m: 1184, gain_mnt_m: 2329}
+    - id: perso-189
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Vendée"
+      mois: "2020-06"
+      dist_km: 153.0
+      fichier: private/traces/perso-189.gpx
+      sha256: 764512936e7c09d1c85fda10f79c259979dba3b4338ac51315a64abd64424ff6
+      sha256_trim1km: 6d3a352c23bc4f68d6e7bac041bf8a4ee0f05cd48f5898dd5cec2ef221f23153
+      qualification: {verdict: fiable, offset_m: -0.92, drift_m: 1.2, noise_m: 0.48, p95_abs_m: 1.5, gain_baro_m: 1271, gain_mnt_m: 1310}
+    - id: perso-190
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 14   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2020-06"
+      dist_km: 625.0
+      fichier: private/traces/perso-190.gpx
+      sha256: e44ea52066a04045f2d379aed9d8d5e03abea08e8b807c83100abbf259c2c6bd
+      sha256_trim1km: a68e20c0a6005d64ccbc1aa967d03f41d6b16fc70cde4fca5b0fd85baf0749a5
+      qualification: {verdict: fiable, offset_m: -0.85, drift_m: 8.2, noise_m: 0.59, p95_abs_m: 2.0, gain_baro_m: 4260, gain_mnt_m: 4331}
+    - id: perso-191
+      groupe: dplus
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Var"
+      mois: "2020-07"
+      dist_km: 132.1
+      fichier: private/traces/perso-191.gpx
+      sha256: 4d84de9fa4d322f9da3618b268355b7b7814520dd263212569a620dc9cfa5941
+      sha256_trim1km: cccf71786a23468ded37f223b954ebd1fcc0af923302b221b2d262a6ec467dee
+      qualification: {verdict: fiable, offset_m: 0.94, drift_m: 21.3, noise_m: 1.78, p95_abs_m: 5.5, gain_baro_m: 2787, gain_mnt_m: 2918}
+    - id: perso-192
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 23   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2020-09"
+      dist_km: 329.2
+      fichier: private/traces/perso-192.gpx
+      sha256: 8732b2eeec4f8159fcb42200701a27e2b0f0fd013be4172d478273e4a552dfb0
+      sha256_trim1km: 7c974fec250ab0ec95a82dd141df6af25627bcca460d8ba4fe75f71acd25e547
+      qualification: {verdict: fiable, offset_m: 2.77, drift_m: 25.8, noise_m: 1.36, p95_abs_m: 5.0, gain_baro_m: 1957, gain_mnt_m: 2333}
+    - id: perso-193
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 17   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2021-08"
+      dist_km: 212.5
+      fichier: private/traces/perso-193.gpx
+      sha256: 99ecccdf5ad91c9adc52efe4d1b6f8e5755d51a5b8a4c4296a71e0eac65032b0
+      sha256_trim1km: 5f1f93c7bbb772386e1934eb2b053a92af76746192b48367c7865755d36f2745
+      qualification: {verdict: fiable, offset_m: 2.45, drift_m: 16.6, noise_m: 0.73, p95_abs_m: 2.1, gain_baro_m: 971, gain_mnt_m: 1096}
+    - id: perso-194
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 0   # series-v12.csv
+      region: "Alpes-de-Haute-Provence"
+      mois: "2023-04"
+      dist_km: 83.4
+      fichier: private/traces/perso-194.gpx
+      sha256: e4b24ef2560be030a6478eac51d7eed3b4e43edf0a325a7ea8771291ee7fdaa9
+      sha256_trim1km: 6ad68dd599904b72059297de5284725bf2a09e9640ca2483229114c0fdb1d4b6
+      qualification: {verdict: fiable, offset_m: 13.76, drift_m: 18.8, noise_m: 1.09, p95_abs_m: 4.0, gain_baro_m: 854, gain_mnt_m: 859}
+    - id: perso-195
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 9   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2023-05"
+      dist_km: 175.1
+      fichier: private/traces/perso-195.gpx
+      sha256: 112d8429b12ae56ef24e54b9698fd70958a37ff5c7a83e407996b068a8201d32
+      sha256_trim1km: b1eebb29dad1cd645a3e099a9c7a50595d9cdd55d9c6215e5e17f44ddf8f1db5
+      qualification: {verdict: fiable, offset_m: -0.38, drift_m: 3.3, noise_m: 0.49, p95_abs_m: 1.4, gain_baro_m: 1342, gain_mnt_m: 1363}
+    - id: perso-196
+      groupe: plaine
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 11   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2023-10"
+      dist_km: 212.6
+      fichier: private/traces/perso-196.gpx
+      sha256: ded39cc6303363e2549d48c47bfa1da788c5a3bd467da03619b2ae1013d2d5e7
+      sha256_trim1km: ee5475e86e44bc2a928b680d65c3b223a48b44058b815a5065ca74e885b73856
+      qualification: {verdict: fiable, offset_m: -0.14, drift_m: 2.9, noise_m: 0.44, p95_abs_m: 1.4, gain_baro_m: 1159, gain_mnt_m: 1199}
+    - id: perso-197
+      groupe: ouvrage
+      serie: tenue_a_l_ecart
+      fenetres_calibration: 5   # series-v12.csv
+      region: "Loire-Atlantique"
+      mois: "2025-03"
+      dist_km: 203.8
+      fichier: private/traces/perso-197.gpx
+      sha256: f82e87fcf9fa9784b9b7a91ed35ca8b82cd78c1d2a9849e6385da2819b665f6c
+      sha256_trim1km: 4471bf0402dd251ef6848de4d6120820fed6d494d6e800223bc8de300ad07184
+      qualification: {verdict: fiable, offset_m: 0.04, drift_m: 3.8, noise_m: 0.36, p95_abs_m: 1.1, gain_baro_m: 1351, gain_mnt_m: 1406}
