@@ -213,7 +213,7 @@ impl BenchPaths {
 /// V1.1 : en calibration (MVP, V1, V1.1), aucun cas V1.2 ouvert, ses éléments (`nv-948` et
 /// suivants) masqués sur les cas de calibration ; au jugement V1.2, cas jugés entiers sans masque
 /// ni extrait, Q1 non bloquant, E3 bloquant si la couverture comptée avant toute mesure (manifest
-/// `serie_v12.couverture.E3`) atteint son minimum, sinon rapporté sans refus (e57dd1e) ; ouvrages
+/// `serie_v12.couverture.E3`) atteint son minimum, sinon rapporté sans refus (e57dd1e ; un sous-minimum mesuré au jugement refuse : 65ea59b) ; ouvrages
 /// V1.1 du complément (`complement_v11`, `nv-840` à `nv-947`, ee5d7c1) mesurés en calibration.
 pub const BENCH_REVISION: Option<&str> = Some("bench4");
 
