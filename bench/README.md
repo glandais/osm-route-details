@@ -1239,6 +1239,22 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    100 m au plus sur 7 %) sont retirés par la règle 00e500f, mention `retire:` au manifest, sans
    remplacement. Rien d'autre ne change : le minimum S2 est atteint par les témoins des sorties.
 
+**§4 sexies. Règles après le jugement V1.2** (décisions de l'utilisateur, 2026-11-04, après le
+diagnostic des échecs du jugement V1.2 ; verdicts rendus non revus, V1.2 n'est pas rejugée).
+
+Constat : la règle du corpus du §1.3 (« aucune trace de 2015-05 à 2020-09, ni d'avant 2014-12 sans
+qualification individuelle ») n'a pas été appliquée au tirage des séries V1.1 et V1.2
+(`tools/tirage_v11.py`, vivier ouvert depuis le 2014-01-01). 18 traces de V1.1 et 26 de V1.2 sont
+de la période, plus une trace d'avant 2014-12 dans chacune. Au jugement V1.2, 27 des 28 ponts en
+échec d'E3 et l'échec d'E2b sur le groupe ouvrage viennent de références baro de traces de la
+période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
+
+1. **Période exclue du tirage** (décision de l'utilisateur, 2026-11-04). Le tirage d'une série
+   future exclut les sorties de 2015-05 à 2020-09 (mois de départ) et celles d'avant 2014-12 qui
+   n'ont pas de qualification individuelle (`qualify_baro.py`, verdict `fiable`, dans
+   `private/strava/qualif*.csv`). Les tirages figés de V1.1 et V1.2 ne sont pas refaits. Q1 n'est
+   pas concerné : ses négatifs sont pris dans la période, exprès (§1.3, `q1_negatif_serie_nouvelle`).
+
 ---
 
 ## 5. Protocole : MNS lu sur la trace GPS ou sur la géométrie OSM du pont (§11.2 du doc 01)

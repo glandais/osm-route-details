@@ -20,7 +20,16 @@ Série : variable d'environnement SERIE (v11 par défaut ; v12 : V1.2, décision
 2026-11-03, sel osm-route-details:v1.2:, jamais utilisées ni MVP, ni V1, ni V1.1, sortie
 private/v12/tirage.json ; Q1 rapporté sur V1.2, README §4 quinquies.1 : Q1 = 0 par défaut).
 
+Période (README §4 sexies.1, décision de l'utilisateur, 2026-11-04) : pour une série après V1.2,
+le vivier exclut les sorties de 2015-05 à 2020-09 et celles d'avant 2014-12 sans qualification
+individuelle (verdict `fiable` dans private/strava/qualif*.csv) ; Q1 n'est pas concerné. Les
+tirages de V1.1 et V1.2 (sans cette règle) restent reproductibles.
+
+`compter` : taille du vivier d'une série future (période exclue, jamais utilisées ni MVP, ni V1, ni
+V1.1, ni V1.2), aux seuils d'inédit donnés, sans tirage ni sel ni écriture.
+
 Usage : [SERIE=v12] tirage_v11.py private/ [N] [Q1]
+        tirage_v11.py compter private/ [MIN_INEDIT_KM ...]
 """
 import csv
 import glob
@@ -35,6 +44,8 @@ SEL = {"v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE
 DEJA = {"v11": ["perso-map.csv", "v1/perso-map-v1.csv"],
         "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"]}[SERIE]
 DEBUT = "2014-01-01"
+PERIODE_EXCLUE = ("2015-05", "2020-09")   # mois de départ, bornes comprises (README §1.3, §4 sexies.1)
+QUALIF_AVANT = "2014-12"
 TYPES = {"Ride", "GravelRide", "MountainBikeRide"}
 MIN_INEDIT_KM = 50.0
 CELL_M = 200.0
@@ -88,6 +99,61 @@ def cell(p):
 def en_france(a, pts):
     pays = (a.get("location_summary") or "").split(", ")[-1]
     return bool(a.get("location_summary")) and pays not in ETRANGER and 41.0 <= pts[0][0] <= 51.6 and -5.5 <= pts[0][1] <= 9.8
+
+
+def periode_exclue(a, qual):
+    m = a["start_local"][:7]
+    if PERIODE_EXCLUE[0] <= m <= PERIODE_EXCLUE[1]:
+        return True
+    return m < QUALIF_AVANT and qual.get(str(a["id"]), {}).get("verdict") != "fiable"
+
+
+def lire_qualif(B):
+    qual = {}
+    for f in sorted(glob.glob(f"{B}/strava/qualif*.csv")):
+        qual.update({r["id"]: r for r in csv.DictReader(open(f))})
+    return qual
+
+
+def vivier_de(B, inv, used, min_inedit_km, qual=None):
+    """Sorties jamais utilisées, en France, à min_inedit_km km inédits au moins (période exclue si qual)."""
+    grid = set()
+    for a in inv:
+        if str(a["id"]) in used and a.get("reduced_polyline"):
+            for p, _ in steps(decode(a["reduced_polyline"])):
+                c = cell(p)
+                grid |= {(c[0] + i, c[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)}
+    out = []
+    for a in inv:
+        i = str(a["id"])
+        if i in used or a.get("sport_type") not in TYPES or a["start_local"][:10] < DEBUT or not a.get("reduced_polyline"):
+            continue
+        if qual is not None and periode_exclue(a, qual):
+            continue
+        pts = decode(a["reduced_polyline"])
+        if len(pts) < 2 or not en_france(a, pts):
+            continue
+        inedit = sum(d for p, d in steps(pts) if cell(p) not in grid) / 1000
+        if inedit >= min_inedit_km:
+            out.append({"id": i, "inedit_km": round(inedit, 1), "km": round(a["summary"]["distance"] / 1000, 1)})
+    return out
+
+
+def compter(B, *seuils):
+    B = B.rstrip("/")
+    inv = json.load(open(f"{B}/strava/inventaire.json"))
+    used = set()
+    for x in ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv", "v12/perso-map-v12.csv"]:
+        used |= {r["strava_id"] for r in csv.DictReader(open(f"{B}/{x}"))}
+    qual = lire_qualif(B)
+    res = {}
+    for k in [float(x) for x in seuils] or [MIN_INEDIT_KM, 30.0]:
+        v = vivier_de(B, inv, used, k, qual)
+        res[f"inedit_{k:g}km"] = {"sorties": len(v), "km": round(sum(x["km"] for x in v)),
+                                  "inedit_km": round(sum(x["inedit_km"] for x in v))}
+    sans = vivier_de(B, inv, used, MIN_INEDIT_KM)
+    res["pour_memoire_sans_exclusion"] = {f"inedit_{MIN_INEDIT_KM:g}km": len(sans)}
+    print(json.dumps(res, ensure_ascii=False))
 
 
 def main(B, n=45, q1=2 if SERIE == "v11" else 0):
@@ -144,4 +210,7 @@ def main(B, n=45, q1=2 if SERIE == "v11" else 0):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    if sys.argv[1:2] == ["compter"]:
+        compter(*sys.argv[2:])
+    else:
+        main(*sys.argv[1:])
