@@ -1312,6 +1312,13 @@ V1.1 et V1.2 en calibration ; inventaire Strava non rafraîchi ; outils réseau 
    est rapporté, non bloquant ; un groupe qui l'atteint reste bloquant. Un critère, ou un groupe
    d'E2b, bloquant parce que sa couverture est atteinte refuse l'incrément s'il est en échec ou
    sous son minimum *mesuré* au jugement (règle ordinaire, comme en 65ea59b).
+3. **Un témoin S2 planifié de plus** (décision de l'utilisateur, 2026-11-04). La couverture
+   comptée avec le seul `pl13-s2-chaux` (couvert arboré) laissait S2 à 34,2 km pour un minimum de
+   40. Un deuxième témoin planifié de 6 km au moins, digue de préférence (nature absente de V1.3),
+   est ajouté avant le gel, sa nature étant confirmée par OSM sur 50 % au moins (00e500f) avant
+   toute collecte. Retenu : `pl13-s2-rhin`, digue, 12,8 km, confirmée sur 93 %, 10,2 km comptés.
+   L'emprise des tuiles est ensuite recalculée (67906e6), meta.json est vérifié avant et après le
+   complément, et la couverture est recomptée : 8 témoins, 44,3 km, 4 natures.
 
 ---
 
