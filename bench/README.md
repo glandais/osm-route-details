@@ -1238,6 +1238,10 @@ Strava non rafraîchi ; MVP, V1 et V1.1 en calibration).
    `man_made=dyke` dans l'emprise, 0 %) et `pl12-s2-nesque` (falaise déclarée : falaises OSM à
    100 m au plus sur 7 %) sont retirés par la règle 00e500f, mention `retire:` au manifest, sans
    remplacement. Rien d'autre ne change : le minimum S2 est atteint par les témoins des sorties.
+   *Précision* (décision de l'utilisateur, 2026-11-04, après le jugement V1.2, où les deux
+   itinéraires retirés ont été remplis et mesurés) : un itinéraire retiré perd son rôle de témoin
+   S2, mais reste un cas pour ses ouvrages et pour M1, comme les itinéraires planifiés de V1 ; il
+   est rempli par `fill-cache` et mesuré au jugement. Comportement d'`ord-bench` gardé.
 
 **§4 sexies. Règles après le jugement V1.2** (décisions de l'utilisateur, 2026-11-04, après le
 diagnostic des échecs du jugement V1.2 ; verdicts rendus non revus, V1.2 n'est pas rejugée).
