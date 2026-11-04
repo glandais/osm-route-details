@@ -23,7 +23,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERIE = os.environ.get("SERIE", "v11")
 AVANT = {"v11": ["perso-map.csv", "v1/perso-map-v1.csv"],
-         "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"]}[SERIE]
+         "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"],
+         "v13": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv", "v12/perso-map-v12.csv"]}[SERIE]
 
 
 def sha256(path):

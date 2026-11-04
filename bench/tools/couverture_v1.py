@@ -40,7 +40,8 @@ calibration et l'API altimétrie de l'IGN ; ne lit jamais le service. Trois éta
    1–3 km), référence incertaine si les côtés diffèrent de plus de 2 m ; baro absent du tablier ;
    test de niveau sur les stations à ± 12,5 m du milieu (baro − décalage − MNT de la station) ;
    garde de bruit (noise_m > 1,0 m, §4 sexies.3). E3 ne compte qu'un pont passé par une
-   référence baro comptée. Approches non purgées des autres ouvrages (le banc les retire).
+   référence baro comptée ; E5 (`sites_garde_bruit`) et les groupes E2b (`<groupe>_garde_bruit`)
+   sont aussi comptés sur les seules traces au bruit ≤ 1,0 m (V1.3, README §4 septies.2). Approches non purgées des autres ouvrages (le banc les retire).
 
 Non contrôlé ici : bandes de portail E4 ; la campagne peut encore exclure.
 
@@ -89,7 +90,8 @@ BRUIT_MAX_M = 1.0
 # Série contrôlée (README §4 ter.4) : v1 (tirage stratifié) ou v11 (V1.1, décision de l'utilisateur,
 # 2026-11-02 : tout le nouveau matériau tenu à l'écart, MVP et V1 en calibration).
 SERIE = os.environ.get("SERIE", "v1")
-SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE]
+SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:",
+       "v13": "osm-route-details:v1.3:"}[SERIE]
 ALIGNE = SERIE not in ("v1", "v11", "v12")
 ALTI = "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json"
 UA = "osm-route-details-bench/0.1 (usage personnel)"
@@ -232,7 +234,7 @@ def calibration_refs(B):
     tracks = sorted(glob.glob(f"{B}/traces/*.gpx")) + sorted(glob.glob(f"{B}/../data/vcyclist/**/*.gpx", recursive=True)) \
         + sorted(glob.glob(f"{B}/../data/osm-surface/*.gpx"))
     # séries passées en calibration : leurs ouvrages, croisements et itinéraires planifiés
-    for d in {"v1": [], "v11": ["v1"], "v12": ["v1", "v11"]}[SERIE]:
+    for d in {"v1": [], "v11": ["v1"], "v12": ["v1", "v11"], "v13": ["v1", "v11", "v12"]}[SERIE]:
         for o in json.load(open(f"{B}/{d}/ouvrages-{d}.json")):
             refs += [tuple(p) for p in o["pts"].values()]
         tracks += sorted(glob.glob(f"{B}/{d}/planifies/*.gpx"))
@@ -977,6 +979,11 @@ def tirage(B):
         C["temoins"] = [tm for tm in C["temoins"] if tm["planifie"] or tm["length_m"] >= TEMOIN_MIN_M]
     fiables = [t for t in C["traces"] if t["role"] == "trace"]
     planifies = {t["id"]: t for t in C["traces"] if t["zone"] == "planifie"}
+    bruit = {}   # garde de bruit (README §4 sexies.3) : traces au baro sous BRUIT_MAX_M, séries alignées
+    if ALIGNE:
+        for q in sorted(glob.glob(f"{B}/strava/qualif*.csv")):
+            bruit.update({r["id"]: float(r["noise_m"] or 99) for r in csv.DictReader(open(q))})
+    calme = lambda t: bruit.get(t, 99.0) <= BRUIT_MAX_M
     # ouvrages comptés
     compte = {}
     raisons = {}
@@ -1054,7 +1061,9 @@ def tirage(B):
                     us.union(a, b)
         site = {k: us.find(k) for k in xk}
         mE5 = lambda held: {"sites": len({site[k] for k in members(held) if k in xs}),
-                            "croisements": sum(1 for k in members(held) if k in xs)}
+                            "croisements": sum(1 for k in members(held) if k in xs),
+                            **({"sites_garde_bruit": len({site[k] for k in members(held) if k in xs
+                                                          and any(calme(t) for t in xs[k]["traces"])})} if ALIGNE else {})}
         res["E5"] = assign("E5", x_cases, mE5, lambda m: m["sites"] >= cible(8))
     tem = [t for t in C["temoins"] if t["nature"]]   # témoin planifié sans nature confirmée : retiré
     temd = {t["id"]: t for t in tem}
@@ -1084,7 +1093,9 @@ def tirage(B):
         grp[t["id"]] = "dplus" if dpk >= 11 else ("ouvrage" if nb_ouv.get(t["id"], 0) >= 2 else "plaine")
     td = {t["id"]: t for t in fiables}
     mR = lambda held: {"traces": len(held), "km": round(sum(td[c]["km"] for c in held)),
-                       **{g: sum(1 for c in held if grp[c] == g) for g in ("dplus", "plaine", "ouvrage")}}
+                       **{g: sum(1 for c in held if grp[c] == g) for g in ("dplus", "plaine", "ouvrage")},
+                       **({f"{g}_garde_bruit": sum(1 for c in held if grp[c] == g and calme(c)) for g in ("dplus", "plaine", "ouvrage")}
+                          if ALIGNE else {})}   # E2b par groupe, garde de bruit (README §4 septies.2)
     res["reste"] = assign("reste", [t["id"] for t in fiables], mR,
                           lambda m: m["traces"] >= cible(8) and m["km"] >= cible(800) and all(m[g] >= cible(3) for g in ("dplus", "plaine", "ouvrage")))
     # S1 sur l'ensemble des ouvrages tenus à l'écart (toutes strates)

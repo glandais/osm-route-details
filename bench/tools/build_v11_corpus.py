@@ -38,7 +38,7 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOL_M = 40.0
 SERIE = os.environ.get("SERIE", "v11")
-CALIB = {"v11": ["v1"], "v12": ["v1", "v11"]}[SERIE]   # séries passées en calibration
+CALIB = {"v11": ["v1"], "v12": ["v1", "v11"], "v13": ["v1", "v11", "v12"]}[SERIE]   # séries passées en calibration
 
 
 def sha256(path):

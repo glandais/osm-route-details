@@ -29,6 +29,10 @@ tirages de V1.1 et V1.2 (sans cette règle) restent reproductibles.
 `compter` : taille du vivier d'une série future (période exclue, jamais utilisées ni MVP, ni V1, ni
 V1.1, ni V1.2), aux seuils d'inédit donnés, sans tirage ni sel ni écriture.
 
+V1.3 (SERIE=v13, décision de l'utilisateur, 2026-11-04, README §4 septies) : sel
+osm-route-details:v1.3:, jamais utilisées ni MVP, ni V1, ni V1.1, ni V1.2, 30 km inédits au moins,
+période exclue ; Q1 = 0 (rapporté).
+
 Usage : [SERIE=v12] tirage_v11.py private/ [N] [Q1]
         tirage_v11.py compter private/ [MIN_INEDIT_KM ...]
 """
@@ -41,14 +45,16 @@ import os
 import sys
 
 SERIE = os.environ.get("SERIE", "v11")
-SEL = {"v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE]
+SEL = {"v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:", "v13": "osm-route-details:v1.3:"}[SERIE]
 DEJA = {"v11": ["perso-map.csv", "v1/perso-map-v1.csv"],
-        "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"]}[SERIE]
+        "v12": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv"],
+        "v13": ["perso-map.csv", "v1/perso-map-v1.csv", "v11/perso-map-v11.csv", "v12/perso-map-v12.csv"]}[SERIE]
 DEBUT = "2014-01-01"
 PERIODE_EXCLUE = ("2015-05", "2020-09")   # mois de départ, bornes comprises (README §1.3, §4 sexies.1)
 QUALIF_AVANT = "2014-12"
 TYPES = {"Ride", "GravelRide", "MountainBikeRide"}
-MIN_INEDIT_KM = 50.0
+MIN_INEDIT_KM = {"v13": 30.0}.get(SERIE, 50.0)   # V1.3 : 30 km (décision de l'utilisateur, 2026-11-04, README §4 septies)
+PERIODE_REGLE = SERIE not in ("v11", "v12")   # README §4 sexies.1
 CELL_M = 200.0
 STEP_M = 100.0
 ETRANGER = {"United Kingdom", "Kyrgyzstan", "Spain", "Italy", "Austria", "Ireland", "Germany", "Switzerland",
@@ -177,23 +183,7 @@ def main(B, n=45, q1=2 if SERIE == "v11" else 0):
     used = set()
     for f in (f"{B}/{x}" for x in DEJA):
         used |= {r["strava_id"] for r in csv.DictReader(open(f))}
-    grid = set()
-    for a in inv:
-        if str(a["id"]) in used and a.get("reduced_polyline"):
-            for p, _ in steps(decode(a["reduced_polyline"])):
-                c = cell(p)
-                grid |= {(c[0] + i, c[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)}
-    vivier = []
-    for a in inv:
-        i = str(a["id"])
-        if i in used or a.get("sport_type") not in TYPES or a["start_local"][:10] < DEBUT or not a.get("reduced_polyline"):
-            continue
-        pts = decode(a["reduced_polyline"])
-        if len(pts) < 2 or not en_france(a, pts):
-            continue
-        inedit = sum(d for p, d in steps(pts) if cell(p) not in grid) / 1000
-        if inedit >= MIN_INEDIT_KM:
-            vivier.append({"id": i, "inedit_km": round(inedit, 1), "km": round(a["summary"]["distance"] / 1000, 1)})
+    vivier = vivier_de(B, inv, used, MIN_INEDIT_KM, lire_qualif(B) if PERIODE_REGLE else None)
     vivier.sort(key=lambda v: h(v["id"]))
     qual = {}
     for f in sorted(glob.glob(f"{B}/strava/qualif*.csv")):
@@ -208,6 +198,7 @@ def main(B, n=45, q1=2 if SERIE == "v11" else 0):
         return x < 0.6 or x > 1.6
     negatifs = [i for i in sus if atteste(qual[i])][:q1]
     out = {"sel": SEL, "criteres": {"debut": DEBUT, "types": sorted(TYPES), "france": True, "min_inedit_km": MIN_INEDIT_KM,
+                                    **({"periode_exclue": list(PERIODE_EXCLUE), "qualification_avant": QUALIF_AVANT} if PERIODE_REGLE else {}),
                                     "cellule_m": CELL_M, "jamais_utilisees": DEJA},
            "ordre": [v["id"] for v in vivier], "vivier": vivier, "selection": [v["id"] for v in vivier[:n]],
            "q1_ordre": sus, "q1": negatifs}
