@@ -1263,6 +1263,12 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    peut contrôler. Les deux traces d'avant 2014-12 (`perso-130`, 2014-09 ; `perso-166`, 2014-06) ont
    une qualification individuelle `fiable` et ne sont pas marquées ; la garde de bruit (point 3)
    s'applique à elles comme aux autres. Les négatifs `neg-*` (Q1) ne sont pas concernés.
+3. **Garde de bruit étendue à E3 et E2b** (décision de l'utilisateur, 2026-11-04). Comme en E1
+   plaine (§4 ter.8) et en E5 (§4 quater.2), une trace dont le bruit baro (`qualify_baro.py`,
+   `noise_m` de la trace entière ; segments `.sN` : celui de la trace) dépasse 1,0 m fournit une
+   référence incertaine : en E3, ses passages sont rapportés (`baro_bruite`), hors de la médiane
+   du pont, sans repli sur le MNS ; en E2b, la trace sort de la médiane de son groupe, rapportée.
+   Tous groupes, calibration comprise, à partir de la révision du banc qui l'applique.
 
 ---
 
