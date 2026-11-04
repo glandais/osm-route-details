@@ -778,6 +778,36 @@ fn is_crossing(o: &Ouvrage) -> bool {
 /// témoin planifié : « sa longueur comptée exclut les abords d'ouvrage (100 m) »).
 pub const TEMOIN_ABORDS_M: f64 = 100.0;
 
+/// Fenêtre de recherche du début d'un témoin avant sa fin, en longueurs déclarées.
+const TEMOIN_DEBUT_FENETRE: f64 = 1.5;
+
+/// Stations du début et de la fin d'un témoin sur un cas, chacune la plus proche à `tol` au plus.
+/// La fin est cherchée sur tout le cas, puis, si la longueur déclarée `declared` est connue, le
+/// début dans `[d_fin − 1,5 × declared, d_fin]` (à défaut, témoin parcouru à rebours, dans
+/// `[d_fin, d_fin + 1,5 × declared]`) : une trace qui repasse par le début ailleurs ne rallonge
+/// pas le témoin (décision de l'utilisateur, 2026-11-04 ; `perso-196-s0`, début repassé trois
+/// fois). Sans longueur déclarée, début cherché sur tout le cas.
+fn temoin_ends(
+    d: &[f64],
+    pts: &[LatLon],
+    debut: LatLon,
+    fin: LatLon,
+    declared: Option<f64>,
+    tol: f64,
+) -> Option<(usize, usize)> {
+    let within = |x: Option<(usize, f64)>| x.filter(|(_, dist)| *dist <= tol);
+    let (ib, _) = within(nearest(d, pts, fin, f64::NEG_INFINITY, f64::INFINITY))?;
+    let (ia, _) = match declared {
+        Some(l) => {
+            let w = TEMOIN_DEBUT_FENETRE * l;
+            within(nearest(d, pts, debut, d[ib] - w, d[ib]))
+                .or_else(|| within(nearest(d, pts, debut, d[ib], d[ib] + w)))?
+        }
+        None => within(nearest(d, pts, debut, f64::NEG_INFINITY, f64::INFINITY))?,
+    };
+    (ia != ib).then_some((ia, ib))
+}
+
 /// S2 d'un témoin négatif V1 (README §4 ter.4–6) sur le profil d'un cas : tronçon entre les
 /// stations les plus proches de ses extrémités (à 40 m au plus), sur une sortie comme sur un
 /// itinéraire planifié, ou cas entier (témoin planifié sans extrémités ; affc041). Sont retirés de la longueur comptée, des ouvrages fictifs et de la longueur typée :
@@ -806,11 +836,7 @@ pub fn temoin_v1_item(
         // Témoin à extrémités, de sortie comme d'itinéraire planifié (README §4 ter.6, affc041) :
         // entre ses extrémités ; seul un témoin sans extrémités couvre tout l'itinéraire.
         Some([a, b]) => {
-            let (ia, da) = nearest(d, pts, a, f64::NEG_INFINITY, f64::INFINITY)?;
-            let (ib, db) = nearest(d, pts, b, f64::NEG_INFINITY, f64::INFINITY)?;
-            if da > tol || db > tol || ia == ib {
-                return None;
-            }
+            let (ia, ib) = temoin_ends(d, pts, a, b, t.declared_m, tol)?;
             (ia.min(ib), ia.max(ib))
         }
         _ => (0, n - 1),
@@ -3586,6 +3612,7 @@ mod tests {
             ends: None,
             real: Vec::new(),
             length_m: None,
+            declared_m: None,
         };
         let closed = [750.0..800.0];
         let it = temoin_v1_item(&t, &d, &pts, &on, &tile, &closed, None, 40.0).unwrap().pop().unwrap();
@@ -3619,6 +3646,48 @@ mod tests {
         assert!(items.iter().all(|i| i["metrique"] != "S2"));
         let far = crate::v1::TemoinV1 { ends: Some([LatLon::new(46.0, 5.0), pts[110]]), ..s };
         assert!(temoin_v1_item(&far, &d, &pts, &on, &tile, &[], None, 40.0).is_none());
+    }
+
+    #[test]
+    fn a_v1_control_start_is_searched_before_its_end() {
+        // Trace au pas de 5 m : vers le nord (stations 0–60), retour vers le sud jusqu'au point de
+        // la station 20 (station 100), puis vers l'est jusqu'à la fin du témoin (station 200). Le
+        // début du témoin est passé deux fois (stations 20 et 100) ; sa longueur déclarée est de
+        // 500 m : le début est cherché dans les 750 m avant la fin, pas sur toute la trace
+        // (décision de l'utilisateur, 2026-11-04).
+        let n = 201;
+        let step_lat = 0.000045;
+        let step_lon = step_lat / 45f64.to_radians().cos();
+        let pts: Vec<LatLon> = (0..n)
+            .map(|k| match k {
+                0..=60 => LatLon::new(45.0 + k as f64 * step_lat, 5.0),
+                61..=100 => LatLon::new(45.0 + (120 - k) as f64 * step_lat, 5.0),
+                _ => LatLon::new(45.0 + 20.0 * step_lat, 5.0 + (k - 100) as f64 * step_lon),
+            })
+            .collect();
+        let d: Vec<f64> = (0..n).map(|k| k as f64 * 5.0).collect();
+        let none = vec![false; n];
+        let t = crate::v1::TemoinV1 {
+            id: "perso-x-s0".into(),
+            trace: "perso-x".into(),
+            planifie: false,
+            nature: "remblai_deblai".into(),
+            serie: crate::manifest::Serie::Calibration,
+            ends: Some([pts[20], pts[200]]),
+            real: Vec::new(),
+            length_m: None,
+            declared_m: Some(500.0),
+        };
+        let it = temoin_v1_item(&t, &d, &pts, &none, &none, &[], None, 40.0).unwrap().pop().unwrap();
+        assert_eq!(it["longueur_m"], 500.0, "{it}");
+        // Sans longueur déclarée : premier passage du début, sur toute la trace.
+        let sans = crate::v1::TemoinV1 { declared_m: None, ..t.clone() };
+        let it = temoin_v1_item(&sans, &d, &pts, &none, &none, &[], None, 40.0).unwrap().pop().unwrap();
+        assert_eq!(it["longueur_m"], 900.0, "{it}");
+        // Témoin parcouru à rebours (début après la fin) : retrouvé dans la fenêtre d'après.
+        let rebours = crate::v1::TemoinV1 { ends: Some([pts[200], pts[120]]), ..t.clone() };
+        let it = temoin_v1_item(&rebours, &d, &pts, &none, &none, &[], None, 40.0).unwrap().pop().unwrap();
+        assert_eq!(it["longueur_m"], 400.0, "{it}");
     }
 
     #[test]

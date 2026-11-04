@@ -174,6 +174,9 @@ pub struct TemoinV1 {
     pub real: Vec<RealRange>,
     /// Longueur du témoin lue par `tools/temoins_v1_tags.py` (part d'une plage).
     pub length_m: Option<f64>,
+    /// Longueur déclarée le long de la trace (`length_m` de l'index des témoins) : borne la
+    /// recherche du début à partir de la fin (décision de l'utilisateur, 2026-11-04).
+    pub declared_m: Option<f64>,
 }
 
 /// Plage d'ouvrage réel sur la voie d'un témoin V1 (extrémités projetées sur le cas par ord-bench).
@@ -244,6 +247,7 @@ pub fn temoins(paths: &BenchPaths, v1: &PersoV1, target: Serie) -> anyhow::Resul
                 ends: point(&t["debut"]).zip(point(&t["fin"])).map(|(a, b)| [a, b]),
                 real: Vec::new(),
                 length_m: None,
+                declared_m: t["length_m"].as_f64().filter(|l| *l > 0.0),
             })
         })
         .map(|mut t: TemoinV1| {

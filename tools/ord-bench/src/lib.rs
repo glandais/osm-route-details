@@ -215,7 +215,12 @@ impl BenchPaths {
 /// ni extrait, Q1 non bloquant, E3 bloquant si la couverture comptée avant toute mesure (manifest
 /// `serie_v12.couverture.E3`) atteint son minimum, sinon rapporté sans refus (e57dd1e ; un sous-minimum mesuré au jugement refuse : 65ea59b) ; ouvrages
 /// V1.1 du complément (`complement_v11`, `nv-840` à `nv-947`, ee5d7c1) mesurés en calibration.
-pub const BENCH_REVISION: Option<&str> = Some("bench4");
+/// `bench5` (règles 2026.11.12 ; après le jugement V1.2, décision de l'utilisateur du
+/// 2026-11-04) : extrémités d'un témoin S2, la fin cherchée d'abord sur tout le cas, puis le début
+/// dans `[d_fin − 1,5 × longueur déclarée, d_fin]` (à défaut, à rebours, dans
+/// `[d_fin, d_fin + 1,5 × longueur déclarée]`) ; une trace qui repasse par le début ne rallonge
+/// plus le témoin (`perso-196-s0` : 1 645 m mesurés au lieu de 567 m).
+pub const BENCH_REVISION: Option<&str> = Some("bench5");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.
