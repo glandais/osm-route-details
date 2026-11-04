@@ -539,3 +539,22 @@ fn a_secondary_tagged_bicycle_no_stays_off_graph() {
     let off = length_where(&segs, |s| s.off_graph && s.way_kind == WayKind::MajorRoad);
     assert!(off > 900.0, "{off} m hors graphe : {segs:?}");
 }
+
+#[test]
+fn turning_off_a_bridge_at_its_abutment_stays_matched() {
+    // Pont d'ouest en est jusqu'à x = 0, puis la rue repart vers le nord-ouest à 135° : à la
+    // culée, le cap du parcours sur ± 20 m s'écarte de plus de 60° de celui du tablier, mais le
+    // parcours le suit encore du côté du tablier. L'observation de la culée reste appariée : pas
+    // de plage non appariée contre le passage (doute `UnmatchedAdjacent`), qui reste corrigeable.
+    let net = || {
+        Net::new()
+            .add(with_surface("tertiary", PavedGroup::Paved), &[(-400.0, 0.0), (-120.0, 0.0)])
+            .add(bridge("tertiary"), &[(-120.0, 0.0), (0.0, 0.0)])
+            .add(with_surface("tertiary", PavedGroup::Paved), &[(0.0, 0.0), (-200.0, 200.0)])
+    };
+    let trace = [(-302.0, 0.0), (0.0, 0.0), (-150.0, 150.0)];
+    let (_, out) = typology_of(net(), &trace);
+    assert_eq!(out.passages.len(), 1, "{:?}", out.passages);
+    assert!(out.passages[0].doubts.is_empty(), "{:?}", out.passages[0].doubts);
+    assert!(out.runs.iter().all(|r| matches!(r.matched, RunMatch::Matched { .. })), "{:?}", out.runs);
+}

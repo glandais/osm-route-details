@@ -265,7 +265,12 @@ Surchargeables par configuration (comme `MATCH_*`) ; valeurs effectives dans `ru
    une autoroute.
 7. Ouvrage apparié à contre-cap (2026.10.5) : une observation appariée sur un pont ou un tunnel dont
    le cap s'écarte de plus de `max_structure_heading_deg` de celui du parcours (sur
-   ± `heading_window_m`) est non appariée, ainsi que les morceaux restants trop courts.
+   ± `heading_window_m`) est non appariée, ainsi que les morceaux restants trop courts. Depuis
+   2026.11.12, le cap est lu de chaque côté de l'observation (de `t − heading_window_m` à `t`, et de
+   `t` à `t + heading_window_m`) et l'ouvrage n'est croisé que si les deux côtés s'en écartent : à
+   une culée, le parcours qui quitte le pont en tournant le suit encore du côté du tablier et reste
+   apparié (sinon une plage non appariée de 10 à 15 m contre le passage, doute
+   `UnmatchedAdjacent`, et le pont n'était pas corrigé).
 
 **Pas de pénalité de demi-tour** (`route_to`, `os:src/matcher.rs:262-282`) : aller-retour, boucle,
 demi-tour sur un pont sont des parcours ordinaires.

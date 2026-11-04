@@ -47,7 +47,10 @@ use serde::Serialize;
 // de la route des deux côtés ; correction sous un pont au-dessus de la trace étendue au terrain
 // Mapterhorn mesuré (sonde de 28 m) ; fenêtre de cette correction rognée à la rampe d'un ouvrage
 // emprunté au lieu d'être rejetée.
-pub const RULES_VERSION: &str = "2026.11.11";
+// 2026.11.12 : ouvrage croisé et non suivi seulement si le cap du parcours s'écarte de celui de
+// l'ouvrage des deux côtés de l'observation : à une culée, le parcours qui quitte le pont en
+// tournant reste apparié (plus de plage non appariée ni de doute `UnmatchedAdjacent`).
+pub const RULES_VERSION: &str = "2026.11.12";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Rules {
@@ -556,6 +559,6 @@ mod tests {
             hash ^= u64::from(b);
             hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
         }
-        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.11", "0c0fa503293f2593".to_owned()));
+        assert_eq!((RULES_VERSION, format!("{hash:016x}")), ("2026.11.12", "0c0fa503293f2593".to_owned()));
     }
 }

@@ -125,6 +125,19 @@ vérifié par `ord-bench check` avant toute campagne.
       échecs en moins). Pas de seuil de bosse propre à Mapterhorn. Quand un tunnel heuristique
       est refusé par le profil en travers, le MNT reste dans le profil, sans correction
       d'altitude seule (`perso-157` : RMSE E1 de 0,72 à 0,99 m, toujours réussi).
+  - Décisions de l'utilisateur (2026-11-04, après le jugement V1.2, refusé : `bench/judgements.md`) :
+    - un pont OSM suivi jusqu'à sa culée, où la trace tourne, n'est plus pris pour un ouvrage
+      croisé : le contrôle de cap de l'appariement (T03 §5, étape 7) lit le cap du parcours de
+      chaque côté de l'observation et ne rejette l'ouvrage que si les deux côtés s'en écartent de
+      plus de 60°. Le cap lu sur ± 20 m de part et d'autre de la culée, virage compris, atteignait
+      60° sur l'observation de la culée : non appariée, elle laissait 15 m sans appariement contre
+      le passage (doute `UnmatchedAdjacent`), et le pont restait au MNT (`perso-192`, `nv-983` :
+      écart au milieu de −3,9 m en mode `distance` ; en `input_with_breakpoints`, l'interpolation
+      entre les points d'entrée des culées masquait le creux). Règles 2026.11.12, contrat
+      inchangé, T03 §5 ;
+    - banc : les extrémités d'un témoin S2 sont cherchées fin d'abord, puis début dans
+      `[d_fin − 1,5 × longueur déclarée, d_fin]` (`perso-196-s0`, début repassé trois fois :
+      1 645 m mesurés au lieu de 567 m). Révision `bench5`.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

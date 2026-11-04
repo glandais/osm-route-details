@@ -268,6 +268,42 @@ fn closed_candidate(g: &StreetGraph, o: &Obs, params: &MatchParams) -> Option<Cl
         })
 }
 
+/// Angle aigu, en degrés, entre deux directions (le sens est indifférent) ; `None` si l'une est
+/// nulle.
+fn acute_angle_deg(u: [f64; 2], v: [f64; 2]) -> Option<f64> {
+    let (nu, nv) = ((u[0].powi(2) + u[1].powi(2)).sqrt(), (v[0].powi(2) + v[1].powi(2)).sqrt());
+    if nu <= 0.0 || nv <= 0.0 {
+        return None;
+    }
+    let cos = ((u[0] * v[0] + u[1] * v[1]) / (nu * nv)).abs().min(1.0);
+    Some(cos.acos().to_degrees())
+}
+
+/// L'observation `t`, appariée sur un segment d'ouvrage de direction `seg`, croise l'ouvrage au
+/// lieu de le suivre : le cap du parcours s'écarte de plus de `max_structure_heading_deg` de celui
+/// du segment de chaque côté de l'observation (de `t − heading_window_m` à `t`, et de `t` à
+/// `t + heading_window_m`). Un seul côté ne suffit pas : à une culée, le parcours qui quitte
+/// l'ouvrage en tournant le suit encore du côté du tablier (règles 2026.11.12) ; un côté réduit à
+/// l'observation elle-même (bout du parcours) n'est pas lu.
+fn crosses_structure(obs: &[Obs], t: usize, seg: [f64; 2], params: &MatchParams) -> bool {
+    let n = obs.len();
+    let lo = (0..=t).rev().find(|&k| obs[t].d_m - obs[k].d_m >= params.heading_window_m).unwrap_or(0);
+    let hi = (t..n).find(|&k| obs[k].d_m - obs[t].d_m >= params.heading_window_m).unwrap_or(n - 1);
+    let mut read = false;
+    for (from, to) in [(lo, t), (t, hi)] {
+        if to <= from {
+            continue;
+        }
+        let side = [obs[to].p[0] - obs[from].p[0], obs[to].p[1] - obs[from].p[1]];
+        let Some(angle) = acute_angle_deg(side, seg) else { continue };
+        if angle <= params.max_structure_heading_deg {
+            return false;
+        }
+        read = true;
+    }
+    read
+}
+
 /// Apparie les observations sur le graphe ; le budget est lu toutes les 1 000 observations.
 ///
 /// Outre ses candidats du graphe, une observation a un état « hors graphe » : sa projection sur la
@@ -472,24 +508,8 @@ pub fn match_obs(
         if !g.segs[c.seg as usize].level.is_structure() {
             continue;
         }
-        let lo = (0..=t).rev().find(|&k| obs[t].d_m - obs[k].d_m >= params.heading_window_m).unwrap_or(0);
-        let hi = (t..n).find(|&k| obs[k].d_m - obs[t].d_m >= params.heading_window_m).unwrap_or(n - 1);
-        if hi <= lo {
-            continue;
-        }
-        let trace = [obs[hi].p[0] - obs[lo].p[0], obs[hi].p[1] - obs[lo].p[1]];
         let (a, b) = g.seg_points(c.seg);
-        let seg = [b[0] - a[0], b[1] - a[1]];
-        let (nt, ns) =
-            ((trace[0].powi(2) + trace[1].powi(2)).sqrt(), (seg[0].powi(2) + seg[1].powi(2)).sqrt());
-        if nt <= 0.0 || ns <= 0.0 {
-            continue;
-        }
-        // Angle aigu entre les deux directions (le sens du segment est indifférent).
-        let cos = ((trace[0] * seg[0] + trace[1] * seg[1]) / (nt * ns)).abs().min(1.0);
-        if cos.acos().to_degrees() > params.max_structure_heading_deg {
-            crossing[t] = true;
-        }
+        crossing[t] = crosses_structure(&obs, t, [b[0] - a[0], b[1] - a[1]], params);
     }
     if crossing.iter().any(|x| *x) {
         for (c, x) in chosen.iter_mut().zip(&crossing) {
