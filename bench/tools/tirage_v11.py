@@ -22,7 +22,8 @@ private/v12/tirage.json ; Q1 rapporté sur V1.2, README §4 quinquies.1 : Q1 = 0
 
 Période (README §4 sexies.1, décision de l'utilisateur, 2026-11-04) : pour une série après V1.2,
 le vivier exclut les sorties de 2015-05 à 2020-09 et celles d'avant 2014-12 sans qualification
-individuelle (verdict `fiable` dans private/strava/qualif*.csv) ; Q1 n'est pas concerné. Les
+individuelle (private/strava/qualif*.csv : verdict `fiable`, bruit ≤ 1,0 m et D+ baro / D+ MNT de
+0,90 à 1,20, décision de l'utilisateur, 2026-11-04) ; Q1 n'est pas concerné. Les
 tirages de V1.1 et V1.2 (sans cette règle) restent reproductibles.
 
 `compter` : taille du vivier d'une série future (période exclue, jamais utilisées ni MVP, ni V1, ni
@@ -101,11 +102,24 @@ def en_france(a, pts):
     return bool(a.get("location_summary")) and pays not in ETRANGER and 41.0 <= pts[0][0] <= 51.6 and -5.5 <= pts[0][1] <= 9.8
 
 
+QUALIF_BRUIT_MAX_M = 1.0   # qualification individuelle d'avant 2014-12 (décision de l'utilisateur, 2026-11-04)
+QUALIF_RATIO = (0.90, 1.20)   # D+ baro / D+ MNT brut, bornes par trace d'E2
+
+
+def qualifiee(r):
+    """Qualification individuelle (README §4 sexies.1) : verdict fiable, bruit ≤ 1,0 m, D+ baro / D+ MNT dans les bornes d'E2."""
+    try:
+        x = float(r["gain_rec_m"]) / float(r["gain_dem_m"])
+        return r["verdict"] == "fiable" and float(r["noise_m"]) <= QUALIF_BRUIT_MAX_M and QUALIF_RATIO[0] <= x <= QUALIF_RATIO[1]
+    except (KeyError, ValueError, ZeroDivisionError):
+        return False
+
+
 def periode_exclue(a, qual):
     m = a["start_local"][:7]
     if PERIODE_EXCLUE[0] <= m <= PERIODE_EXCLUE[1]:
         return True
-    return m < QUALIF_AVANT and qual.get(str(a["id"]), {}).get("verdict") != "fiable"
+    return m < QUALIF_AVANT and not qualifiee(qual.get(str(a["id"]), {}))
 
 
 def lire_qualif(B):

@@ -2362,6 +2362,7 @@ perso_v12:
       fenetres_calibration: 1   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2014-06"
+      reference_baro: non_qualifiee   # README §4 sexies.1 et .2 : avant 2014-12 sans qualification individuelle (bruit 1,19 m, D+ baro / MNT 1,23) ; traitée comme periode_exclue
       dist_km: 167.2
       fichier: private/traces/perso-166.gpx
       sha256: 433b46c5ba69583577f82b369eb2c58bb8defb00b6ef9c88d8957772591a5616

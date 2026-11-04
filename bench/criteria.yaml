@@ -167,9 +167,9 @@ decisions:   # de l'utilisateur, 2026-10-30
   - id: serie_v12_s2_un_planifie   # 2026-11-03, après le contrôle de couverture de V1.2
     decision: "Série V1.2 : un seul témoin S2 planifié gardé (pl12-s2-troncais) ; pl12-s2-isere et pl12-s2-nesque retirés (nature non confirmée par OSM, 00e500f), mention retire au manifest, sans remplacement"
   - id: tirage_periode_exclue   # 2026-11-04, après le jugement V1.2 ; séries futures
-    decision: "Tirage d'une série future : sorties de 2015-05 à 2020-09 exclues, et d'avant 2014-12 sans qualification individuelle (qualify_baro.py, verdict fiable) ; tirages figés de V1.1 et V1.2 non refaits ; Q1 non concerné (négatifs pris dans la période, q1_negatif_serie_nouvelle) ; README §4 sexies.1"
+    decision: "Tirage d'une série future : sorties de 2015-05 à 2020-09 exclues, et d'avant 2014-12 sans qualification individuelle (verdict fiable, bruit ≤ 1,0 m et D+ baro / D+ MNT brut de 0,90 à 1,20, décision de l'utilisateur, 2026-11-04) ; tirages figés de V1.1 et V1.2 non refaits ; Q1 non concerné (négatifs pris dans la période, q1_negatif_serie_nouvelle) ; README §4 sexies.1"
   - id: periode_hors_reference_baro   # 2026-11-04, après le jugement V1.2 ; calibration
-    decision: "Traces V1.1 et V1.2 de 2015-05 à 2020-09 (manifest reference_baro: periode_exclue) : hors des références baro d'E1, E2b, E3 et E5, rapportées (periode_baro_exclue), non comptées ; cas de M1 et de la typologie ; verdicts rendus non revus ; README §4 sexies.2"
+    decision: "Traces V1.1 et V1.2 de 2015-05 à 2020-09 (manifest reference_baro: periode_exclue), et d'avant 2014-12 sans qualification individuelle (reference_baro: non_qualifiee, perso-166) : hors des références baro d'E1, E2b, E3 et E5, rapportées (periode_baro_exclue), non comptées ; cas de M1 et de la typologie ; verdicts rendus non revus ; README §4 sexies.2"
   - id: e3_e2b_baro_bruite   # 2026-11-04, après le jugement V1.2 ; calibration comprise
     decision: "E3 et E2b : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non comptée (E3 : passages hors de la médiane du pont, sans repli MNS ; E2b : trace hors de la médiane du groupe), comme E1 plaine et E5 ; README §4 sexies.3"
   - id: couverture_alignee_banc   # 2026-11-04, après le jugement V1.2 ; séries futures

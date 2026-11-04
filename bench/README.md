@@ -1255,8 +1255,10 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
 
 1. **Période exclue du tirage** (décision de l'utilisateur, 2026-11-04). Le tirage d'une série
    future exclut les sorties de 2015-05 à 2020-09 (mois de départ) et celles d'avant 2014-12 qui
-   n'ont pas de qualification individuelle (`qualify_baro.py`, verdict `fiable`, dans
-   `private/strava/qualif*.csv`). Les tirages figés de V1.1 et V1.2 ne sont pas refaits. Q1 n'est
+   n'ont pas de qualification individuelle. *Qualification individuelle* (décision de
+   l'utilisateur, 2026-11-04) : verdict `fiable` de `qualify_baro.py` **et** bruit ≤ 1,0 m **et**
+   D+ baro / D+ MNT brut dans les bornes par trace d'E2 (0,90 à 1,20) ; le verdict `fiable` seul ne
+   suffit pas. Les tirages figés de V1.1 et V1.2 ne sont pas refaits. Q1 n'est
    pas concerné : ses négatifs sont pris dans la période, exprès (§1.3, `q1_negatif_serie_nouvelle`).
 2. **Traces de la période hors des références baro** (décision de l'utilisateur, 2026-11-04). Les
    traces de V1.1 et de V1.2 dont le mois de départ est dans 2015-05 → 2020-09 (18 et 26 traces)
@@ -1264,9 +1266,10 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    où elles sont rapportées (`periode_baro_exclue`), non comptées. Elles restent des cas pour M1 et
    pour la typologie (E4, S1, S2, S3, hors graphe vélo). Marque au manifest, par trace :
    `reference_baro: periode_exclue` dans `perso_v11` et `perso_v12`, à côté de `mois`, que l'outil
-   peut contrôler. Les deux traces d'avant 2014-12 (`perso-130`, 2014-09 ; `perso-166`, 2014-06) ont
-   une qualification individuelle `fiable` et ne sont pas marquées ; la garde de bruit (point 3)
-   s'applique à elles comme aux autres. Les négatifs `neg-*` (Q1) ne sont pas concernés.
+   peut contrôler. Traces d'avant 2014-12 (qualification individuelle du point 1, décision de
+   l'utilisateur, 2026-11-04) : `perso-130` (2014-09, bruit 0,9 m, D+ baro / MNT 1,06) est
+   qualifiée et n'est pas marquée ; `perso-166` (2014-06, bruit 1,19 m, rapport 1,23) ne l'est pas
+   et porte `reference_baro: non_qualifiee`, traitée comme `periode_exclue`. Les négatifs `neg-*` (Q1) ne sont pas concernés.
 3. **Garde de bruit étendue à E3 et E2b** (décision de l'utilisateur, 2026-11-04). Comme en E1
    plaine (§4 ter.8) et en E5 (§4 quater.2), une trace dont le bruit baro (`qualify_baro.py`,
    `noise_m` de la trace entière ; segments `.sN` : celui de la trace) dépasse 1,0 m fournit une
