@@ -1271,6 +1271,11 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    l'utilisateur, 2026-11-04) : `perso-130` (2014-09, bruit 0,9 m, D+ baro / MNT 1,06) est
    qualifiée et n'est pas marquée ; `perso-166` (2014-06, bruit 1,19 m, rapport 1,23) ne l'est pas
    et porte `reference_baro: non_qualifiee`, traitée comme `periode_exclue`. Les négatifs `neg-*` (Q1) ne sont pas concernés.
+   Lecture (rédaction, 2026-11-04) : en E5, un site croisé par une trace marquée a une référence
+   incertaine (`periode_baro_exclue`), rapportée, hors mesure, sans repli sur le MNT, comme
+   `baro_bruite` (§4 quater.2). Le test de niveau (§4 ter.2) lit encore le baro d'une trace
+   marquée : c'est un contrôle géométrique, pas une référence ; il peut retirer un passage de S1
+   ou du hors graphe vélo, comportement conservé.
 3. **Garde de bruit étendue à E3 et E2b** (décision de l'utilisateur, 2026-11-04). Comme en E1
    plaine (§4 ter.8) et en E5 (§4 quater.2), une trace dont le bruit baro (`qualify_baro.py`,
    `noise_m` de la trace entière ; segments `.sN` : celui de la trace) dépasse 1,0 m fournit une
