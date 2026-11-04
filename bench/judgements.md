@@ -234,3 +234,51 @@ Anomalies constatées sans analyse de la série (en-têtes du rapport, du cache 
 
 L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
 
+## Jugement V1.3 (2026-11-04)
+
+- Commit du code mesuré (`crates/`, `tools/ord-bench/`, `Cargo.*`) : `7b84689`
+- HEAD au jugement : `1ff6f14` ; commit de gel : `1ff6f14`
+- `rules_version` : 2026.11.12 ; `api_version` : 1.4
+- Révision du banc (`revision_banc`) : `bench7`
+- `data_versions` : `{"elevation":[{"date":"2026-10-31","indicative":true,"products":["mnt","mns"],"role":"primary","source":"ign-lidar-hd","zoom":15}],"typology":{"indicative":true,"role":"primary","source":"versatiles-shortbread","zoom":14}}`
+- Empreintes : manifest `fb9d2de0cb9d3432784cfb81784c7476286649d62a1ce62c8c8916fd18c0b224`, critères `026f0a893fa0b555e6a856154d6ee6b797cda31cf391a285ad5868aa74c7374f`, règles du banc `ea7c9f203dab75744e65f211d4534f1e076576ac55262685d684a0ea5b73fb85`, données `e4a98312c8b0906cd735ac9e5ea46a4d69608a220e5359ac808c15fa3dd22230`
+- Rapport : `reports/2026-11-04-2026.11.12-bench7-jugement-V1.3/results.json`
+- Résultat : **refusé** (en échec, sautés ou sous leur minimum de couverture : E2b, E5)
+- Non bloquants en échec ou sautés, rapportés sans refuser : E3, E3_hors_france, Q1, S3, hors_graphe_velo
+
+| Critère | bloquant | distance | input_with_breakpoints | ids en échec |
+|---|---|---|---|---|
+| E1 | oui | pass | pass | references incertaines : perso-207 |
+| E2 | non | reported | reported | distance : indicatif : dplus 1,018 ; ouvrage 1,017 ; plaine 0,992 ; input_with_breakpoints : indicatif : dplus 1,018 ; ouvrage 1,016 ; plaine 0,991 |
+| E2b | oui | fail | fail | perso-214, perso-216, perso-207 ; dplus |
+| E3 | non | fail | fail | distance : nv-1268, nv-1269, nv-1270, nv-1273, nv-1282, nv-1283, nv-1284, nv-1309 ; input_with_breakpoints : nv-1268, nv-1269, nv-1270, nv-1273, nv-1309 ; ponts_mnh_10m_min 1 < 3 |
+| E3_hors_france | non | skipped | skipped | — |
+| E4 | oui | pass | pass | nv-1315, nv-1315, nv-1336 |
+| E5 | oui | fail | fail | nv-1389 |
+| M1 | oui | pass | pass | — |
+| Q1 | non | sous_minimum | sous_minimum | traces_negatives 0 < 2 |
+| R1_R2 | oui | pass | pass | — |
+| R3 | non | pass | pass | — |
+| S1 | oui | pass | pass | — |
+| S2 | oui | pass | pass | — |
+| S3 | non | skipped | skipped | — |
+| hors_graphe_velo | non | skipped | skipped | — |
+
+Aucun cas sauté (23 traces et 10 itinéraires retenus, 66 mesures) ; gel `1ff6f14`, code mesuré
+`7b84689` (bench7), un seul passage mesuré, jusqu'au bout (2026-11-04, 11:11:46Z à 11:17:26Z) ;
+`fill-cache` de la série (11:03:32Z à 11:11:20Z) sans refus, toutes les tuiles dans la campagne
+`tuiles_2026_11_04`. Lignes du tableau telles qu'écrites par `judge`.
+
+Anomalies constatées pendant la collecte, sans analyse de la série :
+1. **Overpass en parallèle** (2026-11-04, de 09:12Z à 09:22Z environ) : la recherche de digues
+   pour le témoin S2 supplémentaire (§4 septies.3) a interrogé Overpass pendant le troisième
+   instantané `--toutes` (date des données du serveur Valhalla), contre la règle « Overpass sans
+   parallélisme ». Arrêtée dès le constat. Erreurs HTTP réessayées des deux côtés ; instantanés
+   complets (1 592 voies sur 1 592), `--diff` : aucun tag différent, aucune voie absente.
+2. **Correction de `tools/couverture_v1.py` pendant la collecte** (`f27f021`) : appartenance à
+   une forêt OSM testée par la boîte englobante du polygone ; sans elle, `pl13-s2-chaux` était
+   confirmé sur 15 % au lieu de 100 % et retiré. V1.2 n'est pas recomptée (décision de
+   l'utilisateur, 2026-11-04).
+
+L1 et L2 (latences) sont mesurés à part (`ord-bench latency`).
+
