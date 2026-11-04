@@ -174,6 +174,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "E3 et E2b : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non comptée (E3 : passages hors de la médiane du pont, sans repli MNS ; E2b : trace hors de la médiane du groupe), comme E1 plaine et E5 ; README §4 sexies.3"
   - id: couverture_alignee_banc   # 2026-11-04, après le jugement V1.2 ; séries futures
     decision: "Contrôle de couverture (couverture_v1.py) aligné sur le banc pour les séries après V1.2 : trim1km, baro interpolé sur 5 m, décalage sur les approches 50–300 m et côtés à 2 m, baro sur le tablier, test de niveau sur les stations, garde de bruit ; README §4 sexies.4"
+  - id: serie_v13_e3_e2b_si_couverture   # 2026-11-04, composition de V1.3
+    decision: "Série tenue à l'écart V1.3 : E3 bloquant si sa couverture comptée avant mesure (couverture_v1.py aligné f8a87d9, garde de bruit comprise) atteint le minimum, sinon rapporté ; E2b de même groupe par groupe ; un sous-minimum mesuré sur un critère ou groupe bloquant refuse (65ea59b) ; Q1 rapporté ; README §4 septies"
   # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
   # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
   # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).
@@ -272,6 +274,10 @@ serie_tenue_a_l_ecart:   # README §2 point 3 et §4 ter.4, V1
   serie_v11:   # README §4 ter.10, décision de l'utilisateur, 2026-11-02 ; série V1.1 seulement
     E3: {bloquant: false, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1]}
     E2b: {groupes_exiges: [dplus, plaine], ouvrage: rapporte}
+  serie_v13:   # README §4 septies, décision de l'utilisateur, 2026-11-04 ; série V1.3 seulement
+    Q1: {bloquant: false, sous_minimum: rapporte, calibration: [MVP, V1, V1.1, V1.2]}
+    E3: {bloquant: si_couverture_atteinte, couverture: comptee_avant_toute_mesure, outil: couverture_v1_aligne, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1, V1.1, V1.2]}   # serie_v13_e3_e2b_si_couverture
+    E2b: {bloquant: si_couverture_atteinte_par_groupe, couverture: comptee_avant_toute_mesure, groupes: [dplus, plaine, ouvrage], seuils: inchanges, sous_minimum: rapporte}
   serie_v12:   # README §4 quinquies, décisions de l'utilisateur, 2026-11-03 ; série V1.2 seulement
     Q1: {bloquant: false, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}
     E3: {bloquant: si_couverture_atteinte, couverture: comptee_avant_toute_mesure, seuils: inchanges, sous_minimum: rapporte, calibration: [MVP, V1, V1.1]}   # serie_v12_e3_si_couverture ; couverture 2026-11-03 atteinte : bloquant ; sous_minimum vise la couverture comptée avant mesure, un sous-minimum mesuré au jugement refuse (bloquant_sous_minimum, README §4 quinquies.2)

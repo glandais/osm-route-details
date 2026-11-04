@@ -1289,6 +1289,25 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    sont pas purgées des autres ouvrages. Essai sur les données de V1.2 (hors git, 2026-11-04) :
    72 ponts sans la garde de bruit (83 mesurés par le banc), 27 avec.
 
+**§4 septies. Série tenue à l'écart V1.3** (décision de l'utilisateur, 2026-11-04 ; collecte
+complète autorisée). Composition : les 29 sorties à 30 km inédits au moins du vivier, période
+exclue et qualification individuelle d'avant 2014-12 appliquées (§4 sexies.1), tirées au sel
+`osm-route-details:v1.3:` et fixées avant toute collecte ; 3 parcours E4 par des tunnels jamais
+vus ; 1 ou 2 témoins S2 planifiés, nature confirmée par OSM sur 50 % au moins (00e500f) avant
+collecte ; 4 ou 5 parcours R1_R2, 400 km au moins, hors des régions déjà utilisées, références
+§4 quater.1 et deux instantanés `--toutes` datés ; E5 en sites ; tout tenu à l'écart, MVP, V1,
+V1.1 et V1.2 en calibration ; inventaire Strava non rafraîchi ; outils réseau en séquence.
+
+1. **Q1 rapporté**, comme en V1.2 (§4 quinquies.1).
+2. **E3 et E2b bloquants si leur couverture est atteinte** (règle de V1.2 reconduite et étendue,
+   §4 quinquies.2). La couverture se compte avant toute mesure, par `tools/couverture_v1.py`
+   aligné sur le banc (§4 sexies.4, f8a87d9), garde de bruit comprise (§4 sexies.3). E3 est
+   bloquant si elle atteint son minimum ; sinon le minimum non atteint est rapporté, non
+   bloquant. E2b se juge groupe par groupe : un groupe sous son minimum de traces avant mesure
+   est rapporté, non bloquant ; un groupe qui l'atteint reste bloquant. Un critère, ou un groupe
+   d'E2b, bloquant parce que sa couverture est atteinte refuse l'incrément s'il est en échec ou
+   sous son minimum *mesuré* au jugement (règle ordinaire, comme en 65ea59b).
+
 ---
 
 ## 5. Protocole : MNS lu sur la trace GPS ou sur la géométrie OSM du pont (§11.2 du doc 01)
