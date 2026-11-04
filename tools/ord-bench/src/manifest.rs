@@ -173,7 +173,7 @@ pub struct Planned {
 }
 
 /// Section d'une série nouvelle du manifest (`perso_v1` pour V1, `perso_v11` pour V1.1,
-/// `perso_v12` pour V1.2) : index
+/// `perso_v12` pour V1.2, `perso_v13` pour V1.3) : index
 /// des ouvrages, témoins et séries (hors git, par empreinte), itinéraires planifiés et
 /// identifiants des traces de la série. Le recalage et l'instantané OSM de ses références sont lus
 /// dans la section, sinon dans `serie_<clé>` (V1.1 : `serie_v11.recalage`,
@@ -237,7 +237,8 @@ pub struct Manifest {
     pub v1: Option<PersoV1>,
     /// Sections des séries tenues à l'écart entières après V1, dans l'ordre de `SECTIONS`
     /// (`perso_v11` : V1.1, décision de l'utilisateur, 2026-11-02 ; `perso_v12` : V1.2, README
-    /// §4 quinquies) ; une section absente du manifest n'y figure pas, ses cas ne sont jamais lus.
+    /// §4 quinquies ; `perso_v13` : V1.3, README §4 septies, b34b23f) ; une section absente du
+    /// manifest n'y figure pas, ses cas ne sont jamais lus.
     /// Une série suivante s'ajoute par ses clés dans `SECTIONS`, sans autre changement ici.
     pub apres_v1: Vec<(&'static SectionKeys, PersoV1)>,
     /// Série tenue à l'écart du MVP jugée (`judgements.md`) : devenue calibration (README §2,
@@ -325,18 +326,23 @@ pub const SECTION_V11: SectionKeys =
     SectionKeys { perso: "perso_v11", serie: "serie_v11", suffix: "v11", name: "V1.1" };
 pub const SECTION_V12: SectionKeys =
     SectionKeys { perso: "perso_v12", serie: "serie_v12", suffix: "v12", name: "V1.2" };
+/// Série tenue à l'écart V1.3 (README §4 septies ; manifest `perso_v13`, `serie_v13`,
+/// `tuiles_2026_11_04`, b34b23f).
+pub const SECTION_V13: SectionKeys =
+    SectionKeys { perso: "perso_v13", serie: "serie_v13", suffix: "v13", name: "V1.3" };
 
 /// Séries nouvelles du manifest, dans l'ordre des incréments. V1 d'abord (champ `v1`), puis les
-/// séries tenues à l'écart entières (`apres_v1`) : une série suivante (V1.3) s'ajoute ici, avec
-/// ses clés du manifest, une fois sa section écrite par data-init.
-pub const SECTIONS: [&SectionKeys; 3] = [&SECTION_V1, &SECTION_V11, &SECTION_V12];
+/// séries tenues à l'écart entières (`apres_v1`) : une série suivante s'ajoute ici, avec ses clés
+/// du manifest, une fois sa section écrite par data-init.
+pub const SECTIONS: [&SectionKeys; 4] = [&SECTION_V1, &SECTION_V11, &SECTION_V12, &SECTION_V13];
 
-/// Clés d'un incrément (`V1`, `V1.1`, `V1.2`).
+/// Clés d'un incrément (`V1`, `V1.1`, `V1.2`, `V1.3`).
 pub fn section_keys(name: &str) -> Option<&'static SectionKeys> {
     SECTIONS.into_iter().find(|k| k.name == name)
 }
 
-/// Section d'une série nouvelle (`perso_v1`, `perso_v11`, `perso_v12`) ; ses traces sont ajoutées à `traces`.
+/// Section d'une série nouvelle (`perso_v1`, `perso_v11`, `perso_v12`, `perso_v13`) ; ses traces
+/// sont ajoutées à `traces`.
 /// Absente : `None`, ses cas ne sont jamais lus.
 fn parse_section(
     root: &Value,
@@ -497,9 +503,10 @@ impl Manifest {
 
     /// Série MVP jugée (README §2, point 3) : ses traces et ses ouvrages tenus à l'écart deviennent
     /// calibration, et les fenêtres masquées des traces du MVP (ouvrages d'une autre série au MVP)
-    /// n'ont plus lieu d'être. Les traces V1, V1.1 et V1.2 gardent leur série et leurs fenêtres.
+    /// n'ont plus lieu d'être. Les traces V1, V1.1, V1.2 et V1.3 gardent leur série et leurs
+    /// fenêtres.
     pub fn with_mvp_judged(mut self) -> Self {
-        // Traces des séries nouvelles (V1, V1.1, V1.2) : leur série et leurs fenêtres restent.
+        // Traces des séries nouvelles (V1 à V1.3) : leur série et leurs fenêtres restent.
         let new: BTreeSet<String> = self.sections().flat_map(|v| v.traces.iter().cloned()).collect();
         for t in self.traces.iter_mut().filter(|t| !new.contains(&t.id)) {
             t.serie = Serie::Calibration;
@@ -519,7 +526,7 @@ impl Manifest {
         self.with_judged("V1")
     }
 
-    /// Série nouvelle `name` (`V1`, `V1.1`, `V1.2`) jugée (README §2, point 3) : comme
+    /// Série nouvelle `name` (`V1`, `V1.1`, `V1.2`, `V1.3`) jugée (README §2, point 3) : comme
     /// `with_v1_judged`.
     pub fn with_judged(mut self, name: &str) -> Self {
         let slot = if name == SECTION_V1.name {
@@ -537,7 +544,7 @@ impl Manifest {
     }
 
     /// Sections des séries nouvelles présentes au manifest, avec leur incrément, dans l'ordre (V1,
-    /// V1.1, puis V1.2).
+    /// V1.1, V1.2, puis V1.3).
     pub fn named_sections(&self) -> impl Iterator<Item = (&'static str, &PersoV1)> {
         self.v1
             .as_ref()
@@ -546,17 +553,17 @@ impl Manifest {
             .chain(self.apres_v1.iter().map(|(k, v)| (k.name, v)))
     }
 
-    /// Sections des séries nouvelles présentes au manifest (V1, V1.1, puis V1.2).
+    /// Sections des séries nouvelles présentes au manifest (V1, V1.1, V1.2, puis V1.3).
     pub fn sections(&self) -> impl Iterator<Item = &PersoV1> {
         self.named_sections().map(|(_, v)| v)
     }
 
-    /// Section d'un incrément (`V1`, `V1.1`, `V1.2`).
+    /// Section d'un incrément (`V1`, `V1.1`, `V1.2`, `V1.3`).
     pub fn section(&self, name: &str) -> Option<&PersoV1> {
         self.named_sections().find(|(n, _)| *n == name).map(|(_, v)| v)
     }
 
-    /// Trace ou itinéraire d'une série nouvelle (V1, V1.1, V1.2) : ses fichiers ne sont jamais ouverts
+    /// Trace ou itinéraire d'une série nouvelle (V1 à V1.3) : ses fichiers ne sont jamais ouverts
     /// tant que la série est tenue à l'écart, extraits compris.
     pub fn is_new_series(&self, id: &str) -> bool {
         self.sections().any(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
@@ -622,7 +629,7 @@ impl Manifest {
         } else {
             manifest
         };
-        // De même pour V1 (README §2, point 3), jugée le 2026-11-02, puis V1.1 et V1.2.
+        // De même pour V1 (README §2, point 3), jugée le 2026-11-02, puis V1.1, V1.2 et V1.3.
         let mut manifest = manifest;
         for name in SECTIONS.map(|k| k.name) {
             if crate::judge::already_judged(&judgements, name) {

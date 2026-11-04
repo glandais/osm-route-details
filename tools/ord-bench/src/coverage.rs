@@ -114,10 +114,39 @@ pub fn coverage_before_measure(
         ok &= got >= min;
         detail.insert(k.clone(), json!({"manifest": mk, "atteint": got, "minimum": min}));
     }
-    Ok((
-        ok,
-        json!({"source": format!("manifest {key}.couverture.{criterion}"), "atteinte": ok, "comptes": detail}),
-    ))
+    // Statut déclaré par data-init (`statut`, b34b23f : E3 de V1.3 `rapporte_non_bloquant`) :
+    // contrôlé contre les comptes, jamais lu à leur place ; contraire ou inconnu = erreur.
+    let mut out = json!({"source": format!("manifest {key}.couverture.{criterion}"), "atteinte": ok, "comptes": detail});
+    if let Some(statut) = declared_status(&cov, &key, increment, criterion)? {
+        anyhow::ensure!(
+            !ok,
+            "{criterion} de {increment} : statut {statut} au manifest ({key}.couverture.{criterion}), \
+             mais la couverture comptée atteint le minimum de jugement"
+        );
+        out["statut_manifest"] = json!(statut);
+    }
+    Ok((ok, out))
+}
+
+/// Statut de couverture déclaré au manifest pour un critère non bloquant faute de couverture
+/// (`serie_v13.couverture.E3.statut`, b34b23f ; README §4 septies.2).
+pub const STATUT_NON_BLOQUANT: &str = "rapporte_non_bloquant";
+
+/// `statut` de `serie_<clé>.couverture.<crit>` : absent, ou `rapporte_non_bloquant` ; toute autre
+/// valeur est refusée plutôt que devinée.
+fn declared_status(
+    cov: &Value,
+    key: &str,
+    increment: &str,
+    criterion: &str,
+) -> anyhow::Result<Option<String>> {
+    match &cov["statut"] {
+        Value::Null => Ok(None),
+        Value::String(s) if s == STATUT_NON_BLOQUANT => Ok(Some(s.clone())),
+        other => anyhow::bail!(
+            "{criterion} de {increment} : statut {other} inconnu au manifest ({key}.couverture.{criterion})"
+        ),
+    }
 }
 
 /// Valeur de `bloquant` d'un critère jugé groupe par groupe, chaque groupe bloquant si sa
@@ -141,6 +170,13 @@ pub fn coverage_before_measure_by_group(
     let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&manifest).context("manifest.yaml illisible")?;
     let key = increment_key(increment);
     let cov: Value = serde_json::to_value(&root[key.as_str()]["couverture"][criterion])?;
+    // Un statut global n'a pas de sens groupe par groupe : refusé plutôt que deviné.
+    anyhow::ensure!(
+        cov["statut"].is_null(),
+        "{criterion} de {increment} : statut {} au manifest ({key}.couverture.{criterion}), non prévu \
+         pour un critère jugé groupe par groupe",
+        cov["statut"]
+    );
     anyhow::ensure!(
         cov["atteint"].is_object(),
         "{criterion} de {increment} : couverture par groupe comptée avant toute mesure absente du \

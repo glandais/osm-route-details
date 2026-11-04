@@ -43,6 +43,8 @@ pub mod v1;
 mod v11_tests;
 #[cfg(test)]
 mod v12_tests;
+#[cfg(test)]
+mod v13_tests;
 
 use std::path::{Path, PathBuf};
 
@@ -229,8 +231,15 @@ impl BenchPaths {
 /// la médiane du pont) et d'E2b (trace hors de la médiane du groupe), rapportée (`baro_bruite`,
 /// befb602) ; critère jugé groupe par groupe si sa couverture par groupe est atteinte avant mesure
 /// (`si_couverture_atteinte_par_groupe`, dc76a6e, pour E2b de V1.3 ; sections des séries après V1
-/// lues par `SECTIONS`, aucune section V1.3 au manifest).
-pub const BENCH_REVISION: Option<&str> = Some("bench6");
+/// lues par `SECTIONS`, aucune section V1.3 au manifest). `bench7` (règles 2026.11.12 inchangées ;
+/// série tenue à l'écart V1.3 lue, manifest `perso_v13`, `serie_v13`, `tuiles_2026_11_04`,
+/// b34b23f ; README §4 septies, 13b6ba4, dc76a6e) comme V1.2 : en calibration (MVP, V1, V1.1 et
+/// V1.2, jugée), aucun cas V1.3 ouvert, ses éléments (`nv-1267` et suivants) masqués sur les cas
+/// de calibration — ces masques modifient la calibration, comme `bench4` pour V1.2 ; au jugement
+/// V1.3, cas jugés entiers sans masque ni extrait, E3 et E5 sur ses seuls éléments, Q1 non
+/// bloquant, E3 bloquant si sa couverture comptée avant toute mesure atteint son minimum (sinon
+/// rapporté ; `statut` du manifest contrôlé contre les comptes), E2b jugé groupe par groupe.
+pub const BENCH_REVISION: Option<&str> = Some("bench7");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

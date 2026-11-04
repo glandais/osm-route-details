@@ -26,7 +26,8 @@ fn held_out_cases_are_excluded_before_any_read() {
     let all = ord_bench::campaign::select(&manifest, &[], &[]);
     // Série tenue à l'écart du manifest : exclue, négatifs à part. Depuis le jugement V1.2
     // (bench/judgements.md), ses 32 traces (`perso_v12`, perso-166 à perso-197, README §4
-    // quinquies) sont en calibration, comme celles de V1.1 : plus aucune trace tenue à l'écart.
+    // quinquies) sont en calibration, comme celles de V1.1 ; la série tenue à l'écart est V1.3
+    // (`perso_v13`, README §4 septies, b34b23f) : ses 23 traces, perso-198 à perso-220.
     let held: Vec<&str> = manifest
         .traces
         .iter()
@@ -34,7 +35,17 @@ fn held_out_cases_are_excluded_before_any_read() {
         .map(|t| t.id.as_str())
         .collect();
     assert_eq!(all.excluded_held_out, held);
-    assert!(held.is_empty(), "{held:?}");
+    let v13 = manifest.section("V1.3").expect("section perso_v13");
+    assert!(!v13.judged);
+    let expected: Vec<String> = (198..=220).map(|k| format!("perso-{k}")).collect();
+    assert_eq!(held, expected);
+    assert_eq!(v13.traces.len(), 23);
+    assert!(!all.cases.iter().any(|t| v13.traces.contains(&t.id)));
+    assert_eq!(v13.planifies.len(), 10);
+    assert!(v13.planifies.iter().all(|p| p.id.starts_with("pl13-")));
+    assert!(v13.planifies.iter().all(|p| manifest.is_new_series(&p.id)));
+    assert_eq!(manifest.tile_campaign(v13).map(|c| c.id.as_str()), Some("tuiles_2026_11_04"));
+    assert!(manifest.held_out_increment("V1.3").is_ok());
     let v12 = manifest.section("V1.2").expect("section perso_v12");
     assert!(v12.judged);
     let expected: Vec<String> = (166..=197).map(|k| format!("perso-{k}")).collect();

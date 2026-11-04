@@ -166,9 +166,9 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
         for e in &manifest.hors_git {
             verify(&mut report, &paths.resolve(&e.fichier), &e.sha256, &e.id);
         }
-        // Séries V1, V1.1 et V1.2 : index (deux séries, lus et vérifiés), puis itinéraires selon
-        // leur série. L'instantané OSM d'une série nouvelle n'est ouvert qu'avec ses cas : toujours
-        // pour V1 (calibration), au jugement pour une série encore tenue à l'écart (V1.2).
+        // Séries V1 à V1.3 : index (deux séries, lus et vérifiés), puis itinéraires selon leur
+        // série. L'instantané OSM d'une série nouvelle n'est ouvert qu'avec ses cas : toujours pour
+        // V1 (calibration), au jugement pour une série encore tenue à l'écart (V1.3).
         for (name, v1) in manifest.named_sections() {
             let suffix = crate::manifest::section_keys(name).map_or("v1", |k| k.suffix);
             for (label, (fichier, sum)) in
