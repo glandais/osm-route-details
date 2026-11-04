@@ -672,6 +672,12 @@ def cas(B):
         fg = Grid()
         for a, r in enumerate(forets):
             fg.add(a, r)
+        # polygones dont la boîte contient le point : un point au cœur d'un grand massif est à plus de
+        # 1 500 m de tout sommet (V1.3, pl13-s2-chaux) ; avant 2026-11-04, seuls les polygones ayant un
+        # sommet à 1 500 m au plus étaient testés
+        fbox = [(min(q[0] for q in r), min(q[1] for q in r), max(q[0] for q in r), max(q[1] for q in r)) for r in forets]
+        def dans_foret(p):
+            return any(in_poly(p, forets[a]) for a, b in enumerate(fbox) if b[0] <= p[0] <= b[2] and b[1] <= p[1] <= b[3])
         RAD = {"digue": 30.0, "bati_ou_falaise": 30.0, "remblai_deblai": 15.0}
         # plages hors graphe : voie streets non ferrée la plus proche (≤ 30 m) route motorisée fermée au vélo
         ferme = []
@@ -712,7 +718,7 @@ def cas(B):
                 if seg_dist(p, g2[j], g2[j + 1]) < RAD[k2]:
                     n = k2 if n is None or k2 == "digue" else n
             if n is None and forets and (any(seg_dist(p, forets[a][j], forets[a][j + 1]) <= 20.0 for a, j in fg.near(p, 20.0))
-                                         or any(in_poly(p, forets[a]) for a in {a for a, _ in fg.near(p, 1500.0)})):
+                                         or dans_foret(p)):
                 n = "couvert_arbore"   # dans une forêt OSM ou à 20 m au plus de son bord (parcelles bordées par la route)
             lab.append(n)
         if tr["zone"] == "planifie" and tr["role"] == "S2":
@@ -727,7 +733,7 @@ def cas(B):
                 if n == "couvert_arbore":
                     return sum(1 for idx in libres if lab[idx] == "couvert_arbore" or (forets and (
                         any(seg_dist(dec[idx], forets[a][j], forets[a][j + 1]) <= 20.0 for a, j in fg.near(dec[idx], 20.0))
-                        or any(in_poly(dec[idx], forets[a]) for a in {a for a, _ in fg.near(dec[idx], 1500.0)}))))
+                        or dans_foret(dec[idx]))))
                 gs = [g for w, (k2, g) in nkind.items() if k2 == n and len(g) > 1]
                 return sum(1 for idx in libres if any(poly_dist(dec[idx], g) <= RCONF[n] for g in gs))
             parts = {n: round(conf_of(n) / max(1, len(libres)), 2) for n in ("couvert_arbore", "bati_ou_falaise", "digue", "remblai_deblai")}
