@@ -1273,6 +1273,17 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    référence incertaine : en E3, ses passages sont rapportés (`baro_bruite`), hors de la médiane
    du pont, sans repli sur le MNS ; en E2b, la trace sort de la médiane de son groupe, rapportée.
    Tous groupes, calibration comprise, à partir de la révision du banc qui l'applique.
+4. **Contrôle de couverture aligné sur le banc** (décision de l'utilisateur, 2026-11-04).
+   `tools/couverture_v1.py` comptait avant mesure 122 ponts E3 sur V1.2, le banc en a mesuré 83.
+   Pour les séries après V1.2 (V1, V1.1 et V1.2 gardent leur compte), l'étape `ign` recompte
+   chaque passage d'une sortie comme le banc : kilomètre retiré à chaque bout (trim1km :
+   passages, croisements E5, longueur des témoins S2) ; baro du stream interpolé sur une grille de
+   5 m ; décalage local sur les approches de 50 à 300 m de chaque côté (repli 1–3 km sous 20
+   stations), référence incertaine si les côtés diffèrent de plus de 2 m ; baro absent du tablier ;
+   test de niveau sur les stations à ± 12,5 m du milieu ; garde de bruit (point 3). Un pont ne
+   compte en E3 que passé par une référence baro comptée. Écart restant connu : les approches ne
+   sont pas purgées des autres ouvrages. Essai sur les données de V1.2 (hors git, 2026-11-04) :
+   72 ponts sans la garde de bruit (83 mesurés par le banc), 27 avec.
 
 ---
 

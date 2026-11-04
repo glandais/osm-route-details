@@ -172,6 +172,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Traces V1.1 et V1.2 de 2015-05 à 2020-09 (manifest reference_baro: periode_exclue) : hors des références baro d'E1, E2b, E3 et E5, rapportées (periode_baro_exclue), non comptées ; cas de M1 et de la typologie ; verdicts rendus non revus ; README §4 sexies.2"
   - id: e3_e2b_baro_bruite   # 2026-11-04, après le jugement V1.2 ; calibration comprise
     decision: "E3 et E2b : trace dont le bruit baro (qualify_baro.py, noise_m) dépasse 1,0 m = référence incertaine, rapportée, non comptée (E3 : passages hors de la médiane du pont, sans repli MNS ; E2b : trace hors de la médiane du groupe), comme E1 plaine et E5 ; README §4 sexies.3"
+  - id: couverture_alignee_banc   # 2026-11-04, après le jugement V1.2 ; séries futures
+    decision: "Contrôle de couverture (couverture_v1.py) aligné sur le banc pour les séries après V1.2 : trim1km, baro interpolé sur 5 m, décalage sur les approches 50–300 m et côtés à 2 m, baro sur le tablier, test de niveau sur les stations, garde de bruit ; README §4 sexies.4"
   # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
   # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
   # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).

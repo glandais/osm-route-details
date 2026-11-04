@@ -32,7 +32,17 @@ calibration et l'API altimétrie de l'IGN ; ne lit jamais le service. Trois éta
    d'une même trace à SITE_M au plus l'un de l'autre, de proche en proche ; V1 et V1.1 gardent le
    compte en croisements de leur tirage figé.
 
-Non contrôlé ici : bandes de portail E4, référence incertaine ; la campagne peut encore exclure.
+   Séries après V1.2 (SERIE hors FIGES et v12, README §4 sexies.4, décision de l'utilisateur,
+   2026-11-04), étape `ign` alignée sur le banc, par passage d'une sortie (`couverture-baro.json`) :
+   kilomètre retiré à chaque bout (trim1km : passages, croisements et longueur des témoins) ; baro
+   du stream interpolé sur une grille de GRILLE_M m (pas de trou de plus de PAS_BRUT_MAX_M) ;
+   décalage local E3 sur les approches de 50 à 300 m de chaque côté (≥ 20 stations, sinon repli
+   1–3 km), référence incertaine si les côtés diffèrent de plus de 2 m ; baro absent du tablier ;
+   test de niveau sur les stations à ± 12,5 m du milieu (baro − décalage − MNT de la station) ;
+   garde de bruit (noise_m > 1,0 m, §4 sexies.3). E3 ne compte qu'un pont passé par une
+   référence baro comptée. Approches non purgées des autres ouvrages (le banc les retire).
+
+Non contrôlé ici : bandes de portail E4 ; la campagne peut encore exclure.
 
 Sorties dans private/v1/ (hors git : géométries, identifiants de way et de sortie) ; le résumé
 imprimé ne porte que des comptes.
@@ -65,10 +75,22 @@ LONG_TUNNEL_M = 300.0
 TEMOIN_MIN_M = 300.0
 TEMOIN_LIBRE_M = 100.0   # pas d'ouvrage ni de croisement à moins de cette distance
 STEP_M = 10.0
+# Alignement sur le banc (README §4 sexies.4) pour les séries après V1.2 ; V1, V1.1, V1.2 gardent leur compte.
+TRIM_M = 1000.0
+GRILLE_M = 5.0
+PAS_BRUT_MAX_M = 100.0
+APPROCHES_M = (50.0, 300.0)
+APPROCHE_MIN = 20
+REPLI_M = (1000.0, 3000.0)
+COTES_MAX_M = 2.0
+NIVEAU_DEMI_M = 12.5
+NIVEAU_MIN = 3
+BRUIT_MAX_M = 1.0
 # Série contrôlée (README §4 ter.4) : v1 (tirage stratifié) ou v11 (V1.1, décision de l'utilisateur,
 # 2026-11-02 : tout le nouveau matériau tenu à l'écart, MVP et V1 en calibration).
 SERIE = os.environ.get("SERIE", "v1")
 SEL = {"v1": "osm-route-details:v1:", "v11": "osm-route-details:v1.1:", "v12": "osm-route-details:v1.2:"}[SERIE]
+ALIGNE = SERIE not in ("v1", "v11", "v12")
 ALTI = "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json"
 UA = "osm-route-details-bench/0.1 (usage personnel)"
 FERMES = {"motorway", "motorway_link", "trunk", "trunk_link", "pedestrian", "bridleway", "busway"}
@@ -774,6 +796,112 @@ def batched(points, lidar, n=40):
     return out
 
 
+def grille_baro(s):
+    """Stations tous les GRILLE_M m de l'abscisse du stream : (s, point, baro interpolé ou None si trou > PAS_BRUT_MAX_M)."""
+    P = [(tuple(x), z, d) for x, z, d in zip(s["location"], s["altitude"], s["distance"]) if x and z is not None and d is not None]
+    out, j = [], 0
+    for k in range(int(P[-1][2] // GRILLE_M) + 1):
+        d = k * GRILLE_M
+        while j + 1 < len(P) - 1 and P[j + 1][2] < d:
+            j += 1
+        (xa, za, da), (xb, zb, db) = P[j], P[min(j + 1, len(P) - 1)]
+        f = 0.0 if db <= da else min(1.0, max(0.0, (d - da) / (db - da)))
+        pt = (xa[0] + (xb[0] - xa[0]) * f, xa[1] + (xb[1] - xa[1]) * f)
+        out.append((d, pt, za + (zb - za) * f if db - da <= PAS_BRUT_MAX_M else None))
+    return out
+
+
+def baro_step(B, C, G):
+    """Passages des sorties recomptés comme le banc (README §4 sexies.4) ; écrit couverture-baro.json (reprise)."""
+    f = f"{B}/{SERIE}/couverture-baro.json"
+    R = json.load(open(f)) if os.path.exists(f) else {}
+    qual = {}
+    for q in sorted(glob.glob(f"{B}/strava/qualif*.csv")):
+        qual.update({r["id"]: r for r in csv.DictReader(open(q))})
+    grilles = {}
+
+    def grille(t):
+        if t not in grilles:
+            grilles[t] = grille_baro(json.load(open(f"{B}/strava/streams-{SERIE}/{t}.json")))
+        return grilles[t]
+
+    def abscisse(st, pt, autour=None, rayon=None):
+        idx = range(len(st)) if autour is None else [k for k in range(len(st)) if abs(st[k][0] - autour) <= rayon]
+        return st[min(idx, key=lambda k: hav(st[k][1], pt))][0]
+
+    def hors_trim(st, d):
+        return d < TRIM_M or d > st[-1][0] - TRIM_M
+
+    for o in C["ouvrages"].values():
+        for p in o["passages"]:
+            key = f'{o["id"]}:{p["trace"]}'
+            if key in R or p.get("planifie"):
+                continue
+            st = grille(p["trace"])
+            sm = abscisse(st, tuple(o["pts"]["milieu"]))
+            if hors_trim(st, sm):
+                R[key] = {"etat": "hors_trim1km"}; continue
+            if o["type"] != "bridge" or o["exclusions"] or p["exclusions"] or not p.get("fiable"):
+                R[key] = {"etat": "sans_objet"}; continue
+            ray = o["length_m"] + 200.0
+            s0, s1 = sorted((abscisse(st, tuple(o["pts"]["A"]), sm, ray), abscisse(st, tuple(o["pts"]["B"]), sm, ray)))
+            if not any(z is not None for d, _, z in st if s0 <= d <= s1):
+                R[key] = {"etat": "sans_baro_tablier"}; json.dump(R, open(f, "w")); continue
+            av = [x for x in st if APPROCHES_M[0] <= s0 - x[0] <= APPROCHES_M[1] and x[2] is not None]
+            ap = [x for x in st if APPROCHES_M[0] <= x[0] - s1 <= APPROCHES_M[1] and x[2] is not None]
+            mid = [x for x in st if abs(x[0] - sm) <= NIVEAU_DEMI_M and x[2] is not None]
+            repli = len(av) < APPROCHE_MIN or len(ap) < APPROCHE_MIN
+            if repli:
+                av = [x for x in st if REPLI_M[0] <= s0 - x[0] <= REPLI_M[1] and x[2] is not None][::10]
+                ap = [x for x in st if REPLI_M[0] <= x[0] - s1 <= REPLI_M[1] and x[2] is not None][::10]
+            pts = av + ap + mid
+            mnt = [m.get("MNT") for m in batched([x[1] for x in pts], True)]
+            dav = [x[2] - t for x, t in zip(av, mnt[:len(av)]) if t is not None]
+            dap = [x[2] - t for x, t in zip(ap, mnt[len(av):len(av) + len(ap)]) if t is not None]
+            dmid = [(x[2], t) for x, t in zip(mid, mnt[len(av) + len(ap):]) if t is not None]
+            r = {"repli_1_3km": repli}
+            if not dav or not dap:
+                R[key] = dict(r, etat="sans_decalage"); json.dump(R, open(f, "w")); continue
+            off = statistics.median(dav + dap)
+            r["cotes_m"] = [round(statistics.median(dav), 2), round(statistics.median(dap), 2)]
+            mnh = (G.get(o["id"]) or {}).get("mnh_m")
+            etat = "compte"
+            if mnh is not None and mnh >= MNH_NIVEAU_M:
+                if len(dmid) < NIVEAU_MIN:
+                    r["niveau_sans_baro"] = True
+                else:
+                    mes = statistics.median(z - off - t for z, t in dmid)
+                    r["niveau_m"] = round(mes, 2)
+                    if mes < 0.5 * mnh:
+                        etat = "retire_niveau"
+            if etat == "compte" and not repli and abs(r["cotes_m"][0] - r["cotes_m"][1]) > COTES_MAX_M:
+                etat = "incertaine"
+            if etat == "compte" and float(qual.get(p["trace"], {}).get("noise_m") or 0) > BRUIT_MAX_M:
+                etat = "baro_bruite"
+            R[key] = dict(r, etat=etat)
+            json.dump(R, open(f, "w"))
+    # croisements et témoins des sorties dans le kilomètre retiré (trim1km)
+    trace_ids = {t["id"] for t in C["traces"] if t["zone"] != "planifie"}
+    for c in C["croisements"].values():
+        for t in c["traces"]:
+            key = f'{c["id"]}:{t}'
+            if key not in R and t in trace_ids:
+                st = grille(t)
+                R[key] = {"etat": "hors_trim1km" if hors_trim(st, abscisse(st, tuple(c["pt"]))) else "compte"}
+    for tm in C["temoins"]:
+        key = f'temoin:{tm["id"]}'
+        if key not in R and not tm["planifie"] and tm.get("debut") and tm.get("fin"):
+            st = grille(tm["trace"]); tot = st[-1][0]
+            a, b = sorted((abscisse(st, tuple(tm["debut"])), abscisse(st, tuple(tm["fin"]))))
+            hors = max(0.0, min(b, TRIM_M) - a) + max(0.0, b - max(a, tot - TRIM_M))
+            R[key] = {"etat": "compte", "retire_m": round(min(hors, b - a), 1)}
+    json.dump(R, open(f, "w"))
+    n = {}
+    for v in R.values():
+        n[v["etat"]] = n.get(v["etat"], 0) + 1
+    print("passages recomptés (banc)", n)
+
+
 def ign_step(B):
     C = json.load(open(f"{B}/{SERIE}/couverture-cas.json"))
     cache_f = f"{B}/{SERIE}/couverture-ign.json"
@@ -793,7 +921,7 @@ def ign_step(B):
     # contrôle de niveau des ponts à MNH ≥ 10 m, par passage
     lev_f = f"{B}/{SERIE}/couverture-niveau.json"
     lev = json.load(open(lev_f)) if os.path.exists(lev_f) else {}
-    for o in C["ouvrages"].values():
+    for o in C["ouvrages"].values() if not ALIGNE else ():   # aligné : test de niveau dans baro_step
         g = cache.get(o["id"])
         if not g or g["mnh_m"] is None or g["mnh_m"] < MNH_NIVEAU_M:
             continue
@@ -819,6 +947,8 @@ def ign_step(B):
                 lev[key] = {"etat": "retire" if mes < 0.5 * g["mnh_m"] else "garde", "mesure_m": round(mes, 2)}
             json.dump(lev, open(lev_f, "w"))
     print("ponts lus", len(cache), "contrôles de niveau", len(lev))
+    if ALIGNE:
+        baro_step(B, C, cache)
 
 
 # --- étape 3 : tirage et comptes ---
@@ -835,6 +965,16 @@ def tirage(B):
     C = json.load(open(f"{B}/{SERIE}/couverture-cas.json"))
     G = json.load(open(f"{B}/{SERIE}/couverture-ign.json"))
     LV = json.load(open(f"{B}/{SERIE}/couverture-niveau.json")) if os.path.exists(f"{B}/{SERIE}/couverture-niveau.json") else {}
+    BA = json.load(open(f"{B}/{SERIE}/couverture-baro.json")) if ALIGNE else {}
+    etat = lambda k, t: BA.get(f"{k}:{t}", {}).get("etat")
+    if ALIGNE:   # trim1km : croisements et témoins des sorties (README §4 sexies.4)
+        for c in C["croisements"].values():
+            c["traces"] = [t for t in c["traces"] if etat(c["id"], t) != "hors_trim1km"]
+            if not c["traces"] and not c["exclusions"]:
+                c["exclusions"] = ["hors_trim1km"]
+        for tm in C["temoins"]:
+            tm["length_m"] -= BA.get(f'temoin:{tm["id"]}', {}).get("retire_m", 0.0)
+        C["temoins"] = [tm for tm in C["temoins"] if tm["planifie"] or tm["length_m"] >= TEMOIN_MIN_M]
     fiables = [t for t in C["traces"] if t["role"] == "trace"]
     planifies = {t["id"]: t for t in C["traces"] if t["zone"] == "planifie"}
     # ouvrages comptés
@@ -848,15 +988,18 @@ def tirage(B):
                 r.append("hors_lidar")       # gardé hors MNH connu ? non : règle du corpus MVP
             elif not r and g["mnh_m"] < MIN_MNH_M:
                 r.append("pas_un_tablier")
-        ok = [p for p in o["passages"] if not p["exclusions"] and LV.get(f'{o["id"]}:{p["trace"]}', {}).get("etat") != "retire"]
+        ok = [p for p in o["passages"] if not p["exclusions"] and LV.get(f'{o["id"]}:{p["trace"]}', {}).get("etat") != "retire"
+              and etat(o["id"], p["trace"]) not in ("hors_trim1km", "retire_niveau")]
         if not r and not ok:
-            r.append("passage_sur_ouvrage_parallele" if any(p["exclusions"] for p in o["passages"]) else "passage_retire_niveau")
+            r.append("passage_sur_ouvrage_parallele" if any(p["exclusions"] for p in o["passages"])
+                     else "hors_trim1km" if all(etat(o["id"], p["trace"]) == "hors_trim1km" for p in o["passages"])
+                     else "passage_retire_niveau")
         for x in r:
             raisons[(o["type"], x)] = raisons.get((o["type"], x), 0) + 1
         if not r:
             compte[o["id"]] = {"type": o["type"], "L": o["length_m"], "mnh": (G.get(o["id"]) or {}).get("mnh_m"),
                                "pts": o["pts"], "traces": sorted({p["trace"] for p in ok}),
-                               "baro": any(p.get("fiable") for p in ok)}   # E3 : référence baro
+                               "baro": any(p.get("fiable") and (not ALIGNE or etat(o["id"], p["trace"]) == "compte") for p in ok)}   # E3 : référence baro
     xs = {c["id"]: c for c in C["croisements"].values() if not c["exclusions"]}
     # groupes : ouvrages et croisements à moins de NEAR_M
     uf = UF(); items = {k: [tuple(p) for p in v["pts"].values()] for k, v in compte.items()}
