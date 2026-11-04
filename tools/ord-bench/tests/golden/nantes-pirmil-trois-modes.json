@@ -29,7 +29,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.11"
+      "rules_version": "2026.11.12"
     },
     "points": [
       {
@@ -511,7 +511,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.11"
+      "rules_version": "2026.11.12"
     },
     "points": [
       {
@@ -810,7 +810,7 @@
       },
       "duration_ms": null,
       "request_id": null,
-      "rules_version": "2026.11.11"
+      "rules_version": "2026.11.12"
     },
     "points": [
       {
