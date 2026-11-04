@@ -1846,6 +1846,7 @@ perso_v11:
       fenetres_calibration: 21   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2015-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 197.8
       fichier: private/traces/perso-131.gpx
       sha256: daade2dc53374de424002b2b723dbfdf7f08775b2b20f72a3acad6c67c5338d8
@@ -1857,6 +1858,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2015-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 65.1
       fichier: private/traces/perso-132.gpx
       sha256: f3e61968a3e2de9dc677cd00a1ffbd89b036dc00100cc848cac3dbd9f4ce7cf4
@@ -1868,6 +1870,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2015-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 65.4
       fichier: private/traces/perso-133.gpx
       sha256: 45f727928acb976172f526571dea90703bf5c98982096a6aa618caeeb72aec4f
@@ -1879,6 +1882,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Morbihan"
       mois: "2015-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 73.3
       fichier: private/traces/perso-134.gpx
       sha256: 4816e5743a08cd8409d132edf12bd6715b013963285d594597046547df29d63d
@@ -1890,6 +1894,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Vendée"
       mois: "2015-09"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 156.5
       fichier: private/traces/perso-135.gpx
       sha256: 8191b0ea8730a862658bf18464b38b2bffbccdc2ada53e5ec99a2be249f727cd
@@ -1901,6 +1906,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Vendée"
       mois: "2016-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 170.8
       fichier: private/traces/perso-136.gpx
       sha256: a10074dd2c124d592005b38e73017b1032697f4320e573f9f561dad5adcf52fa
@@ -1912,6 +1918,7 @@ perso_v11:
       fenetres_calibration: 2   # series-v11.csv
       region: "Vendée"
       mois: "2018-01"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 120.8
       fichier: private/traces/perso-137.gpx
       sha256: 3f50939eea08562467a71bc5acef013e93616e0bf2624fa52ae2afa0c21f4ad8
@@ -1923,6 +1930,7 @@ perso_v11:
       fenetres_calibration: 2   # series-v11.csv
       region: "Vendée"
       mois: "2018-03"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 208.8
       fichier: private/traces/perso-138.gpx
       sha256: 95e19c4c6d17f269db6c85ae12b10731044d0e9062ff6caa3cf9c3e08d4e6cd8
@@ -1934,6 +1942,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2018-03"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 70.5
       fichier: private/traces/perso-139.gpx
       sha256: a2842c637bd4b6ca911261bc38e504703de8f2a9415dbaaaa0141d75182b22f4
@@ -1945,6 +1954,7 @@ perso_v11:
       fenetres_calibration: 12   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2018-09"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 126.0
       fichier: private/traces/perso-140.gpx
       sha256: 8b743287061db45891bb1f630e7e1e55c5ea4ee69745360f6cbb9465d1bdc8a3
@@ -1956,6 +1966,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Vendée"
       mois: "2018-10"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 110.9
       fichier: private/traces/perso-141.gpx
       sha256: 5f98d70eeca14d0f8a3a95b01616d269d2182e7ff995fb46ac731cc353e8348f
@@ -1967,6 +1978,7 @@ perso_v11:
       fenetres_calibration: 6   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2019-03"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 173.7
       fichier: private/traces/perso-142.gpx
       sha256: 81f0d130a95eef57b91f9d60704bf7cab0a3e6cf19b9eb04d146c8a9527a7fed
@@ -1978,6 +1990,7 @@ perso_v11:
       fenetres_calibration: 4   # series-v11.csv
       region: "Nièvre"
       mois: "2019-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 329.8
       fichier: private/traces/perso-143.gpx
       sha256: ed1388067a3e31dddb942644c8ed6ac8bfc5e62924a3e9793872f6029812e0ca
@@ -1989,6 +2002,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Dordogne"
       mois: "2019-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 87.6
       fichier: private/traces/perso-144.gpx
       sha256: 2eeef7a48392baddb5e2f8e304f779dcbc10b6317d0ab000d0fd1af3f0a69364
@@ -2000,6 +2014,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Dordogne"
       mois: "2019-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 78.9
       fichier: private/traces/perso-145.gpx
       sha256: 733b18cd97e1223e94c61002c39390434afaf46757cebc26756e6456edf62fb8
@@ -2011,6 +2026,7 @@ perso_v11:
       fenetres_calibration: 1   # series-v11.csv
       region: "Finistère"
       mois: "2019-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 89.5
       fichier: private/traces/perso-146.gpx
       sha256: 9163425331c16c149ae50cc42af5f8a1bf26c15ebc847172a203ce8ae345a248
@@ -2022,6 +2038,7 @@ perso_v11:
       fenetres_calibration: 0   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2019-12"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 160.7
       fichier: private/traces/perso-147.gpx
       sha256: b9f10244a4b554ac26be6d146ae2f7ad34f35781ca4203b4b7effaccbae0924a
@@ -2033,6 +2050,7 @@ perso_v11:
       fenetres_calibration: 13   # series-v11.csv
       region: "Loire-Atlantique"
       mois: "2020-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 170.8
       fichier: private/traces/perso-148.gpx
       sha256: 172ba0ccadcc39f9a318a8f97eba149c5879a30d61d92711e253a11867f25ade
@@ -2355,6 +2373,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Vendée"
       mois: "2015-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 144.7
       fichier: private/traces/perso-167.gpx
       sha256: 4e8cf833034a43449084fc011998d22b8e411006ed19a015bd2de5d2528e3994
@@ -2366,6 +2385,7 @@ perso_v12:
       fenetres_calibration: 1   # series-v12.csv
       region: "Maine-et-Loire"
       mois: "2015-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 697.9
       fichier: private/traces/perso-168.gpx
       sha256: 0baa8009bfbc09660b1f014a60a9bf1c5b83eb112bc04ddfcba968fdb4f8cdae
@@ -2377,6 +2397,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Gironde"
       mois: "2016-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 122.0
       fichier: private/traces/perso-169.gpx
       sha256: f957cc258b4f8b6b783e373083acef93f6c30ab293d0980dc0af1d2d1a943269
@@ -2388,6 +2409,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2016-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 103.9
       fichier: private/traces/perso-170.gpx
       sha256: aaff2c93c13ff8ebb776f4eaa60627d4527afc1120ced96c2dcb9195c5826e6f
@@ -2399,6 +2421,7 @@ perso_v12:
       fenetres_calibration: 7   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2016-11"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 217.0
       fichier: private/traces/perso-171.gpx
       sha256: e75241a8997e9bdf59bb6083858daf8ca59be45d9f5d4f0aad03517b6c977c51
@@ -2410,6 +2433,7 @@ perso_v12:
       fenetres_calibration: 2   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2017-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 128.7
       fichier: private/traces/perso-172.gpx
       sha256: 155a33c61f316d5b84a584047e7913006bf6123483e3bfb3e9f0fbe027fb0898
@@ -2421,6 +2445,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Côte-d'Or"
       mois: "2017-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 116.4
       fichier: private/traces/perso-173.gpx
       sha256: 361c229bb9cae297c71980d31cedd2689fe4a9e042df6581bab8d8de9e3ee4fd
@@ -2432,6 +2457,7 @@ perso_v12:
       fenetres_calibration: 1   # series-v12.csv
       region: "Vendée"
       mois: "2017-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 146.4
       fichier: private/traces/perso-174.gpx
       sha256: b6df05a9fd05835361dd9e96e6b436c7a6f0c4d042cb6a2cad9a976b96f11a7c
@@ -2443,6 +2469,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2017-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 128.5
       fichier: private/traces/perso-175.gpx
       sha256: d2f160ae34fb803676243a261568529b27e2e29da6677276421b89acc0964635
@@ -2454,6 +2481,7 @@ perso_v12:
       fenetres_calibration: 5   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2017-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 411.2
       fichier: private/traces/perso-176.gpx
       sha256: f4fe79026f2d09e165efe9107c81802f762da4535ac1c6d608b963f54e3f82c5
@@ -2465,6 +2493,7 @@ perso_v12:
       fenetres_calibration: 12   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2017-11"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 261.5
       fichier: private/traces/perso-177.gpx
       sha256: 457ee6383e8f722a0dc8dc2d271da542f86d254e852eb25cf3d38ccaa61241ab
@@ -2476,6 +2505,7 @@ perso_v12:
       fenetres_calibration: 2   # series-v12.csv
       region: "Vendée"
       mois: "2018-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 167.2
       fichier: private/traces/perso-178.gpx
       sha256: f3c5f9058acbfc426ee54079b2e25d148724c9205a10016820523e3cda6ed107
@@ -2487,6 +2517,7 @@ perso_v12:
       fenetres_calibration: 2   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2019-03"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 201.7
       fichier: private/traces/perso-179.gpx
       sha256: 38b14398e138bb1ab26cbcd32f22eae9f23984a0a6b9acf7df69e776503ab7a7
@@ -2498,6 +2529,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Paris"
       mois: "2019-04"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 89.0
       fichier: private/traces/perso-180.gpx
       sha256: 95cea10d39978c9d84428c5d68df7eeb56be4ffc212dac361205ce8c7092acd6
@@ -2509,6 +2541,7 @@ perso_v12:
       fenetres_calibration: 1   # series-v12.csv
       region: "Haute-Garonne"
       mois: "2019-05"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 600.6
       fichier: private/traces/perso-181.gpx
       sha256: a5d4730b56a2e185f01cab972fe9eb416541935b8a39a0e1d2f0b49961f87f55
@@ -2520,6 +2553,7 @@ perso_v12:
       fenetres_calibration: 7   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2019-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 152.6
       fichier: private/traces/perso-182.gpx
       sha256: 4a3e5d8f555ad2d3d3754e5477ddd60db69c2e4bab554b5e9402eb8e045bfdaa
@@ -2531,6 +2565,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Ille-et-Vilaine"
       mois: "2019-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 54.0
       fichier: private/traces/perso-183.gpx
       sha256: 242a20d522f914e0c726c5f2ae12503cb8b5fc722060c2c2a19dbef960cfff42
@@ -2542,6 +2577,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Côtes-d'Armor"
       mois: "2019-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 86.9
       fichier: private/traces/perso-184.gpx
       sha256: 36bc3b83a10c4f284ae44a87f83522513d00812db6f8df9748cc9fb5f0b414b2
@@ -2553,6 +2589,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Ille-et-Vilaine"
       mois: "2019-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 54.4
       fichier: private/traces/perso-185.gpx
       sha256: 0d3d3cfe7dd983b08e2bb515012818400935ec74a412446f617b363816fa2430
@@ -2564,6 +2601,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Orne"
       mois: "2019-08"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 77.5
       fichier: private/traces/perso-186.gpx
       sha256: 789670afc600106eaa2bbea9b8837648662f8eb7967fda41c137b7e3351ee196
@@ -2575,6 +2613,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Calvados"
       mois: "2020-01"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 92.5
       fichier: private/traces/perso-187.gpx
       sha256: 78502df4a252985bfff01bc37918388fb265f811bdb2e1fb22be82369f57bbf0
@@ -2586,6 +2625,7 @@ perso_v12:
       fenetres_calibration: 2   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2020-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 199.3
       fichier: private/traces/perso-188.gpx
       sha256: 1313db81a91873f6cec7f799622497e27d9cee21661ff70ab98981a9a89310f2
@@ -2597,6 +2637,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Vendée"
       mois: "2020-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 153.0
       fichier: private/traces/perso-189.gpx
       sha256: 764512936e7c09d1c85fda10f79c259979dba3b4338ac51315a64abd64424ff6
@@ -2608,6 +2649,7 @@ perso_v12:
       fenetres_calibration: 14   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2020-06"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 625.0
       fichier: private/traces/perso-190.gpx
       sha256: e44ea52066a04045f2d379aed9d8d5e03abea08e8b807c83100abbf259c2c6bd
@@ -2619,6 +2661,7 @@ perso_v12:
       fenetres_calibration: 0   # series-v12.csv
       region: "Var"
       mois: "2020-07"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 132.1
       fichier: private/traces/perso-191.gpx
       sha256: 4d84de9fa4d322f9da3618b268355b7b7814520dd263212569a620dc9cfa5941
@@ -2630,6 +2673,7 @@ perso_v12:
       fenetres_calibration: 23   # series-v12.csv
       region: "Loire-Atlantique"
       mois: "2020-09"
+      reference_baro: periode_exclue   # README §4 sexies.2 : hors des références baro d'E1, E2b, E3 et E5 ; cas de M1 et de la typologie
       dist_km: 329.2
       fichier: private/traces/perso-192.gpx
       sha256: 8732b2eeec4f8159fcb42200701a27e2b0f0fd013be4172d478273e4a552dfb0

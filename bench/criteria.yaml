@@ -168,6 +168,8 @@ decisions:   # de l'utilisateur, 2026-10-30
     decision: "Série V1.2 : un seul témoin S2 planifié gardé (pl12-s2-troncais) ; pl12-s2-isere et pl12-s2-nesque retirés (nature non confirmée par OSM, 00e500f), mention retire au manifest, sans remplacement"
   - id: tirage_periode_exclue   # 2026-11-04, après le jugement V1.2 ; séries futures
     decision: "Tirage d'une série future : sorties de 2015-05 à 2020-09 exclues, et d'avant 2014-12 sans qualification individuelle (qualify_baro.py, verdict fiable) ; tirages figés de V1.1 et V1.2 non refaits ; Q1 non concerné (négatifs pris dans la période, q1_negatif_serie_nouvelle) ; README §4 sexies.1"
+  - id: periode_hors_reference_baro   # 2026-11-04, après le jugement V1.2 ; calibration
+    decision: "Traces V1.1 et V1.2 de 2015-05 à 2020-09 (manifest reference_baro: periode_exclue) : hors des références baro d'E1, E2b, E3 et E5, rapportées (periode_baro_exclue), non comptées ; cas de M1 et de la typologie ; verdicts rendus non revus ; README §4 sexies.2"
   # « À partir de V1.2 » (ci-dessus et plus bas) = révision bench3 : appliqué sans condition, calibration MVP, V1, V1.1
   # comprise ; verdicts rendus non revus ; seul le tirage figé de V1 et V1.1 garde son compte (README §4 quater.5).
   # Campagne tuiles_* déclarée au manifest : tout fill-cache la respecte, tuile de rues manquante = refus (§4 quater.5).

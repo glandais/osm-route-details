@@ -1254,6 +1254,15 @@ période (baro creusé de 2 à 10 m sous les tabliers, rampes effacées).
    n'ont pas de qualification individuelle (`qualify_baro.py`, verdict `fiable`, dans
    `private/strava/qualif*.csv`). Les tirages figés de V1.1 et V1.2 ne sont pas refaits. Q1 n'est
    pas concerné : ses négatifs sont pris dans la période, exprès (§1.3, `q1_negatif_serie_nouvelle`).
+2. **Traces de la période hors des références baro** (décision de l'utilisateur, 2026-11-04). Les
+   traces de V1.1 et de V1.2 dont le mois de départ est dans 2015-05 → 2020-09 (18 et 26 traces)
+   ne fournissent plus de référence baro en calibration : elles sortent d'E1, d'E2b, d'E3 et d'E5,
+   où elles sont rapportées (`periode_baro_exclue`), non comptées. Elles restent des cas pour M1 et
+   pour la typologie (E4, S1, S2, S3, hors graphe vélo). Marque au manifest, par trace :
+   `reference_baro: periode_exclue` dans `perso_v11` et `perso_v12`, à côté de `mois`, que l'outil
+   peut contrôler. Les deux traces d'avant 2014-12 (`perso-130`, 2014-09 ; `perso-166`, 2014-06) ont
+   une qualification individuelle `fiable` et ne sont pas marquées ; la garde de bruit (point 3)
+   s'applique à elles comme aux autres. Les négatifs `neg-*` (Q1) ne sont pas concernés.
 
 ---
 
