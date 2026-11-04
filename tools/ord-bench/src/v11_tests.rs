@@ -140,7 +140,7 @@ fn calibration_reads_no_v11_case() {
     let (_d, paths) = bench(Snapshot::WrongSum, true);
     let m = Manifest::load(&paths.bench).unwrap();
     assert!(m.v1.as_ref().unwrap().judged, "V1 jugée");
-    let v11 = m.v11.as_ref().expect("section perso_v11 lue");
+    let v11 = m.section("V1.1").expect("section perso_v11 lue");
     assert!(!v11.judged);
     // Le jugement du MVP ne rend pas les traces V1.1 à la calibration.
     assert_eq!(m.trace("perso-130").unwrap().serie, Serie::TenueALEcart);
@@ -255,7 +255,7 @@ fn v11_snapshot_absent_or_wrong_is_refused() {
 fn without_perso_v11_nothing_is_read_and_v11_cannot_be_judged() {
     let (_d, paths) = bench(Snapshot::Ok, false);
     let m = Manifest::load(&paths.bench).unwrap();
-    assert!(m.v11.is_none());
+    assert!(m.section("V1.1").is_none());
     assert!(m.trace("perso-130").is_none());
     let e = m.held_out_increment("V1.1").unwrap_err();
     assert!(e.to_string().contains("absente du manifest"), "{e}");
@@ -307,7 +307,7 @@ fn cases_under_serie_v11_are_read_too() {
     let (head, cases) = text.split_once("perso_v11:\n").unwrap();
     std::fs::write(&path, format!("{head}{cases}")).unwrap();
     let m = Manifest::load(&paths.bench).unwrap();
-    let v11 = m.v11.as_ref().expect("section lue dans serie_v11");
+    let v11 = m.section("V1.1").expect("section lue dans serie_v11");
     assert!(v11.traces.contains("perso-130"));
     assert_eq!(v11.donnees_serveur.as_deref(), Some(V11_DATE));
 }

@@ -401,6 +401,7 @@ pub fn load_planned(paths: &BenchPaths, p: &Planned, serie: Serie) -> Result<Per
         serie,
         baro_fiable: false,
         baro_noise_m: None,
+        reference_baro_exclue: None,
         parts: vec![pts.iter().map(|q| Pt { lat: q.lat, lon: q.lon }).collect()],
         s_ref: s,
         baro_s: Vec::new(),
@@ -536,6 +537,8 @@ mod tests {
             gain_baro_m: None,
             gain_mnt_m: None,
             noise_m: None,
+            mois: None,
+            reference_baro: None,
         };
         let m = Manifest {
             traces: vec![

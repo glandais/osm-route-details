@@ -120,6 +120,143 @@ pub fn coverage_before_measure(
     ))
 }
 
+/// Valeur de `bloquant` d'un critère jugé groupe par groupe, chaque groupe bloquant si sa
+/// couverture comptée avant toute mesure atteint le minimum (`serie_v13.E2b`, README §4 septies.2,
+/// criteria `serie_v13_e3_e2b_si_couverture`, dc76a6e).
+pub const BLOQUANT_SI_COUVERTURE_PAR_GROUPE: &str = "si_couverture_atteinte_par_groupe";
+
+/// Couverture d'un critère par groupe (E2b) comptée **avant toute mesure** : manifest
+/// `serie_<clé>.couverture.<crit>.atteint.<groupe>` (un compte de traces par groupe, garde de
+/// bruit comprise, README §4 septies.2), comparé au minimum par groupe de `criteria.yaml`
+/// (`couverture.minimums.<crit>`, sa seule valeur numérique). Groupes : `serie_<clé>.<crit>.groupes`,
+/// sinon ceux des minimums. Renvoie, par groupe, `atteint`, et le détail rapporté au jugement.
+/// Aucun refus deviné : couverture absente, groupe sans compte ou minimum du manifest différent =
+/// erreur, le gel et le jugement s'arrêtent.
+pub fn coverage_before_measure_by_group(
+    bench: &Path,
+    increment: &str,
+    criterion: &str,
+) -> anyhow::Result<(BTreeMap<String, bool>, Value)> {
+    let manifest = std::fs::read_to_string(bench.join("manifest.yaml")).context("manifest.yaml")?;
+    let root: serde_yaml_ng::Value = serde_yaml_ng::from_str(&manifest).context("manifest.yaml illisible")?;
+    let key = increment_key(increment);
+    let cov: Value = serde_json::to_value(&root[key.as_str()]["couverture"][criterion])?;
+    anyhow::ensure!(
+        cov["atteint"].is_object(),
+        "{criterion} de {increment} : couverture par groupe comptée avant toute mesure absente du \
+         manifest ({key}.couverture.{criterion}.atteint) : bloquant ou non, indécidable"
+    );
+    let mins = minimums_for(bench, increment)?;
+    let mins = mins[criterion].as_object().with_context(|| {
+        format!("{criterion} : minimum de jugement absent de criteria.yaml (couverture.minimums)")
+    })?;
+    let numeric: Vec<(&String, f64)> = mins.iter().filter_map(|(k, v)| Some((k, v.as_f64()?))).collect();
+    let [(min_key, min)] = numeric[..] else {
+        anyhow::bail!(
+            "{criterion} : un seul minimum par groupe attendu dans criteria.yaml, {} lus",
+            numeric.len()
+        );
+    };
+    if let Some(declared) = cov["minimum"].as_object().and_then(|o| {
+        o.iter().filter(|(m, v)| min_key.contains(m.as_str()) && v.is_number()).max_by_key(|(m, _)| m.len())
+    }) {
+        let declared = declared.1.as_f64().unwrap_or(f64::NAN);
+        anyhow::ensure!(
+            (declared - min).abs() < 1e-9,
+            "{criterion} de {increment} : minimum par groupe du manifest ({declared}) différent de criteria.yaml ({min})"
+        );
+    }
+    let rules = series_rules(bench, increment)?;
+    let groups: Vec<String> = rules[criterion]["groupes"]
+        .as_array()
+        .or_else(|| mins.get("groupes").and_then(Value::as_array))
+        .into_iter()
+        .flatten()
+        .filter_map(|g| g.as_str().map(str::to_owned))
+        .collect();
+    anyhow::ensure!(!groups.is_empty(), "{criterion} de {increment} : aucun groupe à juger");
+    let mut out = BTreeMap::new();
+    let mut detail = serde_json::Map::new();
+    for g in groups {
+        let got = cov["atteint"][g.as_str()].as_f64().with_context(|| {
+            format!("{criterion} de {increment} : groupe {g} sans compte au manifest ({key}.couverture.{criterion}.atteint)")
+        })?;
+        detail.insert(g.clone(), json!({"atteint": got, "minimum": min, "bloquant": got >= min}));
+        out.insert(g, got >= min);
+    }
+    Ok((
+        out,
+        json!({"source": format!("manifest {key}.couverture.{criterion}"), "minimum": min_key, "groupes": detail}),
+    ))
+}
+
+/// Groupes bloquants d'un critère jugé groupe par groupe (`coverage_before_measure_by_group`) :
+/// lus dans le détail rapporté (`groupes.<g>.bloquant`) ; `None` pour un critère qui ne l'est pas.
+pub fn blocking_groups(detail: &Value) -> Option<(Vec<String>, Vec<String>)> {
+    let groups = detail["groupes"].as_object()?;
+    let (on, off): (Vec<_>, Vec<_>) = groups.iter().partition(|(_, g)| g["bloquant"] == true);
+    Some((
+        on.into_iter().map(|(k, _)| k.clone()).collect(),
+        off.into_iter().map(|(k, _)| k.clone()).collect(),
+    ))
+}
+
+/// Jugement groupe par groupe d'un critère (E2b, README §4 septies.2) : dans chaque mode, le
+/// verdict du critère ne porte que sur ses groupes bloquants (verdicts de `agregats.<crit>.<g>`) ;
+/// les autres groupes sont rapportés (`<crit>_groupes_rapportes`, avec leur verdict, et leurs
+/// manques mesurés, `<crit>_groupes_rapportes_sous_minimum`), sans refuser. Le minimum mesuré ne
+/// vaut plus que pour les groupes bloquants (`minimums.<crit>.groupes` restreint) : à appliquer
+/// avant `apply_minimums`. Aucun groupe bloquant : verdict inchangé (critère rapporté entier).
+pub fn apply_group_blocking(
+    results: &mut Value,
+    minimums: &mut Value,
+    criterion: &str,
+    on: &[String],
+    off: &[String],
+) {
+    let all_mins = minimums.clone();
+    for mode in [None, Some("input_with_breakpoints")] {
+        let base = match mode {
+            None => &mut *results,
+            Some(k) => &mut results[k],
+        };
+        let agg = base["agregats"][criterion].clone();
+        let verdict_of = |g: &String| agg[g.as_str()]["verdict"].as_str().unwrap_or("sans_trace").to_owned();
+        let lacks = shortfalls(&base["couverture"], &all_mins);
+        let Some(verdicts) = base["verdicts"].as_object_mut() else { continue };
+        let reported: Vec<Value> =
+            off.iter().map(|g| json!({"groupe": g, "verdict": verdict_of(g)})).collect();
+        let reported_lacks: Vec<String> = lacks
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .filter(|l| off.iter().any(|g| l.split_whitespace().nth(1) == Some(g.as_str())))
+            .cloned()
+            .collect();
+        verdicts.insert(format!("{criterion}_groupes_rapportes"), json!(reported));
+        verdicts.insert(format!("{criterion}_groupes_rapportes_sous_minimum"), json!(reported_lacks));
+        if on.is_empty() {
+            continue;
+        }
+        let v: Vec<String> = on.iter().map(verdict_of).collect();
+        let fails: Vec<&String> = on.iter().zip(&v).filter(|(_, v)| *v == "fail").map(|(g, _)| g).collect();
+        let verdict = if !fails.is_empty() {
+            "fail"
+        } else if v.iter().any(|v| v == "pass") {
+            "pass"
+        } else if v.iter().any(|v| v == "non_discriminant") {
+            "non_discriminant"
+        } else {
+            "skipped"
+        };
+        verdicts.insert(criterion.to_owned(), json!(verdict));
+        verdicts.insert(format!("{criterion}_groupes_en_echec"), json!(fails));
+    }
+    if minimums[criterion].is_object() {
+        minimums[criterion]["groupes"] = json!(on);
+    }
+}
+
 /// Groupes E2b exigés d'une série (`E2b.groupes_exiges`) reportés dans les minimums.
 pub fn apply_series_rules(minimums: &mut Value, rules: &Value) {
     if let Some(groups) = rules["E2b"]["groupes_exiges"].as_array() {
@@ -155,13 +292,20 @@ pub fn measure(
             matches!(groupe(c).as_str(), "dplus" | "plaine")
                 && num(&c["metriques"]["E1.rmse_m"]).is_finite()
                 && !crate::campaign::e1_uncertain(c)
+                && !crate::campaign::reference_baro_excluded(c)
         })
         .collect();
     let mut e2b: BTreeMap<String, usize> = BTreeMap::new();
     for g in ["dplus", "plaine", "ouvrage"] {
         e2b.insert(g.into(), 0);
     }
-    for c in cases.iter().filter(|c| num(&c["metriques"]["E2b.ratio"]).is_finite()) {
+    // Traces hors des références baro ou au baro bruité (README §4 sexies.2 et .3) : hors d'E2b.
+    let e2b_counted = |c: &&Value| {
+        num(&c["metriques"]["E2b.ratio"]).is_finite()
+            && !crate::campaign::reference_baro_excluded(c)
+            && !crate::campaign::e2b_noisy(c)
+    };
+    for c in cases.iter().filter(e2b_counted) {
         if let Some(n) = e2b.get_mut(&groupe(c)) {
             *n += 1;
         }
@@ -170,7 +314,9 @@ pub fn measure(
     let limited = |i: &Value| i["limite_donnees"].is_string();
     let id = |i: &Value| i["ouvrage"].as_str().unwrap_or("").to_owned();
     let e3: BTreeSet<String> = by("E3")
-        .filter(|i| !limited(i) && i["reference_incertaine"] != true)
+        .filter(|i| {
+            !limited(i) && i["reference_incertaine"] != true && !i["reference_baro_exclue"].is_string()
+        })
         .filter(|i| num(&i["ecart_milieu_m"]).is_finite() && num(&i["ecart_max_m"]).is_finite())
         .map(id)
         .collect();
@@ -333,6 +479,67 @@ mod tests {
         let m = minimums_for(&bench, "V1.1").unwrap();
         assert_eq!(m["E2b"]["groupes"], json!(["dplus", "plaine"]));
         assert_eq!(minimums_for(&bench, "V1").unwrap(), minimums(&bench).unwrap());
+    }
+
+    /// Critère jugé groupe par groupe (README §4 septies.2, dc76a6e ; série fictive `V9`, aucune
+    /// clé d'une série réelle) : un groupe sous son minimum avant mesure est rapporté, les autres
+    /// restent bloquants ; leur sous-minimum mesuré refuse, celui du groupe rapporté non.
+    #[test]
+    fn a_criterion_by_group_blocks_only_on_groups_reached_before_measure() {
+        let dir = tempfile::tempdir().unwrap();
+        let b = dir.path();
+        std::fs::write(
+            b.join("criteria.yaml"),
+            "criteres:\n  - {id: E2b, bloquant: true}\nserie_tenue_a_l_ecart:\n  couverture:\n    minimums:\n\
+             \x20     E2b: {traces_par_groupe: 3, groupes: [dplus, plaine, ouvrage]}\n\
+             \x20 serie_v9:\n    E2b: {bloquant: si_couverture_atteinte_par_groupe, groupes: [dplus, plaine, ouvrage]}\n",
+        )
+        .unwrap();
+        let manifest = |atteint: &str, minimum: u32| {
+            std::fs::write(
+                b.join("manifest.yaml"),
+                format!("serie_v9:\n  couverture:\n    E2b: {{atteint: {{{atteint}}}, minimum: {{par_groupe: {minimum}}}}}\n"),
+            )
+            .unwrap();
+        };
+        manifest("dplus: 4, plaine: 7, ouvrage: 2", 3);
+        let (groups, detail) = coverage_before_measure_by_group(b, "V9", "E2b").unwrap();
+        assert_eq!(groups.values().copied().collect::<Vec<_>>(), [true, false, true], "{detail}");
+        let (on, off) = blocking_groups(&detail).unwrap();
+        assert_eq!((on.clone(), off.clone()), (ids(&["dplus", "plaine"]), ids(&["ouvrage"])));
+        let c = crate::judge::conditional_blocking(b, "V9").unwrap();
+        assert!(c["E2b"].0 && crate::judge::blocking_criteria_for(b, "V9").unwrap().contains("E2b"));
+        // Le groupe rapporté échoue et manque de traces ; les groupes bloquants passent.
+        let mode = || {
+            json!({"verdicts": {"E2b": "fail", "E2b_groupes_en_echec": ["ouvrage"]},
+                "agregats": {"E2b": {"dplus": {"verdict": "pass"}, "plaine": {"verdict": "pass"}, "ouvrage": {"verdict": "fail"}}},
+                "couverture": {"E2b": {"traces_par_groupe": {"dplus": 3, "plaine": 5, "ouvrage": 1}}}})
+        };
+        let mut results = mode();
+        results["input_with_breakpoints"] = mode();
+        // Mode `input_with_breakpoints` : un groupe bloquant sous son minimum mesuré refuse.
+        results["input_with_breakpoints"]["couverture"]["E2b"]["traces_par_groupe"]["plaine"] = json!(2);
+        let mut mins = minimums_for(b, "V9").unwrap();
+        apply_group_blocking(&mut results, &mut mins, "E2b", &on, &off);
+        apply_minimums(&mut results, &mins);
+        let v = &results["verdicts"];
+        assert_eq!(v["E2b"], "pass", "{v}");
+        assert_eq!(v["E2b_groupes_rapportes"], json!([{"groupe": "ouvrage", "verdict": "fail"}]));
+        assert_eq!(v["E2b_groupes_rapportes_sous_minimum"], json!(["traces_par_groupe ouvrage 1 < 3"]));
+        let bp = &results["input_with_breakpoints"]["verdicts"];
+        assert_eq!(bp["E2b"], "sous_minimum", "{bp}");
+        assert_eq!(bp["E2b_sous_minimum"], json!(["traces_par_groupe plaine 2 < 3"]));
+        // Aucun groupe atteint : critère rapporté entier ; indécidable = erreur.
+        manifest("dplus: 1, plaine: 2, ouvrage: 0", 3);
+        assert!(!crate::judge::blocking_criteria_for(b, "V9").unwrap().contains("E2b"));
+        manifest("dplus: 4, plaine: 7", 3);
+        assert!(crate::judge::conditional_blocking(b, "V9").is_err());
+        manifest("dplus: 4, plaine: 7, ouvrage: 3", 2);
+        assert!(crate::judge::conditional_blocking(b, "V9").is_err());
+    }
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_owned()).collect()
     }
 
     #[test]

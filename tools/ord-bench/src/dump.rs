@@ -141,6 +141,8 @@ mod tests {
             gain_baro_m: None,
             gain_mnt_m: None,
             noise_m: None,
+            mois: None,
+            reference_baro: None,
         }
     }
 

@@ -219,8 +219,18 @@ impl BenchPaths {
 /// 2026-11-04) : extrémités d'un témoin S2, la fin cherchée d'abord sur tout le cas, puis le début
 /// dans `[d_fin − 1,5 × longueur déclarée, d_fin]` (à défaut, à rebours, dans
 /// `[d_fin, d_fin + 1,5 × longueur déclarée]`) ; une trace qui repasse par le début ne rallonge
-/// plus le témoin (`perso-196-s0` : 1 645 m mesurés au lieu de 567 m).
-pub const BENCH_REVISION: Option<&str> = Some("bench5");
+/// plus le témoin (`perso-196-s0` : 1 645 m mesurés au lieu de 567 m). `bench6` (règles
+/// 2026.11.12 inchangées ; règles du banc après le jugement V1.2, README §4 sexies, décisions de
+/// l'utilisateur du 2026-11-04) : trace marquée au manifest `reference_baro: periode_exclue`
+/// (départ de 2015-05 à 2020-09) ou `non_qualifiee` (avant 2014-12 sans qualification
+/// individuelle) hors des références baro d'E1, E2, E2b, E3 et E5, rapportée
+/// (`periode_baro_exclue`), cas de M1 et de la typologie ; marque contrôlée contre `mois` par
+/// `check` (d4aad9a, 1c9edf8, a8bee85) ; garde de bruit (`noise_m` > 1,0 m) d'E3 (passage hors de
+/// la médiane du pont) et d'E2b (trace hors de la médiane du groupe), rapportée (`baro_bruite`,
+/// befb602) ; critère jugé groupe par groupe si sa couverture par groupe est atteinte avant mesure
+/// (`si_couverture_atteinte_par_groupe`, dc76a6e, pour E2b de V1.3 ; sections des séries après V1
+/// lues par `SECTIONS`, aucune section V1.3 au manifest).
+pub const BENCH_REVISION: Option<&str> = Some("bench6");
 
 /// Règles de calcul non fixées par le banc (T05 §3.1) : constantes hachées dans `results.json`
 /// (`bench_rules_sha256`) et gelées avec les seuils.

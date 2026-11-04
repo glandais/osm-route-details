@@ -320,6 +320,16 @@ pub fn conditional_blocking(
             Value::String(v) if v == crate::coverage::BLOQUANT_SI_COUVERTURE => {
                 out.insert(crit.clone(), crate::coverage::coverage_before_measure(bench, increment, crit)?);
             }
+            // Groupe par groupe (E2b, README §4 septies.2, dc76a6e) : le critère reste bloquant si
+            // un groupe au moins atteint son minimum avant mesure ; ses autres groupes sont
+            // rapportés (`coverage::apply_group_blocking`).
+            Value::String(v) if v == crate::coverage::BLOQUANT_SI_COUVERTURE_PAR_GROUPE => {
+                let (groups, mut detail) =
+                    crate::coverage::coverage_before_measure_by_group(bench, increment, crit)?;
+                let any = groups.values().any(|b| *b);
+                detail["atteinte"] = Value::Bool(any);
+                out.insert(crit.clone(), (any, detail));
+            }
             Value::String(v) => bail!("criteria.yaml : {crit}.bloquant = {v} inconnu pour {increment}"),
             _ => {}
         }
@@ -480,7 +490,14 @@ where
     // Contrôle de couverture au jugement (README §2 point 3, §4 ter.4 ; à partir de V1) : un
     // critère sous son **minimum de jugement** (pas la cible majorée du tirage) vaut refus.
     if increment != "MVP" {
-        let minimums = crate::coverage::minimums_for(bench, increment)?;
+        let mut minimums = crate::coverage::minimums_for(bench, increment)?;
+        // Critère jugé groupe par groupe (README §4 septies.2) : verdict et minimum mesuré sur ses
+        // seuls groupes bloquants, les autres rapportés ; avant les minimums.
+        for (crit, (_, detail)) in &conditional {
+            if let Some((on, off)) = crate::coverage::blocking_groups(detail) {
+                crate::coverage::apply_group_blocking(&mut results, &mut minimums, crit, &on, &off);
+            }
+        }
         crate::coverage::apply_minimums(&mut results, &minimums);
         results["campagne"]["couverture_minimums"] = minimums;
     }
@@ -739,6 +756,8 @@ mod tests {
             gain_baro_m: None,
             gain_mnt_m: None,
             noise_m: None,
+            mois: None,
+            reference_baro: None,
         };
         let m = Manifest {
             sha256: String::new(),
@@ -755,8 +774,7 @@ mod tests {
             ],
             hors_git: Vec::new(),
             v1: None,
-            v11: None,
-            v12: None,
+            apres_v1: Vec::new(),
             mvp_judged: false,
         };
         let held = crate::campaign::select_series(&m, &[], &[], Serie::TenueALEcart);

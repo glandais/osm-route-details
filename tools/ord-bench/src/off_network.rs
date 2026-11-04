@@ -288,6 +288,7 @@ mod tests {
             serie: Serie::Calibration,
             baro_fiable: true,
             baro_noise_m: None,
+            reference_baro_exclue: None,
             parts: vec![pts],
             s_ref: (0..=200).map(|k| k as f64 * 10.0).collect(),
             baro_s: Vec::new(),

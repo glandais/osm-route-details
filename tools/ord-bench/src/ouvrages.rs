@@ -407,8 +407,11 @@ pub struct CaseProfile<'a> {
     /// Trace perso fiable : le baro corrigé localement est la référence d'E5 (README §4 ter.7).
     pub baro_fiable: bool,
     /// Bruit baro de la trace (`noise_m`) : référence baro d'E5 incertaine au-delà de 1,0 m
-    /// (README §4 quater.2).
+    /// (README §4 quater.2) ; passage E3 hors de la médiane du pont (`baro_bruite`, §4 sexies.3).
     pub baro_noise_m: Option<f64>,
+    /// Trace hors des références baro (manifest `reference_baro`, README §4 sexies.2) : passages
+    /// E3 et E5 au baro rapportés `periode_baro_exclue`, non comptés.
+    pub baro_exclue: bool,
 }
 
 fn nearest(d: &[f64], pts: &[LatLon], target: LatLon, lo: f64, hi: f64) -> Option<(usize, f64)> {
@@ -1174,6 +1177,18 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         let france = p.ign[im];
                         item.insert("metrique".into(), json!(if france { "E3" } else { "E3_hors_france" }));
                         item.insert("reference".into(), json!("baro_corrige_local"));
+                        // Référence baro exclue (README §4 sexies.2) ou bruitée (§4 sexies.3) :
+                        // passage rapporté, hors de la médiane du pont, sans repli sur le MNS.
+                        let exclusion = if p.baro_exclue {
+                            Some(PERIODE_BARO_EXCLUE)
+                        } else if p.baro_noise_m.is_some_and(|b| b > E3_BARO_NOISE_MAX_M) {
+                            Some(BARO_BRUITE)
+                        } else {
+                            None
+                        };
+                        if let Some(why) = exclusion {
+                            item.insert("reference_baro_exclue".into(), json!(why));
+                        }
                     }
                 }
                 Kind::Tunnel => {
@@ -1219,6 +1234,7 @@ pub fn perso_items(case: &str, p: &CaseProfile<'_>, ouvrages: &[Ouvrage], tol: f
                         im,
                         ends: [im, im],
                         baro_noise_m: p.baro_noise_m,
+                        baro_exclue: p.baro_exclue,
                     };
                     let bump = e5_bump(p.d, p.raw, im, [im, im]);
                     let svc = p.svc[im];
@@ -2070,6 +2086,14 @@ const E5_SIDE_OFFSETS_MAX_M: f64 = 2.0;
 /// Bruit baro de la trace au-delà duquel (exclu) la référence baro est incertaine (criteria
 /// `E5.reference.baro_incertaine_si_bruit`, comme E1 plaine).
 const E5_BARO_NOISE_MAX_M: f64 = 1.0;
+/// Bruit baro de la trace au-delà duquel (exclu) un passage E3 est hors de la médiane du pont
+/// (criteria `E3.baro_incertaine_si_bruit`, README §4 sexies.3, befb602), sans repli sur le MNS.
+pub const E3_BARO_NOISE_MAX_M: f64 = 1.0;
+/// Raison d'une référence baro exclue par la période (README §4 sexies.2, criteria
+/// `periode_hors_reference_baro`).
+pub const PERIODE_BARO_EXCLUE: &str = "periode_baro_exclue";
+/// Raison d'une référence baro bruitée (README §4 quater.2 et §4 sexies.3).
+pub const BARO_BRUITE: &str = "baro_bruite";
 const E5_SIDE_POINTS_MIN: usize = 3;
 /// Demi-fenêtre de la direction de la trace au croisement (test « trace sur un ouvrage »).
 const E5_DIRECTION_HALF_M: f64 = 10.0;
@@ -2132,6 +2156,9 @@ pub struct E5Input<'a> {
     /// Bruit baro de la trace (`qualify_baro.py`, `noise_m` de la trace entière, segments `.sN`
     /// compris) : référence baro incertaine au-delà de 1,0 m (README §4 quater.2).
     pub baro_noise_m: Option<f64>,
+    /// Trace hors des références baro (README §4 sexies.2) : référence baro rapportée
+    /// (`periode_baro_exclue`), non comptée, sans repli sur le MNT, comme `baro_bruite`.
+    pub baro_exclue: bool,
 }
 
 /// Bosse du MNT au croisement : MNT(croisement) − moyenne des médianes du MNT entre 20 et 50 m
@@ -2236,6 +2263,11 @@ pub fn e5_reference(x: &E5Input<'_>) -> E5Reference {
             offset_m,
             sides: Some(sides),
         };
+        // Trace hors des références baro (README §4 sexies.2, d4aad9a, 1c9edf8) : rapportée
+        // comme le baro bruité, testée avant lui ; sans repli sur le MNT.
+        if x.baro_exclue {
+            return uncertain(PERIODE_BARO_EXCLUE);
+        }
         // Baro bruité (README §4 quater.2, f8f81a6) : après le retrait, avant les côtés ; tous
         // groupes, sans repli sur le MNT.
         if x.baro_noise_m.is_some_and(|b| b > E5_BARO_NOISE_MAX_M) {
@@ -2651,6 +2683,7 @@ pub async fn vc_items(
                     im,
                     ends: [i0, i1],
                     baro_noise_m: None,
+                    baro_exclue: false,
                 };
                 let bump = e5_bump(&r.d, &r.raw.ele, im, [i0, i1]);
                 // Référence MNT : écart max sur la plage, contre le MNT de chaque station.
@@ -2904,8 +2937,9 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     let limited = |i: &Value| i["limite_donnees"].is_string();
     let mut ponts: BTreeMap<String, (Vec<f64>, Vec<f64>, f64)> = BTreeMap::new();
     for i in by("E3").into_iter().filter(|i| !limited(i)) {
-        // Référence incertaine (§4 bis.3) : rapportée, non comptée.
-        if i["reference_incertaine"] == true {
+        // Référence incertaine (§4 bis.3), exclue par la période ou bruitée (§4 sexies.2 et .3) :
+        // rapportée, non comptée.
+        if i["reference_incertaine"] == true || i["reference_baro_exclue"].is_string() {
             continue;
         }
         let (Some(mid), Some(max)) = (i["ecart_milieu_m"].as_f64(), i["ecart_max_m"].as_f64()) else {
@@ -2928,6 +2962,9 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         })
         .collect();
     let e3_n = e3.len();
+    let e3_excluded = |why: &str| -> Vec<&Value> {
+        by("E3").into_iter().filter(|i| !limited(i) && i["reference_baro_exclue"] == why).collect()
+    };
     let e3_ok = e3.iter().filter(|p| p.3).count();
     let e3_ponts: Vec<Value> = e3
         .iter()
@@ -3013,7 +3050,10 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     };
     let agg = json!({
         "E3": {"ponts": e3_n, "ponts_ok": e3_ok, "part": r4(e3_ok as f64 / e3_n.max(1) as f64), "seuil": 0.90, "par_pont": e3_ponts,
-            "references_incertaines": by("E3").into_iter().filter(|i| i["reference_incertaine"] == true).map(strip_private).collect::<Vec<_>>()},
+            "references_incertaines": by("E3").into_iter().filter(|i| i["reference_incertaine"] == true).map(strip_private).collect::<Vec<_>>(),
+            // README §4 sexies.2 et .3 : passages rapportés, hors de la médiane du pont.
+            "periode_baro_exclue": e3_excluded(PERIODE_BARO_EXCLUE).into_iter().map(strip_private).collect::<Vec<_>>(),
+            "baro_bruite": e3_excluded(BARO_BRUITE).into_iter().map(strip_private).collect::<Vec<_>>()},
         "E3_hors_france": by("E3_hors_france").into_iter().map(strip_private).collect::<Vec<_>>(),
         "E3_non_couverts": not_covered("E3_non_couvert"),
         "E4": {"tunnels": e4_n, "tunnels_ok": e4_ok, "part": r4(e4_ok as f64 / e4_n.max(1) as f64), "seuil": 0.857, "reference_ambigue": e4_amb, "reference_indisponible": e4_unavailable},
@@ -3039,9 +3079,17 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
         "passages_sur_ouvrage_parallele": by("passage_sur_ouvrage_parallele").into_iter().map(strip_private).collect::<Vec<_>>(),
         "hors_graphe_velo": {"ouvrages": hg.len(), "controle_ok": hg_ok, "detail": hg.iter().map(|i| strip_private(i)).collect::<Vec<_>>()},
     });
+    let excluded_ids = |why: &str| -> Vec<String> {
+        let ids: BTreeSet<String> =
+            e3_excluded(why).iter().filter_map(|i| i["ouvrage"].as_str().map(str::to_owned)).collect();
+        ids.into_iter().collect()
+    };
     let verdicts = json!({
         "E3": verdict(e3_ok as f64 >= 0.90 * e3_n as f64, e3_n),
         "E3_echecs": e3_fail,
+        // Ponts dont au moins un passage est rapporté hors de la médiane (§4 sexies.2 et .3).
+        "E3_periode_baro_exclue": excluded_ids(PERIODE_BARO_EXCLUE),
+        "E3_baro_bruite": excluded_ids(BARO_BRUITE),
         "E3_hors_france": if by("E3_hors_france").is_empty() { "skipped" } else { "reported" },
         "E4": verdict(e4_ok as f64 >= 0.857 * e4_n as f64, e4_n),
         "E4_echecs": e4_fail,
@@ -3490,6 +3538,7 @@ mod tests {
             tiles: Some(&tiles),
             baro_fiable: true,
             baro_noise_m: None,
+            baro_exclue: false,
         };
         let items = perso_items("c", &p, std::slice::from_ref(&o), 40.0);
         assert_eq!(items.len(), 1);
@@ -3580,6 +3629,7 @@ mod tests {
                 // Sans baro fiable : référence MNT (le baro n'a pas ici de stations à 200–1 500 m).
                 baro_fiable: false,
                 baro_noise_m: None,
+                baro_exclue: false,
             };
             perso_items("c", &p, std::slice::from_ref(&o), 40.0)
         };
@@ -3821,6 +3871,7 @@ mod tests {
                 tiles: None,
                 baro_fiable: true,
                 baro_noise_m: None,
+                baro_exclue: false,
             };
             approach_offset(&p, 100, 120, others)
         };
@@ -3887,7 +3938,7 @@ mod tests {
             mnh_milieu: mnh,
             voie: None,
         };
-        let items = |baro: &[f64], mnh: Option<f64>| {
+        let items_with = |baro: &[f64], mnh: Option<f64>, noise: Option<f64>, exclue: bool| {
             let p = CaseProfile {
                 d: &d,
                 pts: &pts,
@@ -3906,10 +3957,12 @@ mod tests {
                 raw_gps: None,
                 tiles: None,
                 baro_fiable: true,
-                baro_noise_m: None,
+                baro_noise_m: noise,
+                baro_exclue: exclue,
             };
             perso_items("c", &p, &[o(mnh)], 40.0)
         };
+        let items = |baro: &[f64], mnh: Option<f64>| items_with(baro, mnh, None, false);
         // Trace au sol sous le tablier : retirée.
         let ground = vec![0.0; n];
         let i = items(&ground, Some(50.0));
@@ -3930,6 +3983,23 @@ mod tests {
         let gap: Vec<f64> = (0..n).map(|k| if (190..=210).contains(&k) { f64::NAN } else { 0.0 }).collect();
         let i = items(&gap, Some(50.0));
         assert_eq!(i[0]["niveau_sans_baro"], true, "{i:?}");
+        // README §4 sexies.2 et .3 (bench6) : trace hors des références baro, ou au bruit > 1,0 m
+        // (1,0 m gardé) : passage rapporté, hors de la médiane du pont et de la couverture.
+        let counted = items_with(&deck, Some(50.0), Some(1.0), false);
+        assert!(counted[0].get("reference_baro_exclue").is_none(), "{counted:?}");
+        let noisy = items_with(&deck, Some(50.0), Some(1.01), false);
+        assert_eq!(noisy[0]["reference_baro_exclue"], BARO_BRUITE);
+        let excluded = items_with(&deck, Some(50.0), Some(1.5), true);
+        assert_eq!(excluded[0]["reference_baro_exclue"], PERIODE_BARO_EXCLUE);
+        let all: Vec<Value> = [counted, noisy, excluded].concat();
+        let (agg, v) = judge(&all);
+        assert_eq!(agg["E3"]["par_pont"][0]["passages"], 1, "{agg}");
+        assert_eq!(agg["E3"]["periode_baro_exclue"].as_array().unwrap().len(), 1);
+        assert_eq!(agg["E3"]["baro_bruite"].as_array().unwrap().len(), 1);
+        assert_eq!(v["E3_periode_baro_exclue"], json!(["pont"]));
+        assert_eq!(v["E3_baro_bruite"], json!(["pont"]));
+        let cov = crate::coverage::measure(&[], &[], &all[1..], &BTreeMap::new(), 0, 5.0);
+        assert_eq!(cov["E3"]["ponts"], 0, "{cov}");
     }
 
     #[test]
@@ -3984,6 +4054,7 @@ mod tests {
                 tiles: None,
                 baro_fiable: true,
                 baro_noise_m: None,
+                baro_exclue: false,
             };
             perso_items("c", &p, &os, 40.0)
         };
@@ -4125,7 +4196,7 @@ mod e5_tests {
         baro: Option<&'a [f64]>,
         tiles: Option<&'a Tiles>,
     ) -> E5Input<'a> {
-        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40], baro_noise_m: None }
+        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40], baro_noise_m: None, baro_exclue: false }
     }
 
     /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.
@@ -4194,6 +4265,7 @@ mod e5_tests {
             im: 400,
             ends: [400, 400],
             baro_noise_m: None,
+            baro_exclue: false,
         };
         // 261 stations de 200 à 1 500 m de chaque côté.
         let sides = BaroSides { offset_m: [Some(3.0), Some(3.0)], points: [261, 261] };
@@ -4211,6 +4283,18 @@ mod e5_tests {
                 offset_m: Some(3.0),
                 sides: Some(BaroSides { offset_m: [Some(3.0), Some(3.0)], points: [200, 0] }),
             }
+        );
+        // Trace hors des références baro (README §4 sexies.2) : incertaine, sans repli sur le MNT,
+        // avant le bruit.
+        let excluded = E5Input { baro_exclue: true, baro_noise_m: Some(1.5), ..x };
+        assert!(matches!(
+            e5_reference(&excluded),
+            E5Reference::Incertaine { reference: "baro_corrige_local", raison: PERIODE_BARO_EXCLUE, .. }
+        ));
+        // Trace non fiable (pas de baro) : la référence MNT n'est pas une référence baro, inchangée.
+        assert_eq!(
+            e5_reference(&E5Input { baro: None, ..excluded }),
+            E5Reference::Indisponible { raison: "mnt_lit_le_tablier" }
         );
         // Baro absent au croisement (pas brut de plus de 100 m) : MNT, ici indisponible.
         let mut gap = baro.clone();
@@ -4267,6 +4351,7 @@ mod e5_tests {
                 im: 400,
                 ends: [400, 400],
                 baro_noise_m: None,
+                baro_exclue: false,
             };
             e5_reference(&x)
         };
@@ -4321,6 +4406,7 @@ mod e5_tests {
             im: 400,
             ends: [400, 400],
             baro_noise_m: None,
+            baro_exclue: false,
         };
         let r = e5_reference(&x);
         assert!(
@@ -4353,6 +4439,7 @@ mod e5_tests {
             im: 400,
             ends: [400, 400],
             baro_noise_m: None,
+            baro_exclue: false,
         };
         let r = e5_reference(&x);
         assert!(
@@ -4395,6 +4482,7 @@ mod e5_tests {
                 im: 400,
                 ends: [400, 400],
                 baro_noise_m: None,
+                baro_exclue: false,
             };
             e5_reference(&x)
         };
@@ -4553,6 +4641,7 @@ mod e5_tests {
             im: 400,
             ends: [400, 400],
             baro_noise_m: None,
+            baro_exclue: false,
         };
         assert!(matches!(e5_reference(&x), E5Reference::Baro { .. }), "{:?}", e5_reference(&x));
         assert_eq!(e5_reference(&E5Input { baro: None, ..x }), approche_sur_ouvrage(100.0));

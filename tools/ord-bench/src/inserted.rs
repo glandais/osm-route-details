@@ -200,6 +200,7 @@ mod tests {
             serie: Serie::Calibration,
             baro_fiable: true,
             baro_noise_m: None,
+            reference_baro_exclue: None,
             parts: vec![pts],
             s_ref,
             baro_z: baro_s.iter().map(|s| 100.0 + s / 100.0).collect(),

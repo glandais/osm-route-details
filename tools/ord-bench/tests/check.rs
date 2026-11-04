@@ -35,13 +35,13 @@ fn held_out_cases_are_excluded_before_any_read() {
         .collect();
     assert_eq!(all.excluded_held_out, held);
     assert!(held.is_empty(), "{held:?}");
-    let v12 = manifest.v12.as_ref().expect("section perso_v12");
+    let v12 = manifest.section("V1.2").expect("section perso_v12");
     assert!(v12.judged);
     let expected: Vec<String> = (166..=197).map(|k| format!("perso-{k}")).collect();
     assert!(expected.iter().all(|id| v12.traces.contains(id)));
     assert_eq!(all.cases.iter().filter(|t| v12.traces.contains(&t.id)).count(), 32);
     assert_eq!(manifest.tile_campaign(v12).map(|c| c.id.as_str()), Some("tuiles_2026_11_03"));
-    let v11 = manifest.v11.as_ref().expect("section perso_v11");
+    let v11 = manifest.section("V1.1").expect("section perso_v11");
     assert!(v11.judged);
     assert_eq!(all.cases.iter().filter(|t| v11.traces.contains(&t.id)).count(), 36);
     assert!(all.cases.iter().all(|t| t.serie == ord_bench::manifest::Serie::Calibration));

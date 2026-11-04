@@ -73,6 +73,82 @@ pub struct Trace {
     /// Bruit baro de `qualify_baro.py` (`noise_m`) : E1 plaine incertaine au-delà de 1,0 m
     /// (README §4 ter.8).
     pub noise_m: Option<f64>,
+    /// Mois de départ (`mois`, `AAAA-MM`) : contrôle de la marque `reference_baro`.
+    pub mois: Option<String>,
+    /// Marque `reference_baro` du manifest (README §4 sexies.2, d4aad9a, 1c9edf8) :
+    /// `periode_exclue` (départ de 2015-05 à 2020-09) ou `non_qualifiee` (avant 2014-12 sans
+    /// qualification individuelle) ; la trace ne fournit alors aucune référence baro.
+    pub reference_baro: Option<String>,
+}
+
+/// Valeurs de `reference_baro` (README §4 sexies.2) : la trace sort des références baro d'E1, E2,
+/// E2b, E3 et E5 (rapportée `periode_baro_exclue`) ; elle reste un cas pour M1 et la typologie.
+pub const REFERENCE_BARO_EXCLUE: [&str; 2] = ["periode_exclue", "non_qualifiee"];
+/// Période exclue des références baro (mois de départ, bornes comprises ; README §1.3, §4 sexies).
+pub const PERIODE_EXCLUE: (&str, &str) = ("2015-05", "2020-09");
+/// Avant ce mois, une trace sans qualification individuelle est `non_qualifiee` (§4 sexies.1).
+pub const QUALIFICATION_AVANT: &str = "2014-12";
+/// Qualification individuelle d'une trace d'avant 2014-12 (README §4 sexies.1, 1c9edf8) : verdict
+/// `fiable`, bruit ≤ 1,0 m et D+ baro / D+ MNT brut dans les bornes par trace d'E2.
+const QUALIFICATION_BRUIT_MAX_M: f64 = 1.0;
+const QUALIFICATION_RATIO: (f64, f64) = (0.90, 1.20);
+
+impl Trace {
+    /// La trace ne fournit aucune référence baro (`reference_baro` du manifest, §4 sexies.2).
+    pub fn baro_exclue(&self) -> bool {
+        self.reference_baro.as_deref().is_some_and(|r| REFERENCE_BARO_EXCLUE.contains(&r))
+    }
+
+    /// Qualification individuelle (README §4 sexies.1) lue au manifest (`qualification`).
+    pub fn qualifiee(&self) -> bool {
+        let ratio = match (self.gain_baro_m, self.gain_mnt_m) {
+            (Some(b), Some(m)) if m > 0.0 => b / m,
+            _ => f64::NAN,
+        };
+        self.verdict.as_deref() == Some("fiable")
+            && self.noise_m.is_some_and(|n| n <= QUALIFICATION_BRUIT_MAX_M)
+            && ratio >= QUALIFICATION_RATIO.0
+            && ratio <= QUALIFICATION_RATIO.1
+    }
+}
+
+/// Marques `reference_baro` contraires au mois de départ (README §4 sexies.2 ; `check` refuse) :
+/// une trace (hors négatifs Q1, non concernés) dont le mois est dans 2015-05 → 2020-09 porte
+/// `periode_exclue`, et elle seule ; avant 2014-12, `non_qualifiee` si et seulement si la
+/// qualification individuelle manque ; toute autre valeur, ou une marque sans mois, est refusée.
+pub fn reference_baro_failures(traces: &[Trace]) -> Vec<String> {
+    let mut out = Vec::new();
+    for t in traces.iter().filter(|t| t.groupe != "negatif") {
+        let mark = t.reference_baro.as_deref();
+        if let Some(m) = mark.filter(|m| !REFERENCE_BARO_EXCLUE.contains(m)) {
+            out.push(format!("{} : reference_baro {m} inconnue (README §4 sexies.2)", t.id));
+            continue;
+        }
+        let Some(mois) = t.mois.as_deref() else {
+            if mark.is_some() {
+                out.push(format!("{} : reference_baro sans mois de départ, incontrôlable", t.id));
+            }
+            continue;
+        };
+        let in_period = mois >= PERIODE_EXCLUE.0 && mois <= PERIODE_EXCLUE.1;
+        let before = mois < QUALIFICATION_AVANT;
+        let expected = if in_period {
+            Some("periode_exclue")
+        } else if before && !t.qualifiee() {
+            Some("non_qualifiee")
+        } else {
+            None
+        };
+        if mark != expected {
+            out.push(format!(
+                "{} : reference_baro {} contraire au mois {mois} (attendu : {}, README §4 sexies.2)",
+                t.id,
+                mark.unwrap_or("absente"),
+                expected.unwrap_or("aucune marque")
+            ));
+        }
+    }
+    out
 }
 
 /// Itinéraire planifié de la série V1 (`perso_v1.planifies`) : sans donnée perso, hors git
@@ -159,13 +235,11 @@ pub struct Manifest {
     pub hors_git: Vec<HorsGitEntry>,
     /// Section `perso_v1` (série V1), absente avant sa constitution.
     pub v1: Option<PersoV1>,
-    /// Section `perso_v11` (série V1.1, tenue à l'écart entière ; décision de l'utilisateur,
-    /// 2026-11-02), absente avant sa constitution : ses cas ne sont alors jamais lus.
-    pub v11: Option<PersoV1>,
-    /// Section `perso_v12` (série V1.2, tenue à l'écart entière ; décisions de l'utilisateur,
-    /// 2026-11-03, README §4 quinquies), absente avant sa constitution : ses cas ne sont alors
-    /// jamais lus.
-    pub v12: Option<PersoV1>,
+    /// Sections des séries tenues à l'écart entières après V1, dans l'ordre de `SECTIONS`
+    /// (`perso_v11` : V1.1, décision de l'utilisateur, 2026-11-02 ; `perso_v12` : V1.2, README
+    /// §4 quinquies) ; une section absente du manifest n'y figure pas, ses cas ne sont jamais lus.
+    /// Une série suivante s'ajoute par ses clés dans `SECTIONS`, sans autre changement ici.
+    pub apres_v1: Vec<(&'static SectionKeys, PersoV1)>,
     /// Série tenue à l'écart du MVP jugée (`judgements.md`) : devenue calibration (README §2,
     /// point 3) ; ses traces, ses ouvrages et leurs fenêtres masquées le sont pour V1.
     pub mvp_judged: bool,
@@ -210,6 +284,8 @@ fn parse_traces(section: Option<&Value>, name: &str) -> anyhow::Result<Vec<Trace
                 gain_baro_m: q.and_then(|q| f(q, "gain_baro_m")),
                 gain_mnt_m: q.and_then(|q| f(q, "gain_mnt_m")),
                 noise_m: q.and_then(|q| f(q, "noise_m")),
+                mois: s(it, "mois"),
+                reference_baro: s(it, "reference_baro"),
                 id,
             });
         }
@@ -250,7 +326,9 @@ pub const SECTION_V11: SectionKeys =
 pub const SECTION_V12: SectionKeys =
     SectionKeys { perso: "perso_v12", serie: "serie_v12", suffix: "v12", name: "V1.2" };
 
-/// Séries nouvelles du manifest, dans l'ordre des incréments.
+/// Séries nouvelles du manifest, dans l'ordre des incréments. V1 d'abord (champ `v1`), puis les
+/// séries tenues à l'écart entières (`apres_v1`) : une série suivante (V1.3) s'ajoute ici, avec
+/// ses clés du manifest, une fois sa section écrite par data-init.
 pub const SECTIONS: [&SectionKeys; 3] = [&SECTION_V1, &SECTION_V11, &SECTION_V12];
 
 /// Clés d'un incrément (`V1`, `V1.1`, `V1.2`).
@@ -367,8 +445,12 @@ impl Manifest {
             ouvrages.get("ouvrages_perso").and_then(|p| Some((s(p, "fichier")?, s(p, "sha256")?)));
         let mut traces = parse_traces(root.get("perso"), "perso")?;
         let v1 = parse_section(&root, &SECTION_V1, &mut traces)?;
-        let v11 = parse_section(&root, &SECTION_V11, &mut traces)?;
-        let v12 = parse_section(&root, &SECTION_V12, &mut traces)?;
+        let mut apres_v1 = Vec::new();
+        for keys in SECTIONS.into_iter().skip(1) {
+            if let Some(sec) = parse_section(&root, keys, &mut traces)? {
+                apres_v1.push((keys, sec));
+            }
+        }
         let hors_git = match root.get("hors_git") {
             Some(Value::Sequence(items)) => items
                 .iter()
@@ -408,8 +490,7 @@ impl Manifest {
             ouvrages_perso,
             traces,
             v1,
-            v11,
-            v12,
+            apres_v1,
             mvp_judged: false,
         })
     }
@@ -441,11 +522,10 @@ impl Manifest {
     /// Série nouvelle `name` (`V1`, `V1.1`, `V1.2`) jugée (README §2, point 3) : comme
     /// `with_v1_judged`.
     pub fn with_judged(mut self, name: &str) -> Self {
-        let slot = match name {
-            n if n == SECTION_V1.name => self.v1.as_mut(),
-            n if n == SECTION_V11.name => self.v11.as_mut(),
-            n if n == SECTION_V12.name => self.v12.as_mut(),
-            _ => None,
+        let slot = if name == SECTION_V1.name {
+            self.v1.as_mut()
+        } else {
+            self.apres_v1.iter_mut().find(|(k, _)| k.name == name).map(|(_, v)| v)
         };
         let Some(sec) = slot else { return self };
         sec.judged = true;
@@ -459,13 +539,11 @@ impl Manifest {
     /// Sections des séries nouvelles présentes au manifest, avec leur incrément, dans l'ordre (V1,
     /// V1.1, puis V1.2).
     pub fn named_sections(&self) -> impl Iterator<Item = (&'static str, &PersoV1)> {
-        [
-            (SECTION_V1.name, self.v1.as_ref()),
-            (SECTION_V11.name, self.v11.as_ref()),
-            (SECTION_V12.name, self.v12.as_ref()),
-        ]
-        .into_iter()
-        .filter_map(|(n, v)| Some((n, v?)))
+        self.v1
+            .as_ref()
+            .map(|v| (SECTION_V1.name, v))
+            .into_iter()
+            .chain(self.apres_v1.iter().map(|(k, v)| (k.name, v)))
     }
 
     /// Sections des séries nouvelles présentes au manifest (V1, V1.1, puis V1.2).
@@ -498,7 +576,10 @@ impl Manifest {
     /// de la série tenue à l'écart mesure tout ce qui l'est).
     pub fn held_out_increment(&self, increment: &str) -> anyhow::Result<&PersoV1> {
         let sec = self.section(increment).with_context(|| {
-            format!("incrément {increment} : section de ses cas absente du manifest (perso_v1, perso_v11, perso_v12)")
+            format!(
+                "incrément {increment} : section de ses cas absente du manifest ({})",
+                SECTIONS.map(|k| k.perso).join(", ")
+            )
         })?;
         anyhow::ensure!(!sec.judged, "incrément {increment} déjà jugé (judgements.md)");
         let others: Vec<&str> =
@@ -563,4 +644,81 @@ impl Manifest {
 /// Une empreinte du manifest est-elle un SHA-256 simple ?
 pub fn is_plain_sha256(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trace(id: &str, groupe: &str, mois: Option<&str>, mark: Option<&str>) -> Trace {
+        Trace {
+            id: id.into(),
+            groupe: groupe.into(),
+            serie: Serie::Calibration,
+            fichier: String::new(),
+            sha256: None,
+            sha256_trim1km: None,
+            passages_masques: Vec::new(),
+            verdict: Some("fiable".into()),
+            dist_km: None,
+            gain_baro_m: Some(986.0),
+            gain_mnt_m: Some(933.0),
+            noise_m: Some(0.9),
+            mois: mois.map(str::to_owned),
+            reference_baro: mark.map(str::to_owned),
+        }
+    }
+
+    /// README §4 sexies.2 (d4aad9a, 1c9edf8) : marque `reference_baro` contrôlée contre `mois` ;
+    /// négatifs Q1 non concernés.
+    #[test]
+    fn the_reference_baro_mark_follows_the_month() {
+        let unqualified = Trace {
+            noise_m: Some(1.19),
+            gain_baro_m: Some(869.0),
+            gain_mnt_m: Some(706.0),
+            ..trace("u", "plaine", Some("2014-06"), Some("non_qualifiee"))
+        };
+        let ok = [
+            trace("a", "plaine", Some("2015-05"), Some("periode_exclue")),
+            trace("b", "dplus", Some("2020-09"), Some("periode_exclue")),
+            trace("c", "plaine", Some("2020-10"), None),
+            trace("d", "plaine", Some("2015-04"), None),
+            // Qualifiée (verdict fiable, bruit 0,9 m, rapport 1,06) : pas de marque.
+            trace("e", "plaine", Some("2014-09"), None),
+            unqualified.clone(),
+            trace("neg", "negatif", Some("2016-01"), None),
+            trace("sans-mois", "plaine", None, None),
+        ];
+        assert!(reference_baro_failures(&ok).is_empty(), "{:?}", reference_baro_failures(&ok));
+        assert!(ok[0].baro_exclue() && unqualified.baro_exclue() && !ok[2].baro_exclue());
+        assert!(ok[4].qualifiee() && !unqualified.qualifiee());
+        let bad = [
+            trace("p", "plaine", Some("2016-03"), None),
+            trace("q", "plaine", Some("2021-01"), Some("periode_exclue")),
+            trace("r", "plaine", Some("2014-09"), Some("non_qualifiee")),
+            Trace { mois: Some("2014-06".into()), reference_baro: None, ..unqualified },
+            trace("s", "plaine", Some("2016-03"), Some("non_qualifiee")),
+            trace("t", "plaine", Some("2016-03"), Some("autre")),
+            trace("v", "plaine", None, Some("periode_exclue")),
+        ];
+        let f = reference_baro_failures(&bad);
+        assert_eq!(f.len(), bad.len(), "{f:?}");
+        assert!(f[1].starts_with("q : reference_baro periode_exclue contraire au mois 2021-01"), "{f:?}");
+    }
+
+    /// Manifest du dépôt : marques cohérentes ; `perso-130` qualifiée, `perso-166` non.
+    #[test]
+    fn repo_reference_baro_marks_are_coherent() {
+        let bench = crate::BenchPaths::repo_bench();
+        let m = Manifest::parse(&std::fs::read_to_string(bench.join("manifest.yaml")).unwrap()).unwrap();
+        assert_eq!(reference_baro_failures(&m.traces), Vec::<String>::new());
+        let t = |id: &str| m.trace(id).unwrap();
+        assert!(t("perso-130").qualifiee() && !t("perso-130").baro_exclue());
+        assert_eq!(t("perso-166").reference_baro.as_deref(), Some("non_qualifiee"));
+        assert!(t("perso-166").baro_exclue() && t("perso-131").baro_exclue());
+        // Sections des séries après V1 lues dans l'ordre de `SECTIONS`.
+        let names: Vec<&str> = m.named_sections().map(|(n, _)| n).collect();
+        assert_eq!(names, SECTIONS.map(|k| k.name));
+    }
 }

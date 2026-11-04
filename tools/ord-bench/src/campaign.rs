@@ -130,6 +130,10 @@ pub struct PersoCase {
     pub baro_fiable: bool,
     /// Bruit baro de `qualify_baro.py` (`noise_m`, E1 plaine, README §4 ter.8).
     pub baro_noise_m: Option<f64>,
+    /// Marque `reference_baro` d'une trace hors des références baro (`periode_exclue`,
+    /// `non_qualifiee` ; README §4 sexies.2) : rapportée `periode_baro_exclue` en E1, E2, E2b,
+    /// E3 et E5, cas de M1 et de la typologie. `None` : référence baro ordinaire.
+    pub reference_baro_exclue: Option<String>,
     /// Requêtes envoyées, une par tronçon (`.partN` : bornes d'entrée de 200 km) ; le tronçon
     /// N+1 repart du dernier point du tronçon N.
     pub parts: Vec<Vec<Pt>>,
@@ -380,6 +384,7 @@ fn build_case(
         serie: trace.serie,
         baro_fiable: trace.verdict.as_deref() == Some("fiable"),
         baro_noise_m: trace.noise_m,
+        reference_baro_exclue: trace.baro_exclue().then(|| trace.reference_baro.clone()).flatten(),
         parts,
         s_ref,
         baro_s,
@@ -678,6 +683,7 @@ pub fn held_out_extracts_lagged(
             serie: case.serie,
             baro_fiable: case.baro_fiable,
             baro_noise_m: case.baro_noise_m,
+            reference_baro_exclue: case.reference_baro_exclue.clone(),
             parts: vec![pts[first..=last].to_vec()],
             s_ref: case.s_ref[first..=last].iter().map(|x| x - s0).collect(),
             baro_s,
@@ -1448,6 +1454,7 @@ pub async fn measure_case(
         "serie": case.serie,
         "groupe": case.groupe,
         "bruit_baro_m": case.baro_noise_m,
+        "reference_baro_exclue": case.reference_baro_exclue,
         "marche_baro": marche.map(|m| m.to_json()),
         "zones_pente_baro": crate::marche::zones_json(&slope_zones, compared_in_zones),
         "retard_baro": retard.to_json(),
@@ -1543,6 +1550,7 @@ pub async fn measure_case(
         tiles: Some(&tiles),
         baro_fiable: case.baro_fiable,
         baro_noise_m: case.baro_noise_m,
+        baro_exclue: case.reference_baro_exclue.is_some(),
     };
     let mut items = crate::ouvrages::perso_items(&case.id, &cp, ouvrages, rules.passage_tol_m);
     // Témoins négatifs V1 portés par ce cas (README §4 ter.4–6) ; plages hors graphe vélo en
@@ -1653,6 +1661,17 @@ pub fn e1_uncertain(c: &Value) -> bool {
     (c["groupe"] == "plaine" && c["bruit_baro_m"].as_f64().is_some_and(|b| b > E1_PLAINE_NOISE_MAX_M))
         || c["marche_baro"].is_object()
 }
+/// Trace hors des références baro (manifest `reference_baro`, README §4 sexies.2) : hors d'E1,
+/// E2, E2b, E3 et E5, rapportée (`periode_baro_exclue`) ; cas de M1 et de la typologie.
+pub fn reference_baro_excluded(c: &Value) -> bool {
+    c["reference_baro_exclue"].is_string()
+}
+/// E2b, garde de bruit (README §4 sexies.3, criteria `E2b.reference_incertaine_si`) : trace au
+/// bruit baro > 1,0 m hors de la médiane de son groupe, rapportée (`baro_bruite`).
+const E2B_NOISE_MAX_M: f64 = 1.0;
+pub fn e2b_noisy(c: &Value) -> bool {
+    c["bruit_baro_m"].as_f64().is_some_and(|b| b > E2B_NOISE_MAX_M)
+}
 const E2_GROUP_MEDIAN: (f64, f64) = (0.95, 1.12);
 /// Groupes jugés « France » pour E2 et E2b (`criteria.yaml`, `terrain: france`).
 const E2_GROUPS: [&str; 3] = ["dplus", "plaine", "ouvrage"];
@@ -1666,9 +1685,12 @@ fn judge(cases: &[Value]) -> (Value, Value) {
     let metric = |c: &Value, k: &str| c["metriques"][k].as_f64().unwrap_or(f64::NAN);
     let groupe = |c: &Value| c["groupe"].as_str().unwrap_or("").to_owned();
     let mut groups: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
-    for c in cases {
+    // Traces hors des références baro (README §4 sexies.2) : ni E1, ni E2, ni E2b, rapportées.
+    let excluded: Vec<&Value> = cases.iter().filter(|c| reference_baro_excluded(c)).collect();
+    for c in cases.iter().filter(|c| !reference_baro_excluded(c)) {
         groups.entry(groupe(c)).or_default().push(c);
     }
+    let mut e2b_noisy_list = Vec::new();
     let mut agg_e1 = serde_json::Map::new();
     let mut agg_e2 = serde_json::Map::new();
     let mut agg_e2b = serde_json::Map::new();
@@ -1726,7 +1748,14 @@ fn judge(cases: &[Value]) -> (Value, Value) {
                 "traces_hors_bornes": traces_out
             }));
             // E2b : médiane |ln(service / baro)| ≤ médiane |ln(MNT brut / baro)|, D+ baro au preset
-            // `dem` (`E2b.ratio*`, criteria.yaml `preset_baro: dem`).
+            // `dem` (`E2b.ratio*`, criteria.yaml `preset_baro: dem`). Garde de bruit (README
+            // §4 sexies.3) : trace au bruit baro > 1,0 m hors de la médiane, rapportée.
+            let (noisy, list): (Vec<&Value>, Vec<&Value>) = list.iter().partition(|c| e2b_noisy(c));
+            e2b_noisy_list.extend(noisy.iter().map(|c| c["id"].clone()));
+            if list.is_empty() {
+                agg_e2b.insert(g.clone(), json!({"verdict": "sans_trace", "baro_bruite": noisy.len()}));
+                continue;
+            }
             let ln_of = |k: &str| -> Vec<f64> { list.iter().map(|c| metric(c, k).ln().abs()).collect() };
             let (ln_svc, ln_raw) = (ln_of("E2b.ratio"), ln_of("E2b.ratio_mnt_brut"));
             let (ms, mr) = (median(&ln_svc), median(&ln_raw));
@@ -1750,6 +1779,8 @@ fn judge(cases: &[Value]) -> (Value, Value) {
                 json!({
                     "mediane_ecart_log_service": round(ms, 5),
                     "mediane_ecart_log_mnt_brut": round(mr, 5),
+                    "traces": list.len(),
+                    "baro_bruite": noisy.len(),
                     "verdict": v
                 }),
             );
@@ -1771,6 +1802,11 @@ fn judge(cases: &[Value]) -> (Value, Value) {
             (j, _) => verdict(j, e2b_fail.len()),
         },
         "E2b_groupes_en_echec": e2b_fail,
+        // README §4 sexies.2 et .3 : traces rapportées, non comptées.
+        "E1_periode_baro_exclue": excluded.iter().map(|c| c["id"].clone()).collect::<Vec<_>>(),
+        "E2_periode_baro_exclue": excluded.iter().map(|c| c["id"].clone()).collect::<Vec<_>>(),
+        "E2b_periode_baro_exclue": excluded.iter().map(|c| c["id"].clone()).collect::<Vec<_>>(),
+        "E2b_baro_bruite": e2b_noisy_list,
     });
     (json!({"E1": agg_e1, "E2": agg_e2, "E2b": agg_e2b}), verdicts)
 }
@@ -1974,9 +2010,10 @@ impl V1Ctx {
 /// (calibration) et V1 (jugée avec masques et extraits) ne sont pas concernées.
 pub fn judged_whole(manifest: &Manifest, target: Serie, id: &str) -> bool {
     target == Serie::TenueALEcart
-        && [manifest.v11.as_ref(), manifest.v12.as_ref()]
-            .into_iter()
-            .flatten()
+        && manifest
+            .apres_v1
+            .iter()
+            .map(|(_, v)| v)
             .filter(|v| !v.judged)
             .any(|v| v.traces.contains(id) || v.planifies.iter().any(|p| p.id == id))
 }
@@ -2373,6 +2410,10 @@ fn judge_pass(
     });
     agregats["ouvrages"] = ouvrages_agg;
     agregats["couverture"] = couverture;
+    // Références baro exclues par la période (README §4 sexies.2) et garde de bruit d'E3 et E2b
+    // (§4 sexies.3) : comptes, rapportés ; détail par critère dans les verdicts et les ouvrages.
+    agregats["periode_baro_exclue"] = baro_exclusions(&cases, &items, crate::ouvrages::PERIODE_BARO_EXCLUE);
+    agregats["baro_bruite"] = baro_exclusions(&cases, &items, crate::ouvrages::BARO_BRUITE);
     // Retard du baro des traces perso (README §4 ter.9) : id opaque et δ seulement.
     agregats["retard_baro"] = crate::retard::summary(&cases);
     if let Some(frozen) = frozen {
@@ -2391,6 +2432,45 @@ fn judge_pass(
     let public = crate::ouvrages::public(&items);
     let rest = Pass { skipped, data_versions, inserted_report, held_out_measured, ..Pass::default() };
     (cases, public, agregats, verdicts, rest)
+}
+
+/// Résumé d'une exclusion de référence baro (`periode_baro_exclue` ou `baro_bruite`, README
+/// §4 sexies.2 et .3) : traces sorties d'E1, E2 et E2b (période) ou d'E2b (bruit), passages E3
+/// hors de la médiane de leur pont, passages E5 à référence baro rapportée. Ids seulement.
+fn baro_exclusions(cases: &[Value], items: &[Value], why: &str) -> Value {
+    let periode = why == crate::ouvrages::PERIODE_BARO_EXCLUE;
+    let traces: Vec<Value> = cases
+        .iter()
+        .filter(|c| {
+            if periode {
+                reference_baro_excluded(c)
+            } else {
+                !reference_baro_excluded(c)
+                    && e2b_noisy(c)
+                    && E2_GROUPS.contains(&c["groupe"].as_str().unwrap_or(""))
+            }
+        })
+        .map(|c| {
+            if periode {
+                json!({"id": c["id"], "reference_baro": c["reference_baro_exclue"]})
+            } else {
+                c["id"].clone()
+            }
+        })
+        .collect();
+    let e3: Vec<&Value> =
+        items.iter().filter(|i| i["metrique"] == "E3" && i["reference_baro_exclue"] == why).collect();
+    let e3_ponts: std::collections::BTreeSet<&str> =
+        e3.iter().filter_map(|i| i["ouvrage"].as_str()).collect();
+    let e5 =
+        items.iter().filter(|i| i["metrique"] == "e5_reference_incertaine" && i["raison"] == why).count();
+    let key = if periode { "traces" } else { "traces_E2b" };
+    json!({
+        key: traces,
+        "E3_passages": e3.len(),
+        "E3_ponts": e3_ponts.len(),
+        "E5_passages": e5,
+    })
 }
 
 /// `run --offline` : campagne de calibration ; renvoie le contenu de `results.json`.
@@ -2501,7 +2581,7 @@ pub async fn run_series(
             "increment": increment,
             "increment_plan": "V1",
             "modes": ["distance", "input_with_breakpoints"],
-            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8) ; après le jugement V1 (décisions de l'utilisateur, 2026-11-02) : E5, approche sur un autre ouvrage (§4 ter.7 : f38b745, validé en 2e511e5), erreur de la référence Valhalla de R1, R2 et R3 hors décompte (§4 bis.8 : 562d729) ; README §4 quater, règles pour V1.2 (décisions de l'utilisateur, 2026-11-03, après le jugement V1.1) : référence R1/R2, tags différents entre dates et sauts de s_origine (§4 quater.1 : d6fd42c), E5 baro bruité (§4 quater.2 : f8f81a6), E1 zones de pente du baro avant la marche (§4 quater.3 : 2744983, 633255f), E5 par site (§4 quater.4 : 8559a21) ; série V1.2 (README §4 quinquies, décisions de l'utilisateur, 2026-11-03) : Q1 rapporté (77a5fbf), E3 bloquant si sa couverture est atteinte (e57dd1e, remplace 6a984fa ; sous-minimum mesuré au jugement refusant : 65ea59b), campagne de tuiles de la série (8ca83ad, 70517b5), un seul témoin S2 planifié (3092e59), ouvrages V1.1 exclus à tort ajoutés à la calibration V1.1 (ee5d7c1) ; après le jugement V1.2 (décision de l'utilisateur, 2026-11-04) : extrémités des témoins S2, fin d'abord puis début dans [d_fin − 1,5 × longueur déclarée, d_fin] (bench5)",
+            "regles_banc": "README §4 bis (décision de l'utilisateur, 2026-10-31 ; complétée en 40a989f, 657d2c8, 022710f, 4304838, e48170f, adbf6f1, 53225a8 et 405f956 ; décision de l'utilisateur, 2026-11-01 : 2f3254b, 02874b5 et 01272dc) ; README §4 ter, règles V1 (décision de l'utilisateur, 2026-11-01 : 304f767, 16f6097 et c1d231c ; 6c664b6 non appliqué en calibration ; après la calibration 2026.11.2 : ec72f13, 09dcda0 et 0b590ff ; ouvrage réel sur la voie d'un témoin : 32f6867, précisé en eb4c4cc, covered mesuré contre le MNT : cc59b18) ; série V1 (README §4 ter.4 : 13e0ed1, 930f6e8, 305abd7, 64b7067, 00e500f ; manifest perso_v1 e4af0f7, 71781e7 ; recalage Valhalla FOSSGIS 6aba29e) ; E5 au croisement (README §4 ter.7 : 800d4e0 ; après la calibration 2026.11.6 : f1bfda3, e477dd4, 504c800, e9430ac), E1 plaine incertaine (§4 ter.8 : 4423741), ouvrages réels des témoins V1 (§4 ter.6 : 57e9d95 ; manifest temoins_v1_tags 6ed1da7) ; après la calibration 2026.11.6-bench1 (décisions de l'utilisateur, 2026-11-02) : E5 tronçons recousus, bosse de 1,0 m, côté sans baro sans repli (1477b5f), retard du baro estimé et corrigé (§4 ter.9 : b922ce4), points de baro d'E5 comptés bruts (6bc77a5) ; après la calibration 2026.11.6-bench2 : points de baro d'E5 à l'abscisse corrigée du retard (décision de l'utilisateur, 2026-11-02 : 085d26e), lectures du retard et d'E5 (7dab276) ; après la calibration 2026.11.6-bench3 : extraits des traces de calibration au jugement au δ gelé de leur trace, sans réestimation (décision de l'utilisateur, 2026-11-02 : 30e8024 ; data/retard-baro-v1.json, manifest perso_v1.retard_baro_gele : 48ca44a ; lectures des extraits et des fenêtres masquées d'E5 : 87b0ea8) ; après le jugement V1 (décisions de l'utilisateur, 2026-11-02) : E5, approche sur un autre ouvrage (§4 ter.7 : f38b745, validé en 2e511e5), erreur de la référence Valhalla de R1, R2 et R3 hors décompte (§4 bis.8 : 562d729) ; README §4 quater, règles pour V1.2 (décisions de l'utilisateur, 2026-11-03, après le jugement V1.1) : référence R1/R2, tags différents entre dates et sauts de s_origine (§4 quater.1 : d6fd42c), E5 baro bruité (§4 quater.2 : f8f81a6), E1 zones de pente du baro avant la marche (§4 quater.3 : 2744983, 633255f), E5 par site (§4 quater.4 : 8559a21) ; série V1.2 (README §4 quinquies, décisions de l'utilisateur, 2026-11-03) : Q1 rapporté (77a5fbf), E3 bloquant si sa couverture est atteinte (e57dd1e, remplace 6a984fa ; sous-minimum mesuré au jugement refusant : 65ea59b), campagne de tuiles de la série (8ca83ad, 70517b5), un seul témoin S2 planifié (3092e59), ouvrages V1.1 exclus à tort ajoutés à la calibration V1.1 (ee5d7c1) ; après le jugement V1.2 (décision de l'utilisateur, 2026-11-04) : extrémités des témoins S2, fin d'abord puis début dans [d_fin − 1,5 × longueur déclarée, d_fin] (bench5) ; README §4 sexies, après le jugement V1.2 (décisions de l'utilisateur, 2026-11-04) : traces de 2015-05 → 2020-09 et d'avant 2014-12 sans qualification individuelle hors des références baro d'E1, E2, E2b, E3 et E5 (§4 sexies.2 : d4aad9a, 1c9edf8 ; E2 : a8bee85), garde de bruit d'E3 et d'E2b (§4 sexies.3 : befb602), E3 et E2b bloquants groupe par groupe si leur couverture est atteinte avant mesure (§4 septies.2 : dc76a6e, mécanisme préparé, aucune section V1.3 lue), itinéraire retiré cas pour ses ouvrages (§4 quinquies.4 : 7d284f4, comportement gardé) (bench6)",
             "revision_banc": crate::BENCH_REVISION,
             "commit": git_commit(&paths.bench),
             "api_version": ord_server::API_VERSION,
@@ -2557,6 +2637,9 @@ pub async fn run_series(
                 "couverture (par mode) : comptes après exclusions du banc par critère à minimum de jugement (criteria.yaml serie_tenue_a_l_ecart.couverture.minimums) ; informative en calibration ; au jugement V1, un critère sous son minimum prend le verdict sous_minimum (refus, README §2 point 3)",
                 "E1, zones de pente du baro sans relief (README §4 quater.3, 2744983, 633255f), toutes strates : sur la grille de 5 m, baro corrigé du δ et MNT du mode distance sans correction, là où |baro(s + 50) − baro(s)| / 50 > 0,15 et |MNT(s + 50) − MNT(s)| / 50 < 0,10 (deux stations avec baro et MNT, hors ouvrage et fenêtre masquée), stations de [s − 300, s + 350] masquées pour E1 (décalage, tendance, RMSE, P95, km comparés de la couverture), zones réunies, bornées à la trace ; ordre δ, zones, marche (détectée hors zones, stations exclues en s comme en s + δ), E1 ; cas.zones_pente_baro (zones, km_masques, abscisses_km, stations_comparees_masquees) ; E2, E2b, E3, E5 inchangés",
                 "E5 baro bruité (README §4 quater.2, f8f81a6) : bruit baro de la trace (noise_m de qualify_baro.py, trace entière pour ses segments .sN) > 1,0 m, tous groupes : référence baro corrigé local incertaine (e5_reference_incertaine, raison baro_bruite), non comptée, sans repli sur le MNT ; testée après le retrait, avant les côtés",
+                "Références baro exclues par la période (README §4 sexies.2, d4aad9a, 1c9edf8, a8bee85) : trace marquée au manifest reference_baro: periode_exclue (départ de 2015-05 à 2020-09) ou non_qualifiee (avant 2014-12 sans qualification individuelle : verdict fiable, bruit ≤ 1,0 m et D+ baro / D+ MNT de 0,90 à 1,20), marque contrôlée contre mois par check (négatifs Q1 non concernés) ; hors d'E1 (jugement, médianes et couverture), d'E2 indicatif, d'E2b (médianes et couverture), d'E3 (passages hors de la médiane du pont et de la couverture) et d'E5 (référence baro corrigé local incertaine, raison periode_baro_exclue, testée avant baro_bruite, sans repli sur le MNT ; une trace non fiable garde la référence MNT) ; rapportées : verdicts.E1_, E2_, E2b_periode_baro_exclue, E3_periode_baro_exclue (ponts), agregats.ouvrages.E3.periode_baro_exclue, agregats.periode_baro_exclue ; cas de M1 et de la typologie (E4, S1, S2, S3, hors graphe vélo), cas.reference_baro_exclue",
+                "Garde de bruit d'E3 et d'E2b (README §4 sexies.3, befb602), tous groupes, calibration comprise : bruit baro de la trace (noise_m de qualify_baro.py, trace entière pour ses segments .sN) > 1,0 m ; E3 : passage rapporté (reference_baro_exclue baro_bruite), hors de la médiane du pont et de la couverture, sans repli sur le MNS ; E2b : trace hors de la médiane de son groupe et de la couverture, rapportée (verdicts.E2b_baro_bruite) ; groupe sans trace restante : verdict sans_trace ; agregats.baro_bruite",
+                "Critère jugé groupe par groupe (criteria serie_<clé>.<crit>.bloquant: si_couverture_atteinte_par_groupe, README §4 septies.2, dc76a6e ; E2b de V1.3, section non encore au manifest) : couverture par groupe comptée avant toute mesure (manifest serie_<clé>.couverture.<crit>.atteint.<groupe>) ; au jugement, verdict sur les groupes qui atteignent leur minimum, minimum mesuré sur eux seuls (refus s'il manque), autres groupes rapportés (<crit>_groupes_rapportes, <crit>_groupes_rapportes_sous_minimum)",
                 "E5 par site (README §4 quater.4, 8559a21) : passages E5 et e5_* (comptés ou non) réunis en sites, deux ids du même site s'ils sont le même ouvrage ou croisés par un même cas à 40 m au plus l'un de l'autre (d_milieu_m), de proche en proche, toutes traces ; site en échec si un passage compté échoue, réussi si tous ses passages comptés réussissent, sans passage compté non compté (marques) ; verdicts.E5 et E5_echecs par site (ids joints par +), agregats.ouvrages.E5.par_site (ouvrages, cas, passages, passages_comptes, ecart_max_m) ; couverture.E5.croisements = sites avec un passage compté",
                 "R1/R2 des parcours planifiés (README §4 quater.1, d6fd42c) : voies de <id>.surface.csv (toutes classes, hors discontinuités) dont highway, surface ou tracktype diffèrent entre l'instantané à la date OSM des tuiles (tuiles_*.date_osm) et celui de la date des données du serveur Valhalla, ou présentes à une seule date, retirées de R1 et R2 avant l'erreur de la référence (qui ne les voit plus) et rapportées par parcours (typologie R1.tags_differents : longueur_m, part de la référence classée) ; instantanés osm_tags_toutes de la section du manifest (voies_retenues: toutes, empreinte vérifiée) ; absents du manifest : non appliqué en calibration (R1.tags_differents = instantanes_absents_du_manifest), refus au jugement ; plages ramenées à l'itinéraire coupées aux sauts de s_origine (Δs_origine − Δs_recale > 100 m)",
                 "fill-cache : campagne de tuiles datée du manifest (tuiles_*, espace de cache des tuiles de rues) verrouillée : tuiles de rues lues dans le cache seulement, sans revalidation ni téléchargement ; une tuile manquante refuse le remplissage",
@@ -3008,6 +3091,8 @@ mod tests {
             gain_baro_m: None,
             gain_mnt_m: None,
             noise_m: None,
+            mois: None,
+            reference_baro: None,
         };
         let m = Manifest {
             sha256: String::new(),
@@ -3023,8 +3108,7 @@ mod tests {
             ],
             hors_git: Vec::new(),
             v1: None,
-            v11: None,
-            v12: None,
+            apres_v1: Vec::new(),
             mvp_judged: false,
         };
         // Jugement : la trace tenue à l'écart est dans les cas mesurés en entier, pas dans la
@@ -3080,6 +3164,57 @@ mod tests {
         assert_eq!(judge(&cases).1["E2b"], "fail");
     }
 
+    /// README §4 sexies.2 et .3 (bench6) : une trace marquée `reference_baro` sort d'E1, d'E2 et
+    /// d'E2b (médianes, jugement, couverture), rapportée `periode_baro_exclue` ; une trace au bruit
+    /// baro > 1,0 m sort de la seule médiane d'E2b (`baro_bruite`) ; toutes restent des cas de M1.
+    #[test]
+    fn excluded_or_noisy_baro_references_are_reported_not_counted() {
+        let case = |id: &str, groupe: &str, rmse: f64, e2b: f64, noise: f64, mark: Option<&str>| {
+            json!({"id": id, "groupe": groupe, "bruit_baro_m": noise, "reference_baro_exclue": mark,
+                "metriques": {"E1.rmse_m": rmse, "E1.p95_m": 2.0,
+                "E2.dplus_service_m": 100.0, "E2.dplus_mnt_brut_m": 110.0, "E2.ratio": 1.0, "E2.ratio_mnt_brut": 1.1,
+                "E2b.ratio": e2b, "E2b.ratio_mnt_brut": 1.05},
+                "diagnostics": {"stations_comparees": 200, "stations": 200}})
+        };
+        let cases = [
+            case("ok", "plaine", 1.0, 1.01, 0.5, None),
+            // Période : E1 en échec et E2b en échec si elle comptait.
+            case("periode", "plaine", 9.0, 1.50, 0.5, Some("periode_exclue")),
+            case("ancienne", "plaine", 9.0, 1.50, 0.5, Some("non_qualifiee")),
+            // Bruitée : E2b en échec si elle comptait ; E1 plaine déjà incertaine (§4 ter.8).
+            case("bruitee", "plaine", 1.0, 1.50, 1.2, None),
+            // Seule trace de son groupe, bruitée : groupe sans trace en E2b.
+            case("seule", "dplus", 1.0, 1.50, 1.3, None),
+        ];
+        let (agg, v) = judge(&cases);
+        assert_eq!(v["E1"], "pass", "{v}");
+        assert_eq!(v["E1_periode_baro_exclue"], json!(["periode", "ancienne"]));
+        assert_eq!(v["E2_periode_baro_exclue"], v["E1_periode_baro_exclue"]);
+        assert_eq!(v["E2b_periode_baro_exclue"], v["E1_periode_baro_exclue"]);
+        assert_eq!(v["E2b_baro_bruite"], json!(["seule", "bruitee"]));
+        assert_eq!(v["E2b"], "pass", "{agg}");
+        assert_eq!(agg["E2b"]["plaine"]["traces"], 1);
+        assert_eq!(agg["E2b"]["plaine"]["baro_bruite"], 1);
+        assert_eq!(agg["E2b"]["dplus"]["verdict"], "sans_trace");
+        assert_eq!(agg["E1"]["plaine.rmse_m_max"], 1.0, "{agg}");
+        assert!(v["E1_references_incertaines"].as_array().unwrap().iter().all(|c| c["id"] == "bruitee"));
+        let cov = crate::coverage::measure(&cases, &[], &[], &Default::default(), 0, 5.0);
+        assert_eq!(cov["E1"]["traces_france_fiables"], 2, "{cov}");
+        assert_eq!(cov["E2b"]["traces_par_groupe"], json!({"dplus": 0, "plaine": 1, "ouvrage": 0}));
+        assert_eq!(cov["M1"]["traces"], 5);
+        let items = [
+            json!({"metrique": "E3", "ouvrage": "nv-1", "cas": "periode", "reference_baro_exclue": "periode_baro_exclue"}),
+            json!({"metrique": "E3", "ouvrage": "nv-2", "cas": "bruitee", "reference_baro_exclue": "baro_bruite"}),
+            json!({"metrique": "e5_reference_incertaine", "ouvrage": "nv-3", "raison": "periode_baro_exclue"}),
+        ];
+        let p = baro_exclusions(&cases, &items, crate::ouvrages::PERIODE_BARO_EXCLUE);
+        assert_eq!(p["traces"][1], json!({"id": "ancienne", "reference_baro": "non_qualifiee"}));
+        assert_eq!((p["E3_passages"].as_u64(), p["E5_passages"].as_u64()), (Some(1), Some(1)));
+        let b = baro_exclusions(&cases, &items, crate::ouvrages::BARO_BRUITE);
+        assert_eq!(b["traces_E2b"], json!(["bruitee", "seule"]));
+        assert_eq!((b["E3_ponts"].as_u64(), b["E5_passages"].as_u64()), (Some(1), Some(0)));
+    }
+
     /// Trace synthétique est-ouest de 10 km (un point tous les 10 m), baro partout, qui franchit un
     /// ouvrage de calibration au kilomètre 5.
     fn straight_case() -> (PersoCase, BTreeMap<String, Vec<LatLon>>) {
@@ -3093,6 +3228,7 @@ mod tests {
             serie: Serie::TenueALEcart,
             baro_fiable: true,
             baro_noise_m: None,
+            reference_baro_exclue: None,
             parts: vec![pts],
             baro_s: s_ref.clone(),
             baro_z: vec![10.0; s_ref.len()],
@@ -3121,6 +3257,8 @@ mod tests {
             gain_baro_m: None,
             gain_mnt_m: None,
             noise_m: None,
+            mois: None,
+            reference_baro: None,
         }
     }
 
@@ -3277,6 +3415,7 @@ mod tests {
             serie: Serie::Calibration,
             baro_fiable: true,
             baro_noise_m: None,
+            reference_baro_exclue: None,
             parts,
             baro_s: s_ref.clone(),
             baro_z: vec![10.0; s_ref.len()],

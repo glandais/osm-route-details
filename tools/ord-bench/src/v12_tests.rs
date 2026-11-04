@@ -166,8 +166,8 @@ fn ids<T: AsRef<str>>(v: impl IntoIterator<Item = T>) -> Vec<String> {
 fn calibration_reads_no_v12_case() {
     let (_d, paths) = bench(Cov::Reached, true);
     let m = Manifest::load(&paths.bench).unwrap();
-    assert!(m.v1.as_ref().unwrap().judged && m.v11.as_ref().unwrap().judged, "V1 et V1.1 jugées");
-    let v12 = m.v12.as_ref().expect("section perso_v12 lue");
+    assert!(m.v1.as_ref().unwrap().judged && m.section("V1.1").unwrap().judged, "V1 et V1.1 jugées");
+    let v12 = m.section("V1.2").expect("section perso_v12 lue");
     assert!(!v12.judged);
     assert_eq!(v12.tuiles, None);
     assert_eq!(m.trace("perso-166").unwrap().serie, Serie::TenueALEcart);
@@ -256,7 +256,7 @@ fn judgement_reads_v12_cases_whole() {
 fn without_perso_v12_nothing_is_read() {
     let (_d, paths) = bench(Cov::Reached, false);
     let m = Manifest::load(&paths.bench).unwrap();
-    assert!(m.v12.is_none() && m.trace("perso-166").is_none());
+    assert!(m.section("V1.2").is_none() && m.trace("perso-166").is_none());
     assert!(m.held_out_increment("V1.2").unwrap_err().to_string().contains("absente du manifest"));
     assert!(crate::judge::current_gel(&paths, "V1.2").is_err());
     assert!(!ouvrage_refs(&paths).unwrap().contains_key("nv-948"));
@@ -299,10 +299,10 @@ fn repo_rules_for_v12() {
     assert!(v12.contains("E3") && !v12.contains("Q1"), "{v12:?}");
     assert_eq!(v1.len(), v12.len() + 1);
     let m = Manifest::parse(&std::fs::read_to_string(bench.join("manifest.yaml")).unwrap()).unwrap();
-    let v12 = m.v12.as_ref().expect("perso_v12");
+    let v12 = m.section("V1.2").expect("perso_v12");
     assert_eq!(v12.tuiles.as_deref(), Some("tuiles_2026_11_03"));
     assert_eq!(m.tile_campaign(v12).map(|c| c.id.as_str()), Some("tuiles_2026_11_03"));
-    assert_eq!(m.tile_campaign(m.v11.as_ref().unwrap()).map(|c| c.id.as_str()), Some("tuiles_2026_11_02"));
+    assert_eq!(m.tile_campaign(m.section("V1.1").unwrap()).map(|c| c.id.as_str()), Some("tuiles_2026_11_02"));
     assert!(v12.temoins_tags.is_some() && v12.osm_tags.is_some() && v12.donnees_serveur.is_some());
     assert_eq!(v12.osm_tags_toutes.len(), 2);
     assert!(v12.traces.contains("perso-166") && v12.traces.contains("perso-197"));

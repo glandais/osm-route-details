@@ -259,6 +259,10 @@ pub fn check_series(paths: &BenchPaths, scope: Serie) -> anyhow::Result<CheckRep
     // Groupe E2b d'une trace nouvelle (README §4 ter.4, 13e0ed1), lu au manifest.
     report.failures.extend(crate::v1::e2b_group_failures(&manifest));
 
+    // Marque `reference_baro` contrôlée contre le mois de départ (README §4 sexies.2, d4aad9a,
+    // 1c9edf8) : incohérence = refus.
+    report.failures.extend(crate::manifest::reference_baro_failures(&manifest.traces));
+
     // Q1 : verdicts de qualify_baro.py inscrits au manifest, par série. Un négatif d'une série
     // nouvelle n'en est un que si son défaut est attesté hors du qualificateur (README §4 ter.4).
     for t in manifest.traces.iter().filter(|t| t.groupe == "negatif") {
