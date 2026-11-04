@@ -22,7 +22,8 @@ Sortie standard : fragment YAML du manifest (section perso_v11), sans identifian
 ni coordonnée ; département et mois seulement.
 
 Série : variable d'environnement SERIE (v11 par défaut ; v12 : V1.2, décision de l'utilisateur,
-2026-11-03, MVP, V1 et V1.1 en calibration, nv-NN à la suite de V1.1).
+2026-11-03, MVP, V1 et V1.1 en calibration, nv-NN à la suite de V1.1 ; v13 : V1.3, décision de
+l'utilisateur, 2026-11-04, V1.2 aussi en calibration, nv-NN à la suite de V1.2).
 
 Usage : [SERIE=v12] uv run --with pyyaml tools/build_v11_corpus.py private/
 """
