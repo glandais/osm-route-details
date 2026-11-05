@@ -561,7 +561,7 @@ et `.dockerignore` à la racine ; la crypto de rustls est `ring` (pas `aws-lc`),
 dépendances construite sur des sources vides des membres du workspace ; `HEALTHCHECK` par la
 sous-commande `healthcheck` (HTTP/1.0 sur `127.0.0.1`, port de `server.listen_addr`) ; à l'arrêt,
 les requêtes en vol sont attendues au plus `shutdown_grace_s`, puis abandonnées (`docker stop -t`
-supérieur au budget). Aucune image n'est poussée par le dépôt.
+supérieur au budget). Publication : `.github/workflows/docker.yml` pousse l'image sur ghcr.io.
 
 **Déploiement : une seule instance** (décision doc 01 §10). La cadence IGN (20 req/s) et les budgets
 par hôte sont locaux au processus (§6, T02 §4.2) : deux réplicas derrière une même IP doubleraient

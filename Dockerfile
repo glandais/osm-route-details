@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Image du service osm-route-details (T01 §10) : binaire unique, distroless, utilisateur non root.
 # Une seule instance par IP sortante : la cadence IGN (20 req/s) est locale au processus (T07 §3).
-# Construction : docker build -t osm-route-details .   (aucune image n'est poussée par ce dépôt)
+# Construction : docker build -t osm-route-details .   (publication : .github/workflows/docker.yml)
 
 # --- construction ---------------------------------------------------------------------------
 # Rust et Debian épinglés : construction reproductible.

@@ -16,6 +16,12 @@ pour les ouvrages absents d'OSM et les points de rupture (mode par défaut
 [technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris,
 sans réseau ; `cargo run -p ord-server -- openapi` régénère le contrat.
 
+Image : `ghcr.io/glandais/osm-route-details`, publiée par
+[`docker.yml`](.github/workflows/docker.yml) (linux/amd64 et linux/arm64) : `develop` et `latest` à
+chaque push sur `develop`, `1.2.3` et `1.2` pour un tag `v1.2.3`, `sha-<commit>` dans tous les cas.
+Rien n'est publié si `cargo test` ou `cargo clippy` échoue ; sur une pull request, l'image est
+seulement construite.
+
 Banc (`tools/ord-bench`, T05 §5, règles dans [`bench/README.md`](bench/README.md)) :
 `ord-bench check` (empreintes du manifest, Q1), `ord-bench fill-cache` (cache de banc local,
 `~/.cache/osm-route-details/bench`), `ord-bench run --offline` (campagne de calibration,
