@@ -1366,11 +1366,14 @@ tenue à l'écart compte 17 ponts français franchis par une trace baro (de 54 �
 
 ## 6. Reste à faire, et à fournir par l'utilisateur
 
+Plus de série tenue à l'écart ni de jugement (§4 octies) : ce qui reste porte sur la calibration.
+
 - Qualifier les 3 traces hors France contre Mapterhorn (pas de MNT IGN).
-- Conditions de Stadia Maps sur le stockage des réponses : dans le doute, hors git et régénérables.
-- Vérifier l'accès vélo des ponts du corpus (Krk, Venise, Cheviré `bicycle=no`), la source réelle
-  GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
-- Constituer une nouvelle série tenue à l'écart après le jugement du MVP.
+- Conditions de Stadia Maps sur le stockage des réponses, à confirmer. En attendant, les réponses
+  restent hors git, régénérables par `tools/stadia_match.py`.
+- Vérifier la source réelle GLO-30 de Krk, et trancher RGE ALTI vs MNT LiDAR au tunnel d'Arbois.
+  L'accès vélo des ponts n'est plus à vérifier cas par cas : la règle de tags du §4 bis.1 le
+  tranche (Cheviré `bicycle=no` hors graphe vélo).
 
 ## 6 bis. Taille du cache de banc
 
