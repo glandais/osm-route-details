@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Crates Rust (Cargo.toml, Cargo.lock) : mineures et correctifs dans une seule PR
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  # Images de base du Dockerfile (construction Rust, exécution distroless)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Actions de .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
