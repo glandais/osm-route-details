@@ -3,3 +3,5 @@
 .env.*
 # Produits de compilation Cargo.
 /target
+# Métadonnées du Finder (macOS).
+.DS_Store
