@@ -1391,7 +1391,22 @@ vcyclist et les 36 ouvrages :
 
 Sans les traces perso : ≈ 650 tuiles IGN, soit ≈ 250–350 Mo comme prévu. Les traces perso
 représentent 90 % du cache ; il croît à peu près linéairement avec les kilomètres de zones nouvelles
-(les boucles nantaises se recouvrent). Mesure exacte au premier `fill-cache`.
+(les boucles nantaises se recouvrent). Estimation gardée pour mémoire.
+
+Mesure du 2026-11-05 (`du -k` sur `~/.cache/osm-route-details/bench`, en local, sans réseau ni
+`fill-cache`), après les séries MVP à V1.3 et leurs campagnes :
+
+| Source | Tuiles | Taille unitaire moyenne | Taille |
+|--------|--------|-------------------------|--------|
+| IGN MNT z15 | 26 280 | ≈ 260 Ko | ≈ 6,5 Go |
+| IGN MNS z15 | 25 349 | ≈ 260 Ko | ≈ 6,3 Go |
+| Mapterhorn z12 | 483 | ≈ 72 Ko | ≈ 34 Mo |
+| VersaTiles z14 | 31 319 | ≈ 23 Ko | ≈ 716 Mo |
+| **Total** (avec couverture Mapterhorn, méta et témoins, ≈ 4 Mo) | | | **≈ 13,5 Go** |
+
+Le cache fait 5,6 fois le nombre de tuiles MNT estimé : les séries V1 à V1.3 ont ajouté des zones
+nouvelles par construction. Le MNS n'est pas limité aux ponts : il couvre presque toutes les
+tuiles du MNT.
 
 ## 7. Outils
 
