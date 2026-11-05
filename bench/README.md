@@ -1320,6 +1320,15 @@ V1.1 et V1.2 en calibration ; inventaire Strava non rafraîchi ; outils réseau 
    L'emprise des tuiles est ensuite recalculée (67906e6), meta.json est vérifié avant et après le
    complément, et la couverture est recomptée : 8 témoins, 44,3 km, 4 natures.
 
+**§4 octies. Fin des jugements** (décision de l'utilisateur, 2026-11-05). V1.3 (jugée refusée,
+1147039) est le dernier jugement : pas de série V1.4, ni tirage, ni gel, ni fill-cache pour une
+série nouvelle. La suite se fait sur la calibration seulement. Décision prise après le diagnostic
+de V1.3 (aucun changement au service ni aux règles du banc) et le compte du vivier restant, fait
+hors ligne sur l'inventaire local (rédaction, 2026-11-05) : aux règles du §4 sexies.1 et au seuil
+de V1.3 (30 km inédits), 0 sortie tirable ; 11, 33 et 69 sorties à 20, 15 et 10 km inédits. La
+couverture prévisible, extrapolée des rendements de V1.3, laissait E3 MNH ≥ 10 m et Q1 sous leur
+minimum à tout seuil, et E2b (dplus, ouvrage) à la limite.
+
 ---
 
 ## 5. Protocole : MNS lu sur la trace GPS ou sur la géométrie OSM du pont (§11.2 du doc 01)
