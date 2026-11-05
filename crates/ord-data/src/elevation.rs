@@ -885,7 +885,11 @@ mod tests {
             "au-dessus du plancher"
         );
         // Pixel mêlé au-dessus du plancher, à deux pixels d'un no-data : rejeté ; sans no-data
-        // dans la couronne (falaise) ou à trois pixels du carré `[9, 10]²`, gardé.
+        // dans la couronne (falaise) ou à trois pixels du carré `[9, 10]²`, gardé. Point décalé
+        // du centre du pixel : au centre, l'arrondi de la libm change le carré selon la plateforme.
+        let inside = latlon_of_global(9.5 + 1e-3, 9.5 + 1e-3, Z, S);
+        let m = neighbours(inside, Z, S, RowMode::Mercator, PixelConvention::Center);
+        assert_eq!(m.origin, (9, 9));
         let mixed = |nodata: (u64, u64)| {
             all_tiles(move |x, y| match (x, y) {
                 (9, 9) => 30.0,
@@ -902,7 +906,7 @@ mod tests {
             ((0, 0), true),
         ] {
             let tiles = mixed(nodata);
-            let r = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: guard }.sample(&n);
+            let r = TileGrid { zoom: Z, size: S, tiles: &tiles, plausibility: guard }.sample(&m);
             assert_eq!(r.is_ok(), ok, "no-data en {nodata:?} : {r:?}");
         }
         // Écart sous le seuil, no-data voisin : gardé.
