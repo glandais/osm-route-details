@@ -154,7 +154,9 @@ impl WayTags {
             bail!("instantané des tags OSM daté {own}, pas {date}");
         }
         if v["voies_retenues"] != "toutes" {
-            bail!("instantané des tags OSM du {own} : voies_retenues ≠ toutes (osm_tags_reference.py --toutes)");
+            bail!(
+                "instantané des tags OSM du {own} : voies_retenues ≠ toutes (osm_tags_reference.py --toutes)"
+            );
         }
         let asked = v["demandees"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
         let tags = v["tags"]
@@ -169,7 +171,11 @@ impl WayTags {
     }
 
     /// Instantané d'une date parmi les entrées `osm_tags_toutes` d'une section, empreinte vérifiée.
-    fn load(paths: &crate::BenchPaths, entries: &[(String, String, String)], date: &str) -> anyhow::Result<Self> {
+    fn load(
+        paths: &crate::BenchPaths,
+        entries: &[(String, String, String)],
+        date: &str,
+    ) -> anyhow::Result<Self> {
         let Some((f, sum, _)) = entries.iter().find(|(_, _, d)| date_key(d) == date_key(date)) else {
             bail!(
                 "tags différents entre dates (README §4 quater.1) : aucun instantané osm_tags_toutes au \
@@ -216,14 +222,12 @@ impl TagsBetweenDates {
         if sec.osm_tags_toutes.is_empty() {
             return Ok(None);
         }
-        let tiles = manifest
-            .tile_campaign(sec)
-            .and_then(|c| c.date_osm.clone())
-            .context("tags différents entre dates : date OSM des tuiles absente du manifest (tuiles_*.date_osm)")?;
-        let reference = sec
-            .donnees_serveur
-            .as_deref()
-            .context("tags différents entre dates : date des données du serveur Valhalla absente du manifest")?;
+        let tiles = manifest.tile_campaign(sec).and_then(|c| c.date_osm.clone()).context(
+            "tags différents entre dates : date OSM des tuiles absente du manifest (tuiles_*.date_osm)",
+        )?;
+        let reference = sec.donnees_serveur.as_deref().context(
+            "tags différents entre dates : date des données du serveur Valhalla absente du manifest",
+        )?;
         Ok(Some(Self {
             tiles: WayTags::load(paths, &sec.osm_tags_toutes, &tiles)?,
             reference: WayTags::load(paths, &sec.osm_tags_toutes, reference)?,
@@ -234,7 +238,9 @@ impl TagsBetweenDates {
     /// Voie non demandée à l'une des dates : instantané incomplet, refus.
     fn differs(&self, way: u64) -> anyhow::Result<bool> {
         if !self.tiles.asked.contains(&way) || !self.reference.asked.contains(&way) {
-            bail!("tags différents entre dates : voie de la référence absente d'un instantané (non demandée)");
+            bail!(
+                "tags différents entre dates : voie de la référence absente d'un instantané (non demandée)"
+            );
         }
         Ok(self.tiles.tags.get(&way) != self.reference.tags.get(&way))
     }
@@ -607,7 +613,8 @@ mod tests {
     }
 
     fn way_tags(date: &str, tags: &str) -> WayTags {
-        let json = format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1,2,3,4,5],"tags":{tags}}}"#);
+        let json =
+            format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1,2,3,4,5],"tags":{tags}}}"#);
         WayTags::from_json(json.as_bytes(), date).unwrap()
     }
 
@@ -648,14 +655,20 @@ mod tests {
         let private = dir.path().join("private");
         std::fs::create_dir_all(private.join("osm-tags")).unwrap();
         let body = |date: &str| {
-            format!(r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1],"tags":{{"1":{{"highway":"track"}}}}}}"#)
+            format!(
+                r#"{{"date":"{date}","voies_retenues":"toutes","demandees":[1],"tags":{{"1":{{"highway":"track"}}}}}}"#
+            )
         };
         let (a, b) = (body("2026-10-19T00:00:04Z"), body("2026-11-01T13:01:00Z"));
         std::fs::write(private.join("osm-tags/a.json"), &a).unwrap();
         std::fs::write(private.join("osm-tags/b.json"), &b).unwrap();
         let paths = crate::BenchPaths::new(dir.path(), Some(dir.path()), Some(&private));
         let entry = |f: &str, body: &str, date: &str| {
-            (format!("private/osm-tags/{f}.json"), crate::hash::sha256_bytes(body.as_bytes()), date.to_owned())
+            (
+                format!("private/osm-tags/{f}.json"),
+                crate::hash::sha256_bytes(body.as_bytes()),
+                date.to_owned(),
+            )
         };
         let manifest = crate::manifest::Manifest {
             tuiles: vec![crate::manifest::TileCampaign {
@@ -671,8 +684,7 @@ mod tests {
             ..Default::default()
         };
         assert!(TagsBetweenDates::load_for(&paths, &manifest, &sec(Vec::new())).unwrap().is_none());
-        let both =
-            sec(vec![entry("a", &a, "2026-10-19T00:00:04Z"), entry("b", &b, "2026-11-01T13:01:00Z")]);
+        let both = sec(vec![entry("a", &a, "2026-10-19T00:00:04Z"), entry("b", &b, "2026-11-01T13:01:00Z")]);
         let t = TagsBetweenDates::load_for(&paths, &manifest, &both).unwrap().unwrap();
         assert!(!t.differs(1).unwrap());
         let one = sec(vec![entry("b", &b, "2026-11-01T13:01:00Z")]);

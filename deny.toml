@@ -6,6 +6,10 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # Via serde_yaml_ng, dans ord-bench seulement : le manifest du dépôt, jamais d'entrée du service.
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml non maintenu, hors de l'image" },
+]
 
 [licenses]
 version = 2

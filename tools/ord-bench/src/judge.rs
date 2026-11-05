@@ -219,9 +219,9 @@ fn aux_summary(key: &str, v: &Value) -> Option<String> {
         .iter()
         .map(|g| {
             // Cas (E1 : `id`), témoin, ouvrage, site (ouvrages réunis), sinon groupe (E2).
-            let joined = g["ouvrages"].as_array().map(|o| {
-                o.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("+")
-            });
+            let joined = g["ouvrages"]
+                .as_array()
+                .map(|o| o.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("+"));
             let name = g["id"]
                 .as_str()
                 .or_else(|| g["temoin"].as_str())
@@ -948,7 +948,10 @@ mod tests {
         let sites = json!([{"ouvrages": ["nv-1", "nv-2"], "cas": ["perso-131"]}]);
         assert_eq!(aux_summary("E5_echecs", &sites).unwrap(), "echecs : nv-1+nv-2");
         assert_eq!(aux_summary("E5_echecs", &json!(["nv-1+nv-2"])).unwrap(), "nv-1+nv-2");
-        assert_eq!(aux_summary("S2_echecs", &json!(["pl-x-s0", "perso-56-s1"])).unwrap(), "pl-x-s0, perso-56-s1");
+        assert_eq!(
+            aux_summary("S2_echecs", &json!(["pl-x-s0", "perso-56-s1"])).unwrap(),
+            "pl-x-s0, perso-56-s1"
+        );
         let e2 = json!([{"groupe": "dplus", "mediane": 0.98, "mediane_dans_bornes": true, "traces_hors_bornes": []}]);
         assert_eq!(aux_summary("E2_indicatif", &e2).unwrap(), "indicatif : dplus 0,980");
     }

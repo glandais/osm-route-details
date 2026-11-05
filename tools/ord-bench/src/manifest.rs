@@ -479,7 +479,9 @@ impl Manifest {
                     Some(TileCampaign {
                         id: id.to_owned(),
                         espace_cache: s(v, "espace_cache")?,
-                        date_osm: v.get("date_osm").and_then(|d| s(d, "planetiler_osm_osmosisreplicationtime")),
+                        date_osm: v
+                            .get("date_osm")
+                            .and_then(|d| s(d, "planetiler_osm_osmosisreplicationtime")),
                     })
                 })
                 .collect(),

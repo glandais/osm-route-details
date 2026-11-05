@@ -2819,7 +2819,8 @@ pub async fn vc_items(
 }
 
 /// Passages d'E5, comptés (`E5`) ou rapportés non comptés : réunis en sites (README §4 quater.4).
-const E5_FAMILY: [&str; 4] = ["E5", "e5_reference_incertaine", "e5_reference_indisponible", "e5_trace_sur_ouvrage"];
+const E5_FAMILY: [&str; 4] =
+    ["E5", "e5_reference_incertaine", "e5_reference_indisponible", "e5_trace_sur_ouvrage"];
 /// Deux croisements d'un même passage à 40 m au plus l'un de l'autre (abscisse du croisement sur la
 /// trace ; tolérance d'un passage, README §2.1) sont du même site.
 pub const E5_SITE_TOL_M: f64 = 40.0;
@@ -2881,7 +2882,9 @@ pub fn e5_sites(items: &[Value]) -> Vec<E5Site> {
     // Croisements de chaque passage (même cas), dans l'ordre de l'abscisse : voisins à 40 m reliés.
     let mut by_case: BTreeMap<&str, Vec<(f64, usize)>> = BTreeMap::new();
     for i in &family {
-        if let (Some(c), Some(d), Some(id)) = (i["cas"].as_str(), i["d_milieu_m"].as_f64(), i["ouvrage"].as_str()) {
+        if let (Some(c), Some(d), Some(id)) =
+            (i["cas"].as_str(), i["d_milieu_m"].as_f64(), i["ouvrage"].as_str())
+        {
             by_case.entry(c).or_default().push((d, index[id]));
         }
     }
@@ -3013,7 +3016,8 @@ pub fn judge(items: &[Value]) -> (Value, Value) {
     let e5_sites = e5_sites(items);
     let e5_counted: Vec<&E5Site> = e5_sites.iter().filter(|s| s.pass().is_some()).collect();
     let (e5_ok, e5_n) = (e5_counted.iter().filter(|s| s.pass() == Some(true)).count(), e5_counted.len());
-    let e5_fail: Vec<String> = e5_counted.iter().filter(|s| s.pass() == Some(false)).map(|s| s.label()).collect();
+    let e5_fail: Vec<String> =
+        e5_counted.iter().filter(|s| s.pass() == Some(false)).map(|s| s.label()).collect();
     let sum = |k: &str| -> f64 {
         items
             .iter()
@@ -4196,7 +4200,20 @@ mod e5_tests {
         baro: Option<&'a [f64]>,
         tiles: Option<&'a Tiles>,
     ) -> E5Input<'a> {
-        E5Input { d, pts, raw, ign: None, baro, baro_points: d, tiles, at: pts[40], im: 40, ends: [40, 40], baro_noise_m: None, baro_exclue: false }
+        E5Input {
+            d,
+            pts,
+            raw,
+            ign: None,
+            baro,
+            baro_points: d,
+            tiles,
+            at: pts[40],
+            im: 40,
+            ends: [40, 40],
+            baro_noise_m: None,
+            baro_exclue: false,
+        }
     }
 
     /// MNT plat à 100 m avec une bosse (`h` > 0) ou une cuvette (`h` < 0) de ± 10 m au croisement.

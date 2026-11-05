@@ -147,12 +147,18 @@ pub fn locked_campaign<'a>(
     if manifest.tuiles.is_empty() {
         return Ok(None);
     }
-    let ns = ord_server::wiring::streets_namespace(&bench_config_with(cache_dir, true, Variant::DEFAULT, true));
+    let ns =
+        ord_server::wiring::streets_namespace(&bench_config_with(cache_dir, true, Variant::DEFAULT, true));
     let Some(c) = manifest.tuiles.iter().rev().find(|c| c.espace_cache == ns) else {
-        bail!("campagne de tuiles du manifest sur un autre espace de cache que celui du service ({ns}) : refus");
+        bail!(
+            "campagne de tuiles du manifest sur un autre espace de cache que celui du service ({ns}) : refus"
+        );
     };
     if !cache_dir.join(&ns).is_dir() {
-        bail!("campagne de tuiles {} absente du cache de banc ({ns}) : à remplir par l'outil de la campagne", c.id);
+        bail!(
+            "campagne de tuiles {} absente du cache de banc ({ns}) : à remplir par l'outil de la campagne",
+            c.id
+        );
     }
     Ok(Some(c))
 }
@@ -369,7 +375,12 @@ mod tests {
         assert!(e.to_string().contains("campagne de tuiles verrouillée"), "{e}");
         assert!(ensure_streets_cached::<()>(&[]).is_ok());
         // Campagne du manifest : espace du service exigé, présent dans le cache.
-        let ns = ord_server::wiring::streets_namespace(&bench_config_with(dir.path(), true, Variant::DEFAULT, true));
+        let ns = ord_server::wiring::streets_namespace(&bench_config_with(
+            dir.path(),
+            true,
+            Variant::DEFAULT,
+            true,
+        ));
         let campaign = |espace: &str| crate::manifest::Manifest {
             tuiles: vec![crate::manifest::TileCampaign {
                 id: "tuiles_2026_11_02".into(),
