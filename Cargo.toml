@@ -46,7 +46,7 @@ serde_path_to_error = "0.1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["catch-panic", "compression-gzip", "compression-br", "decompression-gzip", "decompression-br", "map-request-body", "trace"] }
+tower-http = { version = "0.7", features = ["catch-panic", "compression-gzip", "compression-br", "decompression-gzip", "decompression-br", "map-request-body", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = "6"
