@@ -138,6 +138,17 @@ vérifié par `ord-bench check` avant toute campagne.
     - banc : les extrémités d'un témoin S2 sont cherchées fin d'abord, puis début dans
       `[d_fin − 1,5 × longueur déclarée, d_fin]` (`perso-196-s0`, début repassé trois fois :
       1 645 m mesurés au lieu de 567 m). Révision `bench5`.
+  - Décisions de l'utilisateur (2026-11-05, après le jugement V1.3, refusé : `bench/judgements.md`) :
+    - rien au service. Le diagnostic classe l'échec E2b `dplus` en effet de petit échantillon
+      (4 traces, service meilleur que le MNT brut sur 3, médianes séparées) et l'échec E5 de
+      `nv-1389` d'abord en dérive locale du baro de référence (≈ 2 m) ;
+    - limite connue, non corrigée : une ligne `bridge` qui s'arrête sur la trace sans la croiser
+      (son prolongement au sol franchit la trace, sans sommet commun avec la voie suivie) n'est
+      pas trouvée par `overpasses::find` ; la bosse du MNT sous ce pont reste dans le profil
+      (`nv-1389`, 1,56 m). Effet secondaire, aussi : sur un pont court, le tablier lu au MNS peut
+      dépasser de 1,5 à 2 m la droite entre les approches ;
+    - fin des jugements : V1.3 est le dernier, faute de traces inédites (bench §4 octies). Les
+      changements suivants se mesurent sur la calibration seule.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

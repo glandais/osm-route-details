@@ -1,19 +1,30 @@
 # osm-route-details
 
-Microservice Rust (à venir) : en entrée un parcours, en sortie l'**élévation** et la
-**typologie** (structure : sol / pont / tunnel ; revêtement : enum simple) le long du parcours.
+Microservice Rust : en entrée un parcours, en sortie l'**élévation** et la **typologie**
+(structure : sol / pont / tunnel ; revêtement : enum simple) le long du parcours.
 
-Code : incrément 1 du MVP, le profil Mapterhorn seul (workspace `crates/`, validation, erreurs
-RFC 9457, `/health/*`, `/v1/capabilities`, `/v1/attribution`, contrat
-[`contract/openapi.json`](contract/openapi.json)). `POST /v1/route-details` répond 200 avec le
-profil d'élévation Mapterhorn z12 (modes `input` et `distance`), le D+ du preset, la provenance du
-terrain et l'attribution ; ni typologie, ni IGN, ni ouvrages pour l'instant. Plan des incréments :
+Code : MVP et V1 réalisés, règles `2026.11.12`, API `1.4` (contrat
+[`contract/openapi.json`](contract/openapi.json)). `POST /v1/route-details` rend le profil
+d'élévation (IGN LiDAR HD en France, repli Mapterhorn point par point, GLO-30 ailleurs), la
+typologie appariée sur les tuiles VersaTiles shortbread@1.1 (classe, revêtement, ouvrages), les
+corrections d'ouvrage (tablier MNS, tunnels, ponts qui enjambent la trace), les heuristiques MNT/MNS
+pour les ouvrages absents d'OSM et les points de rupture (mode par défaut
+`input_with_breakpoints`, aussi `input` et `distance`). Autres routes : `/health/live`,
+`/health/ready`, `/v1/capabilities`, `/v1/attribution` ; erreurs RFC 9457. Workspace `crates/`
+(`ord-domain`, `ord-core`, `ord-adapters`, `ord-data`, `ord-pipeline`, `ord-server`,
+`ord-testkit`) ; image : [`Dockerfile`](Dockerfile). Plan et décisions des incréments :
 [technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris,
 sans réseau ; `cargo run -p ord-server -- openapi` régénère le contrat.
 
-Banc (`tools/ord-bench`, T05 §5) : `ord-bench check` (empreintes du manifest, Q1),
-`ord-bench fill-cache` (cache de banc local, `~/.cache/osm-route-details/bench`),
-`ord-bench run --offline` (E1, E2 ; `results.json` dans `bench/reports/<date>-<rules_version>/`).
+Banc (`tools/ord-bench`, T05 §5, règles dans [`bench/README.md`](bench/README.md)) :
+`ord-bench check` (empreintes du manifest, Q1), `ord-bench fill-cache` (cache de banc local,
+`~/.cache/osm-route-details/bench`), `ord-bench run --offline` (campagne de calibration,
+`results.json` dans `bench/reports/<date>-<rules_version>[-<révision>]/`), `gel` et `judge`
+(jugement unique d'une série tenue à l'écart), plus des outils de diagnostic (`compare`,
+`diagnose`, `dump-profils`…). Jugements : MVP, V1, V1.1, V1.2 et V1.3, tous refusés
+([`bench/judgements.md`](bench/judgements.md)). Le vivier de traces inédites étant épuisé, V1.3
+est le dernier jugement (décision de l'utilisateur, 2026-11-05, bench §4 octies) : la suite se
+mesure sur la calibration seule.
 
 ## Conception
 
