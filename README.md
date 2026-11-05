@@ -76,12 +76,15 @@ mesure sur la calibration seule.
   terrain), chacun avec son origine et ses raisons. Points d'entrée seuls ou pas fixe en
   option. 200 km par appel synchrone, 413 au-delà ; 503 + `Retry-After` en cas de panne, sauf
   `accept_partial`.
-- **Typologie** : aucune source de tuiles publique ne fournit `surface` brut
-  (VersaTiles/OpenFreeMap : paved/unpaved ; OSMF et Protomaps : rien). Pont/tunnel disponibles
-  partout ; gué et `layer` seulement dans OpenMapTiles. v1 : revêtu / non revêtu (VersaTiles,
-  API publique avec cache, fichier local en production). Revêtement fin et gué en V2, avec des
-  tuiles maison (Planetiler, schéma dédié). 25–60 % des ways sans `surface` → inférence par
-  `highway`/`tracktype` nécessaire.
+- **Typologie** : seul VersaTiles fournit `surface` brut, depuis son build shortbread@1.1 du
+  2026-10-27 (OpenFreeMap : paved/unpaved ; OSMF et Protomaps : rien ; contrôle du
+  2026-11-05, doc 03). Pont/tunnel disponibles partout ; gué et `layer` seulement dans
+  OpenMapTiles. v1 : revêtu / non revêtu (VersaTiles, API publique avec cache, fichier local en
+  production) ; la valeur brute sert à mieux classer (table de Valhalla), le revêtement fin
+  n'est pas exposé (`surface_detail: false`). Revêtement fin en V2 : la donnée est désormais
+  dans VersaTiles, reste à l'exposer au contrat. Gué en V2 avec une autre source (tuiles
+  maison, Planetiler, schéma dédié ; `ford_detectable: false`). 25–60 % des ways sans
+  `surface` (mesure de l'exploration) → inférence par `highway`/`tracktype` nécessaire.
 - **Qualité** : bancs de vcyclist, corpus d'ouvrages et traces barométriques personnelles
   d'autres régions.
 - **Map-matching** : le HMM tiles-only d'osm-surface est réutilisable ; les niveaux

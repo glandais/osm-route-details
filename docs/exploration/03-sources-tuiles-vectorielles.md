@@ -10,20 +10,29 @@
 > 14/8312/5668, Paris 14/8299/5636, Nantes 14/8121/5748, Annecy 14/8470/5835) sur
 > VersaTiles, vector.openstreetmap.org et OpenFreeMap. Le contrôle a été fait avec
 > `mapbox-vector-tile` (Python) et n'a porté que sur quelques tuiles, pas en masse.
+>
+> **Mise à jour du 2026-11-05.** VersaTiles est passé à `shortbread@1.1` (réplication OSM
+> du 2026-10-19, build du 2026-10-27) : `surface` y porte désormais la valeur OSM **brute**,
+> et `bicycle` / `foot` / `motorcar` sont servis (yes/limited/no). Contrôle refait sur 3
+> tuiles z14 autour de Nantes chez VersaTiles, OSMF et OpenFreeMap, et sur le code public de
+> Protomaps : rien d'autre n'a changé (OSMF toujours sans `surface` sur `streets`,
+> OpenFreeMap toujours `paved`/`unpaved` avec `ford` et `layer`, Protomaps toujours sans
+> `surface`). Les passages corrigés sont marqués « (2026-11-05) ».
 
 ## 1. Résumé
 
-- **Aucune tuile « grand public » ne fournit aujourd'hui la valeur brute de `surface`
-  sur les routes**, contrairement à ce que laissent croire certaines specs :
-  - le schéma **Shortbread** spécifie `surface` = « value of surface=* » (brut). Mais
-    l'instance **OSMF** ne renvoie **aucun** `surface` sur `streets`, et **VersaTiles**
-    le renvoie **regroupé en `paved`/`unpaved`** (constaté) ;
+- **Seul VersaTiles fournit la valeur brute de `surface` sur les routes** (2026-11-05 ;
+  en octobre, aucune tuile grand public ne la fournissait) :
+  - le schéma **Shortbread** spécifie `surface` = « value of surface=* » (brut).
+    **VersaTiles** le respecte depuis son build `shortbread@1.1` du 2026-10-27 (avant :
+    regroupé en `paved`/`unpaved`) ; l'instance **OSMF** ne renvoie toujours **aucun**
+    `surface` sur `streets` ;
   - le schéma **OpenMapTiles** (OpenFreeMap, MapTiler) regroupe explicitement en
     `paved`/`unpaved` ;
   - **Protomaps** n'a aucun attribut `surface` sur `roads`.
 - Pont/tunnel est disponible partout (z11–z12+). Le **gué (`ford`)** n'existe que dans
   **OpenMapTiles** (`brunnel=ford`). `layer` brut n'est exposé que dans OpenMapTiles.
-- **Recommandation** : en source primaire, **générer ses propres tuiles** (Planetiler
+- **Recommandation** (octobre ; depuis, le service lit VersaTiles, voir §6) : en source primaire, **générer ses propres tuiles** (Planetiler
   avec un schéma YAML sur mesure, ou tilemaker) à partir du `.osm.pbf`, en z14 et
   avec `surface`, `smoothness`, `tracktype`, `bridge`, `tunnel`, `ford`, `layer`,
   `highway` et `osm_id` en brut. En repli immédiat, prendre le planet **OpenFreeMap**
@@ -35,19 +44,19 @@
 
 | | **VersaTiles** (`osm.versatiles`) | **OSMF** vector.openstreetmap.org | **OpenFreeMap** | **Protomaps** basemap v4 | **OpenMapTiles self-host / MapTiler** | **Tuiles maison** (Planetiler / tilemaker) |
 |---|---|---|---|---|---|---|
-| Schéma | Shortbread (tiles.json : `shortbread@1.0` ; docs : 1.1) + extensions VersaTiles | Shortbread v1 (`shortbread_v1`) | OpenMapTiles, non modifié | Protomaps basemap v4 | OpenMapTiles | Libre (YAML / Lua) |
+| Schéma | Shortbread (tiles.json : `shortbread@1.1` depuis le build du 2026-10-27 ; avant : 1.0) + extensions VersaTiles | Shortbread v1 (`shortbread_v1`) | OpenMapTiles, non modifié | Protomaps basemap v4 | OpenMapTiles | Libre (YAML / Lua) |
 | Générateur | Planetiler + profil Shortbread Java | Tilekiln + osm2pgsql-themepark (PostGIS) | Planetiler (profil OMT) | Planetiler (profil Java protomaps) | OpenMapTiles (imposm + PostGIS) ou Planetiler | Planetiler / tilemaker |
 | Zoom max | 14 | 14 | 14 | 15 | 14 | Au choix (14 conseillé) |
 | Couche routes | `streets` (+ `street_polygons`, `bridges`) | `streets` (+ `street_polygons`, `bridges`) | `transportation` | `roads` | `transportation` | Au choix |
 | Chemins / pistes / cyclables | track, path, footway, cycleway, steps dès z13 | idem (z13) | `class=path/track`, `subclass` = highway (footway, cycleway…) | path z12, footway/cycleway/steps z13, sidewalk z14 | idem OpenFreeMap | Tout |
-| `surface` | **Constaté : `paved`/`unpaved` seulement** (spec : brut) | **Absent des tuiles** (déclaré dans tilejson ; brut seulement sur `street_polygons`) | `paved`/`unpaved` (liste fixe) | **Absent** | `paved`/`unpaved` | **Brut** |
+| `surface` | **Brut** depuis shortbread@1.1 (2026-11-05 ; avant : `paved`/`unpaved` seulement) | **Absent des tuiles** (déclaré dans tilejson ; brut seulement sur `street_polygons`) | `paved`/`unpaved` (liste fixe) | **Absent** | `paved`/`unpaved` | **Brut** |
 | Pont / tunnel | `bridge`, `tunnel` booléens z11+ | `bridge`, `tunnel` booléens z11+ | `brunnel` = bridge/tunnel/ford | `is_bridge`, `is_tunnel` z12+ | `brunnel` | Brut |
 | Gué (`ford`) | Non | Non | **Oui** (`brunnel=ford`) | Non | Oui | Oui |
 | `layer` | Non (sert seulement au tri) | Non (sert seulement au tri) | **Oui** (brut) | Non (`sort_rank`) | Oui | Oui |
 | `tracktype` | Oui (brut, z11+) | Champ présent mais **valeurs incohérentes** (`yes`/`no` sur des `residential`) | Non | Non | Non | Oui |
 | `smoothness` | Non | Non | Non | Non | Non | Oui |
 | Classe highway détaillée | `kind` = highway brut | `kind` = highway brut | `class` regroupé + `subclass` (paths) | `kind` + `kind_detail` (≈ highway) | `class` + `subclass` | Brut |
-| Accès / usages | `bicycle`, `horse` (z14) | `bicycle`, `foot`, `horse`, `motorcar` normalisés yes/limited/no (z13) | `bicycle`, `foot`, `horse`, `mtb_scale`, `access` | `access` (z15) | idem OFM | Brut |
+| Accès / usages | `bicycle`, `foot`, `horse`, `motorcar` (`bicycle` normalisé yes/limited/no ; 2026-11-05) | `bicycle`, `foot`, `horse`, `motorcar` normalisés yes/limited/no (z13) | `bicycle`, `foot`, `horse`, `mtb_scale`, `access` | `access` (z15) | idem OFM | Brut |
 | Généralisation au zoom max | Fusion des lignes à attributs identiques (Paris : 116 entités vs 2842 chez OSMF) | Faible (1 entité ≈ 1 way) | Fusion OMT (`update_transportation_merge`) | `mergeLineStrings` à tous les zooms (tolérance 0,1 px) | Fusion OMT | Paramétrable (`tolerance_at_max_zoom`, pas de merge) |
 | Accès | Fichier planet `.versatiles` (aussi `.pmtiles`, `.mbtiles`) **62,1 Go** ; serveur Rust `versatiles serve` ; HTTP z/x/y public | HTTP z/x/y uniquement (`/shortbread_v1/{z}/{x}/{y}.mvt`) | Planet MBTiles **103 Go**, PMTiles **87 Go**, image Btrfs ; HTTP z/x/y public | Planet PMTiles **139 Go** (z0–15), range requests, `pmtiles extract` | MBTiles (commercial chez MapTiler) ou génération | Fichier local (MBTiles/PMTiles) |
 | Mise à jour | Planet tous les 2 à 4 mois (20261027, 20260608, 20260413…) | Continue (Tilekiln, base osm2pgsql mise à jour) | Planet hebdomadaire | Build quotidien | Selon fournisseur | Selon notre cron |
@@ -67,7 +76,8 @@
   téléchargement complet est donc l'usage prévu.
 - **Génération** : Planetiler + profil Shortbread Java ([extensions VersaTiles](https://docs.versatiles.org/compendium/specification_shortbread_extensions.html)).
   Le [tiles.json public](https://tiles.versatiles.org/tiles/osm/tiles.json) annonce
-  `shortbread@1.0` et Planetiler 0.10.3-SNAPSHOT. Les extensions n'ajoutent rien d'utile
+  `shortbread@1.1` (version 1.1) et Planetiler 0.10.3-SNAPSHOT depuis le build du
+  2026-10-27 ; en octobre, il annonçait `shortbread@1.0`. Les extensions n'ajoutent rien d'utile
   ici côté `streets` : `link` dès z5 et `service` dès z10.
 - **Serveur** : CLI Rust `versatiles` (convert / serve), serveur Node, images Docker
   ([versatiles.org](https://versatiles.org/)). Le format `.versatiles` est lisible en
@@ -80,8 +90,13 @@
   `bridge=true` couvre aussi `low_water_crossing` (passage à gué bétonné).
   `tunnel=true` couvre aussi `building_passage` et `covered=yes`. Pas de `ford`, pas
   de `layer`, pas de `smoothness`.
-- **Point clé `surface`** : la spec dit « value of surface=* ». **Dans les tuiles
-  réelles, on n'observe que `paved` et `unpaved`.** Sur 4 tuiles, aucune valeur brute
+- **Point clé `surface`** : la spec dit « value of surface=* ». **Mise à jour
+  (2026-11-05) : depuis le build `shortbread@1.1`, les tuiles portent la valeur brute**
+  (sur 3 tuiles près de Nantes : asphalt, compacted, concrete, sett, dirt, fine_gravel,
+  wood, paving_stones, grass, ground, gravel…, et `paved` quand le tag OSM vaut `paved`).
+  `bicycle` y vaut yes/limited/no ; `foot` et `motorcar` sont présents ; toujours ni
+  `ford`, ni `layer`, ni `smoothness`. Constat d'octobre, en `shortbread@1.0` : **dans les
+  tuiles réelles, on n'observait que `paved` et `unpaved`.** Sur 4 tuiles, aucune valeur brute
   (`asphalt`, `sett`, `gravel`…) n'apparaît, alors que les mêmes tuiles chez OSMF
   (`street_polygons`) contiennent `paving_stones`, `sett`, `asphalt`, `compacted`.
   Le profil Planetiler de VersaTiles normalise donc le revêtement. À noter : le
@@ -251,7 +266,7 @@
 | Source | Présent sur la couche routes ? | Valeurs | Zoom |
 |---|---|---|---|
 | Spec Shortbread 1.0 / 1.1 | Oui | brutes (« value of surface=* ») | 11+ |
-| VersaTiles (constaté) | Oui | **`paved` / `unpaved`** | 11+ |
+| VersaTiles (constaté) | Oui | **brutes** depuis shortbread@1.1 (2026-11-05 ; avant : `paved` / `unpaved`) | 11+ |
 | OSMF (constaté) | **Non** (seulement `street_polygons`, brut) | — | — |
 | OpenMapTiles / OpenFreeMap | Oui | `paved` / `unpaved` (liste fixe, autres valeurs → NULL) | 12+ (tilemaker) |
 | Protomaps v4 | Non | — | — |
@@ -259,7 +274,8 @@
 
 Taux de remplissage observé à z14, part des entités routes avec un `surface` non nul :
 - OpenFreeMap : 51 % à Paris, 76 % à Nantes, 76 % à Annecy, 40 % à Fontainebleau ;
-- VersaTiles : environ 70 %, mais sur des lignes fusionnées.
+- VersaTiles : environ 70 %, mais sur des lignes fusionnées (63 % sur les 3 tuiles du
+  contrôle du 2026-11-05, d'autres tuiles : chiffres non comparables).
 
 Un `surface` absent reste fréquent sur les tracks et paths. Le service devra donc
 **inférer** le revêtement depuis `highway` + `tracktype` (cf. doc 02), d'où l'intérêt
@@ -288,8 +304,9 @@ d'avoir `tracktype` et `highway` bruts.
 au microservice Rust :
 
 1. C'est la seule option qui donne **`surface` brut** et donc l'enum fine (asphalte /
-   pavés / gravier / terre). Toutes les sources prêtes à l'emploi plafonnent à
-   paved/unpaved, ou n'ont rien.
+   pavés / gravier / terre). En octobre, toutes les sources prêtes à l'emploi
+   plafonnaient à paved/unpaved, ou n'avaient rien ; depuis le 2026-10-27, VersaTiles
+   donne aussi `surface` brut, mais toujours sans `ford`, `layer` ni `smoothness`.
 2. Elle permet d'ajouter `ford` (ways **et** nœuds), `layer`, `smoothness`, `tracktype`
    et `osm_id`, sans simplification ni fusion à z14 : une géométrie fidèle pour le
    map-matching.
@@ -308,13 +325,18 @@ le PMTiles (87 Go) chaque semaine et on le lit localement :
 
 **Alternative 2 : VersaTiles `osm.versatiles`** (62 Go, lecture native via l'écosystème
 Rust VersaTiles) : `bridge`/`tunnel`, `kind` = highway brut, `tracktype` brut, `surface`
-regroupé. Elle n'a ni `ford` ni `layer`, et les mises à jour sont rares (2 à 4 mois).
+brut depuis shortbread@1.1 (regroupé jusqu'au build du 2026-10-27). Elle n'a ni `ford` ni `layer`, et les mises à jour sont rares (2 à 4 mois).
 
 **À écarter pour le backend** :
 - **OSMF** : bulk interdit, pas de `surface` dans les tuiles, `tracktype` incohérent ;
 - **API publique OpenFreeMap** : collecte automatisée interdite ;
 - **Protomaps** : pas de `surface`. Reste un bon choix si un jour seul pont/tunnel compte,
   ou comme fond de carte.
+
+**Choix retenu par le service** (doc 01, technique T03) : VersaTiles, API publique avec
+cache disque, fichier local en production. Depuis shortbread@1.1, `surface` brut y est rangé
+en `paved` / `unpaved` par la table de Valhalla ; le revêtement fin n'est pas exposé
+(`surface_detail: false`) et le gué reste hors d'atteinte (`ford_detectable: false`).
 
 **Approche hybride possible** : démarrer le prototype sur le PMTiles OpenFreeMap, avec un
 lecteur PMTiles et un décodeur MVT en Rust. Le format est identique pour les tuiles
@@ -323,8 +345,9 @@ d'attributs.
 
 ## 7. Risques
 
-- **Écart spec / réalité** : VersaTiles et OSMF ne respectent pas, en pratique, la spec
-  Shortbread pour `surface`. Il ne faut pas se fier à la seule spec : écrire des tests
+- **Écart spec / réalité** : OSMF ne respecte pas, en pratique, la spec Shortbread pour
+  `surface` ; VersaTiles ne la respectait pas non plus jusqu'à son build `shortbread@1.1`
+  du 2026-10-27, et un format de tuile peut changer d'un build à l'autre sans prévenir. Il ne faut pas se fier à la seule spec : écrire des tests
   d'intégration sur des tuiles réelles connues.
 - **Généralisation** : même à z14, la quantification MVT (extent 4096, soit ≈ 2,4 m par
   unité à 45° de latitude) et les fusions de lignes dégradent la géométrie. Le
