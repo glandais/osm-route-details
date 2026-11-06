@@ -16,7 +16,7 @@ use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
 use ord_domain::elevation::TerrainOrigin;
 use ord_domain::report::WarningCode;
-use ord_domain::request::{GainPreset, SectionSet};
+use ord_domain::request::{GainPreset, Profile, SectionSet};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -75,6 +75,8 @@ pub struct OptionsV1 {
     pub accept_partial: Option<bool>,
     /// Internal use only; refused unless the deployment allows it.
     pub debug: Option<bool>,
+    /// Default: `full` (api 1.5).
+    pub profile: Option<Profile>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -150,6 +152,9 @@ pub struct MetaV1 {
     pub data_versions: DataVersions,
     pub request_id: String,
     pub duration_ms: u64,
+    /// Effective processing profile (api 1.5): part of the request identity, like the versions.
+    /// A `fast` response is meant to be refined later by a `full` request.
+    pub profile: Profile,
 }
 
 /// `partial` when a source gave no data on part of the route.
@@ -253,6 +258,13 @@ pub struct OutputPointV1 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ele_smoothed: Option<f64>,
     pub ele_method: EleMethodV1,
+    /// Cumulative elevation gain from the start, in metres (api 1.5), on the same internal
+    /// profile as `summary.gain_m`: non-decreasing, the last point carries `summary.gain_m`. The
+    /// gain of a sub-range is the difference of its two ends (never recomputed from `ele`).
+    pub gain_cum_m: f64,
+    /// Cumulative elevation loss from the start, positive, in metres (api 1.5); the last point
+    /// carries `summary.loss_m`.
+    pub loss_cum_m: f64,
 }
 
 impl fmt::Debug for OutputPointV1 {
@@ -639,6 +651,7 @@ fn origin_key(origin: TerrainOrigin) -> String {
 pub fn to_dto(
     report: &RouteReport,
     sections: SectionSet,
+    profile: Profile,
     request_id: &RequestId,
     duration_ms: u64,
     attribution_text: &str,
@@ -660,6 +673,8 @@ pub fn to_dto(
                 ele: p.ele,
                 ele_smoothed: p.ele_smoothed,
                 ele_method: p.ele_method.into(),
+                gain_cum_m: p.gain_cum_m,
+                loss_cum_m: p.loss_cum_m,
             })
             .collect()
     });
@@ -731,6 +746,7 @@ pub fn to_dto(
             data_versions: report.versions.data_versions.clone(),
             request_id: request_id.0.clone(),
             duration_ms,
+            profile,
         },
         status: match report.status {
             Status::Complete => StatusV1::Complete,

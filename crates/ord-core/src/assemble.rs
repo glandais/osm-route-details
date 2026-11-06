@@ -342,6 +342,8 @@ fn round_point(mut p: OutputPoint) -> OutputPoint {
     p.d_m = cm(p.d_m);
     p.ele = p.ele.map(cm);
     p.ele_smoothed = p.ele_smoothed.map(cm);
+    p.gain_cum_m = cm(p.gain_cum_m);
+    p.loss_cum_m = cm(p.loss_cum_m);
     p.latlon = p.latlon.map(|l| ord_domain::LatLon::new(coord(l.lat), coord(l.lon)));
     p
 }

@@ -161,6 +161,13 @@ Le découpage reprend les modules d'osm-surface (`OS/src/lib.rs:4-14`) en sépar
   `overloaded` est posé par le handler. `max_queued = 0` est admis (aucune attente). Les jetons de
   calcul (`compute_permits`) sont un second sémaphore, partagé entre l'orchestrateur et la chaîne
   typologie (HMM et ouvrages), le permis étant déplacé dans chaque `spawn_blocking`.
+- Profil `fast` (api 1.5, doc 02 §3.2) : une **seconde file**, `fast_max_in_flight` /
+  `fast_max_queued` (défauts : ceux de la file `full`), choisie en tête d'`Orchestrator::run`
+  selon `options.profile`. Une requête `fast` n'attend donc jamais derrière des requêtes `full`
+  bloquées sur l'IGN ; elle lit le terrain par un second `LayeredTerrainReader` sans couche IGN
+  (`Sources::fast_terrain`), qui partage la couche Mapterhorn (caches mémoire et disque) et ne
+  prend aucun créneau du budget d'hôte IGN. Les jetons de calcul restent partagés (calcul court,
+  borné par le CPU), comme les tuiles de rues.
 
 ### 3.3 Budget de temps et annulation
 

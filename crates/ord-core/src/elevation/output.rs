@@ -36,6 +36,10 @@ pub struct OutputPoint {
     pub ele: Option<f64>,
     pub ele_smoothed: Option<f64>,
     pub ele_method: EleMethod,
+    /// D+ et D− cumulés depuis le départ, sur le profil interne (api 1.5) : la dernière valeur
+    /// est `summary.gain_m` (`loss_m`).
+    pub gain_cum_m: f64,
+    pub loss_cum_m: f64,
 }
 
 impl fmt::Debug for OutputPoint {
@@ -103,6 +107,8 @@ pub(super) fn input_points(route: &PreparedRoute, profile: &ElevationProfile) ->
                 ele: (!ele.is_nan()).then_some(ele),
                 ele_smoothed: profile.ele_smoothed.as_ref().map(|v| v[i]).filter(|v| !v.is_nan()),
                 ele_method: profile.method[i],
+                gain_cum_m: profile.gain.cum_gain_m.get(i).copied().unwrap_or(0.0),
+                loss_cum_m: profile.gain.cum_loss_m.get(i).copied().unwrap_or(0.0),
             }
         })
         .collect()
@@ -126,6 +132,8 @@ pub(super) fn point_at(route: &PreparedRoute, profile: &ElevationProfile, d: f64
         ele: pe.ele,
         ele_smoothed: pe.ele_smoothed,
         ele_method: pe.method,
+        gain_cum_m: pe.gain_cum_m,
+        loss_cum_m: pe.loss_cum_m,
     }
 }
 

@@ -74,6 +74,8 @@ pub struct RequestOptions {
     pub structure_correction: bool,
     pub accept_partial: bool,
     pub debug: bool,
+    /// Profil de traitement (api 1.5) : `Full` par défaut.
+    pub profile: Profile,
 }
 
 impl Default for RequestOptions {
@@ -86,6 +88,33 @@ impl Default for RequestOptions {
             structure_correction: true,
             accept_partial: false,
             debug: false,
+            profile: Profile::Full,
+        }
+    }
+}
+
+// Doc 02 §3.2 (api 1.5) ; ce `///` est recopié dans le contrat OpenAPI, donc en anglais.
+/// Processing profile. `full` (default): IGN LiDAR HD in France with its surface model, all
+/// structure corrections and heuristics. `fast`: low latency for interactive use, Mapterhorn
+/// only (no IGN read, own queue, never waits behind `full` requests), OSM bridges and tunnels
+/// interpolated between their ends, no heuristic detection. Same response shape; the effective
+/// profile is in `meta.profile`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum Profile {
+    #[default]
+    Full,
+    Fast,
+}
+
+impl Profile {
+    pub const ALL: [Self; 2] = [Self::Full, Self::Fast];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Fast => "fast",
         }
     }
 }

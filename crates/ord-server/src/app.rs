@@ -249,6 +249,7 @@ async fn route_details(
     let started = Instant::now();
     let request = validate(dto, &state.inner.limits)?;
     let sections = request.options.sections;
+    let profile = request.options.profile;
     let input_points = request.input_len;
     let ctx = RequestCtx::new(request_id.clone(), Deadline::after(state.inner.budget));
     // Client parti : ce futur est lâché, l'orchestrateur annule le calcul (T01 §3.3).
@@ -306,7 +307,7 @@ async fn route_details(
         }
     }
     let report = result?;
-    let body = to_dto(&report, sections, &request_id, duration_ms, &state.inner.attribution_text);
+    let body = to_dto(&report, sections, profile, &request_id, duration_ms, &state.inner.attribution_text);
     Ok(Json::<RouteDetailsResponseV1>(body).into_response())
 }
 

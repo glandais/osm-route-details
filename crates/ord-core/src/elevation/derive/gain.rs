@@ -39,6 +39,10 @@ pub struct GainResult {
     /// Extrémités des jambes comptées (T04 §6.1), réutilisées par la sélection des points de
     /// rupture.
     pub turning_points: Vec<TurningPoint>,
+    /// D+ et D− cumulés à chaque station du profil (`GainProfile`), pour `points[].gain_cum_m`
+    /// et `loss_cum_m` (api 1.5).
+    pub cum_gain_m: Vec<f64>,
+    pub cum_loss_m: Vec<f64>,
 }
 
 /// Extrémité d'une jambe comptée par l'accumulateur (T04 §6.1) : sommet ou creux confirmé, ou
@@ -230,18 +234,53 @@ pub fn gain_turns_on_runs(
     params: PresetParams,
     tau: Option<&[f64]>,
 ) -> (f64, f64, bool, Vec<TurningPoint>) {
+    let p = gain_profile_on_runs(d, ele, params, tau);
+    (p.gain_m, p.loss_m, p.partial, p.turning_points)
+}
+
+/// D+/D− d'un profil à trous, avec leurs cumuls à chaque station (`points[].gain_cum_m`,
+/// api 1.5).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GainProfile {
+    pub gain_m: f64,
+    pub loss_m: f64,
+    pub partial: bool,
+    pub turning_points: Vec<TurningPoint>,
+    /// D+ cumulé à chaque station : croissant, 0 à la première, `gain_m` à la dernière.
+    pub cum_gain_m: Vec<f64>,
+    /// D− cumulé à chaque station (valeur positive) : croissant, `loss_m` à la dernière.
+    pub cum_loss_m: Vec<f64>,
+}
+
+/// Comme `gain_turns_on_runs`, avec le D+ et le D− cumulés à chaque station. Une jambe comptée
+/// (d'une extrémité à la suivante, sur le profil lissé du preset) apporte son dénivelé au fil de
+/// ses stations, au plus haut (montée) ou au plus bas (descente) atteint depuis son départ : le
+/// cumul ne décroît jamais, une bosse sous le seuil n'y entre pas, et il vaut le total de la jambe
+/// à son extrémité. Constant sur un trou et hors de toute jambe ; la dernière valeur est
+/// exactement `gain_m` (`loss_m`).
+pub fn gain_profile_on_runs(
+    d: &[f64],
+    ele: &[f64],
+    params: PresetParams,
+    tau: Option<&[f64]>,
+) -> GainProfile {
     assert_eq!(d.len(), ele.len(), "distances et altitudes de même longueur");
+    let n = ele.len();
     let (mut gain, mut loss, mut partial) = (0.0, 0.0, false);
     let mut turns = Vec::new();
+    let (mut cum_gain, mut cum_loss) = (vec![0.0; n], vec![0.0; n]);
+    let mut last_turn: Option<usize> = None;
     let mut i = 0;
-    while i < ele.len() {
+    while i < n {
         if ele[i].is_nan() {
             partial = true;
+            cum_gain[i] = gain;
+            cum_loss[i] = loss;
             i += 1;
             continue;
         }
         let start = i;
-        while i < ele.len() && !ele[i].is_nan() {
+        while i < n && !ele[i].is_nan() {
             i += 1;
         }
         let smoothed = smooth_profile(&d[start..i], &ele[start..i], params.smoothing_m);
@@ -252,6 +291,10 @@ pub fn gain_turns_on_runs(
             }
             None => accumulate_turns(&smoothed, |_| params.threshold_m),
         };
+        cumulate_run(&smoothed, &t, gain, loss, &mut cum_gain[start..i], &mut cum_loss[start..i]);
+        if let Some(last) = t.last() {
+            last_turn = Some(start + last.station);
+        }
         gain += g;
         loss += l;
         let (rd, re) = (&d[start..i], &ele[start..i]);
@@ -272,7 +315,71 @@ pub fn gain_turns_on_runs(
             TurningPoint { station: k + start, d_m: rd[k], peak_d_m: rd[best], peak_value: re[best], ..p }
         }));
     }
-    (gain, loss, partial, turns)
+    // Sommes des jambes et totaux peuvent différer d'un arrondi flottant : la dernière extrémité
+    // comptée et tout ce qui suit portent exactement les totaux, rien ne les dépasse.
+    for k in 0..n {
+        cum_gain[k] = cum_gain[k].min(gain);
+        cum_loss[k] = cum_loss[k].min(loss);
+    }
+    if let Some(from) = last_turn {
+        cum_gain[from..].fill(gain);
+        cum_loss[from..].fill(loss);
+    }
+    GainProfile {
+        gain_m: gain,
+        loss_m: loss,
+        partial,
+        turning_points: turns,
+        cum_gain_m: cum_gain,
+        cum_loss_m: cum_loss,
+    }
+}
+
+/// Cumuls d'une suite lue (`h` lissé, extrémités `turns` en rangs locaux), à partir des cumuls
+/// `gain0` / `loss0` des suites précédentes.
+fn cumulate_run(
+    h: &[f64],
+    turns: &[TurningPoint],
+    gain0: f64,
+    loss0: f64,
+    cum_gain: &mut [f64],
+    cum_loss: &mut [f64],
+) {
+    let (mut g, mut l) = (gain0, loss0);
+    let mut k = 0;
+    for w in turns.windows(2) {
+        let (a, b) = (w[0].station, w[1].station);
+        let (va, vb) = (w[0].value, w[1].value);
+        while k <= a {
+            cum_gain[k] = g;
+            cum_loss[k] = l;
+            k += 1;
+        }
+        let amount = (vb - va).abs();
+        let up = vb > va;
+        let mut ext = va;
+        for j in a + 1..=b {
+            if up {
+                ext = ext.max(h[j]);
+                cum_gain[j] = g + (ext - va).clamp(0.0, amount);
+                cum_loss[j] = l;
+            } else {
+                ext = ext.min(h[j]);
+                cum_gain[j] = g;
+                cum_loss[j] = l + (va - ext).clamp(0.0, amount);
+            }
+        }
+        k = k.max(b + 1);
+        if up {
+            g += amount;
+        } else {
+            l += amount;
+        }
+    }
+    for j in k..h.len() {
+        cum_gain[j] = g;
+        cum_loss[j] = l;
+    }
 }
 
 #[cfg(test)]
@@ -394,5 +501,40 @@ mod tests {
         let (gc, _, _) = gain_on_runs(&coarse_d, &coarse_e, DEM);
         let (gf, _, _) = gain_on_runs(&fine_d, &fine_e, DEM);
         assert!((gc - gf).abs() / gc < 0.01, "{gc} vs {gf}");
+    }
+
+    /// Cumuls par station (api 1.5) : croissants, constants sur un trou et sur une bosse sous le
+    /// seuil, égaux aux totaux à la fin ; le D+ d'une sous-plage est la différence des cumuls.
+    #[test]
+    fn cumulative_gain_follows_the_counted_legs() {
+        let d: Vec<f64> = (0..12).map(|i| i as f64 * 5.0).collect();
+        // Montée de 10, bosse de 2 (sous le seuil), descente de 10, trou, montée de 20, fin
+        // plus basse de 1 (non confirmée).
+        let e = [0.0, 5.0, 10.0, 8.0, 10.0, 0.0, f64::NAN, 50.0, 60.0, 70.0, 69.0, 69.0];
+        let p = PresetParams { threshold_m: 3.0, smoothing_m: 0.0 };
+        let g = gain_profile_on_runs(&d, &e, p, None);
+        assert_eq!((g.gain_m, g.loss_m), (30.0, 10.0));
+        assert_eq!(g.cum_gain_m, [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 20.0, 30.0, 30.0, 30.0]);
+        // La descente comptée (10 → 0) avance au plus bas atteint : 2 m dès le creux de la bosse.
+        assert_eq!(g.cum_loss_m, [0.0, 0.0, 0.0, 2.0, 2.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        assert_eq!(*g.cum_gain_m.last().unwrap(), g.gain_m);
+        // Même résultat que l'accumulateur seul.
+        let (g2, l2, _, _) = gain_turns_on_runs(&d, &e, p, None);
+        assert_eq!((g2, l2), (g.gain_m, g.loss_m));
+    }
+
+    #[test]
+    fn cumulative_gain_ends_exactly_on_the_total_with_smoothing() {
+        let d: Vec<f64> = (0..=400).map(|i| i as f64 * 5.0).collect();
+        let e: Vec<f64> =
+            d.iter().map(|x| 30.0 * (x / 170.0).sin() + 0.013 * x + 7.1 * (x / 23.0).cos()).collect();
+        for p in [DEM, PresetParams { threshold_m: 0.0, smoothing_m: 0.0 }] {
+            let g = gain_profile_on_runs(&d, &e, p, None);
+            assert!(g.cum_gain_m.windows(2).all(|w| w[1] >= w[0]));
+            assert!(g.cum_loss_m.windows(2).all(|w| w[1] >= w[0]));
+            assert_eq!(*g.cum_gain_m.last().unwrap(), g.gain_m);
+            assert_eq!(*g.cum_loss_m.last().unwrap(), g.loss_m);
+            assert!(g.gain_m > 50.0);
+        }
     }
 }

@@ -14,7 +14,7 @@ use ord_domain::catalog::{DataCatalog, Versions};
 use ord_domain::coverage::{CoverageRef, SourceOutcome};
 use ord_domain::ctx::RequestCtx;
 use ord_domain::elevation::{Missing, TerrainReader};
-use ord_domain::request::ValidatedRequest;
+use ord_domain::request::{Profile, ValidatedRequest};
 use ord_domain::tiles::SourceId;
 use tokio::sync::Semaphore;
 
@@ -29,6 +29,9 @@ use crate::{Outcome, PipelineError};
 pub struct Sources {
     pub typology: Arc<dyn TypologyChain>,
     pub terrain: Arc<dyn TerrainReader>,
+    /// Lecteur du profil `fast` (api 1.5) : Mapterhorn seul, jamais l'IGN, si bien qu'une
+    /// requête `fast` ne prend aucun créneau du budget d'hôte IGN.
+    pub fast_terrain: Arc<dyn TerrainReader>,
     pub coverage: Arc<dyn CoverageRef>,
     pub catalog: Arc<dyn DataCatalog>,
 }
@@ -59,6 +62,9 @@ pub struct Orchestrator {
     api_version: &'static str,
     retry: RetryAfterPolicy,
     admission: Admission,
+    /// File du profil `fast`, distincte : une requête `fast` n'attend jamais derrière les
+    /// requêtes `full` (lectures IGN lentes).
+    fast_admission: Admission,
     /// `compute_permits` (T01 §3.1) : chaque tâche bloquante du cœur en prend un, déplacé dans la
     /// tâche.
     compute: Arc<Semaphore>,
@@ -103,6 +109,7 @@ impl Orchestrator {
             api_version,
             retry,
             admission: Admission::new(AdmissionLimits::default()),
+            fast_admission: Admission::new(AdmissionLimits::default()),
             compute: Arc::new(Semaphore::new(cpus())),
         }
     }
@@ -110,6 +117,12 @@ impl Orchestrator {
     /// File d'admission (`max_in_flight`, `max_queued`).
     pub fn with_admission(mut self, admission: Admission) -> Self {
         self.admission = admission;
+        self
+    }
+
+    /// File du profil `fast`.
+    pub fn with_fast_admission(mut self, admission: Admission) -> Self {
+        self.fast_admission = admission;
         self
     }
 
@@ -121,6 +134,24 @@ impl Orchestrator {
 
     pub fn admission(&self) -> &Admission {
         &self.admission
+    }
+
+    pub fn fast_admission(&self) -> &Admission {
+        &self.fast_admission
+    }
+
+    fn admission_for(&self, profile: Profile) -> &Admission {
+        match profile {
+            Profile::Full => &self.admission,
+            Profile::Fast => &self.fast_admission,
+        }
+    }
+
+    fn terrain_for(&self, profile: Profile) -> &dyn TerrainReader {
+        match profile {
+            Profile::Full => self.sources.terrain.as_ref(),
+            Profile::Fast => self.sources.fast_terrain.as_ref(),
+        }
     }
 
     /// Calcul bloquant du cœur sous un jeton de calcul, déplacé dans la tâche : un client qui part
@@ -158,7 +189,7 @@ impl Orchestrator {
     pub async fn run(&self, req: ValidatedRequest, ctx: &RequestCtx) -> Result<RouteReport, PipelineError> {
         let guard = CancelOnDrop::new(&ctx.deadline);
         let result = async {
-            let _permit = self.admission.admit(&ctx.deadline).await?;
+            let _permit = self.admission_for(req.options.profile).admit(&ctx.deadline).await?;
             let deadline = tokio::time::Instant::from_std(ctx.deadline.at);
             match tokio::time::timeout_at(deadline, self.run_inner(req, ctx)).await {
                 Ok(result) => result,
@@ -201,7 +232,13 @@ impl Orchestrator {
         let route = Arc::new(route);
 
         check()?;
-        let heuristics = self.rules.elevation.heuristics && options.structure_correction;
+        // Profil `fast` : Mapterhorn seul et pas d'heuristique (détecteurs calibrés sur le LiDAR,
+        // et lectures en travers des tunnels candidats en moins) ; les ouvrages OSM restent
+        // corrigés, en droite entre leurs extrémités faute de MNS.
+        let terrain = self.terrain_for(options.profile);
+        let heuristics = self.rules.elevation.heuristics
+            && options.structure_correction
+            && options.profile == Profile::Full;
         // 4a ∥ 4b. Typologie et MNT aux stations : `join!`, pas `try_join!` (la réponse partielle a
         // besoin des deux branches, T01 §5.2).
         let started = Instant::now();
@@ -212,7 +249,7 @@ impl Orchestrator {
                 r
             },
             async {
-                let mut r = sample_raw(&route, self.sources.terrain.as_ref(), ctx).await;
+                let mut r = sample_raw(&route, terrain, ctx).await;
                 stage("terrain", started);
                 // V1 : MNS sur toute l'enveloppe LiDAR pour les heuristiques, en parallèle de la
                 // typologie (`DsmScope::LidarHull`, T04 §2.3), seulement si la correction est
@@ -220,8 +257,7 @@ impl Orchestrator {
                 if heuristics {
                     if let Ok(raw) = r.as_mut() {
                         let dsm_started = Instant::now();
-                        if let Err(e) = sample_dsm_hull(raw, &route, self.sources.terrain.as_ref(), ctx).await
-                        {
+                        if let Err(e) = sample_dsm_hull(raw, &route, terrain, ctx).await {
                             r = Err(e);
                         }
                         stage("dsm_hull", dsm_started);
@@ -229,10 +265,7 @@ impl Orchestrator {
                     // Profil en travers des tunnels candidats (T04 §4.2, règles 2026.11.11).
                     if let Ok(raw) = r.as_mut() {
                         let cross_started = Instant::now();
-                        if let Err(e) =
-                            sample_tunnel_cross(raw, &route, self.sources.terrain.as_ref(), ctx, &self.rules)
-                                .await
-                        {
+                        if let Err(e) = sample_tunnel_cross(raw, &route, terrain, ctx, &self.rules).await {
                             r = Err(e);
                         }
                         stage("tunnel_cross", cross_started);
@@ -272,8 +305,7 @@ impl Orchestrator {
         if options.structure_correction {
             check()?;
             let started = Instant::now();
-            sample_structures(&mut raw, &route, &typo, self.sources.terrain.as_ref(), ctx, &self.rules)
-                .await?;
+            sample_structures(&mut raw, &route, &typo, terrain, ctx, &self.rules).await?;
             stage("structures", started);
         }
 
@@ -466,6 +498,7 @@ mod tests {
             Sources {
                 typology: Arc::new(NoStreets),
                 terrain: Arc::new(Flat(missing)),
+                fast_terrain: Arc::new(Flat(missing)),
                 coverage: Arc::new(HalfZone),
                 catalog: Arc::new(NoCatalog),
             },
@@ -565,6 +598,7 @@ mod tests {
             Sources {
                 typology: Arc::new(Spinning { stopped: Arc::clone(stopped) }),
                 terrain: Arc::new(Flat(None)),
+                fast_terrain: Arc::new(Flat(None)),
                 coverage: Arc::new(HalfZone),
                 catalog: Arc::new(NoCatalog),
             },
@@ -613,6 +647,7 @@ mod tests {
             Sources {
                 typology: Arc::new(Slow),
                 terrain: Arc::new(Flat(None)),
+                fast_terrain: Arc::new(Flat(None)),
                 coverage: Arc::new(HalfZone),
                 catalog: Arc::new(NoCatalog),
             },
@@ -644,6 +679,66 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         assert_eq!(o.run(request(false), &ctx()).await.unwrap_err(), PipelineError::Overloaded);
+        assert_eq!(first.await.unwrap().unwrap_err(), PipelineError::Timeout);
+    }
+
+    /// Profil `fast` (api 1.5) : file `full` pleine et occupée, une requête `fast` passe par sa
+    /// propre file et lit son propre lecteur de terrain.
+    #[tokio::test]
+    async fn fast_requests_have_their_own_queue_and_terrain() {
+        struct Typed(f32);
+        #[async_trait::async_trait]
+        impl TerrainReader for Typed {
+            async fn sample_terrain(&self, pts: &[LatLon], _: &RequestCtx) -> Vec<TerrainSample> {
+                vec![
+                    TerrainSample {
+                        ele: Some(self.0),
+                        origin: TerrainOrigin::MapterhornMeasured,
+                        fallback_after_error: false,
+                        dem_kind: DemKind::Unknown,
+                        missing: None,
+                    };
+                    pts.len()
+                ]
+            }
+            async fn sample_ign_dtm(&self, pts: &[LatLon], _: &RequestCtx) -> Vec<Option<f32>> {
+                vec![None; pts.len()]
+            }
+            async fn sample_dsm(&self, pts: &[LatLon], _: &RequestCtx) -> Vec<DsmSample> {
+                vec![DsmSample::NoData; pts.len()]
+            }
+            fn pixel_size_m(&self, _: LatLon, _: TerrainOrigin) -> f64 {
+                30.0
+            }
+        }
+        // Lecteur de terrain : celui du profil `fast` est choisi.
+        let mut o = orchestrator(None);
+        o.sources.fast_terrain = Arc::new(Typed(7.0));
+        let mut fast = request(false);
+        fast.options.profile = Profile::Fast;
+        assert_eq!(o.run(fast.clone(), &ctx()).await.unwrap().summary.ele_max_m, Some(7.0));
+        assert_eq!(o.run(request(false), &ctx()).await.unwrap().summary.ele_max_m, Some(42.0));
+
+        // Files : la file `full` (1 jeton, pas d'attente) est occupée par une requête qui calcule
+        // jusqu'à son échéance ; une seconde requête `full` est refusée, une requête `fast` est
+        // admise (elle calcule à son tour jusqu'à son échéance : 504, pas 503).
+        let one = AdmissionLimits { max_in_flight: 1, max_queued: 0 };
+        let stopped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let o = Arc::new(spinning(&stopped, one).with_fast_admission(Admission::new(one)));
+        let first = {
+            let o = Arc::clone(&o);
+            tokio::spawn(async move {
+                let ctx = RequestCtx::new(RequestId("a".into()), Deadline::after(Duration::from_millis(800)));
+                o.run(request(false), &ctx).await
+            })
+        };
+        while o.admission().in_flight() == 0 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert_eq!(o.run(request(false), &ctx()).await.unwrap_err(), PipelineError::Overloaded);
+        let short = RequestCtx::new(RequestId("f".into()), Deadline::after(Duration::from_millis(200)));
+        assert_eq!(o.run(fast, &short).await.unwrap_err(), PipelineError::Timeout);
+        assert_eq!(o.fast_admission().in_flight(), 0);
         assert_eq!(first.await.unwrap().unwrap_err(), PipelineError::Timeout);
     }
 

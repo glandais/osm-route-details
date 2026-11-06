@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.4"
+    "version": "1.5"
   },
   "paths": {
     "/health/live": {
@@ -403,7 +403,8 @@
           "data",
           "elevation_sources",
           "elevation_rules",
-          "typology_rules"
+          "typology_rules",
+          "profiles"
         ],
         "properties": {
           "api_version": {
@@ -438,6 +439,13 @@
           },
           "primary_zone": {
             "type": "string"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileV1"
+            },
+            "description": "Processing profiles (`options.profile`, api 1.5)."
           },
           "rules_version": {
             "type": "string"
@@ -651,6 +659,7 @@
           "sections",
           "sampling_modes",
           "gain_presets",
+          "profiles",
           "status",
           "structure",
           "structure_source",
@@ -695,6 +704,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProblemCode"
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Profile"
             }
           },
           "sampling_modes": {
@@ -867,6 +882,32 @@
           }
         }
       },
+      "LatencyTargetV1": {
+        "type": "object",
+        "description": "Order of magnitude aimed at for one route, measured on the deployment of reference; not a\nguarantee (the request budget still applies).",
+        "required": [
+          "route_km",
+          "cold_s",
+          "warm_s"
+        ],
+        "properties": {
+          "cold_s": {
+            "type": "number",
+            "format": "double",
+            "description": "Empty tile caches, in seconds."
+          },
+          "route_km": {
+            "type": "number",
+            "format": "double",
+            "description": "Length of the reference route, in kilometres."
+          },
+          "warm_s": {
+            "type": "number",
+            "format": "double",
+            "description": "Tiles already cached, in seconds."
+          }
+        }
+      },
       "LimitKind": {
         "type": "string",
         "description": "Input bound exceeded (413).",
@@ -918,7 +959,8 @@
           "rules_version",
           "data_versions",
           "request_id",
-          "duration_ms"
+          "duration_ms",
+          "profile"
         ],
         "properties": {
           "api_version": {
@@ -932,6 +974,10 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile",
+            "description": "Effective processing profile (api 1.5): part of the request identity, like the versions.\nA `fast` response is meant to be refined later by a `full` request."
           },
           "request_id": {
             "type": "string"
@@ -987,7 +1033,8 @@
           "elevation",
           "structure_correction",
           "accept_partial",
-          "debug"
+          "debug",
+          "profile"
         ],
         "properties": {
           "accept_partial": {
@@ -998,6 +1045,9 @@
           },
           "elevation": {
             "$ref": "#/components/schemas/ElevationDefaults"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
           },
           "sampling": {
             "$ref": "#/components/schemas/SamplingDefaults"
@@ -1040,6 +1090,17 @@
               }
             ]
           },
+          "profile": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Profile",
+                "description": "Default: `full` (api 1.5)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sampling": {
             "oneOf": [
               {
@@ -1076,7 +1137,9 @@
           "d_m",
           "index",
           "ele",
-          "ele_method"
+          "ele_method",
+          "gain_cum_m",
+          "loss_cum_m"
         ],
         "properties": {
           "d_m": {
@@ -1103,6 +1166,11 @@
             "format": "double",
             "description": "Only when smoothing is requested."
           },
+          "gain_cum_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Cumulative elevation gain from the start, in metres (api 1.5), on the same internal\nprofile as `summary.gain_m`: non-decreasing, the last point carries `summary.gain_m`. The\ngain of a sub-range is the difference of its two ends (never recomputed from `ele`)."
+          },
           "index": {
             "type": "integer",
             "format": "int32",
@@ -1124,6 +1192,11 @@
             ],
             "format": "double",
             "description": "Only on inserted points and in `distance` mode."
+          },
+          "loss_cum_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Cumulative elevation loss from the start, positive, in metres (api 1.5); the last point\ncarries `summary.loss_m`."
           },
           "origin": {
             "oneOf": [
@@ -1307,6 +1380,53 @@
           "elevation",
           "both"
         ]
+      },
+      "Profile": {
+        "type": "string",
+        "description": "Processing profile. `full` (default): IGN LiDAR HD in France with its surface model, all\nstructure corrections and heuristics. `fast`: low latency for interactive use, Mapterhorn\nonly (no IGN read, own queue, never waits behind `full` requests), OSM bridges and tunnels\ninterpolated between their ends, no heuristic detection. Same response shape; the effective\nprofile is in `meta.profile`.",
+        "enum": [
+          "full",
+          "fast"
+        ]
+      },
+      "ProfileV1": {
+        "type": "object",
+        "description": "What a processing profile reads and corrects, and its latency target.",
+        "required": [
+          "profile",
+          "elevation_sources",
+          "bridge_dsm",
+          "heuristics",
+          "own_queue",
+          "latency_target"
+        ],
+        "properties": {
+          "bridge_dsm": {
+            "type": "boolean",
+            "description": "Bridge decks read in the IGN surface model; otherwise bridges are interpolated between\ntheir abutments."
+          },
+          "elevation_sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Elevation sources this profile may read, in priority order (`elevation_sources[].source`)."
+          },
+          "heuristics": {
+            "type": "boolean",
+            "description": "Detection of structures missing from OSM, galleries and covers."
+          },
+          "latency_target": {
+            "$ref": "#/components/schemas/LatencyTargetV1"
+          },
+          "own_queue": {
+            "type": "boolean",
+            "description": "Requests of this profile have their own queue: they never wait behind the other profile."
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        }
       },
       "QualityV1": {
         "type": "object",

@@ -22,7 +22,7 @@ use serde::Serialize;
 use crate::classification::StructureVerdict;
 use crate::rules::Rules;
 use crate::typology::TypologyOutput;
-use derive::{gain_turns_on_runs, smooth_profile, AdaptedRange, GainParams, GainResult};
+use derive::{gain_profile_on_runs, smooth_profile, AdaptedRange, GainParams, GainResult};
 use fusion::heuristic::TunnelCross;
 use fusion::plan::StructurePlan;
 use fusion::{StructureCorrectionReport, StructureOutcome};
@@ -148,6 +148,9 @@ pub struct PointElevation {
     pub ele: Option<f64>,
     pub ele_smoothed: Option<f64>,
     pub method: EleMethod,
+    /// D+ et D− cumulés depuis le départ, interpolés entre les deux stations (api 1.5).
+    pub gain_cum_m: f64,
+    pub loss_cum_m: f64,
     /// Rang de la station qui encadre `d` par en dessous.
     pub lower: usize,
     /// Position entre `lower` et `lower + 1`, dans [0, 1].
@@ -164,6 +167,8 @@ impl ElevationProfile {
                 ele: None,
                 ele_smoothed: None,
                 method: EleMethod::None,
+                gain_cum_m: 0.0,
+                loss_cum_m: 0.0,
                 lower: 0,
                 t: 0.0,
             };
@@ -193,7 +198,11 @@ impl ElevationProfile {
             self.method[upper]
         };
         let ele_smoothed = self.ele_smoothed.as_deref().and_then(interp);
-        PointElevation { ele, ele_smoothed, method, lower, t }
+        // Cumuls jamais absents (constants sur un trou) : interpolation directe.
+        let cum = |v: &[f64]| v.get(lower).map_or(0.0, |&a| a + t * (v.get(upper).copied().unwrap_or(a) - a));
+        let gain_cum_m = cum(&self.gain.cum_gain_m);
+        let loss_cum_m = cum(&self.gain.cum_loss_m);
+        PointElevation { ele, ele_smoothed, method, gain_cum_m, loss_cum_m, lower, t }
     }
 
     /// Pente moyenne entre deux distances, en %, sur `ele` corrigé non lissé ; `None` si une borne
@@ -430,7 +439,8 @@ pub fn fuse(
         }
         tau
     });
-    let (gain_m, loss_m, partial, turning_points) = gain_turns_on_runs(&d, &ele, preset, tau.as_deref());
+    let derive::GainProfile { gain_m, loss_m, partial, turning_points, cum_gain_m, cum_loss_m } =
+        gain_profile_on_runs(&d, &ele, preset, tau.as_deref());
     let adapted: Vec<AdaptedRange> = glo30
         .iter()
         .map(|&(i, j)| {
@@ -454,6 +464,8 @@ pub fn fuse(
             partial,
         },
         turning_points,
+        cum_gain_m,
+        cum_loss_m,
     };
 
     // Lissage client : jamais à travers une plage `none`, sans toucher `ele` (T04 §5.3).

@@ -9,7 +9,7 @@ use ord_data::catalog::StaticCatalog;
 use ord_domain::catalog::{Attribution, DataCatalog, DataVersion};
 use ord_domain::elevation::TerrainOrigin;
 use ord_domain::report::WarningCode;
-use ord_domain::request::GainPreset;
+use ord_domain::request::{GainPreset, Profile};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -41,6 +41,70 @@ pub struct Capabilities {
     pub elevation_rules: ElevationRulesV1,
     /// Typology rules that shape the output.
     pub typology_rules: TypologyRulesV1,
+    /// Processing profiles (`options.profile`, api 1.5).
+    pub profiles: Vec<ProfileV1>,
+}
+
+// Profils de traitement (doc 02 §3.2, api 1.5) : un ajout au contrat.
+/// What a processing profile reads and corrects, and its latency target.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct ProfileV1 {
+    pub profile: Profile,
+    /// Elevation sources this profile may read, in priority order (`elevation_sources[].source`).
+    pub elevation_sources: Vec<&'static str>,
+    /// Bridge decks read in the IGN surface model; otherwise bridges are interpolated between
+    /// their abutments.
+    pub bridge_dsm: bool,
+    /// Detection of structures missing from OSM, galleries and covers.
+    pub heuristics: bool,
+    /// Requests of this profile have their own queue: they never wait behind the other profile.
+    pub own_queue: bool,
+    pub latency_target: LatencyTargetV1,
+}
+
+/// Order of magnitude aimed at for one route, measured on the deployment of reference; not a
+/// guarantee (the request budget still applies).
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct LatencyTargetV1 {
+    /// Length of the reference route, in kilometres.
+    pub route_km: f64,
+    /// Empty tile caches, in seconds.
+    pub cold_s: f64,
+    /// Tiles already cached, in seconds.
+    pub warm_s: f64,
+}
+
+/// Cibles de latence publiées (doc 02 §3.2), arrondies avec de la marge au-dessus des mesures du
+/// 2026-11-05 (binaire release, sources publiques, 140 et 144 km) : `full` 17 à 24 s à froid
+/// (IGN), 0,08 s à chaud ; `fast` 0,8 à 1,6 s à froid, 0,08 s à chaud, y compris pendant une
+/// requête `full` à froid.
+const LATENCY_ROUTE_KM: f64 = 130.0;
+const FULL_LATENCY: (f64, f64) = (30.0, 0.5);
+const FAST_LATENCY: (f64, f64) = (5.0, 0.5);
+
+impl ProfileV1 {
+    fn all(ign: bool, heuristics: bool) -> Vec<Self> {
+        let target =
+            |(cold_s, warm_s): (f64, f64)| LatencyTargetV1 { route_km: LATENCY_ROUTE_KM, cold_s, warm_s };
+        vec![
+            Self {
+                profile: Profile::Full,
+                elevation_sources: if ign { vec!["ign-lidar-hd", "mapterhorn"] } else { vec!["mapterhorn"] },
+                bridge_dsm: ign,
+                heuristics,
+                own_queue: true,
+                latency_target: target(FULL_LATENCY),
+            },
+            Self {
+                profile: Profile::Fast,
+                elevation_sources: vec!["mapterhorn"],
+                bridge_dsm: false,
+                heuristics: false,
+                own_queue: true,
+                latency_target: target(FAST_LATENCY),
+            },
+        ]
+    }
 }
 
 // Paramètres effectifs du HMM et des segments (T03 §5.2, §8) : un ajout au contrat.
@@ -194,6 +258,7 @@ pub struct OptionDefaults {
     pub structure_correction: bool,
     pub accept_partial: bool,
     pub debug: bool,
+    pub profile: Profile,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -228,6 +293,7 @@ pub struct EnumCatalog {
     pub sections: Vec<SectionV1>,
     pub sampling_modes: Vec<SamplingModeV1>,
     pub gain_presets: Vec<GainPreset>,
+    pub profiles: Vec<Profile>,
     pub status: Vec<&'static str>,
     pub structure: Vec<&'static str>,
     pub structure_source: Vec<&'static str>,
@@ -251,6 +317,7 @@ impl EnumCatalog {
             sections: SectionV1::ALL.to_vec(),
             sampling_modes: SamplingModeV1::ALL.to_vec(),
             gain_presets: GainPreset::ALL.to_vec(),
+            profiles: Profile::ALL.to_vec(),
             status: vec!["complete", "partial"],
             // `ford` est réservé (V2) : pas encore publié.
             structure: StructureClass::ALL
@@ -310,6 +377,7 @@ impl Capabilities {
                 structure_correction: true,
                 accept_partial: false,
                 debug: false,
+                profile: Profile::Full,
             },
             option_bounds: OptionBounds {
                 step_m: NumberBounds { min: o.step_m_min, max: o.step_m_max, default: o.step_m_default },
@@ -333,6 +401,10 @@ impl Capabilities {
             elevation_sources: catalog.elevation_sources(),
             elevation_rules: ElevationRulesV1::new(&Rules::default()),
             typology_rules: TypologyRulesV1::new(&Rules::default(), config.typology.zoom),
+            profiles: ProfileV1::all(
+                config.elevation.ign.enabled,
+                Rules::default().elevation.heuristics && config.elevation.ign.enabled,
+            ),
         }
     }
 }

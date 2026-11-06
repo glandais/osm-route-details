@@ -65,6 +65,32 @@ Toutes les options sont facultatives et ont une valeur par défaut documentée d
 | `structure_correction` | booléen | `true` | `false` : MNT brut sur les ouvrages, signalé comme non corrigé. Le client ne choisit ni la source d'élévation ni la méthode : elles sont décidées par le service et exposées dans la réponse. |
 | `accept_partial` | booléen | `false` | Accepte une réponse partielle quand une source est **en panne**, au lieu d'un 503. |
 | `debug` | booléen | `false` | Attributs bruts par segment. **Réservé à un usage interne** : activé par configuration du déploiement, sinon refusé (400). |
+| `profile` | `full` \| `fast` | `full` | Profil de traitement (api 1.5). `full` : comportement complet (IGN LiDAR HD en France, MNS des ponts, heuristiques). `fast` : basse latence pour un usage interactif, détaillé ci-dessous. |
+
+**Profil `fast`** (api 1.5). Pour un client interactif (tracé au clic, aperçu d'un import), qui
+raffine ensuite par un appel `full` :
+
+- **aucune lecture IGN** : Mapterhorn seul, partout (en France, origine `mapterhorn_measured`) ;
+- **file d'admission séparée** : une requête `fast` n'attend jamais derrière les requêtes `full`
+  et ne prend aucun créneau du budget d'hôte IGN ; caches Mapterhorn et tuiles de rues partagés ;
+- **corrections** : ponts et tunnels OSM corrigés en droite entre leurs extrémités
+  (`interpolated_structure`, faute de MNS : pas de `dsm_deck` ni de `kept_ground`, pas de
+  `dsm_unavailable`, qui signale une panne), bosse sous un pont qui enjambe la route corrigée
+  (`elevation_overpass_corrected`, sondes Mapterhorn) ; **pas d'heuristique** (ouvrages absents
+  d'OSM, couvertures : détecteurs calibrés sur le LiDAR, et lectures en travers des tunnels en
+  moins). Le statut se lit dans `quality.structure_correction` comme en `full` ;
+- la **typologie tourne** comme en `full`, quelles que soient les `sections` : elle porte les
+  ouvrages à corriger, et elle est lue en parallèle du terrain (elle ne s'ajoute pas à sa
+  latence) ;
+- même forme de réponse ; le profil effectif est dans `meta.profile`, et `data_versions` ne
+  liste que les sources lues (pas d'IGN) ;
+- cible de latence publiée dans `/v1/capabilities` (`profiles[].latency_target`, pour 130 km :
+  `fast` 5 s à froid et 0,5 s à chaud, `full` 30 s et 0,5 s), ordre de grandeur et non garantie :
+  le budget de 90 s reste la seule borne (§7). Mesuré le 2026-11-05 (binaire release, sources
+  publiques, caches vides) : `fast` 1,6 s à froid pour 140 km (0,8 s pendant une requête `full`
+  à froid de 24 s sur l'IGN), 76 ms à chaud, 2 ms pour 5 km ; `full` 16,9 s à froid sur le même
+  parcours. Écart de D+ observé `fast` / `full` : +0,5 % (140 km vallonnés), −4,5 % (144 km
+  plats, Mapterhorn z12 plus lisse).
 
 ### 3.3 Exemple de requête
 
@@ -89,7 +115,7 @@ Toutes les options sont facultatives et ont une valeur par défaut documentée d
 
 | Bloc | Contenu |
 |---|---|
-| `meta` | `api_version`, `rules_version`, `data_versions` (identifiant et date par source), identifiant de requête, durée. |
+| `meta` | `api_version`, `rules_version`, `data_versions` (identifiant et date par source), identifiant de requête, durée, profil effectif `profile` (api 1.5). |
 | `status` | `complete` ou `partial`. `partial` signifie qu'une **source** n'a pas fourni de donnée sur une partie du parcours : panne acceptée par `accept_partial`, ou plage hors de l'emprise des données configurées (`elevation_missing`, `typology_missing`). Une portion non appariée alors que les tuiles sont lues ne rend **pas** la réponse partielle : elle est signalée dans `quality`. |
 | `points[]` | Par défaut, les points d'entrée et les points de rupture insérés (`input_with_breakpoints`) ; un élément par point d'entrée (`input`) ou par pas (`distance`) sur demande. Section `elevation`. |
 | `segments[]` | Tronçons contigus et homogènes qui couvrent **tout** le parcours. Section `typology`. |
@@ -118,6 +144,7 @@ les résultats en face de son parcours sans recalcul géométrique.
 | `lat`, `lon` | Sur un point inséré et en mode `distance`. Jamais sur un point d'entrée, qui n'est pas déplacé. |
 | `ele` | Altitude **après correction des ouvrages**, non lissée. `null` si l'altitude est absente. |
 | `ele_smoothed` | Présent seulement si un lissage est demandé. |
+| `gain_cum_m`, `loss_cum_m` | D+ et D− cumulés depuis le départ (api 1.5), toujours présents, calculés sur le même profil interne densifié que `summary.gain_m` : croissants, constants sur un trou, la dernière valeur est `summary.gain_m` (`loss_m`). Le D+ d'une sous-plage entre deux points est la différence de leurs cumuls. Une jambe comptée apporte son dénivelé au fil de ses stations, au plus haut (montée) ou au plus bas (descente) atteint ; une bosse sous le seuil n'y entre pas. |
 | `ele_method` | `dem` (MNT), `dsm_deck` (tablier de pont lu dans le MNS LiDAR), `interpolated_structure` (droite entre culées ou portails : tunnel, ou pont sans MNS exploitable), `gap_filled` (droite sur un trou court du MNT ; depuis l'api 1.2, aussi sur une couverture lue dans le MNT au-dessus de la route, avec `elevation_cover_corrected` ; depuis l'api 1.3, sous un pont OSM qui enjambe la route, avec `elevation_overpass_corrected`), `none` (altitude absente). |
 
 L'origine du terrain n'est pas répétée à chaque point : elle est donnée par plages dans
@@ -126,7 +153,8 @@ L'origine du terrain n'est pas répétée à chaque point : elle est donnée par
 En mode `input_with_breakpoints`, un ouvrage, un sommet ou un creux qui tombe entre deux points
 d'entrée espacés est représenté par des points insérés. En mode `input`, il peut n'être porté par
 aucun point. Dans tous les modes, le D+ et les pentes du `summary` et des `segments[]` sont calculés
-sur le profil interne densifié : ils ne se recalculent pas à partir de `points[]`.
+sur le profil interne densifié : ils ne se recalculent pas à partir des `ele` de `points[]`. Le D+
+d'une sous-plage se lit dans les cumuls `gain_cum_m` / `loss_cum_m` (api 1.5).
 
 ### 4.3 `segments[]`
 
@@ -382,7 +410,7 @@ Trois versions toujours distinctes, toujours exposées dans `meta` :
 Elles permettent d'expliquer pourquoi deux réponses diffèrent : nouvelles règles, ou nouvelles données.
 
 **Idempotence** : `POST /v1/route-details` n'a aucun effet de bord. À requête identique et à
-`api_version`, `rules_version` et `data_versions` identiques, la réponse est identique, hors
+`api_version`, `rules_version`, `data_versions` et `profile` (api 1.5) identiques, la réponse est identique, hors
 `request_id` et `duration_ms`. Un client ou le reverse proxy peut la mettre en cache avec ce triplet
 dans la clé. Pour toute source lue en ligne (tuiles distantes en dev, IGN dans tous les modes), `data_versions`
 n'est qu'indicatif (doc 01 §8.3) : deux réponses peuvent différer si l'IGN publie de nouvelles zones.
@@ -395,7 +423,9 @@ altitude corrigée seule, `ele_method: gap_filled`), sans changer les champs exi
 enjambe la route, altitude corrigée seule, `ele_method: gap_filled`), sans changer les champs
 existants. `1.4` (2026-11-02) ajoute la raison d'insertion `overpass_crossing` (point de rupture au
 croisement d'un pont qui enjambe la route, mode `input_with_breakpoints`), sans changer les champs
-existants.
+existants. `1.5` (2026-11-05) ajoute l'option `profile` (`full` par défaut, inchangé ; `fast` :
+Mapterhorn seul, file séparée, §3.2), `meta.profile`, les cumuls `points[].gain_cum_m` et
+`loss_cum_m`, et `profiles[]` dans `/v1/capabilities`, sans changer les champs existants.
 
 Règles d'évolution à l'intérieur de la v1 :
 
@@ -419,9 +449,9 @@ Règles d'évolution à l'intérieur de la v1 :
 | Nombre de points, longueur du parcours | Bornes publiées dans `/v1/capabilities` : **200 km** et 16 000 points (bornes d'osm-surface). Elles ne portent que sur l'**entrée** (points d'entrée après dédoublonnage, longueur) : au-delà, 413, découpage par le client ; un endpoint asynchrone pourra venir plus tard, hors v1. |
 | Taille de la sortie | **Non bornée en points** : le mode `distance` au pas minimal de 5 m dépasse 16 000 points (≈ 40 000 sur 200 km) sans 413. La densification interne à 5 m découle des bornes d'entrée et n'est pas une borne. |
 | Taille du corps de requête | Bornée. Les corps compressés sont acceptés. |
-| Budget de temps par requête | **90 s** ; au-delà, 504 `timeout`. Dimensionné large sur une lecture IGN à froid (de l'ordre de 20 s pour 130 km sans cache) : usage personnel, latence à froid secondaire. Le délai du reverse proxy doit le dépasser. |
+| Budget de temps par requête | **90 s**, profils `full` et `fast` ; au-delà, 504 `timeout`. Dimensionné large sur une lecture IGN à froid (de l'ordre de 20 s pour 130 km sans cache) : usage personnel, latence à froid secondaire. Le délai du reverse proxy doit le dépasser. |
 | Sources tierces | Aucune URL de tuile ni de source fournie par le client. |
-| Concurrence | File d'attente bornée ; au-delà, 503 `overloaded`. |
+| Concurrence | File d'attente bornée, une par profil (`full`, `fast`) ; au-delà, 503 `overloaded`. |
 | Couverture | France en qualité maximale ; ailleurs, Mapterhorn en mode dégradé signalé. Limitée par les sources configurées (extraits par bbox éventuels), décrite dans `/v1/capabilities`. |
 | Sources publiques | VersaTiles et Mapterhorn publics : MVP et usage personnel, derrière un cache ; VersaTiles en fichier local en production. IGN Géoplateforme : en ligne dans tous les modes, derrière un cache (doc 01 §8.1). |
 
@@ -436,3 +466,6 @@ Le service n'est conçu pour aucun client particulier ; vcyclist en est indépen
 - **Client qui enrichit sa trace point par point** : `sampling=input`, une valeur par point d'entrée,
   indices conservés, sans insertion.
 - **Client qui trace un graphique à pas régulier** : `sampling=distance`.
+- **Client interactif** (planificateur, aperçu d'un import) : `profile=fast` pour un premier
+  profil en quelques secondes, puis le même appel en `full` pour raffiner ; `gain_cum_m` donne le
+  D+ de chaque morceau d'un parcours recollé.

@@ -149,6 +149,7 @@ fn resolve_options(dto: OptionsV1, limits: &LimitsConfig, errors: &mut Vec<Field
         errors.push(FieldError::new("/options/debug", "debug is not allowed on this deployment"));
     }
     options.debug = dto.debug.unwrap_or(false);
+    options.profile = dto.profile.unwrap_or_default();
     options
 }
 

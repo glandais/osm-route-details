@@ -136,3 +136,52 @@ async fn ign_nodata_falls_back_without_warning() {
     assert_eq!(r["quality"]["terrain"][0]["fallback_after_error"], false);
     assert_eq!(r["summary"]["terrain_m"], json!({"mapterhorn_measured": 500.0}));
 }
+
+/// Profil `fast` (api 1.5) : Mapterhorn seul, aucune requête IGN même en France dans le contour,
+/// pont OSM (600–700 m) interpolé entre ses culées sans `dsm_unavailable` (pas une panne), profil
+/// effectif dans `meta`, D+ cumulé par point qui finit sur `summary.gain_m`.
+#[tokio::test]
+async fn fast_profile_never_reads_ign() {
+    let ign = ign_terrain().serve(|_, _| None).await;
+    let mt = mapterhorn_terrain().serve(with_streets(|_, _| None)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let pts = meridian(START, 1_000.0, 3);
+    let config = config(&ign, &mt, dir.path());
+    let body = request_body(&pts, Some(json!({"sampling": {"mode": "input"}, "profile": "fast"})));
+    let reply = send(app_with(&config), post_json(&body)).await;
+    let r = reply.json();
+    assert_eq!(reply.status, StatusCode::OK, "{r}");
+    assert_eq!(ign.hits(), 0, "aucune requête IGN en profil fast");
+    assert_eq!(r["meta"]["profile"], "fast");
+    assert_eq!(r["status"], "complete");
+    assert_eq!(r["summary"]["terrain_m"], json!({"mapterhorn_measured": 1_000.0}));
+    assert_eq!(r["summary"]["structures"][0]["method"], "interpolated_structure");
+    assert_eq!(r["quality"]["structure_correction"]["bridges"], "applied");
+    assert_eq!(codes(&r), Vec::<String>::new());
+    let sources: Vec<&str> = r["meta"]["data_versions"]["elevation"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["source"].as_str().unwrap())
+        .collect();
+    assert_eq!(sources, ["mapterhorn"]);
+    for (p, q) in r["points"].as_array().unwrap().iter().zip(&pts) {
+        let expected = mapterhorn_terrain().at(*q);
+        assert!((p["ele"].as_f64().unwrap() - expected).abs() < 0.5, "{p} vs {expected}");
+    }
+    let cum: Vec<f64> =
+        r["points"].as_array().unwrap().iter().map(|p| p["gain_cum_m"].as_f64().unwrap()).collect();
+    assert_eq!(cum[0], 0.0);
+    assert!(cum.windows(2).all(|w| w[1] >= w[0]), "{cum:?}");
+    assert_eq!(cum.last().copied(), r["summary"]["gain_m"].as_f64());
+    assert_eq!(
+        r["points"].as_array().unwrap().last().unwrap()["loss_cum_m"].as_f64(),
+        r["summary"]["loss_m"].as_f64()
+    );
+
+    // Même parcours sans option : profil `full`, IGN lu.
+    let (status, r) = post_route(&config, &pts).await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+    assert_eq!(r["meta"]["profile"], "full");
+    assert!(ign.hits() > 0);
+}

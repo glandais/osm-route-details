@@ -299,6 +299,7 @@ pub fn orchestrator(
 ) -> Result<Orchestrator, StartupError> {
     let b = Builder::new(config)?;
     let (admission, compute) = admission(config);
+    let fast_admission = fast_admission(config);
     let typology = Arc::new(b.typology()?.with_compute_permits(Arc::clone(&compute)));
     let m = &config.elevation.mapterhorn;
     let budget = b.budgets.for_url(&m.url, None, m.concurrency);
@@ -335,11 +336,27 @@ pub fn orchestrator(
         IgnMode::Sober => TerrainMode::Sober,
     };
     let coverage: Arc<dyn CoverageRef> = Arc::new(b.coverage(startup));
+    // Profil `fast` (api 1.5) : même couche Mapterhorn (caches mémoire et disque partagés), sans
+    // couche IGN, donc sans aucun créneau du budget d'hôte IGN.
+    let fast_terrain = LayeredTerrainReader::new(
+        None,
+        None,
+        mapterhorn.clone(),
+        Arc::clone(&coverage),
+        mode,
+        wiring.pixel_convention,
+    );
     let terrain =
         LayeredTerrainReader::new(dtm, dsm, mapterhorn, Arc::clone(&coverage), mode, wiring.pixel_convention);
     let budget = &config.budget;
     Ok(Orchestrator::new(
-        Sources { typology, terrain: Arc::new(terrain), coverage, catalog },
+        Sources {
+            typology,
+            terrain: Arc::new(terrain),
+            fast_terrain: Arc::new(fast_terrain),
+            coverage,
+            catalog,
+        },
         rules,
         API_VERSION,
         RetryAfterPolicy {
@@ -349,6 +366,7 @@ pub fn orchestrator(
         },
     )
     .with_admission(admission)
+    .with_fast_admission(fast_admission)
     .with_compute_permits(compute))
 }
 
@@ -361,4 +379,13 @@ pub fn admission(config: &Config) -> (Admission, Arc<tokio::sync::Semaphore>) {
     let limits = AdmissionLimits { max_in_flight, max_queued: b.max_queued.unwrap_or(2 * max_in_flight) };
     let compute = b.compute_permits.unwrap_or(cpus).max(1);
     (Admission::new(limits), Arc::new(tokio::sync::Semaphore::new(compute)))
+}
+
+/// File du profil `fast` (api 1.5) ; défauts : ceux de la file `full`.
+pub fn fast_admission(config: &Config) -> Admission {
+    let cpus = std::thread::available_parallelism().map_or(1, usize::from);
+    let b = &config.budget;
+    let max_in_flight = b.fast_max_in_flight.or(b.max_in_flight).unwrap_or(cpus).max(1);
+    let max_queued = b.fast_max_queued.unwrap_or(2 * max_in_flight);
+    Admission::new(AdmissionLimits { max_in_flight, max_queued })
 }

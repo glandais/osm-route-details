@@ -102,6 +102,11 @@ pub struct BudgetConfig {
     pub max_queued: Option<usize>,
     /// `None` : nombre de CPU.
     pub compute_permits: Option<usize>,
+    /// File du profil `fast` (api 1.5), distincte de celle du profil `full`. `None` : comme
+    /// `max_in_flight`.
+    pub fast_max_in_flight: Option<usize>,
+    /// `None` : 2 × `fast_max_in_flight`.
+    pub fast_max_queued: Option<usize>,
     pub per_request_fetch_concurrency: usize,
     pub overloaded_retry_after_s: u64,
     pub retry_after_min_s: u64,
@@ -116,6 +121,8 @@ impl Default for BudgetConfig {
             max_in_flight: None,
             max_queued: None,
             compute_permits: None,
+            fast_max_in_flight: None,
+            fast_max_queued: None,
             per_request_fetch_concurrency: 10,
             overloaded_retry_after_s: 2,
             retry_after_min_s: 5,

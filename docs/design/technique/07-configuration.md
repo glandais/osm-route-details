@@ -21,7 +21,7 @@ configuration effective est journalisée au démarrage, sans secret (osm-surface
 | `server` | `listen_addr` (`0.0.0.0:8080`), `metrics_addr` (`0.0.0.0:9090`), `shutdown_grace_s` (= budget, 90) |
 | `limits` | bornes d'**entrée** seulement (sortie non bornée en points, doc 02 §7) : `max_points` (16 000), `max_length_m` (200 000), `max_body_bytes` (8 Mio), `debug_allowed` (false) ; `densify_step_m` = 5 est une règle (`ElevationRules::station_step_m`), pas une clé |
 | `limits.options` | bornes publiées (§2) : `sampling.step_m` ∈ [5 ; 1 000] m, défaut 25 m ; `elevation.smoothing_m` ∈ {0} ∪ [10 ; 1 000] m, défaut 0 |
-| `budget` | `request_budget_s` (90, T01 §3.3), `max_in_flight` (nb CPU), `max_queued` (2 × in_flight), `compute_permits` (nb CPU), `per_request_fetch_concurrency` (10), `retry_after_*` (T01 §4.4) |
+| `budget` | `request_budget_s` (90, T01 §3.3), `max_in_flight` (nb CPU), `max_queued` (2 × in_flight), `compute_permits` (nb CPU), `fast_max_in_flight` / `fast_max_queued` (file du profil `fast`, api 1.5 ; défauts : ceux de la file `full`), `per_request_fetch_concurrency` (10), `retry_after_*` (T01 §4.4) |
 | `typology` | `source` = `versatiles_http` \| `versatiles_file` ; `url` (`https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}`, `OS/src/config.rs:49`) ou `path` ; `zoom` (14) ; `concurrency` (8) |
 | `elevation.ign` | `enabled` (true), `wms_url` (Géoplateforme WMS-R), couches MNT / MNS, `zoom` (15), `rate_per_s` (20, cadence **du processus**, §3), `max_attempts` (6), `mode` = `direct` \| `sober` (doc 01 §5.1, défaut `direct`) |
 | `elevation.mapterhorn` | `url` (`https://tiles.mapterhorn.com/{z}/{x}/{y}.webp`), `zoom` (12), `concurrency` (4), `version` |
