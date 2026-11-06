@@ -416,8 +416,8 @@ pub struct Classified { pub level: Level, pub structure: StructureClass,
 pub enum StructureClass { Ground, Bridge, Tunnel, Ford, Unknown }
 pub enum SurfaceClass { Paved, Unpaved, Unknown }                    // gelée v1
 pub enum SurfaceSource { Tagged, InferredTracktype, InferredHighway, None }
-#[non_exhaustive] pub enum SurfaceDetail { Asphalt, PavingStones, Sett, Cobblestone, Concrete,
-    Compacted, FineGravel, Gravel, Dirt, Grass, Wood /* … */ }        // V2 seulement
+pub enum SurfaceDetail { Asphalt, Concrete, PavingStones, Sett, Cobblestone, Compacted,
+    FineGravel, Gravel, Dirt, Sand, Grass, Wood, Rock }              // api 1.6, liste ouverte
 pub enum WayKind { MajorRoad, MinorRoad, Track, Path, Cycleway, Footway, Steps, Unknown }
 pub enum StructureSource { Osm, Heuristic, OsmHeuristic }
 pub struct RuleSet { pub version: &'static str, /* tables ci-dessous */ }
@@ -436,14 +436,16 @@ Valhalla repris par osm-surface (`os:src/valhalla.rs:396-458`, `os:README.md:100
 | Sortie | Règle (v1) |
 |---|---|
 | `structure` | `Bridge` → bridge ; `Tunnel`, `Covered`, `BuildingPassage` → tunnel ; `Ford` → ford **si** `caps.ford_ways`, sinon ground ; `None` → ground |
-| surface 1 | `Grouped(Paved)` → paved / tagged ; `Grouped(Unpaved)` → unpaved / tagged ; `Raw(v)` (VersaTiles shortbread@1.1, tuiles maison V2) → table brute `RAW_SURFACE` → classe / tagged (`detail` rempli en V2 seulement) ; `Raw` inconnu → règle suivante (▲ Valhalla sautait le tracktype) |
+| surface 1 | `Grouped(Paved)` → paved / tagged ; `Grouped(Unpaved)` → unpaved / tagged ; `Raw(v)` (VersaTiles shortbread@1.1, tuiles maison V2) → table brute `RAW_SURFACE` → classe / tagged / `detail` de l'entrée ; `Raw` inconnu → règle suivante (▲ Valhalla sautait le tracktype) |
 | surface 2 | tracktype `grade1` → paved ; `grade2`–`grade5` → unpaved ; source `inferred_tracktype` |
 | surface 3 | highway motorway…residential, `*_link`, living_street, service, road, busway, cycleway, steps → paved ; track, path, footway, pedestrian, bridleway, sidewalk, crossing → unpaved ; source `inferred_highway` |
 | surface 4 | sinon unknown / `none` |
 | `way_kind` | motorway, trunk, primary, secondary, tertiary (+ link) → major_road ; unclassified, residential, living_street, service, road, busway → minor_road ; track → track ; path, bridleway → path ; cycleway → cycleway ; footway, pedestrian, sidewalk, crossing → footway ; steps → steps ; autre → unknown (exploration 02 §9) |
 | `level_of` | §4.2 ; `layer` pris en compte seulement si `caps.layer` |
 
-`surface.detail` reste vide en v1 ; `unpaved_guess` d'osm-surface (classe fine) n'est pas repris.
+`surface.detail` (règles 2026.11.13, api 1.6) vient de la même entrée de `RAW_SURFACE` que la classe,
+donc s'accorde toujours avec elle ; il n'est jamais déduit (`tracktype`, `kind`, tag regroupé :
+absent). `unpaved_guess` d'osm-surface (classe fine déduite) n'est pas repris.
 
 **Table brute `RAW_SURFACE`** (règles 2026.11.9). C'est la table de Valhalla
 (`pbfgraphparser.cc`, `tag_handlers_["surface"]`, recopiée par `os:src/valhalla.rs`
@@ -452,16 +454,19 @@ première entrée gagnante (`stone` seul en égalité stricte). La classe en dé
 (`Class::of_valhalla`, bench README §4) : `paved_smooth`, `paved`, `paved_rough` → paved ; pire →
 unpaved. Aucun écart au regroupement de Valhalla, donc à la référence de R1/R2/R3.
 
-| Surface Valhalla | Sous-chaînes (ordre de la table) | Classe |
+| Surface Valhalla | Sous-chaînes (ordre de la table) → `surface.detail` | Classe |
 |---|---|---|
-| `gravel` | `unpaved` (testée en premier) | unpaved |
-| `paved_smooth` | `paved`, `pavement`, `asphalt`, `concrete`, `cement`, `chipseal`, `metal` | paved |
-| `paved` | `tartan`, `pavingstone`, `paving_stones`, `sett`, `grass_paver`, `rubber`, `acrylic`, `plastic` | paved |
-| `paved_rough` | `cobblestone` (dont `unhewn_cobblestone`), `brick`, `stone` (exact) | paved |
-| `compacted` | `compacted`, `wood` (dont `woodchips`), `boardwalk` | unpaved |
-| `dirt` | `dirt`, `natural`, `earth`, `ground`, `mud`, `clay`, `laterite`, `soil` | unpaved |
-| `gravel` | `gravel` (dont `fine_gravel`), `pebblestone`, `sand` | unpaved |
-| `path` | `grass`, `artificial_turf`, `rock`, `stepping_stones` | unpaved |
+| `gravel` | `unpaved` (testée en premier) → — | unpaved |
+| `paved_smooth` | `paved`, `pavement` → — ; `asphalt`, `chipseal` → `asphalt` ; `concrete` (dont `concrete:plates`), `cement` → `concrete` ; `metal` → — | paved |
+| `paved` | `tartan` → — ; `pavingstone`, `paving_stones`, `grass_paver` → `paving_stones` ; `sett` → `sett` ; `rubber`, `acrylic`, `plastic` → — | paved |
+| `paved_rough` | `cobblestone` (dont `unhewn_cobblestone`), `stone` (exact) → `cobblestone` ; `brick` → `paving_stones` | paved |
+| `compacted` | `compacted` → `compacted` ; `woodchips` → `dirt` ; `wood`, `boardwalk` → `wood` | unpaved |
+| `dirt` | `dirt`, `natural`, `earth`, `ground`, `mud`, `clay`, `laterite`, `soil` → `dirt` | unpaved |
+| `gravel` | `fine_gravel` → `fine_gravel` ; `gravel`, `pebblestone` → `gravel` ; `sand` → `sand` | unpaved |
+| `path` | `grass`, `artificial_turf` → `grass` ; `rock`, `stepping_stones` → `rock` | unpaved |
+
+`woodchips` et `fine_gravel` sont des entrées ajoutées en 2026.11.13 devant `wood` et `gravel`, avec
+la même surface Valhalla : la classe ne change pas, seul le détail se distingue.
 
 Cas ambigus, tranchés par la table et non au cas par cas : `wood` (passerelles, platelages) est
 non revêtu comme chez Valhalla ; `metal` est revêtu ; `sett`, `cobblestone`, `unhewn_cobblestone`

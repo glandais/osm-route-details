@@ -7,6 +7,7 @@
 
 use ord_domain::street::{PavedGroup, SurfaceTag, TrackType, WayAttrs};
 
+use super::SurfaceDetail::{self, *};
 use super::{SurfaceClass, SurfaceSource, WayKind};
 
 /// Valeurs `kind` (highway) d'un réseau routable ; le reste (pistes, rails…) n'entre pas au graphe.
@@ -94,70 +95,87 @@ pub const INFERRED_UNPAVED: &[&str] =
 /// README du banc §4) : revêtu = `paved_smooth`, `paved`, `paved_rough` ; non revêtu = pire que
 /// `paved_rough`. Une valeur qui ne correspond à rien (`bicouche`, `tiles`, `none`, fautes…) passe à
 /// la règle suivante (`tracktype`, puis `kind`), comme chez Valhalla : sa source n'est pas `tagged`.
-pub const RAW_SURFACE: &[(&str, &str)] = &[
-    ("unpaved", "gravel"),
-    ("paved", "paved_smooth"),
-    ("pavement", "paved_smooth"),
-    ("asphalt", "paved_smooth"),
-    ("concrete", "paved_smooth"),
-    ("cement", "paved_smooth"),
-    ("chipseal", "paved_smooth"),
-    ("metal", "paved_smooth"),
-    ("tartan", "paved"),
-    ("pavingstone", "paved"),
-    ("paving_stones", "paved"),
-    ("sett", "paved"),
-    ("grass_paver", "paved"),
-    ("rubber", "paved"),
-    ("acrylic", "paved"),
-    ("plastic", "paved"),
-    ("cobblestone", "paved_rough"),
-    ("brick", "paved_rough"),
-    ("=stone", "paved_rough"),
-    ("compacted", "compacted"),
-    ("wood", "compacted"),
-    ("boardwalk", "compacted"),
-    ("dirt", "dirt"),
-    ("natural", "dirt"),
-    ("earth", "dirt"),
-    ("ground", "dirt"),
-    ("mud", "dirt"),
-    ("clay", "dirt"),
-    ("laterite", "dirt"),
-    ("soil", "dirt"),
-    ("gravel", "gravel"),
-    ("pebblestone", "gravel"),
-    ("sand", "gravel"),
-    ("grass", "path"),
-    ("artificial_turf", "path"),
-    ("rock", "path"),
-    ("stepping_stones", "path"),
+///
+/// Troisième colonne (règles 2026.11.13, api 1.6) : `surface.detail` de l'entrée, `None` pour une
+/// valeur sans matière (`paved`, `unpaved`, `pavement`) ou trop rare pour une valeur fine (`metal`,
+/// revêtements synthétiques). Le détail vient de la même entrée que la classe, donc s'accorde
+/// toujours avec elle. `woodchips` et `fine_gravel`, ajoutées devant `wood` et `gravel`, gardent
+/// leur surface Valhalla : la classe est inchangée.
+pub const RAW_SURFACE: &[(&str, &str, Option<SurfaceDetail>)] = &[
+    ("unpaved", "gravel", None),
+    ("paved", "paved_smooth", None),
+    ("pavement", "paved_smooth", None),
+    ("asphalt", "paved_smooth", Some(Asphalt)),
+    ("concrete", "paved_smooth", Some(Concrete)),
+    ("cement", "paved_smooth", Some(Concrete)),
+    ("chipseal", "paved_smooth", Some(Asphalt)),
+    ("metal", "paved_smooth", None),
+    ("tartan", "paved", None),
+    ("pavingstone", "paved", Some(PavingStones)),
+    ("paving_stones", "paved", Some(PavingStones)),
+    ("sett", "paved", Some(Sett)),
+    ("grass_paver", "paved", Some(PavingStones)),
+    ("rubber", "paved", None),
+    ("acrylic", "paved", None),
+    ("plastic", "paved", None),
+    ("cobblestone", "paved_rough", Some(Cobblestone)),
+    ("brick", "paved_rough", Some(PavingStones)),
+    ("=stone", "paved_rough", Some(Cobblestone)),
+    ("compacted", "compacted", Some(Compacted)),
+    ("woodchips", "compacted", Some(Dirt)),
+    ("wood", "compacted", Some(Wood)),
+    ("boardwalk", "compacted", Some(Wood)),
+    ("dirt", "dirt", Some(Dirt)),
+    ("natural", "dirt", Some(Dirt)),
+    ("earth", "dirt", Some(Dirt)),
+    ("ground", "dirt", Some(Dirt)),
+    ("mud", "dirt", Some(Dirt)),
+    ("clay", "dirt", Some(Dirt)),
+    ("laterite", "dirt", Some(Dirt)),
+    ("soil", "dirt", Some(Dirt)),
+    ("fine_gravel", "gravel", Some(FineGravel)),
+    ("gravel", "gravel", Some(Gravel)),
+    ("pebblestone", "gravel", Some(Gravel)),
+    ("sand", "gravel", Some(Sand)),
+    ("grass", "path", Some(Grass)),
+    ("artificial_turf", "path", Some(Grass)),
+    ("rock", "path", Some(Rock)),
+    ("stepping_stones", "path", Some(Rock)),
 ];
 
 /// Surfaces Valhalla revêtues (`unpaved` de Valhalla : pire que `paved_rough`).
 pub const VALHALLA_PAVED: &[&str] = &["paved_smooth", "paved", "paved_rough"];
 
+/// Entrée de [`RAW_SURFACE`] d'une valeur `surface` brute ; `None` : non reconnue.
+fn raw_entry(raw: &str) -> Option<&'static (&'static str, &'static str, Option<SurfaceDetail>)> {
+    let v = raw.to_ascii_lowercase();
+    RAW_SURFACE.iter().find(|(pat, _, _)| match pat.strip_prefix('=') {
+        Some(exact) => v == exact,
+        None => v.contains(pat),
+    })
+}
+
 /// Surface Valhalla d'une valeur `surface` brute (table [`RAW_SURFACE`]) ; `None` : non reconnue.
 pub fn valhalla_surface(raw: &str) -> Option<&'static str> {
-    let v = raw.to_ascii_lowercase();
-    RAW_SURFACE
-        .iter()
-        .find(|(pat, _)| match pat.strip_prefix('=') {
-            Some(exact) => v == exact,
-            None => v.contains(pat),
-        })
-        .map(|(_, s)| *s)
+    raw_entry(raw).map(|(_, s, _)| *s)
+}
+
+fn valhalla_class(s: &str) -> SurfaceClass {
+    if VALHALLA_PAVED.contains(&s) {
+        SurfaceClass::Paved
+    } else {
+        SurfaceClass::Unpaved
+    }
 }
 
 /// Classe d'une valeur `surface` brute ; `None` : non reconnue, règle suivante.
 pub fn raw_surface_class(raw: &str) -> Option<SurfaceClass> {
-    valhalla_surface(raw).map(|s| {
-        if VALHALLA_PAVED.contains(&s) {
-            SurfaceClass::Paved
-        } else {
-            SurfaceClass::Unpaved
-        }
-    })
+    valhalla_surface(raw).map(valhalla_class)
+}
+
+/// Classe et revêtement fin d'une valeur `surface` brute ; `None` : non reconnue.
+pub fn raw_surface(raw: &str) -> Option<(SurfaceClass, Option<SurfaceDetail>)> {
+    raw_entry(raw).map(|(_, s, d)| (valhalla_class(s), *d))
 }
 
 /// `way_kind` par `kind` ; le reste donne `unknown`.
@@ -211,32 +229,35 @@ pub fn bicycle_closed(a: &WayAttrs) -> bool {
     !a.rail && is_road(&a.highway) && !bicycle_routable(a)
 }
 
-/// Revêtement : tag (regroupé ou brut), puis `tracktype`, puis `kind`, sinon inconnu.
-pub fn surface(a: &WayAttrs) -> (SurfaceClass, SurfaceSource) {
+/// Revêtement : tag (regroupé ou brut), puis `tracktype`, puis `kind`, sinon inconnu. Le
+/// revêtement fin n'est rempli que depuis un tag brut reconnu, jamais déduit.
+pub fn surface(a: &WayAttrs) -> (SurfaceClass, SurfaceSource, Option<SurfaceDetail>) {
     match &a.surface {
-        SurfaceTag::Grouped(PavedGroup::Paved) => return (SurfaceClass::Paved, SurfaceSource::Tagged),
-        SurfaceTag::Grouped(PavedGroup::Unpaved) => return (SurfaceClass::Unpaved, SurfaceSource::Tagged),
+        SurfaceTag::Grouped(PavedGroup::Paved) => return (SurfaceClass::Paved, SurfaceSource::Tagged, None),
+        SurfaceTag::Grouped(PavedGroup::Unpaved) => {
+            return (SurfaceClass::Unpaved, SurfaceSource::Tagged, None)
+        }
         // Valeur brute (VersaTiles shortbread@1.1, tuiles maison V2) : table de Valhalla ; une valeur
         // non reconnue passe à la règle suivante.
         SurfaceTag::Raw(v) => {
-            if let Some(class) = raw_surface_class(v) {
-                return (class, SurfaceSource::Tagged);
+            if let Some((class, detail)) = raw_surface(v) {
+                return (class, SurfaceSource::Tagged, detail);
             }
         }
         SurfaceTag::Absent => {}
     }
     match a.tracktype {
-        Some(TrackType::Grade1) => return (SurfaceClass::Paved, SurfaceSource::InferredTracktype),
-        Some(_) => return (SurfaceClass::Unpaved, SurfaceSource::InferredTracktype),
+        Some(TrackType::Grade1) => return (SurfaceClass::Paved, SurfaceSource::InferredTracktype, None),
+        Some(_) => return (SurfaceClass::Unpaved, SurfaceSource::InferredTracktype, None),
         None => {}
     }
     let kind = &*a.highway;
     if INFERRED_PAVED.contains(&kind) {
-        (SurfaceClass::Paved, SurfaceSource::InferredHighway)
+        (SurfaceClass::Paved, SurfaceSource::InferredHighway, None)
     } else if INFERRED_UNPAVED.contains(&kind) {
-        (SurfaceClass::Unpaved, SurfaceSource::InferredHighway)
+        (SurfaceClass::Unpaved, SurfaceSource::InferredHighway, None)
     } else {
-        (SurfaceClass::Unknown, SurfaceSource::None)
+        (SurfaceClass::Unknown, SurfaceSource::None, None)
     }
 }
 

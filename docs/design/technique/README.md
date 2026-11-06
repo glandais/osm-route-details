@@ -149,6 +149,13 @@ vérifié par `ord-bench check` avant toute campagne.
       dépasser de 1,5 à 2 m la droite entre les approches ;
     - fin des jugements : V1.3 est le dernier, faute de traces inédites (bench §4 octies). Les
       changements suivants se mesurent sur la calibration seule.
+  - Demandes du client Pédalons (2026-11-05 et 2026-11-06) :
+    - api 1.5 : option `profile` (`fast` : Mapterhorn seul, file d'admission séparée, ouvrages OSM
+      interpolés sans MNS ni heuristiques ; `full` par défaut, inchangé) et cumuls
+      `points[].gain_cum_m` / `loss_cum_m`. Contrat §3.2 et §4.2 ;
+    - api 1.6 : `segments[].surface.detail` (13 valeurs, liste ouverte), tiré de la même entrée de
+      `RAW_SURFACE` que la classe, jamais déduit ; `summary.by_surface_detail_m`, segments coupés
+      sur un changement de détail. Règles 2026.11.13 (classe inchangée), T03 §7, contrat §4.3.
 - **`.versatiles` local** au premier `429`, ou au passage en production.
 - **V1.x** : mesure `dsm-placement` (protocole et règle de décision : `bench/README.md` §5 ; mise en
   œuvre : T05 §7) avant toute lecture du MNS sur la géométrie OSM.

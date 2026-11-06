@@ -71,6 +71,40 @@ public_enum!(
     }
 );
 public_enum!(
+    /// `surface.detail` (api 1.6) : revêtement fin, rempli seulement depuis un tag `surface` brut
+    /// reconnu (source `tagged`), jamais déduit. Vocabulaire fermé côté service, ouvert à
+    /// l'extension (contrat §6) ; chaque valeur implique une seule `surface.class` (table
+    /// [`tables::RAW_SURFACE`]).
+    SurfaceDetail {
+        Asphalt => "asphalt",
+        Concrete => "concrete",
+        PavingStones => "paving_stones",
+        Sett => "sett",
+        Cobblestone => "cobblestone",
+        Compacted => "compacted",
+        FineGravel => "fine_gravel",
+        Gravel => "gravel",
+        Dirt => "dirt",
+        Sand => "sand",
+        Grass => "grass",
+        Wood => "wood",
+        Rock => "rock",
+    }
+);
+
+impl SurfaceDetail {
+    /// Classe impliquée par la valeur fine.
+    pub fn class(self) -> SurfaceClass {
+        match self {
+            Self::Asphalt | Self::Concrete | Self::PavingStones | Self::Sett | Self::Cobblestone => {
+                SurfaceClass::Paved
+            }
+            _ => SurfaceClass::Unpaved,
+        }
+    }
+}
+
+public_enum!(
     /// `way_kind` (exploration 02 §9).
     WayKind {
         MajorRoad => "major_road",
@@ -95,6 +129,8 @@ pub struct Classified {
     pub structure: StructureClass,
     pub surface_class: SurfaceClass,
     pub surface_source: SurfaceSource,
+    /// Revêtement fin (api 1.6) : seulement depuis un tag brut reconnu.
+    pub surface_detail: Option<SurfaceDetail>,
     pub way_kind: WayKind,
     /// Trottoir, escalier ou rue piétonne : malus d'émission du HMM (T03 §5.2, `footway_cost`).
     pub footway_like: bool,
@@ -107,6 +143,7 @@ impl Classified {
         structure: StructureClass::Unknown,
         surface_class: SurfaceClass::Unknown,
         surface_source: SurfaceSource::None,
+        surface_detail: None,
         way_kind: WayKind::Unknown,
         footway_like: false,
     };
@@ -133,13 +170,14 @@ pub fn classify(a: &WayAttrs, caps: &SchemaCapabilities) -> Classified {
         StructureTag::Ford if caps.ford_ways => StructureClass::Ford,
         StructureTag::Ford | StructureTag::None => StructureClass::Ground,
     };
-    let (surface_class, surface_source) = tables::surface(a);
+    let (surface_class, surface_source, surface_detail) = tables::surface(a);
     let kind = &*a.highway;
     Classified {
         level: level_of(a, caps),
         structure,
         surface_class,
         surface_source,
+        surface_detail,
         way_kind: tables::way_kind(kind),
         footway_like: tables::FOOTWAY_LIKE.contains(&kind),
     }

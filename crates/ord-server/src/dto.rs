@@ -8,7 +8,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use ord_core::assemble::{ReportSegment, RouteReport, Status};
-use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
+use ord_core::classification::{
+    StructureClass, StructureSource, SurfaceClass, SurfaceDetail, SurfaceSource, WayKind,
+};
 use ord_core::elevation::fusion::{CorrectionStatus, OutcomeMethod};
 use ord_core::elevation::{BreakpointReason, EleMethod, PointOrigin};
 use ord_core::typology::StructureKind;
@@ -292,6 +294,9 @@ pub struct SummaryV1 {
     pub by_surface_class_m: BTreeMap<String, f64>,
     /// Length per `surface.source` value, in metres; zero values are omitted.
     pub by_surface_source_m: BTreeMap<String, f64>,
+    /// Length per `surface.detail` value, in metres (api 1.6); segments without `detail` are not
+    /// counted, so the values may sum to less than `length_m`.
+    pub by_surface_detail_m: BTreeMap<String, f64>,
     /// Length per `way_kind` value, in metres; zero values are omitted.
     pub by_way_kind_m: BTreeMap<String, f64>,
     /// Length not matched on the street network, in metres.
@@ -395,6 +400,48 @@ pub enum SurfaceSourceV1 {
     None,
 }
 
+/// Fine surface (api 1.6), only from a recognised raw OSM `surface` tag, never inferred. Open
+/// list: a client tolerates an unknown value and falls back on `class`. Each value implies one
+/// `class`: `asphalt`, `concrete`, `paving_stones`, `sett`, `cobblestone` are `paved`; the others
+/// are `unpaved`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceDetailV1 {
+    Asphalt,
+    Concrete,
+    PavingStones,
+    Sett,
+    Cobblestone,
+    Compacted,
+    FineGravel,
+    Gravel,
+    Dirt,
+    Sand,
+    Grass,
+    Wood,
+    Rock,
+}
+
+impl From<SurfaceDetail> for SurfaceDetailV1 {
+    fn from(v: SurfaceDetail) -> Self {
+        match v {
+            SurfaceDetail::Asphalt => Self::Asphalt,
+            SurfaceDetail::Concrete => Self::Concrete,
+            SurfaceDetail::PavingStones => Self::PavingStones,
+            SurfaceDetail::Sett => Self::Sett,
+            SurfaceDetail::Cobblestone => Self::Cobblestone,
+            SurfaceDetail::Compacted => Self::Compacted,
+            SurfaceDetail::FineGravel => Self::FineGravel,
+            SurfaceDetail::Gravel => Self::Gravel,
+            SurfaceDetail::Dirt => Self::Dirt,
+            SurfaceDetail::Sand => Self::Sand,
+            SurfaceDetail::Grass => Self::Grass,
+            SurfaceDetail::Wood => Self::Wood,
+            SurfaceDetail::Rock => Self::Rock,
+        }
+    }
+}
+
 /// Kind of way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -471,6 +518,11 @@ impl From<WayKind> for WayKindV1 {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SurfaceV1 {
     pub class: SurfaceClassV1,
+    /// Fine surface (api 1.6); absent when the way has no raw `surface` tag the service
+    /// recognises, or when the tag names no material (`paved`, `unpaved`). Segments also split on
+    /// a change of `detail`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<SurfaceDetailV1>,
     pub source: SurfaceSourceV1,
 }
 
@@ -561,7 +613,11 @@ fn segment_dto(s: &ReportSegment) -> SegmentV1 {
         to_index: t.to_index,
         structure: t.structure.into(),
         structure_source: t.structure_source.map(Into::into),
-        surface: SurfaceV1 { class: t.surface_class.into(), source: t.surface_source.into() },
+        surface: SurfaceV1 {
+            class: t.surface_class.into(),
+            detail: t.surface_detail.map(Into::into),
+            source: t.surface_source.into(),
+        },
         way_kind: t.way_kind.into(),
         matched: t.matched,
         ele_method: s.ele_method.into(),
@@ -708,6 +764,7 @@ pub fn to_dto(
         by_structure_m: keyed(&s.by_structure_m, StructureClass::as_str),
         by_surface_class_m: keyed(&s.by_surface_class_m, SurfaceClass::as_str),
         by_surface_source_m: keyed(&s.by_surface_source_m, SurfaceSource::as_str),
+        by_surface_detail_m: keyed(&s.by_surface_detail_m, SurfaceDetail::as_str),
         by_way_kind_m: keyed(&s.by_way_kind_m, WayKind::as_str),
         unknown_m: s.unknown_m,
         structures: s

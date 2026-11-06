@@ -18,7 +18,7 @@ use ord_domain::report::{Warning, WarningCode};
 use ord_domain::route::PreparedRoute;
 use ord_domain::street::WayAttrs;
 
-use crate::classification::{StructureClass, SurfaceClass, SurfaceSource, WayKind};
+use crate::classification::{StructureClass, SurfaceClass, SurfaceDetail, SurfaceSource, WayKind};
 use crate::elevation::derive::{AdaptedRange, GainResult};
 use crate::elevation::fusion::{StructureCorrectionReport, StructureOutcome};
 use crate::elevation::{EleMethod, ElevationProfile, OutputPoint, TerrainRange};
@@ -41,6 +41,8 @@ pub struct Summary {
     pub by_structure_m: BTreeMap<StructureClass, f64>,
     pub by_surface_class_m: BTreeMap<SurfaceClass, f64>,
     pub by_surface_source_m: BTreeMap<SurfaceSource, f64>,
+    /// Longueur par revêtement fin (api 1.6) ; les segments sans `detail` n'y figurent pas.
+    pub by_surface_detail_m: BTreeMap<SurfaceDetail, f64>,
     pub by_way_kind_m: BTreeMap<WayKind, f64>,
     /// Longueur non appariée (`matched = false`).
     pub unknown_m: f64,
@@ -204,6 +206,7 @@ pub fn assemble(
     let mut by_structure_m: BTreeMap<StructureClass, f64> = BTreeMap::new();
     let mut by_surface_class_m: BTreeMap<SurfaceClass, f64> = BTreeMap::new();
     let mut by_surface_source_m: BTreeMap<SurfaceSource, f64> = BTreeMap::new();
+    let mut by_surface_detail_m: BTreeMap<SurfaceDetail, f64> = BTreeMap::new();
     let mut by_way_kind_m: BTreeMap<WayKind, f64> = BTreeMap::new();
     let (mut unknown_m, mut inferred_m) = (0.0, 0.0);
     for s in segs {
@@ -211,6 +214,9 @@ pub fn assemble(
         *by_structure_m.entry(s.structure).or_default() += l;
         *by_surface_class_m.entry(s.surface_class).or_default() += l;
         *by_surface_source_m.entry(s.surface_source).or_default() += l;
+        if let Some(d) = s.surface_detail {
+            *by_surface_detail_m.entry(d).or_default() += l;
+        }
         *by_way_kind_m.entry(s.way_kind).or_default() += l;
         if !s.matched {
             unknown_m += l;
@@ -308,6 +314,7 @@ pub fn assemble(
             by_structure_m: rounded(by_structure_m),
             by_surface_class_m: rounded(by_surface_class_m),
             by_surface_source_m: rounded(by_surface_source_m),
+            by_surface_detail_m: rounded(by_surface_detail_m),
             by_way_kind_m: rounded(by_way_kind_m),
             unknown_m: cm(unknown_m),
             structures: profile

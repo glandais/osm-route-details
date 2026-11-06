@@ -7,7 +7,8 @@ use ord_domain::route::PreparedRoute;
 use super::graph::{ClassId, EdgeClass, LineId};
 use super::{RunMatch, StructureKind, TypedRun};
 use crate::classification::{
-    Classified, StructureClass, StructureSource, StructureVerdict, SurfaceClass, SurfaceSource, WayKind,
+    Classified, StructureClass, StructureSource, StructureVerdict, SurfaceClass, SurfaceDetail,
+    SurfaceSource, WayKind,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,6 +21,8 @@ pub struct TypedSegment {
     pub structure_source: Option<StructureSource>,
     pub surface_class: SurfaceClass,
     pub surface_source: SurfaceSource,
+    /// Revêtement fin (api 1.6), coupe aussi les segments.
+    pub surface_detail: Option<SurfaceDetail>,
     pub way_kind: WayKind,
     pub matched: bool,
     /// Route fermée au vélo suivie (état « hors graphe », T03 §5.3) : `matched = false`, mais
@@ -46,6 +49,7 @@ impl TypedSegment {
             self.structure_source,
             self.surface_class,
             self.surface_source,
+            self.surface_detail,
             self.way_kind,
             self.matched,
             self.off_graph,
@@ -55,6 +59,7 @@ impl TypedSegment {
             o.structure_source,
             o.surface_class,
             o.surface_source,
+            o.surface_detail,
             o.way_kind,
             o.matched,
             o.off_graph,
@@ -150,6 +155,7 @@ pub fn build_segments(
                 structure_source,
                 surface_class: c.surface_class,
                 surface_source: c.surface_source,
+                surface_detail: c.surface_detail,
                 way_kind: c.way_kind,
                 matched,
                 off_graph,

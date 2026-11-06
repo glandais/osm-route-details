@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.5"
+    "version": "1.6"
   },
   "paths": {
     "/health/live": {
@@ -665,6 +665,7 @@
           "structure_source",
           "surface_class",
           "surface_source",
+          "surface_detail",
           "way_kind",
           "ele_method",
           "terrain_origin",
@@ -759,6 +760,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "surface_detail": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`surface.detail` values (api 1.6, open list)."
           },
           "surface_source": {
             "type": "array",
@@ -1925,6 +1933,7 @@
           "by_structure_m",
           "by_surface_class_m",
           "by_surface_source_m",
+          "by_surface_detail_m",
           "by_way_kind_m",
           "unknown_m",
           "structures"
@@ -1944,6 +1953,17 @@
           "by_surface_class_m": {
             "type": "object",
             "description": "Length per `surface.class` value, in metres; zero values are omitted.",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "by_surface_detail_m": {
+            "type": "object",
+            "description": "Length per `surface.detail` value, in metres (api 1.6); segments without `detail` are not\ncounted, so the values may sum to less than `length_m`.",
             "additionalProperties": {
               "type": "number",
               "format": "double"
@@ -2037,6 +2057,25 @@
           "unknown"
         ]
       },
+      "SurfaceDetailV1": {
+        "type": "string",
+        "description": "Fine surface (api 1.6), only from a recognised raw OSM `surface` tag, never inferred. Open\nlist: a client tolerates an unknown value and falls back on `class`. Each value implies one\n`class`: `asphalt`, `concrete`, `paving_stones`, `sett`, `cobblestone` are `paved`; the others\nare `unpaved`.",
+        "enum": [
+          "asphalt",
+          "concrete",
+          "paving_stones",
+          "sett",
+          "cobblestone",
+          "compacted",
+          "fine_gravel",
+          "gravel",
+          "dirt",
+          "sand",
+          "grass",
+          "wood",
+          "rock"
+        ]
+      },
       "SurfaceSourceV1": {
         "type": "string",
         "description": "How the surface class was obtained.",
@@ -2057,6 +2096,17 @@
         "properties": {
           "class": {
             "$ref": "#/components/schemas/SurfaceClassV1"
+          },
+          "detail": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SurfaceDetailV1",
+                "description": "Fine surface (api 1.6); absent when the way has no raw `surface` tag the service\nrecognises, or when the tag names no material (`paved`, `unpaved`). Segments also split on\na change of `detail`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source": {
             "$ref": "#/components/schemas/SurfaceSourceV1"

@@ -2,7 +2,9 @@
 //!
 //! Les `///` des types sérialisés sont recopiés dans le contrat OpenAPI : ils sont en anglais.
 
-use ord_core::classification::{StructureClass, StructureSource, SurfaceClass, SurfaceSource, WayKind};
+use ord_core::classification::{
+    StructureClass, StructureSource, SurfaceClass, SurfaceDetail, SurfaceSource, WayKind,
+};
 use ord_core::elevation::BreakpointReason;
 use ord_core::{Rules, RULES_VERSION};
 use ord_data::catalog::StaticCatalog;
@@ -10,6 +12,7 @@ use ord_domain::catalog::{Attribution, DataCatalog, DataVersion};
 use ord_domain::elevation::TerrainOrigin;
 use ord_domain::report::WarningCode;
 use ord_domain::request::{GainPreset, Profile};
+use ord_domain::street::{StreetSchemaAdapter, SurfaceFidelity};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -299,6 +302,8 @@ pub struct EnumCatalog {
     pub structure_source: Vec<&'static str>,
     pub surface_class: Vec<&'static str>,
     pub surface_source: Vec<&'static str>,
+    /// `surface.detail` values (api 1.6, open list).
+    pub surface_detail: Vec<&'static str>,
     pub way_kind: Vec<&'static str>,
     pub ele_method: Vec<&'static str>,
     pub terrain_origin: Vec<TerrainOrigin>,
@@ -328,6 +333,7 @@ impl EnumCatalog {
             structure_source: StructureSource::ALL.iter().map(|s| s.as_str()).collect(),
             surface_class: SurfaceClass::ALL.iter().map(|s| s.as_str()).collect(),
             surface_source: SurfaceSource::ALL.iter().map(|s| s.as_str()).collect(),
+            surface_detail: SurfaceDetail::ALL.iter().map(|s| s.as_str()).collect(),
             way_kind: WayKind::ALL.iter().map(|s| s.as_str()).collect(),
             ele_method: vec!["dem", "dsm_deck", "interpolated_structure", "gap_filled", "none"],
             terrain_origin: TerrainOrigin::ALL.to_vec(),
@@ -390,9 +396,10 @@ impl Capabilities {
             enums: EnumCatalog::new(),
             primary_zone: PRIMARY_ZONE,
             data: DataFeatures {
-                // Shortbread (VersaTiles) : revêtement groupé, pas de gué (T03 §3).
+                // Shortbread (VersaTiles) : pas de gué (T03 §3) ; `surface` brut depuis
+                // shortbread@1.1 (2026-10-27), donc `surface.detail` (api 1.6).
                 ford_detectable: false,
-                surface_detail: false,
+                surface_detail: ord_adapters::Shortbread.capabilities().surface == SurfaceFidelity::Raw,
                 // T07 §4 : MNS des ponts = IGN actif ; heuristiques = `ElevationRules::heuristics`
                 // (V1, MNS sur l'enveloppe LiDAR, T04 §2.3), qui demandent elles aussi l'IGN.
                 bridge_dsm: config.elevation.ign.enabled,

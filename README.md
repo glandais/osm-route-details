@@ -1,12 +1,13 @@
 # osm-route-details
 
 Microservice Rust : en entrée un parcours, en sortie l'**élévation** et la **typologie**
-(structure : sol / pont / tunnel ; revêtement : enum simple) le long du parcours.
+(structure : sol / pont / tunnel ; revêtement : classe et détail) le long du parcours.
 
-Code : MVP et V1 réalisés, règles `2026.11.12`, API `1.5` (contrat
+Code : MVP et V1 réalisés, règles `2026.11.13`, API `1.6` (contrat
 [`contract/openapi.json`](contract/openapi.json)). `POST /v1/route-details` rend le profil
 d'élévation (IGN LiDAR HD en France, repli Mapterhorn point par point, GLO-30 ailleurs), la
-typologie appariée sur les tuiles VersaTiles shortbread@1.1 (classe, revêtement, ouvrages), les
+typologie appariée sur les tuiles VersaTiles shortbread@1.1 (classe, revêtement et revêtement fin
+`surface.detail` depuis l'api 1.6, ouvrages), les
 corrections d'ouvrage (tablier MNS, tunnels, ponts qui enjambent la trace), les heuristiques MNT/MNS
 pour les ouvrages absents d'OSM et les points de rupture (mode par défaut
 `input_with_breakpoints`, aussi `input` et `distance`), avec le D+ cumulé par point ; profil

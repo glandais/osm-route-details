@@ -165,7 +165,7 @@ d'une sous-plage se lit dans les cumuls `gain_cum_m` / `loss_cum_m` (api 1.5).
 | `structure` | `ground`, `bridge`, `tunnel`, `unknown`. `ford` est réservé. `unknown` : portion non appariée **sans** ouvrage détecté ni voie connue. Sur une voie fermée au vélo (api 1.1), celle de cette voie. |
 | `structure_source` | Sur un ouvrage : `osm`, `heuristic` (V1, détecté hors de tout way OSM), `osm_heuristic` (V1, les deux concordent). Absent sur `ground` et `unknown`. |
 | `surface.class` | `paved`, `unpaved`, `unknown`. Gelé en v1. |
-| `surface.detail` | **Absent en v1.** Extensible, rempli en V2. |
+| `surface.detail` | Revêtement fin (api 1.6) : `asphalt`, `concrete`, `paving_stones`, `sett`, `cobblestone`, `compacted`, `fine_gravel`, `gravel`, `dirt`, `sand`, `grass`, `wood`, `rock`. Liste **ouverte** (§6). Rempli seulement depuis un tag OSM `surface` brut que le service reconnaît (`surface.source: tagged`), jamais déduit : **absent** sans tag, sur un tag sans matière (`paved`, `unpaved`, `pavement`), sur une valeur rare (`metal`, revêtements synthétiques) ou non reconnue, et quand la source ne fournit que le regroupement revêtu / non revêtu (`capabilities.data.surface_detail: false`). Chaque valeur implique une seule classe : les cinq premières sont `paved`, les autres `unpaved` (`wood` suit Valhalla : passerelles et platelages non revêtus). Correspondance des tags dans T03 §7. |
 | `surface.source` | `tagged`, `inferred_tracktype`, `inferred_highway`, `none`. |
 | `way_kind` | `major_road`, `minor_road`, `track`, `path`, `cycleway`, `footway`, `steps`, `unknown`. |
 | `matched` | `false` sur une portion non appariée. En V1, un ouvrage détecté par l'heuristique seule sur une portion non appariée est un segment `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, revêtement et `way_kind` à `unknown` : `matched: false` n'implique donc pas `structure: unknown`. Depuis l'api 1.1, une portion qui suit une voie **fermée au vélo** (autoroute, trunk, route `bicycle=no`…) reste `matched: false` (elle n'est pas sur le réseau vélo) mais porte `structure`, `surface` et `way_kind` de cette voie, avec les avertissements `unmatched_range` et `bicycle_forbidden` ; un pont ou un tunnel de cette voie n'est pas corrigé. |
@@ -174,7 +174,7 @@ d'une sous-plage se lit dans les cumuls `gain_cum_m` / `loss_cum_m` (api 1.5).
 | `osm` | Seulement avec `debug` : attributs bruts de la source. |
 
 Un nouveau segment commence dès que l'un de ces attributs change : `structure`, `structure_source`,
-`surface.class`, `surface.source`, `way_kind`, `matched`, ainsi qu'à chaque extrémité d'ouvrage (deux
+`surface.class`, `surface.detail` (api 1.6), `surface.source`, `way_kind`, `matched`, ainsi qu'à chaque extrémité d'ouvrage (deux
 ponts contigus restent deux segments, mais forment une seule entrée de `summary.structures[]`). Un
 changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
 
@@ -186,7 +186,9 @@ changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
   automatiquement, avec le seuil appliqué) et d'un indicateur `partial` si des plages d'altitude
   manquent ;
 - `ele_min_m`, `ele_max_m` ;
-- répartitions en mètres par `structure`, `surface.class`, `surface.source` et `way_kind` ;
+- répartitions en mètres par `structure`, `surface.class`, `surface.source` et `way_kind` ; par
+  `surface.detail` (`by_surface_detail_m`, api 1.6), sur les seuls segments qui en portent un : la
+  somme peut être inférieure à `length_m` ;
 - `structures[]` : liste des ponts et tunnels rencontrés sur le réseau vélo (pas ceux d'une voie
   fermée au vélo, portés par `segments[]` seulement), triée par distance : `kind` (`bridge` ou
   `tunnel`), plage, longueur, `structure_source`, méthode appliquée : `dsm_deck`,
@@ -425,7 +427,11 @@ existants. `1.4` (2026-11-02) ajoute la raison d'insertion `overpass_crossing` (
 croisement d'un pont qui enjambe la route, mode `input_with_breakpoints`), sans changer les champs
 existants. `1.5` (2026-11-05) ajoute l'option `profile` (`full` par défaut, inchangé ; `fast` :
 Mapterhorn seul, file séparée, §3.2), `meta.profile`, les cumuls `points[].gain_cum_m` et
-`loss_cum_m`, et `profiles[]` dans `/v1/capabilities`, sans changer les champs existants.
+`loss_cum_m`, et `profiles[]` dans `/v1/capabilities`, sans changer les champs existants. `1.6`
+(2026-11-06) remplit `segments[].surface.detail` (§4.3), ajoute `summary.by_surface_detail_m` et
+`enums.surface_detail`, et passe `capabilities.data.surface_detail` à `true` (VersaTiles
+shortbread@1.1). Les segments se coupent aussi sur un changement de `detail` : une portion de même
+classe peut donner plusieurs segments là où la 1.5 n'en rendait qu'un.
 
 Règles d'évolution à l'intérieur de la v1 :
 

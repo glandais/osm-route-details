@@ -239,6 +239,63 @@ fn raw_surface_follows_the_valhalla_grouping() {
     }
 }
 
+/// Revêtement fin (api 1.6) : valeur de l'entrée de la table qui donne la classe, donc toujours
+/// d'accord avec elle ; absent sans matière (`paved`, `unpaved`, `metal`), sur un tag regroupé et sur
+/// une classe déduite.
+#[test]
+fn raw_surface_detail_comes_with_its_class() {
+    use super::SurfaceDetail as D;
+    let rows: &[(&str, Option<D>)] = &[
+        ("asphalt", Some(D::Asphalt)),
+        ("chipseal", Some(D::Asphalt)),
+        ("concrete:plates", Some(D::Concrete)),
+        ("cement", Some(D::Concrete)),
+        ("paving_stones", Some(D::PavingStones)),
+        ("brick", Some(D::PavingStones)),
+        ("grass_paver", Some(D::PavingStones)),
+        ("sett", Some(D::Sett)),
+        ("cobblestone", Some(D::Cobblestone)),
+        ("unhewn_cobblestone", Some(D::Cobblestone)),
+        ("stone", Some(D::Cobblestone)),
+        ("compacted", Some(D::Compacted)),
+        ("fine_gravel", Some(D::FineGravel)),
+        ("gravel", Some(D::Gravel)),
+        ("pebblestone", Some(D::Gravel)),
+        ("dirt", Some(D::Dirt)),
+        ("ground", Some(D::Dirt)),
+        ("earth", Some(D::Dirt)),
+        ("mud", Some(D::Dirt)),
+        ("woodchips", Some(D::Dirt)),
+        ("sand", Some(D::Sand)),
+        ("grass", Some(D::Grass)),
+        ("wood", Some(D::Wood)),
+        ("boardwalk", Some(D::Wood)),
+        ("rock", Some(D::Rock)),
+        ("asphalt;ground", Some(D::Asphalt)),
+        ("paved", None),
+        ("unpaved", None),
+        ("metal", None),
+        ("tartan", None),
+    ];
+    for &(v, detail) in rows {
+        let c = classify(&raw("track", v, Some(TrackType::Grade5)), &caps());
+        assert_eq!((c.surface_source, c.surface_detail), (S::Tagged, detail), "{v}");
+        if let Some(d) = detail {
+            assert_eq!(d.class(), c.surface_class, "{v}");
+        }
+    }
+    for (pat, valhalla, detail) in super::tables::RAW_SURFACE {
+        let paved = super::tables::VALHALLA_PAVED.contains(valhalla);
+        if let Some(d) = detail {
+            assert_eq!(d.class() == C::Paved, paved, "{pat}");
+        }
+    }
+    let grouped = WayAttrs { surface: SurfaceTag::Grouped(PavedGroup::Unpaved), ..way("track") };
+    assert_eq!(classify(&grouped, &caps()).surface_detail, None);
+    assert_eq!(classify(&raw("track", "bicouche", Some(TrackType::Grade2)), &caps()).surface_detail, None);
+    assert_eq!(classify(&way("residential"), &caps()).surface_detail, None);
+}
+
 /// Valeur brute non reconnue par Valhalla : règle suivante (`tracktype`, puis `kind`), source
 /// inférée, jamais `tagged`.
 #[test]

@@ -175,6 +175,7 @@ fn segment(from_m: f64, to_m: f64, surface: SurfaceClass) -> TypedSegment {
         structure_source: None,
         surface_class: surface,
         surface_source: SurfaceSource::Tagged,
+        surface_detail: None,
         way_kind: WayKind::MinorRoad,
         matched: true,
         off_graph: false,

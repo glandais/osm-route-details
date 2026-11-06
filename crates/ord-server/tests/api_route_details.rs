@@ -316,3 +316,46 @@ async fn failed_street_tiles_give_503_or_typology_unavailable() {
     assert_eq!(r["quality"]["matched_ratio"], 0.0);
     assert!(r["points"][0]["ele"].is_f64(), "l'élévation reste servie");
 }
+
+/// Revêtement fin (api 1.6) : tag `surface` brut de shortbread@1.1, segment coupé sur un changement
+/// de `detail` même à classe égale, répartition `by_surface_detail_m`, absent sur une classe déduite.
+#[tokio::test]
+async fn surface_detail_splits_segments_and_is_summed() {
+    use ord_testkit::routes::offset_north;
+    use ord_testkit::{SyntheticStreet, SyntheticStreets};
+    let north = |from: f64, to: f64| meridian(offset_north(START, from), to - from, 2);
+    let streets = SyntheticStreets::new(vec![
+        SyntheticStreet::new("residential", north(-200.0, 700.0)).with("surface", "asphalt"),
+        SyntheticStreet::new("residential", north(700.0, 1_400.0)).with("surface", "sett"),
+        SyntheticStreet::new("track", north(1_400.0, 2_000.0)).with("surface", "compacted"),
+        SyntheticStreet::new("track", north(2_000.0, 2_800.0)),
+    ])
+    .script();
+    let (server, dir) = served(move |n, r| streets(n, r)).await;
+    let pts = meridian(START, 2_600.0, 14);
+    let r = send(app_with(&online_config(&server, dir.path())), post_json(&request_body(&pts, None)))
+        .await
+        .json();
+    assert_eq!(r["status"], "complete", "{r}");
+    let segs = r["segments"].as_array().expect("segments");
+    let surfaces: Vec<&Value> = segs.iter().map(|s| &s["surface"]).collect();
+    assert_eq!(
+        surfaces,
+        [
+            &json!({"class": "paved", "detail": "asphalt", "source": "tagged"}),
+            &json!({"class": "paved", "detail": "sett", "source": "tagged"}),
+            &json!({"class": "unpaved", "detail": "compacted", "source": "tagged"}),
+            &json!({"class": "unpaved", "source": "inferred_highway"}),
+        ],
+        "{segs:?}"
+    );
+    let near = |v: &Value, x: f64| (v.as_f64().unwrap() - x).abs() < 10.0;
+    assert!(near(&segs[1]["from_m"], 700.0) && near(&segs[2]["from_m"], 1_400.0), "{segs:?}");
+    let by = r["summary"]["by_surface_detail_m"].as_object().expect("by_surface_detail_m");
+    assert_eq!(by.keys().collect::<Vec<_>>(), ["asphalt", "compacted", "sett"]);
+    let total: f64 = by.values().map(|v| v.as_f64().unwrap()).sum();
+    assert!((total - 2_000.0).abs() < 1.0, "{by:?}");
+    let caps = send(app_with(&online_config(&server, dir.path())), get("/v1/capabilities")).await.json();
+    assert_eq!(caps["data"]["surface_detail"], true);
+    assert!(caps["enums"]["surface_detail"].as_array().unwrap().contains(&json!("fine_gravel")));
+}
