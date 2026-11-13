@@ -3,7 +3,7 @@
 Microservice Rust : en entrée un parcours, en sortie l'**élévation** et la **typologie**
 (structure : sol / pont / tunnel ; revêtement : classe et détail) le long du parcours.
 
-Code : MVP et V1 réalisés, règles `2026.11.13`, API `1.7` (contrat
+Code : MVP et V1 réalisés, règles `2026.11.13`, API `1.8` (contrat
 [`contract/openapi.json`](contract/openapi.json)). `POST /v1/route-details` rend le profil
 d'élévation (IGN LiDAR HD en France, repli Mapterhorn point par point, GLO-30 ailleurs), la
 typologie appariée sur les tuiles VersaTiles shortbread@1.1 (classe, revêtement et revêtement fin
@@ -12,7 +12,7 @@ corrections d'ouvrage (tablier MNS, tunnels, ponts qui enjambent la trace), les 
 pour les ouvrages absents d'OSM et les points de rupture (mode par défaut
 `input_with_breakpoints`, aussi `input` et `distance`), avec le D+ cumulé par point ; profil
 `fast` (api 1.5) : Mapterhorn seul, file séparée, pour l'usage interactif ; arêtes du graphe des
-rues parcourues `edges[]` sur option (api 1.7). Autres routes : `/health/live`,
+rues parcourues `edges[]` sur option (api 1.7, `tracktype` et accès en 1.8). Autres routes : `/health/live`,
 `/health/ready`, `/v1/capabilities`, `/v1/attribution` ; erreurs RFC 9457. Workspace `crates/`
 (`ord-domain`, `ord-core`, `ord-adapters`, `ord-data`, `ord-pipeline`, `ord-server`,
 `ord-testkit`) ; image : [`Dockerfile`](Dockerfile). Plan et décisions des incréments :

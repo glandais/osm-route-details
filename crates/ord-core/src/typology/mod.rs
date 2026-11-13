@@ -23,7 +23,7 @@ use rustc_hash::FxHashMap;
 
 use crate::rules::TypologyRules;
 pub use corridor::{corridor_tiles, Corridor};
-pub use edges::{EdgeNode, EdgeOneway, MatchedEdge};
+pub use edges::{AccessTag, EdgeNode, EdgeOneway, MatchedEdge};
 pub use graph::{ClassId, EdgeClass, LineId, StreetGraph};
 pub use overpasses::Overpass;
 pub use segments::{build_segments, InputIndex, TypedSegment, UnmatchedReason};

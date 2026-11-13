@@ -376,6 +376,7 @@ mod tests {
             surface: SurfaceTag::Absent,
             tracktype: None,
             bicycle: bicycle.map(Arc::from),
+            foot: None,
             service: None,
             link: false,
             rail: false,

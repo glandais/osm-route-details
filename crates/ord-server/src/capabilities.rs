@@ -18,7 +18,8 @@ use utoipa::ToSchema;
 
 use crate::config::Config;
 use crate::dto::{
-    EdgeOnewayV1, SamplingModeV1, SectionV1, UnmatchedReasonV1, EDGE_NODE_ID_PREFIX, EDGE_POLYLINE_PRECISION,
+    AccessV1, EdgeOnewayV1, SamplingModeV1, SectionV1, TrackTypeV1, UnmatchedReasonV1, EDGE_NODE_ID_PREFIX,
+    EDGE_POLYLINE_PRECISION,
 };
 use crate::problem::ProblemCode;
 use crate::API_VERSION;
@@ -321,6 +322,10 @@ pub struct EnumCatalog {
     pub unmatched_reason: Vec<UnmatchedReasonV1>,
     /// `edges[].oneway` values (api 1.7).
     pub edge_oneway: Vec<EdgeOnewayV1>,
+    /// `edges[].tracktype` values (api 1.8).
+    pub tracktype: Vec<TrackTypeV1>,
+    /// `edges[].bicycle` and `edges[].foot` values (api 1.8).
+    pub access: Vec<AccessV1>,
 }
 
 impl EnumCatalog {
@@ -353,6 +358,8 @@ impl EnumCatalog {
             problem_codes: ProblemCode::ALL.to_vec(),
             unmatched_reason: UnmatchedReasonV1::ALL.to_vec(),
             edge_oneway: EdgeOnewayV1::ALL.to_vec(),
+            tracktype: TrackTypeV1::ALL.to_vec(),
+            access: AccessV1::ALL.to_vec(),
         }
     }
 }

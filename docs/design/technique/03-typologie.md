@@ -430,7 +430,9 @@ sommet simplifié à moins de `MERGE_UNITS` d'un autre, dont le représentant po
 les nœuds présents dans le couloir.
 
 `GraphSeg::fwd` garde le sens de la géométrie à travers la normalisation `a < b` de `repair`, pour
-lire `oneway` (`OnewayTag`) dans le sens de parcours.
+lire `oneway` (`OnewayTag`) dans le sens de parcours. `tracktype`, `bicycle` et `foot` (api 1.8,
+`foot` lu pour cela seulement) ne sont rendus que s'ils sont tagués et identiques sur toutes les
+classes parcourues ; ils ne changent ni la classification ni les segments.
 
 ## 7. Classification (règles versionnées)
 

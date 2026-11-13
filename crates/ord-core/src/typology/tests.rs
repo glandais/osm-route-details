@@ -748,3 +748,25 @@ fn a_roundabout_is_cut_at_each_branch() {
     assert_eq!(e[0].oneway, EdgeOneway::Both);
     assert!(e.windows(2).all(|w| w[0].to_node.unwrap().key == w[1].from_node.unwrap().key));
 }
+
+#[test]
+fn edge_tags_are_given_only_when_tagged_and_homogeneous() {
+    let track = |g: TrackType, foot: Option<&str>| WayAttrs {
+        tracktype: Some(g),
+        bicycle: Some(Arc::from("yes")),
+        foot: foot.map(Arc::from),
+        ..way("track")
+    };
+    // Une arête de 0 à 400 m (deux lignes de tracktype différents), une de 400 à 600 m.
+    let net = Net::new()
+        .add(track(TrackType::Grade2, Some("yes")), &[(0.0, 0.0), (200.0, 0.0)])
+        .add(track(TrackType::Grade3, Some("yes")), &[(200.0, 0.0), (400.0, 0.0)])
+        .add(track(TrackType::Grade2, None), &[(400.0, 0.0), (600.0, 0.0)])
+        .add(way("residential"), &[(400.0, -90.0), (400.0, 0.0), (400.0, 90.0)]);
+    let e = edges_of(net, &line_pts(0.0, 600.0));
+    assert_eq!(e.len(), 2, "{e:#?}");
+    assert_eq!(e[0].tracktype, None, "grade2 puis grade3 : non homogène");
+    assert_eq!((e[0].bicycle, e[0].foot), (Some(AccessTag::Yes), Some(AccessTag::Yes)));
+    assert_eq!(e[1].tracktype, Some(TrackType::Grade2));
+    assert_eq!((e[1].bicycle, e[1].foot), (Some(AccessTag::Yes), None), "foot non tagué : absent");
+}

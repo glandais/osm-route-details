@@ -316,7 +316,7 @@ async fn edges_are_returned_only_on_request() {
     assert!(plain.get("edges").is_none(), "absent par défaut");
     let body = request_body(&pts, Some(json!({"edges": true, "sections": ["summary"]})));
     let r = send(app_with(&config), post_json(&body)).await.json();
-    assert_eq!(r["meta"]["api_version"], "1.7");
+    assert_eq!(r["meta"]["api_version"], ord_server::API_VERSION);
     assert!(r.get("segments").is_none(), "edges ne dépend pas de sections");
     let edges = r["edges"].as_array().expect("edges");
     assert!(!edges.is_empty(), "{r}");
@@ -333,6 +333,8 @@ async fn edges_are_returned_only_on_request() {
         assert!(node["lat"].is_f64() && node["degree"].is_u64());
         assert!(e["to_gain_cum_m"].as_f64().unwrap() >= e["from_gain_cum_m"].as_f64().unwrap());
         assert_eq!(e["oneway"], "both");
+        // Voie du faux serveur sans tracktype ni accès tagués : champs absents (api 1.8).
+        assert!(e.get("tracktype").is_none() && e.get("bicycle").is_none() && e.get("foot").is_none(), "{e}");
         assert!(e["traversed_m"].as_f64().unwrap() > 0.0);
     }
     let gain = r["summary"]["gain_m"].as_f64().unwrap();

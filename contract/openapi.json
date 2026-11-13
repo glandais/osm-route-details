@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.7"
+    "version": "1.8"
   },
   "paths": {
     "/health/live": {
@@ -222,6 +222,15 @@
   },
   "components": {
     "schemas": {
+      "AccessV1": {
+        "type": "string",
+        "description": "Access value normalised by the street tiles (api 1.8).",
+        "enum": [
+          "yes",
+          "limited",
+          "no"
+        ]
+      },
       "AdaptedRangeV1": {
         "type": "object",
         "description": "A range read on GLO-30 (a surface model), with the threshold applied there.",
@@ -629,6 +638,28 @@
           "to_loss_cum_m"
         ],
         "properties": {
+          "bicycle": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AccessV1",
+                "description": "Bicycle access as normalised by the street tiles (api 1.8): `yes` (OSM `yes`, `designated`,\n`permissive`, ...), `limited`, `no`. Only when tagged and the same all along: absent means not\ntagged (or mixed), not forbidden."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "foot": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AccessV1",
+                "description": "Foot access, normalised as `bicycle` (api 1.8)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "from_gain_cum_m": {
             "type": "number",
             "format": "double",
@@ -745,6 +776,17 @@
             ],
             "format": "double",
             "description": "Exit position along the whole edge, from `from_node`; `null` when `from_node` is."
+          },
+          "tracktype": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackTypeV1",
+                "description": "OSM `tracktype` of the travelled ways (api 1.8), only when tagged and the same all along."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "traversed_m": {
             "type": "number",
@@ -925,9 +967,18 @@
           "warning_codes",
           "problem_codes",
           "unmatched_reason",
-          "edge_oneway"
+          "edge_oneway",
+          "tracktype",
+          "access"
         ],
         "properties": {
+          "access": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessV1"
+            },
+            "description": "`edges[].bicycle` and `edges[].foot` values (api 1.8)."
+          },
           "breakpoint_reasons": {
             "type": "array",
             "items": {
@@ -1037,6 +1088,13 @@
             "items": {
               "$ref": "#/components/schemas/TerrainOrigin"
             }
+          },
+          "tracktype": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackTypeV1"
+            },
+            "description": "`edges[].tracktype` values (api 1.8)."
           },
           "unmatched_reason": {
             "type": "array",
@@ -2452,6 +2510,17 @@
             "format": "double"
           }
         }
+      },
+      "TrackTypeV1": {
+        "type": "string",
+        "description": "OSM `tracktype` (api 1.8): `grade1` solid, usually paved, to `grade5` soft.",
+        "enum": [
+          "grade1",
+          "grade2",
+          "grade3",
+          "grade4",
+          "grade5"
+        ]
       },
       "TypologyRulesV1": {
         "type": "object",

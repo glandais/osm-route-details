@@ -31,6 +31,7 @@ pub(crate) fn way(kind: &str) -> WayAttrs {
         surface: SurfaceTag::Absent,
         tracktype: None,
         bicycle: None,
+        foot: None,
         service: None,
         link: false,
         rail: false,

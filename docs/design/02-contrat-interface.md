@@ -211,6 +211,8 @@ rattachés à l'arête voisine.
 | `geometry` | Géométrie parcourue, recalée sur la rue, dans le sens de parcours : polyligne encodée (algorithme Google), précision 6. |
 | `from_gain_cum_m`, `to_gain_cum_m`, `from_loss_cum_m`, `to_loss_cum_m` | D+ et D− cumulés aux bornes, sur le même profil que `points[].gain_cum_m` : le D+ de l'arête est la différence. |
 | `structure`, `surface`, `way_kind` | Typologie des voies parcourues (attributs OSM, sans heuristique d'ouvrage), **seulement si elle est la même tout du long** ; sinon absents, à recouper avec `segments[]` par `from_m` / `to_m`. |
+| `tracktype` | `grade1` à `grade5` (api 1.8) : tag OSM des voies parcourues, **seulement s'il est présent et le même tout du long** ; absent sinon (non tagué ou mélangé). |
+| `bicycle`, `foot` | `yes`, `limited`, `no` (api 1.8) : accès tels que les tuiles les normalisent (`designated`, `permissive`… deviennent `yes`), mêmes conditions que `tracktype`. Absent veut dire non tagué ou mélangé, pas interdit. |
 
 **Identifiant de nœud.** Il n'y a pas d'identifiant OSM dans les tuiles VersaTiles (ni de way, ni
 de nœud, et les lignes de mêmes attributs y sont fusionnées) : `edges[]` ne porte pas de `way_id`.
@@ -479,7 +481,9 @@ l'option `edges` et `edges[]` (§4.3 bis), `segments[].unmatched_reason`, `defau
 `enums.unmatched_reason`, `enums.edge_oneway` et `data.edges` dans `/v1/capabilities`. Sans l'option
 `edges`, seuls les segments non appariés changent : `unmatched_reason` en plus, et deux portions
 non appariées contiguës de raisons différentes ne sont plus fusionnées. Ni `rules_version` ni la
-clé d'idempotence ne changent (l'option fait partie de la requête).
+clé d'idempotence ne changent (l'option fait partie de la requête). `1.8` (2026-11-13) ajoute
+`edges[].tracktype`, `edges[].bicycle` et `edges[].foot` (§4.3 bis), et `enums.tracktype`,
+`enums.access` dans `/v1/capabilities` ; rien d'autre ne change dans la réponse.
 
 Règles d'évolution à l'intérieur de la v1 :
 

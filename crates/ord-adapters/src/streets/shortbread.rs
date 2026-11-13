@@ -2,8 +2,8 @@
 //!
 //! Clés lues comme osm-surface (`src/mvt.rs`, Apache-2.0, © Gabriel Landais) : `kind`, `surface`,
 //! `tracktype`, `service`, `bicycle`, `link`, `rail`, `bridge`, `tunnel` ; `oneway` et
-//! `oneway_reverse` depuis l'api 1.7 (arêtes `edges[]`, la géométrie suit le sens de la voie). `horse`,
-//! `foot` et `motorcar` ne sont pas lus.
+//! `oneway_reverse` depuis l'api 1.7 (arêtes `edges[]`, la géométrie suit le sens de la voie) ;
+//! `foot` depuis l'api 1.8 (`edges[].foot`). `horse` et `motorcar` ne sont pas lus.
 //!
 //! Deux générations de tuiles sont acceptées (règles 2026.11.9) :
 //! - `shortbread@1.0` (servi jusqu'en octobre 2026) : `surface` regroupé `paved` / `unpaved` ;
@@ -68,6 +68,7 @@ fn attrs_of(properties: &[(String, MvtValue)], interner: &mut Interner) -> WayAt
         surface: SurfaceTag::Absent,
         tracktype: None,
         bicycle: None,
+        foot: None,
         service: None,
         link: false,
         rail: false,
@@ -97,6 +98,7 @@ fn attrs_of(properties: &[(String, MvtValue)], interner: &mut Interner) -> WayAt
             "tracktype" => a.tracktype = track_type(&v.as_string()),
             "service" => a.service = Some(interner.sym(&v.as_string())),
             "bicycle" => a.bicycle = Some(interner.sym(&v.as_string())),
+            "foot" => a.foot = Some(interner.sym(&v.as_string())),
             "link" => a.link = v.as_bool(),
             "rail" => a.rail = v.as_bool(),
             "bridge" => bridge = v.as_bool(),

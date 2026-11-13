@@ -14,6 +14,8 @@ pub struct WayAttrs {
     pub surface: SurfaceTag,
     pub tracktype: Option<TrackType>,
     pub bicycle: Option<Sym>,
+    /// `foot` (Shortbread : normalisé `yes` / `limited` / `no`), pour `edges[].foot` (api 1.8).
+    pub foot: Option<Sym>,
     pub service: Option<Sym>,
     pub link: bool,
     pub rail: bool,

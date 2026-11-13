@@ -13,12 +13,13 @@ use ord_core::classification::{
 };
 use ord_core::elevation::fusion::{CorrectionStatus, OutcomeMethod};
 use ord_core::elevation::{BreakpointReason, EleMethod, PointOrigin};
-use ord_core::typology::{EdgeNode, EdgeOneway, StructureKind, UnmatchedReason};
+use ord_core::typology::{AccessTag, EdgeNode, EdgeOneway, StructureKind, UnmatchedReason};
 use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
 use ord_domain::elevation::TerrainOrigin;
 use ord_domain::report::WarningCode;
 use ord_domain::request::{GainPreset, Profile, SectionSet};
+use ord_domain::street::TrackType;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -755,6 +756,67 @@ pub struct EdgeV1 {
     /// Way kind of the travelled ways, when the same all along.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub way_kind: Option<WayKindV1>,
+    /// OSM `tracktype` of the travelled ways (api 1.8), only when tagged and the same all along.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tracktype: Option<TrackTypeV1>,
+    /// Bicycle access as normalised by the street tiles (api 1.8): `yes` (OSM `yes`, `designated`,
+    /// `permissive`, ...), `limited`, `no`. Only when tagged and the same all along: absent means not
+    /// tagged (or mixed), not forbidden.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bicycle: Option<AccessV1>,
+    /// Foot access, normalised as `bicycle` (api 1.8).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub foot: Option<AccessV1>,
+}
+
+/// OSM `tracktype` (api 1.8): `grade1` solid, usually paved, to `grade5` soft.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackTypeV1 {
+    Grade1,
+    Grade2,
+    Grade3,
+    Grade4,
+    Grade5,
+}
+
+impl TrackTypeV1 {
+    pub const ALL: [Self; 5] = [Self::Grade1, Self::Grade2, Self::Grade3, Self::Grade4, Self::Grade5];
+}
+
+impl From<TrackType> for TrackTypeV1 {
+    fn from(v: TrackType) -> Self {
+        match v {
+            TrackType::Grade1 => Self::Grade1,
+            TrackType::Grade2 => Self::Grade2,
+            TrackType::Grade3 => Self::Grade3,
+            TrackType::Grade4 => Self::Grade4,
+            TrackType::Grade5 => Self::Grade5,
+        }
+    }
+}
+
+/// Access value normalised by the street tiles (api 1.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessV1 {
+    Yes,
+    Limited,
+    No,
+}
+
+impl AccessV1 {
+    pub const ALL: [Self; 3] = [Self::Yes, Self::Limited, Self::No];
+}
+
+impl From<AccessTag> for AccessV1 {
+    fn from(v: AccessTag) -> Self {
+        match v {
+            AccessTag::Yes => Self::Yes,
+            AccessTag::Limited => Self::Limited,
+            AccessTag::No => Self::No,
+        }
+    }
 }
 
 fn node_dto(n: &EdgeNode) -> EdgeNodeV1 {
@@ -820,6 +882,9 @@ fn edge_dto(r: &ReportEdge) -> EdgeV1 {
             source: source.into(),
         }),
         way_kind: r.way_kind.map(Into::into),
+        tracktype: e.tracktype.map(Into::into),
+        bicycle: e.bicycle.map(Into::into),
+        foot: e.foot.map(Into::into),
     }
 }
 

@@ -12,7 +12,7 @@
 //! et en ouvre une dans l'autre sens. Les distances le long de la trace suivent le même prorata que
 //! les tronçons typés (`runs`), donc les mêmes abscisses que `segments[]`.
 
-use ord_domain::street::OnewayTag;
+use ord_domain::street::{OnewayTag, TrackType};
 use ord_domain::LatLon;
 
 use super::graph::{ClassId, NodeId, SegId, StreetGraph};
@@ -28,6 +28,26 @@ pub enum EdgeOneway {
     /// Parcourue à contresens d'un sens unique (contresens cyclable probable : les tuiles ne
     /// portent pas `oneway:bicycle`).
     Against,
+}
+
+/// Accès normalisé par Shortbread (`bicycle`, `foot`) : `yes` / `limited` / `no` (api 1.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccessTag {
+    Yes,
+    Limited,
+    No,
+}
+
+impl AccessTag {
+    /// Valeur normalisée ; toute autre valeur (brute, shortbread@1.0) : `None`.
+    pub fn parse(v: &str) -> Option<Self> {
+        match v {
+            "yes" => Some(Self::Yes),
+            "limited" => Some(Self::Limited),
+            "no" => Some(Self::No),
+            _ => None,
+        }
+    }
 }
 
 /// Bout connu d'une arête : coordonnée du nœud sur la grille des tuiles (unités entières, stable
@@ -62,6 +82,17 @@ pub struct MatchedEdge {
     pub geometry: Vec<LatLon>,
     /// Classes des segments parcourus, distinctes, dans l'ordre.
     pub classes: Vec<ClassId>,
+    /// Tags des voies parcourues, seulement s'ils sont présents et identiques tout du long
+    /// (api 1.8).
+    pub tracktype: Option<TrackType>,
+    pub bicycle: Option<AccessTag>,
+    pub foot: Option<AccessTag>,
+}
+
+/// Valeur commune à tous les éléments (absente comprise), sinon `None`.
+fn homogeneous<T: PartialEq>(mut it: impl Iterator<Item = Option<T>>) -> Option<T> {
+    let first = it.next()??;
+    it.all(|x| x.as_ref() == Some(&first)).then_some(first)
 }
 
 /// Morceau de segment parcouru, avec ses distances le long de la trace.
@@ -291,6 +322,7 @@ fn close(g: &StreetGraph, acc: &[Move]) -> MatchedEdge {
             pts.push(p);
         }
     }
+    let attrs = || classes.iter().map(|&c| &g.classes[c as usize].attrs);
     MatchedEdge {
         from_m: first.m0,
         to_m: last.m1,
@@ -309,6 +341,9 @@ fn close(g: &StreetGraph, acc: &[Move]) -> MatchedEdge {
             EdgeOneway::Both
         },
         geometry: pts.into_iter().map(|p| g.grid.to_latlon(p)).collect(),
+        tracktype: homogeneous(attrs().map(|a| a.tracktype)),
+        bicycle: homogeneous(attrs().map(|a| a.bicycle.as_deref().and_then(AccessTag::parse))),
+        foot: homogeneous(attrs().map(|a| a.foot.as_deref().and_then(AccessTag::parse))),
         classes,
     }
 }
