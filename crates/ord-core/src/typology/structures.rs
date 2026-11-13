@@ -935,8 +935,8 @@ pub fn resolve(
     // Voie d'approche des extrémités qu'aucun passage n'atteint : ses tuiles sont lues au besoin.
     for b in &built {
         let s = &b.structure;
-        for side in 0..2 {
-            let Some(t) = b.approach_need[side] else { continue };
+        for (side, need_side) in b.approach_need.iter().enumerate() {
+            let Some(t) = *need_side else { continue };
             let end_c = if side == 0 { 0.0 } else { s.length_m };
             let reached = passages.iter().filter(|p| p.structure == s.id).any(|p| {
                 let (lo, hi) = p.chain_extent();

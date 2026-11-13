@@ -2610,10 +2610,10 @@ pub async fn vc_items(
         }
         let negative = r.role.contains("negative");
         let mut spans: Vec<(String, usize, usize)> = Vec::new();
-        for i in 0..n {
+        for (i, kind) in r.s.kind.iter().enumerate().take(n) {
             match spans.last_mut() {
-                Some(sp) if sp.0 == r.s.kind[i] => sp.2 = i,
-                _ => spans.push((r.s.kind[i].clone(), i, i)),
+                Some(sp) if sp.0 == *kind => sp.2 = i,
+                _ => spans.push((kind.clone(), i, i)),
             }
         }
         for (k, (kind, i0, i1)) in spans.iter().cloned().enumerate() {
