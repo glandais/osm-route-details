@@ -1258,7 +1258,7 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "ord-adapters"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "flate2",
  "image-webp",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "ord-bench"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1293,7 +1293,7 @@ dependencies = [
 
 [[package]]
 name = "ord-core"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "ord-domain",
  "rstar",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "ord-data"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1325,7 +1325,7 @@ dependencies = [
 
 [[package]]
 name = "ord-domain"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "ord-pipeline"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "metrics",
@@ -1347,7 +1347,7 @@ dependencies = [
 
 [[package]]
 name = "ord-server"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1381,7 +1381,7 @@ dependencies = [
 
 [[package]]
 name = "ord-testkit"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "async-trait",
  "axum",
