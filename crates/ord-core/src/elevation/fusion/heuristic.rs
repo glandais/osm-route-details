@@ -803,6 +803,7 @@ mod tests {
             structures: Vec::new(),
             passages: Vec::new(),
             overpasses: Vec::new(),
+            edges: Vec::new(),
         };
         let rules = Rules::default();
         let tunnels = |cross: Option<&TunnelCross>| {

@@ -11,6 +11,17 @@ use crate::classification::{
     SurfaceSource, WayKind,
 };
 
+/// Pourquoi un segment n'est pas apparié (api 1.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnmatchedReason {
+    /// Route fermée au vélo suivie (état « hors graphe »).
+    ClosedToBicycles,
+    /// Pas de rue du graphe vélo à portée (voie absente des tuiles, trace aberrante).
+    OffNetwork,
+    /// Pas de donnée : tuile absente de l'emprise ou en panne.
+    NoData,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedSegment {
     pub from_m: f64,
@@ -28,6 +39,8 @@ pub struct TypedSegment {
     /// Route fermée au vélo suivie (état « hors graphe », T03 §5.3) : `matched = false`, mais
     /// `structure`, revêtement et `way_kind` de cette route ; avertissement `bicycle_forbidden`.
     pub off_graph: bool,
+    /// Seulement si `matched = false` ; coupe aussi les segments (api 1.7).
+    pub unmatched_reason: Option<UnmatchedReason>,
     /// Élément d'ouvrage (deux ponts contigus restent deux segments).
     pub element: Option<LineId>,
     /// Classe du premier tronçon (attributs bruts de `debug`).
@@ -53,6 +66,7 @@ impl TypedSegment {
             self.way_kind,
             self.matched,
             self.off_graph,
+            self.unmatched_reason,
             self.element,
         ) == (
             o.structure,
@@ -63,6 +77,7 @@ impl TypedSegment {
             o.way_kind,
             o.matched,
             o.off_graph,
+            o.unmatched_reason,
             o.element,
         )
     }
@@ -128,6 +143,12 @@ pub fn build_segments(
                 RunMatch::Unmatched | RunMatch::NoData { .. } => (Classified::UNMATCHED, false, None, None),
             };
             let off_graph = matches!(r.matched, RunMatch::OffGraph { .. });
+            let unmatched_reason = match r.matched {
+                RunMatch::Matched { .. } => None,
+                RunMatch::OffGraph { .. } => Some(UnmatchedReason::ClosedToBicycles),
+                RunMatch::Unmatched => Some(UnmatchedReason::OffNetwork),
+                RunMatch::NoData { .. } => Some(UnmatchedReason::NoData),
+            };
             let mid = 0.5 * (r.from_m + r.to_m);
             let source = verdicts
                 .iter()
@@ -159,6 +180,7 @@ pub fn build_segments(
                 way_kind: c.way_kind,
                 matched,
                 off_graph,
+                unmatched_reason,
                 element,
                 class,
             }
@@ -196,17 +218,42 @@ pub fn build_segments(
         segs = merge(segs);
     }
     // Indices client des points d'entrée qui encadrent chaque segment.
-    let inputs: Vec<(f64, u32)> = route
-        .input_pos
-        .iter()
-        .filter_map(|&i| route.samples.get(i as usize))
-        .map(|s| (s.d_m, s.input_index.unwrap_or(s.prev_input)))
-        .collect();
-    for s in segs.iter_mut().filter(|_| !inputs.is_empty()) {
-        let k = inputs.partition_point(|(d, _)| *d <= s.from_m + 1e-6);
-        s.from_index = inputs[k.saturating_sub(1).min(inputs.len().saturating_sub(1))].1;
-        let k = inputs.partition_point(|(d, _)| *d < s.to_m - 1e-6);
-        s.to_index = inputs[k.min(inputs.len().saturating_sub(1))].1;
+    let inputs = InputIndex::new(route);
+    for s in &mut segs {
+        if let Some((from, to)) = inputs.bracket(s.from_m, s.to_m) {
+            s.from_index = from;
+            s.to_index = to;
+        }
     }
     segs
+}
+
+/// Distances des points d'entrée et leurs indices client.
+#[derive(Debug)]
+pub struct InputIndex(Vec<(f64, u32)>);
+
+impl InputIndex {
+    pub fn new(route: &PreparedRoute) -> Self {
+        Self(
+            route
+                .input_pos
+                .iter()
+                .filter_map(|&i| route.samples.get(i as usize))
+                .map(|s| (s.d_m, s.input_index.unwrap_or(s.prev_input)))
+                .collect(),
+        )
+    }
+
+    /// Dernier point d'entrée à `from_m` ou avant, premier à `to_m` ou après.
+    pub fn bracket(&self, from_m: f64, to_m: f64) -> Option<(u32, u32)> {
+        let inputs = &self.0;
+        if inputs.is_empty() {
+            return None;
+        }
+        let last = inputs.len() - 1;
+        let k = inputs.partition_point(|(d, _)| *d <= from_m + 1e-6);
+        let from = inputs[k.saturating_sub(1).min(last)].1;
+        let k = inputs.partition_point(|(d, _)| *d < to_m - 1e-6);
+        Some((from, inputs[k.min(last)].1))
+    }
 }

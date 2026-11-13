@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use ord_domain::budget::Unbounded;
 use ord_domain::geo::{Grid, EARTH_RADIUS_M};
-use ord_domain::street::{PavedGroup, StreetLine, StreetTile, StructureTag, SurfaceTag, TrackType, WayAttrs};
+use ord_domain::street::{
+    OnewayTag, PavedGroup, StreetLine, StreetTile, StructureTag, SurfaceTag, TrackType, WayAttrs,
+};
 use ord_domain::LatLon;
 
 use super::*;
@@ -37,10 +39,15 @@ impl Net {
         Self { attrs: Vec::new(), lines: Vec::new() }
     }
 
-    pub(crate) fn add(mut self, a: WayAttrs, pts: &[(f64, f64)]) -> Self {
+    pub(crate) fn add(self, a: WayAttrs, pts: &[(f64, f64)]) -> Self {
+        self.add_cut(a, pts, [false, false])
+    }
+
+    /// Ligne dont les extrémités `cut` sont coupées au bord d'une tuile.
+    pub(crate) fn add_cut(mut self, a: WayAttrs, pts: &[(f64, f64)], cut: [bool; 2]) -> Self {
         self.attrs.push(a);
         let points = pts.iter().map(|&(e, n)| u(e, n)).collect();
-        self.lines.push(StreetLine { attr: (self.attrs.len() - 1) as u32, points, cut: [false, false] });
+        self.lines.push(StreetLine { attr: (self.attrs.len() - 1) as u32, points, cut });
         self
     }
 
@@ -557,4 +564,187 @@ fn turning_off_a_bridge_at_its_abutment_stays_matched() {
     assert_eq!(out.passages.len(), 1, "{:?}", out.passages);
     assert!(out.passages[0].doubts.is_empty(), "{:?}", out.passages[0].doubts);
     assert!(out.runs.iter().all(|r| matches!(r.matched, RunMatch::Matched { .. })), "{:?}", out.runs);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Arêtes parcourues (api 1.7)
+// ---------------------------------------------------------------------------------------------
+
+/// Route est-ouest de 0 à 600 m (sommets tous les 50 m), rues nord-sud qui la croisent à 200 et
+/// 400 m.
+fn grid_net(main: WayAttrs) -> Net {
+    let road: Vec<(f64, f64)> = (0..=12).map(|k| (k as f64 * 50.0, 0.0)).collect();
+    let road_ref: &[(f64, f64)] = &road;
+    Net::new()
+        .add(main, road_ref)
+        .add(with_surface("residential", PavedGroup::Paved), &[(200.0, -90.0), (200.0, 0.0), (200.0, 90.0)])
+        .add(with_surface("residential", PavedGroup::Paved), &[(400.0, -90.0), (400.0, 0.0), (400.0, 90.0)])
+}
+
+fn edges_of(net: Net, pts: &[(f64, f64)]) -> Vec<MatchedEdge> {
+    run(net, pts, None).1.edges
+}
+
+fn line_pts(from: f64, to: f64) -> Vec<(f64, f64)> {
+    let n = ((to - from).abs() / 10.0).round() as usize;
+    (0..=n).map(|k| (from + (to - from) * k as f64 / n as f64, 1.0)).collect()
+}
+
+fn close_to(a: Option<f64>, b: f64) -> bool {
+    a.is_some_and(|a| (a - b).abs() < 1.0)
+}
+
+#[test]
+fn edges_are_cut_at_junctions_only() {
+    let e = edges_of(grid_net(with_surface("residential", PavedGroup::Paved)), &line_pts(0.0, 600.0));
+    assert_eq!(e.len(), 3, "{e:#?}");
+    for w in e.windows(2) {
+        assert_eq!(w[0].to_node.unwrap().key, w[1].from_node.unwrap().key, "même carrefour");
+        assert!((w[0].to_m - w[1].from_m).abs() < 1e-9);
+    }
+    // Impasses aux deux bouts (degré 1), carrefours de degré 4.
+    assert_eq!(e[0].from_node.unwrap().degree, 1);
+    assert_eq!(e[0].to_node.unwrap().degree, 4);
+    assert_eq!(e[2].to_node.unwrap().degree, 1);
+    for x in &e {
+        assert!(!x.partial, "{x:#?}");
+        assert!(close_to(x.length_m, 200.0), "{x:#?}");
+        assert!(close_to(x.from_offset_m, 0.0) && close_to(x.to_offset_m, 200.0));
+        assert_eq!(x.oneway, EdgeOneway::Both);
+        assert_eq!(x.classes.len(), 1);
+        assert!(x.geometry.len() >= 5, "sommets intérieurs gardés");
+    }
+    assert!((e[1].to_m - e[1].from_m - 200.0).abs() < 5.0);
+}
+
+#[test]
+fn edge_nodes_do_not_depend_on_the_trace() {
+    let net = || grid_net(with_surface("residential", PavedGroup::Paved));
+    let a = edges_of(net(), &line_pts(0.0, 600.0));
+    let b = edges_of(net(), &line_pts(550.0, 120.0));
+    // Le carrefour à 400 m : même identifiant et même degré d'une trace à l'autre.
+    let k400 = a[1].to_node.unwrap();
+    assert_eq!(b[0].to_node.unwrap(), k400, "{b:#?}");
+    assert_eq!(b[1].from_node.unwrap(), k400);
+    // Arêtes partielles aux bouts de la seconde trace, bouts complets connus.
+    assert!(b[0].partial && b[2].partial && !b[1].partial, "{b:#?}");
+    assert_eq!(b[0].from_node.unwrap().key, a[2].to_node.unwrap().key);
+    assert!(close_to(b[0].from_offset_m, 50.0) && close_to(b[0].length_m, 200.0), "{:#?}", b[0]);
+    // Vers l'ouest depuis le carrefour à 200 m : décalages comptés depuis ce carrefour.
+    assert!(close_to(b[2].from_offset_m, 0.0) && close_to(b[2].to_offset_m, 80.0), "{:#?}", b[2]);
+    assert!(close_to(b[2].length_m, 200.0));
+    assert!(close_to(Some(b[2].traversed_m), 80.0));
+}
+
+#[test]
+fn a_u_turn_gives_the_edge_twice_in_both_directions() {
+    let mut pts = line_pts(0.0, 300.0);
+    pts.extend(line_pts(300.0, 100.0).into_iter().skip(1).map(|(e, _)| (e, -1.0)));
+    let e = edges_of(grid_net(with_surface("residential", PavedGroup::Paved)), &pts);
+    assert_eq!(e.len(), 4, "{e:#?}");
+    let (k200, k400) = (e[0].to_node.unwrap().key, e[1].to_node.unwrap().key);
+    assert!(!e[0].partial);
+    // Aller jusqu'à 300 m sur l'arête 200–400, retour depuis 300 m.
+    assert!(
+        e[1].partial && close_to(e[1].from_offset_m, 0.0) && close_to(e[1].to_offset_m, 100.0),
+        "{:#?}",
+        e[1]
+    );
+    assert_eq!(e[2].from_node.unwrap().key, k400);
+    assert_eq!(e[2].to_node.unwrap().key, k200);
+    assert!(
+        e[2].partial && close_to(e[2].from_offset_m, 100.0) && close_to(e[2].to_offset_m, 200.0),
+        "{:#?}",
+        e[2]
+    );
+    assert!((e[1].to_m - e[2].from_m).abs() < 1e-9);
+    assert_eq!(e[3].from_node.unwrap().key, k200);
+    assert!(e[3].partial && close_to(Some(e[3].traversed_m), 100.0));
+}
+
+#[test]
+fn oneway_is_read_in_the_travel_direction() {
+    let main = || WayAttrs { oneway: OnewayTag::Forward, ..with_surface("residential", PavedGroup::Paved) };
+    let fwd = edges_of(grid_net(main()), &line_pts(0.0, 600.0));
+    assert!(fwd.iter().all(|x| x.oneway == EdgeOneway::Forward), "{fwd:#?}");
+    let back = edges_of(grid_net(main()), &line_pts(600.0, 0.0));
+    assert!(back.iter().all(|x| x.oneway == EdgeOneway::Against), "{back:#?}");
+    let rev = || WayAttrs { oneway: OnewayTag::Backward, ..with_surface("residential", PavedGroup::Paved) };
+    let back = edges_of(grid_net(rev()), &line_pts(600.0, 0.0));
+    assert!(back.iter().all(|x| x.oneway == EdgeOneway::Forward), "{back:#?}");
+}
+
+#[test]
+fn a_tile_border_and_an_attribute_change_do_not_cut_an_edge() {
+    let paved = with_surface("residential", PavedGroup::Paved);
+    let unpaved = with_surface("residential", PavedGroup::Unpaved);
+    let net = Net::new()
+        .add_cut(paved.clone(), &[(0.0, 0.0), (100.0, 0.0), (150.0, 0.0)], [false, true])
+        .add_cut(paved.clone(), &[(150.0, 0.0), (200.0, 0.0), (250.0, 0.0)], [true, false])
+        .add(unpaved, &[(250.0, 0.0), (300.0, 0.0), (400.0, 0.0)])
+        .add(paved.clone(), &[(400.0, -90.0), (400.0, 0.0), (400.0, 90.0)])
+        .add(paved, &[(400.0, 0.0), (500.0, 0.0)]);
+    let e = edges_of(net, &line_pts(0.0, 500.0));
+    assert_eq!(e.len(), 2, "{e:#?}");
+    assert!(!e[0].partial && close_to(e[0].length_m, 400.0), "{:#?}", e[0]);
+    assert_eq!(e[0].classes.len(), 2, "revêtu puis non revêtu");
+    assert_eq!(e[0].to_node.unwrap().degree, 4);
+}
+
+#[test]
+fn an_unread_tile_border_is_an_unknown_end() {
+    let paved = with_surface("residential", PavedGroup::Paved);
+    let net = Net::new().add(paved.clone(), &[(0.0, -90.0), (0.0, 0.0), (0.0, 90.0)]).add_cut(
+        paved,
+        &[(0.0, 0.0), (100.0, 0.0), (300.0, 0.0)],
+        [false, true],
+    );
+    let e = edges_of(net, &line_pts(0.0, 250.0));
+    assert_eq!(e.len(), 1, "{e:#?}");
+    let x = &e[0];
+    assert!(x.partial && x.to_node.is_none() && x.length_m.is_none(), "{x:#?}");
+    assert_eq!(x.from_node.unwrap().degree, 3);
+    assert!(close_to(x.from_offset_m, 0.0) && close_to(x.to_offset_m, 250.0));
+}
+
+#[test]
+fn a_street_leaving_the_corridor_is_an_unknown_end() {
+    let paved = with_surface("residential", PavedGroup::Paved);
+    // La rue continue vers le nord bien au-delà du couloir.
+    let far: Vec<(f64, f64)> = (0..=10).map(|k| (300.0, k as f64 * 100.0)).collect();
+    let net = Net::new().add(paved.clone(), &[(0.0, 0.0), (300.0, 0.0)]).add(paved, &far);
+    let mut pts = line_pts(0.0, 300.0);
+    pts.extend((1..=5).map(|k| (300.0, k as f64 * 10.0)));
+    let e = edges_of(net, &pts);
+    // Le coude à 300 m est de degré 2 : une seule arête, dont le bout nord est hors du couloir.
+    assert_eq!(e.len(), 1, "{e:#?}");
+    assert!(e[0].partial && e[0].to_node.is_none() && e[0].from_node.unwrap().degree == 1, "{:#?}", e[0]);
+}
+
+/// Giratoire de 30 m de rayon centré à (300, 0), à sens unique (sens trigonométrique), quatre
+/// branches ; la trace arrive de l'ouest et sort à l'est par le sud.
+#[test]
+fn a_roundabout_is_cut_at_each_branch() {
+    let paved = || with_surface("primary", PavedGroup::Paved);
+    let ring_at = |deg: f64| (300.0 + 30.0 * deg.to_radians().cos(), 30.0 * deg.to_radians().sin());
+    let ring: Vec<(f64, f64)> = (0..=12).map(|k| ring_at(k as f64 * 30.0)).collect();
+    let net = Net::new()
+        .add(WayAttrs { oneway: OnewayTag::Forward, ..paved() }, &ring)
+        .add(paved(), &[(0.0, 0.0), (135.0, 0.0), ring_at(180.0)])
+        .add(paved(), &[ring_at(0.0), (465.0, 0.0), (600.0, 0.0)])
+        .add(paved(), &[ring_at(90.0), (300.0, 150.0)])
+        .add(paved(), &[ring_at(270.0), (300.0, -150.0)]);
+    let mut pts: Vec<(f64, f64)> = (0..=27).map(|k| (k as f64 * 10.0, 0.0)).collect();
+    pts.extend((1..=18).map(|k| ring_at(180.0 + k as f64 * 10.0)));
+    pts.extend((1..=27).map(|k| (330.0 + k as f64 * 10.0, 0.0)));
+    let e = edges_of(net, &pts);
+    assert_eq!(e.len(), 4, "{e:#?}");
+    let quarter = std::f64::consts::FRAC_PI_2 * 30.0;
+    for arc in &e[1..3] {
+        assert_eq!(arc.oneway, EdgeOneway::Forward, "{arc:#?}");
+        assert!(!arc.partial && arc.length_m.is_some_and(|l| (l - quarter).abs() < 2.0), "{arc:#?}");
+        assert_eq!((arc.from_node.unwrap().degree, arc.to_node.unwrap().degree), (3, 3));
+    }
+    assert_eq!(e[0].oneway, EdgeOneway::Both);
+    assert!(e.windows(2).all(|w| w[0].to_node.unwrap().key == w[1].from_node.unwrap().key));
 }

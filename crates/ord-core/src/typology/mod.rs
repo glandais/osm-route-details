@@ -3,6 +3,7 @@
 //! parcours, segments homogènes.
 
 pub mod corridor;
+pub mod edges;
 pub mod graph;
 pub mod matcher;
 pub mod overpasses;
@@ -22,9 +23,10 @@ use rustc_hash::FxHashMap;
 
 use crate::rules::TypologyRules;
 pub use corridor::{corridor_tiles, Corridor};
+pub use edges::{EdgeNode, EdgeOneway, MatchedEdge};
 pub use graph::{ClassId, EdgeClass, LineId, StreetGraph};
 pub use overpasses::Overpass;
-pub use segments::{build_segments, TypedSegment};
+pub use segments::{build_segments, InputIndex, TypedSegment, UnmatchedReason};
 pub use structures::{
     EndKind, PassageDoubt, PassageId, Structure, StructureElement, StructureEnd, StructureId, StructureKind,
     StructurePassage, StructuresOut, UnresolvedEnd,
@@ -89,6 +91,8 @@ pub struct TypologyOutput {
     /// Ponts des tuiles qui croisent la trace (§6.4), triés par distance ; la fusion décide si la
     /// trace passe dessous (T04 §3.4).
     pub overpasses: Vec<Overpass>,
+    /// Arêtes du graphe des rues parcourues, dans l'ordre de la trace (api 1.7, `edges[]`).
+    pub edges: Vec<MatchedEdge>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -237,6 +241,7 @@ pub fn finish(
         structures: s.structures,
         passages: s.passages,
         overpasses: overpasses::find(m.graph.grid, &m.path.obs, tiles),
+        edges: edges::extract(&m.graph, &m.path),
     })
 }
 

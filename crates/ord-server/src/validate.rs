@@ -150,6 +150,7 @@ fn resolve_options(dto: OptionsV1, limits: &LimitsConfig, errors: &mut Vec<Field
     }
     options.debug = dto.debug.unwrap_or(false);
     options.profile = dto.profile.unwrap_or_default();
+    options.edges = dto.edges.unwrap_or(false);
     options
 }
 

@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.6"
+    "version": "1.7"
   },
   "paths": {
     "/health/live": {
@@ -474,11 +474,16 @@
           "ford_detectable",
           "surface_detail",
           "bridge_dsm",
-          "heuristics"
+          "heuristics",
+          "edges"
         ],
         "properties": {
           "bridge_dsm": {
             "type": "boolean"
+          },
+          "edges": {
+            "$ref": "#/components/schemas/EdgesFeatureV1",
+            "description": "`edges[]` (api 1.7)."
           },
           "ford_detectable": {
             "type": "boolean"
@@ -559,6 +564,250 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "EdgeNodeV1": {
+        "type": "object",
+        "description": "End of an edge: a junction of the bicycle street graph (degree other than 2).",
+        "required": [
+          "id",
+          "lat",
+          "lon",
+          "degree"
+        ],
+        "properties": {
+          "degree": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of distinct neighbouring nodes among the streets open to bicycles: 1 for a dead end,\n3 or more for a junction.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "`z14:<x>:<y>`: integer position on the global zoom 14, extent 4096 tile grid (about 0.4 to\n0.6 m in France). The same junction gives the same id for every route on the same\n`data_versions.streets`; it stays stable across data updates while the OSM node does not\nmove and survives tile simplification. Not an OSM id."
+          },
+          "lat": {
+            "type": "number",
+            "format": "double"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "EdgeOnewayV1": {
+        "type": "string",
+        "description": "One-way restriction of the travelled part of an edge, relative to the travel direction (general\nOSM `oneway`; `oneway:bicycle` is not in the tiles).",
+        "enum": [
+          "both",
+          "forward",
+          "against"
+        ]
+      },
+      "EdgeV1": {
+        "type": "object",
+        "description": "A street graph edge travelled by the matched route (api 1.7). Edges are cut at junctions\n(degree other than 2, dead ends included), never at tile borders, way ends or attribute\nchanges. Unmatched stretches give no edge (a gap in `from_m`/`to_m`); a U-turn closes the\nedge being travelled, so the same edge may appear twice, once in each direction.",
+        "required": [
+          "from_m",
+          "to_m",
+          "from_index",
+          "to_index",
+          "from_node",
+          "to_node",
+          "partial",
+          "length_m",
+          "traversed_m",
+          "from_offset_m",
+          "to_offset_m",
+          "oneway",
+          "geometry",
+          "from_gain_cum_m",
+          "to_gain_cum_m",
+          "from_loss_cum_m",
+          "to_loss_cum_m"
+        ],
+        "properties": {
+          "from_gain_cum_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Cumulative elevation gain and loss at `from_m` and `to_m`, on the profile of\n`points[].gain_cum_m`: the gain of the edge is `to_gain_cum_m - from_gain_cum_m`."
+          },
+          "from_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Client index of the last input point at or before `from_m`.",
+            "minimum": 0
+          },
+          "from_loss_cum_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "from_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Distance along the route, on the same scale as `segments[]`."
+          },
+          "from_node": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EdgeNodeV1",
+                "description": "End of the whole edge on the entry side, in travel direction; `null` when it lies outside\nthe street graph read around the route (corridor of `typology_rules`, unread tile)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "from_offset_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Entry position along the whole edge, from `from_node`; `null` when `from_node` is."
+          },
+          "geometry": {
+            "type": "string",
+            "description": "Travelled geometry snapped on the street, in travel direction: encoded polyline (Google\nalgorithm), precision 6."
+          },
+          "length_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Network length of the whole edge, in metres; `null` when an end is unknown."
+          },
+          "oneway": {
+            "$ref": "#/components/schemas/EdgeOnewayV1"
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "The route does not travel the edge from one end to the other (route start or end, U-turn,\nunknown end)."
+          },
+          "structure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StructureV1",
+                "description": "Source structure of the travelled ways, when the same all along (no structure heuristic)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "surface": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SurfaceV1",
+                "description": "Surface of the travelled ways, when the same all along; otherwise cross with `segments[]`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_gain_cum_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "to_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Client index of the first input point at or after `to_m`.",
+            "minimum": 0
+          },
+          "to_loss_cum_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "to_node": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EdgeNodeV1",
+                "description": "End of the whole edge on the exit side; `null` as `from_node`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_offset_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Exit position along the whole edge, from `from_node`; `null` when `from_node` is."
+          },
+          "traversed_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Network length travelled, in metres."
+          },
+          "way_kind": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WayKindV1",
+                "description": "Way kind of the travelled ways, when the same all along."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EdgesFeatureV1": {
+        "type": "object",
+        "description": "How `edges[]` identifies nodes and encodes geometries (api 1.7).",
+        "required": [
+          "node_id_prefix",
+          "node_grid_zoom",
+          "node_grid_extent",
+          "geometry",
+          "polyline_precision",
+          "way_id",
+          "oneway_bicycle"
+        ],
+        "properties": {
+          "geometry": {
+            "type": "string",
+            "description": "Encoding of `edges[].geometry`."
+          },
+          "node_grid_extent": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "node_grid_zoom": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Zoom and extent of the global tile grid of node ids.",
+            "minimum": 0
+          },
+          "node_id_prefix": {
+            "type": "string",
+            "description": "Prefix of `edges[].from_node.id`, followed by `:<x>:<y>` on the grid below."
+          },
+          "oneway_bicycle": {
+            "type": "boolean",
+            "description": "`oneway:bicycle` is read (contraflow cycle lanes); `false`: general `oneway` only."
+          },
+          "polyline_precision": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "way_id": {
+            "type": "boolean",
+            "description": "OSM way ids are given (not with the current street tiles)."
           }
         }
       },
@@ -674,7 +923,9 @@
           "structure_method",
           "structure_correction_status",
           "warning_codes",
-          "problem_codes"
+          "problem_codes",
+          "unmatched_reason",
+          "edge_oneway"
         ],
         "properties": {
           "breakpoint_reasons": {
@@ -682,6 +933,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "edge_oneway": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EdgeOnewayV1"
+            },
+            "description": "`edges[].oneway` values (api 1.7)."
           },
           "ele_method": {
             "type": "array",
@@ -779,6 +1037,13 @@
             "items": {
               "$ref": "#/components/schemas/TerrainOrigin"
             }
+          },
+          "unmatched_reason": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedReasonV1"
+            },
+            "description": "`segments[].unmatched_reason` values (api 1.7)."
           },
           "warning_codes": {
             "type": "array",
@@ -1042,7 +1307,8 @@
           "structure_correction",
           "accept_partial",
           "debug",
-          "profile"
+          "profile",
+          "edges"
         ],
         "properties": {
           "accept_partial": {
@@ -1050,6 +1316,10 @@
           },
           "debug": {
             "type": "boolean"
+          },
+          "edges": {
+            "type": "boolean",
+            "description": "`options.edges` (api 1.7)."
           },
           "elevation": {
             "$ref": "#/components/schemas/ElevationDefaults"
@@ -1087,6 +1357,13 @@
               "null"
             ],
             "description": "Internal use only; refused unless the deployment allows it."
+          },
+          "edges": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Return `edges[]`, the street graph edges travelled by the matched route (api 1.7).\nDefault: `false`. Independent of `sections`."
           },
           "elevation": {
             "oneOf": [
@@ -1577,6 +1854,16 @@
           "attribution": {
             "$ref": "#/components/schemas/AttributionRefV1"
           },
+          "edges": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EdgeV1"
+            },
+            "description": "Street graph edges travelled by the matched route, in travel order (api 1.7); only with\n`options.edges`."
+          },
           "meta": {
             "$ref": "#/components/schemas/MetaV1"
           },
@@ -1774,6 +2061,17 @@
           "to_m": {
             "type": "number",
             "format": "double"
+          },
+          "unmatched_reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnmatchedReasonV1",
+                "description": "Only when `matched` is `false` (api 1.7): `closed_to_bicycles` (a way closed to bicycles is\nfollowed, warning `bicycle_forbidden`), `off_network` (no street of the bicycle network\nwithin reach: way missing from the tiles, stray GPS points), `no_data` (street tiles\nmissing or failed). Segments also split on a change of reason."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "way_kind": {
             "$ref": "#/components/schemas/WayKindV1"
@@ -2233,6 +2531,15 @@
             "minimum": 0
           }
         }
+      },
+      "UnmatchedReasonV1": {
+        "type": "string",
+        "description": "Why a segment is not matched (api 1.7).",
+        "enum": [
+          "closed_to_bicycles",
+          "off_network",
+          "no_data"
+        ]
       },
       "WarningCode": {
         "type": "string",

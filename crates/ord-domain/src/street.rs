@@ -20,6 +20,8 @@ pub struct WayAttrs {
     pub structure: StructureTag,
     pub layer: Option<i8>,
     pub smoothness: Option<Sym>,
+    /// Sens unique général (`oneway`, `oneway_reverse`), dans le sens de la géométrie (api 1.7).
+    pub oneway: OnewayTag,
     pub osm_id: Option<u64>,
     /// Attributs bruts, seulement si `debug`.
     pub raw: Option<Box<[(Sym, Sym)]>>,
@@ -46,6 +48,18 @@ pub enum StructureTag {
     Covered,
     BuildingPassage,
     Ford,
+}
+
+/// Sens unique d'une ligne, rapporté au sens de sa géométrie.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum OnewayTag {
+    /// Double sens (ou inconnu).
+    #[default]
+    No,
+    /// Seulement dans le sens de la géométrie (`oneway=yes`).
+    Forward,
+    /// Seulement à rebours de la géométrie (`oneway=-1`, Shortbread `oneway_reverse`).
+    Backward,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -148,5 +162,7 @@ pub struct SchemaCapabilities {
     pub covered_distinct: bool,
     pub osm_id: bool,
     pub smoothness: bool,
+    /// `oneway` lu, géométrie dans le sens de la voie (api 1.7).
+    pub oneway: bool,
     pub lines_merged: bool,
 }

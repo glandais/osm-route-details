@@ -1,8 +1,9 @@
 //! Schéma Shortbread de VersaTiles, couche `streets` (T03 §3.2, exploration 02 §4).
 //!
 //! Clés lues comme osm-surface (`src/mvt.rs`, Apache-2.0, © Gabriel Landais) : `kind`, `surface`,
-//! `tracktype`, `service`, `bicycle`, `link`, `rail`, `bridge`, `tunnel`. `oneway`, `horse`, `foot`
-//! et `motorcar` ne sont pas lus.
+//! `tracktype`, `service`, `bicycle`, `link`, `rail`, `bridge`, `tunnel` ; `oneway` et
+//! `oneway_reverse` depuis l'api 1.7 (arêtes `edges[]`, la géométrie suit le sens de la voie). `horse`,
+//! `foot` et `motorcar` ne sont pas lus.
 //!
 //! Deux générations de tuiles sont acceptées (règles 2026.11.9) :
 //! - `shortbread@1.0` (servi jusqu'en octobre 2026) : `surface` regroupé `paved` / `unpaved` ;
@@ -15,7 +16,7 @@ use std::sync::Arc;
 
 use ord_domain::geo::Grid;
 use ord_domain::street::{
-    PavedGroup, SchemaCapabilities, StreetLine, StreetSchemaAdapter, StreetTile, StructureTag,
+    OnewayTag, PavedGroup, SchemaCapabilities, StreetLine, StreetSchemaAdapter, StreetTile, StructureTag,
     SurfaceFidelity, SurfaceTag, Sym, TrackType, WayAttrs,
 };
 use ord_domain::tiles::{DecodeError, TileKey};
@@ -73,10 +74,12 @@ fn attrs_of(properties: &[(String, MvtValue)], interner: &mut Interner) -> WayAt
         structure: StructureTag::None,
         layer: None,
         smoothness: None,
+        oneway: OnewayTag::No,
         osm_id: None,
         raw: None,
     };
     let (mut bridge, mut tunnel) = (false, false);
+    let (mut oneway, mut oneway_reverse) = (false, false);
     for (k, v) in properties {
         match k.as_str() {
             "kind" => a.highway = interner.sym(&v.as_string()),
@@ -98,9 +101,16 @@ fn attrs_of(properties: &[(String, MvtValue)], interner: &mut Interner) -> WayAt
             "rail" => a.rail = v.as_bool(),
             "bridge" => bridge = v.as_bool(),
             "tunnel" => tunnel = v.as_bool(),
+            "oneway" => oneway = v.as_bool(),
+            "oneway_reverse" => oneway_reverse = v.as_bool(),
             _ => {}
         }
     }
+    a.oneway = match (oneway, oneway_reverse) {
+        (true, false) => OnewayTag::Forward,
+        (_, true) => OnewayTag::Backward,
+        (false, false) => OnewayTag::No,
+    };
     // `bridge` prime : un pont dans un tunnel n'existe pas dans OSM ; `tunnel` couvre aussi
     // `covered` et `building_passage`, que Shortbread ne distingue pas.
     a.structure = if bridge {
@@ -133,6 +143,7 @@ impl StreetSchemaAdapter for Shortbread {
             covered_distinct: false,
             osm_id: false,
             smoothness: false,
+            oneway: true,
             lines_merged: true,
         }
     }

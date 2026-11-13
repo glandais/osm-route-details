@@ -17,7 +17,9 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::config::Config;
-use crate::dto::{SamplingModeV1, SectionV1};
+use crate::dto::{
+    EdgeOnewayV1, SamplingModeV1, SectionV1, UnmatchedReasonV1, EDGE_NODE_ID_PREFIX, EDGE_POLYLINE_PRECISION,
+};
 use crate::problem::ProblemCode;
 use crate::API_VERSION;
 
@@ -262,6 +264,8 @@ pub struct OptionDefaults {
     pub accept_partial: bool,
     pub debug: bool,
     pub profile: Profile,
+    /// `options.edges` (api 1.7).
+    pub edges: bool,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -313,6 +317,10 @@ pub struct EnumCatalog {
     pub structure_correction_status: Vec<&'static str>,
     pub warning_codes: Vec<WarningCode>,
     pub problem_codes: Vec<ProblemCode>,
+    /// `segments[].unmatched_reason` values (api 1.7).
+    pub unmatched_reason: Vec<UnmatchedReasonV1>,
+    /// `edges[].oneway` values (api 1.7).
+    pub edge_oneway: Vec<EdgeOnewayV1>,
 }
 
 impl EnumCatalog {
@@ -343,6 +351,8 @@ impl EnumCatalog {
             structure_correction_status: vec!["applied", "partial", "none_found", "disabled", "unavailable"],
             warning_codes: WarningCode::ALL.to_vec(),
             problem_codes: ProblemCode::ALL.to_vec(),
+            unmatched_reason: UnmatchedReasonV1::ALL.to_vec(),
+            edge_oneway: EdgeOnewayV1::ALL.to_vec(),
         }
     }
 }
@@ -354,6 +364,25 @@ pub struct DataFeatures {
     pub surface_detail: bool,
     pub bridge_dsm: bool,
     pub heuristics: bool,
+    /// `edges[]` (api 1.7).
+    pub edges: EdgesFeatureV1,
+}
+
+/// How `edges[]` identifies nodes and encodes geometries (api 1.7).
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct EdgesFeatureV1 {
+    /// Prefix of `edges[].from_node.id`, followed by `:<x>:<y>` on the grid below.
+    pub node_id_prefix: &'static str,
+    /// Zoom and extent of the global tile grid of node ids.
+    pub node_grid_zoom: u8,
+    pub node_grid_extent: u32,
+    /// Encoding of `edges[].geometry`.
+    pub geometry: &'static str,
+    pub polyline_precision: u8,
+    /// OSM way ids are given (not with the current street tiles).
+    pub way_id: bool,
+    /// `oneway:bicycle` is read (contraflow cycle lanes); `false`: general `oneway` only.
+    pub oneway_bicycle: bool,
 }
 
 impl Capabilities {
@@ -384,6 +413,7 @@ impl Capabilities {
                 accept_partial: false,
                 debug: false,
                 profile: Profile::Full,
+                edges: false,
             },
             option_bounds: OptionBounds {
                 step_m: NumberBounds { min: o.step_m_min, max: o.step_m_max, default: o.step_m_default },
@@ -404,6 +434,15 @@ impl Capabilities {
                 // (V1, MNS sur l'enveloppe LiDAR, T04 §2.3), qui demandent elles aussi l'IGN.
                 bridge_dsm: config.elevation.ign.enabled,
                 heuristics: Rules::default().elevation.heuristics && config.elevation.ign.enabled,
+                edges: EdgesFeatureV1 {
+                    node_id_prefix: EDGE_NODE_ID_PREFIX,
+                    node_grid_zoom: ord_adapters::Shortbread::ZOOM,
+                    node_grid_extent: ord_adapters::Shortbread::EXTENT,
+                    geometry: "polyline",
+                    polyline_precision: EDGE_POLYLINE_PRECISION,
+                    way_id: ord_adapters::Shortbread.capabilities().osm_id,
+                    oneway_bicycle: false,
+                },
             },
             elevation_sources: catalog.elevation_sources(),
             elevation_rules: ElevationRulesV1::new(&Rules::default()),

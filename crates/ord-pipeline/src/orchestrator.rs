@@ -342,6 +342,7 @@ impl Orchestrator {
                     segments: &segments,
                     failed: typology_failed,
                     debug: options.debug,
+                    edges: options.edges,
                 };
                 Ok::<_, PipelineError>(assemble(&route, &cov, part, profile, points, versions, attribution))
             })
@@ -489,6 +490,7 @@ mod tests {
                 structures: Vec::new(),
                 passages: Vec::new(),
                 overpasses: Vec::new(),
+                edges: Vec::new(),
             })
         }
     }

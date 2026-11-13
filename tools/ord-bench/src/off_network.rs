@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn stations_nearest_to_a_way_closed_to_bicycles_leave_m1() {
-        use ord_domain::street::{StructureTag, SurfaceTag, WayAttrs};
+        use ord_domain::street::{OnewayTag, StructureTag, SurfaceTag, WayAttrs};
         let attrs = |kind: &str, bicycle: Option<&str>| WayAttrs {
             highway: Arc::from(kind),
             surface: SurfaceTag::Absent,
@@ -382,6 +382,7 @@ mod tests {
             structure: StructureTag::None,
             layer: None,
             smoothness: None,
+            oneway: OnewayTag::No,
             osm_id: None,
             raw: None,
         };

@@ -23,7 +23,7 @@ use crate::elevation::derive::{AdaptedRange, GainResult};
 use crate::elevation::fusion::{StructureCorrectionReport, StructureOutcome};
 use crate::elevation::{EleMethod, ElevationProfile, OutputPoint, TerrainRange};
 use crate::round::{cm, coord, pct, ratio};
-use crate::typology::{TypedSegment, TypologyOutput};
+use crate::typology::{InputIndex, MatchedEdge, TypedSegment, TypologyOutput};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -72,6 +72,23 @@ pub struct ReportSegment {
     pub osm: Option<WayAttrs>,
 }
 
+/// Arête parcourue du contrat (api 1.7) : l'arête appariée, arrondie, avec les indices des points
+/// d'entrée, le D+ et le D− cumulés aux bornes, et la typologie si elle est homogène.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReportEdge {
+    pub edge: MatchedEdge,
+    pub from_index: u32,
+    pub to_index: u32,
+    pub gain_cum_from_m: f64,
+    pub gain_cum_to_m: f64,
+    pub loss_cum_from_m: f64,
+    pub loss_cum_to_m: f64,
+    /// Seulement si toute la partie parcourue a la même valeur.
+    pub structure: Option<StructureClass>,
+    pub surface: Option<(SurfaceClass, Option<SurfaceDetail>, SurfaceSource)>,
+    pub way_kind: Option<WayKind>,
+}
+
 /// Ce que l'assembleur reçoit de la typologie.
 #[derive(Clone, Copy, Debug)]
 pub struct TypologyPart<'a> {
@@ -80,6 +97,8 @@ pub struct TypologyPart<'a> {
     /// Panne acceptée (`accept_partial`) : `typology_unavailable` sur les plages concernées.
     pub failed: bool,
     pub debug: bool,
+    /// `edges[]` demandé (api 1.7).
+    pub edges: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -87,6 +106,8 @@ pub struct RouteReport {
     pub status: Status,
     pub points: Vec<OutputPoint>,
     pub segments: Vec<ReportSegment>,
+    /// Seulement si demandé (api 1.7).
+    pub edges: Option<Vec<ReportEdge>>,
     pub summary: Summary,
     pub quality: Quality,
     pub warnings: Vec<Warning>,
@@ -252,6 +273,8 @@ pub fn assemble(
         })
         .collect();
 
+    let edges = typology.edges.then(|| report_edges(route, typology.output, &profile));
+
     let mut warnings = profile.warnings.clone();
     // Producteurs uniques de `unmatched_range`, `typology_missing`, `typology_unavailable`.
     for s in segs.iter().filter(|s| !s.matched) {
@@ -305,6 +328,7 @@ pub fn assemble(
         status,
         points: points.into_iter().map(round_point).collect(),
         segments,
+        edges,
         summary: Summary {
             length_m: cm(length),
             gain,
@@ -338,6 +362,56 @@ pub fn assemble(
         versions,
         attribution,
     }
+}
+
+/// Valeur commune à tous les éléments, sinon `None`.
+fn homogeneous<T: PartialEq>(mut it: impl Iterator<Item = T>) -> Option<T> {
+    let first = it.next()?;
+    it.all(|x| x == first).then_some(first)
+}
+
+fn report_edges(
+    route: &PreparedRoute,
+    typology: &TypologyOutput,
+    profile: &ElevationProfile,
+) -> Vec<ReportEdge> {
+    let inputs = InputIndex::new(route);
+    let classes = &typology.classes;
+    typology
+        .edges
+        .iter()
+        .map(|e| {
+            let (from_index, to_index) = inputs.bracket(e.from_m, e.to_m).unwrap_or((0, 0));
+            let (a, b) = (profile.at(e.from_m), profile.at(e.to_m));
+            let cl = || e.classes.iter().filter_map(|&c| classes.get(c as usize)).map(|c| c.classified);
+            let mut edge = e.clone();
+            edge.from_m = cm(e.from_m);
+            edge.to_m = cm(e.to_m);
+            edge.length_m = e.length_m.map(cm);
+            edge.traversed_m = cm(e.traversed_m);
+            edge.from_offset_m = e.from_offset_m.map(cm);
+            edge.to_offset_m = e.to_offset_m.map(cm);
+            let round_node = |n: &mut crate::typology::EdgeNode| {
+                n.at = ord_domain::LatLon::new(coord(n.at.lat), coord(n.at.lon));
+            };
+            edge.from_node.iter_mut().for_each(round_node);
+            edge.to_node.iter_mut().for_each(round_node);
+            edge.geometry =
+                e.geometry.iter().map(|l| ord_domain::LatLon::new(coord(l.lat), coord(l.lon))).collect();
+            ReportEdge {
+                from_index,
+                to_index,
+                gain_cum_from_m: cm(a.gain_cum_m),
+                gain_cum_to_m: cm(b.gain_cum_m),
+                loss_cum_from_m: cm(a.loss_cum_m),
+                loss_cum_to_m: cm(b.loss_cum_m),
+                structure: homogeneous(cl().map(|c| c.structure)),
+                surface: homogeneous(cl().map(|c| (c.surface_class, c.surface_detail, c.surface_source))),
+                way_kind: homogeneous(cl().map(|c| c.way_kind)),
+                edge,
+            }
+        })
+        .collect()
 }
 
 /// Longueurs au cm, valeurs nulles omises.
@@ -430,13 +504,14 @@ mod tests {
                 structures: Vec::new(),
                 passages: Vec::new(),
                 overpasses: Vec::new(),
+                edges: Vec::new(),
             },
             segs,
         )
     }
 
     fn part<'a>(out: &'a TypologyOutput, segs: &'a [TypedSegment]) -> TypologyPart<'a> {
-        TypologyPart { output: out, segments: segs, failed: true, debug: false }
+        TypologyPart { output: out, segments: segs, failed: true, debug: false, edges: false }
     }
 
     fn versions() -> Versions {
@@ -625,7 +700,7 @@ mod tests {
             )
             .unwrap();
             let (out, segs) = typology(&route, gaps);
-            let t = TypologyPart { output: &out, segments: &segs, failed, debug: false };
+            let t = TypologyPart { output: &out, segments: &segs, failed, debug: false, edges: false };
             assemble(&route, &CoverageRanges::default(), t, p, Vec::new(), versions(), Vec::new())
         };
         let r = mk(&[(10.0, 50.0, RunMatch::Unmatched)], false);

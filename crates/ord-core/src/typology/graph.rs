@@ -48,6 +48,8 @@ pub struct GraphSeg {
     pub class: ClassId,
     pub level: Level,
     pub line: LineId,
+    /// La géométrie de la ligne va de `a` vers `b` (sens du `oneway`, api 1.7).
+    pub fwd: bool,
 }
 
 pub type SegIndex = RTree<GeomWithData<Line<[f64; 2]>, SegId>>;
@@ -60,6 +62,9 @@ pub struct StreetGraph {
     pub nodes: Vec<[f64; 2]>,
     pub segs: Vec<GraphSeg>,
     pub classes: Vec<EdgeClass>,
+    /// Nœud où la rue continue hors du graphe (coupée par le couloir, ou au bord d'une tuile non
+    /// lue) : bout d'arête inconnu pour `edges[]` (api 1.7).
+    pub open: Vec<bool>,
     adj_start: Vec<u32>,
     adj: Vec<(SegId, NodeId)>,
     pub index: SegIndex,
@@ -85,6 +90,8 @@ struct RawSeg {
     b: NodeId,
     class: ClassId,
     line: LineId,
+    /// Géométrie de `a` vers `b`.
+    fwd: bool,
 }
 
 /// Union-find à compression de chemin.
@@ -120,6 +127,8 @@ impl StreetGraph {
         let mut ends: Vec<(NodeId, bool, LineId, bool)> = Vec::new();
         let mut cut_ends: Vec<(NodeId, LineId)> = Vec::new();
         let mut raw: Vec<RawSeg> = Vec::new();
+        // Nœud dont un segment voisin de la même ligne est hors du couloir.
+        let mut corridor_open: Vec<NodeId> = Vec::new();
         let mut line_count: LineId = 0;
         let mut closed: Vec<GeomWithData<Line<[f64; 2]>, ClassId>> = Vec::new();
         // Classes des routes fermées au vélo : dans `classes` (la typologie de la voie suivie est
@@ -182,12 +191,19 @@ impl StreetGraph {
                         (nodes.len() - 1) as NodeId
                     })
                 };
+                let kept: Vec<bool> = line.points.windows(2).map(|w| corridor.touches(w[0], w[1])).collect();
                 for (k, w) in line.points.windows(2).enumerate() {
-                    if !corridor.touches(w[0], w[1]) {
+                    if !kept[k] {
                         continue;
                     }
                     let a = node_of(w[0]);
                     let b = node_of(w[1]);
+                    if k > 0 && !kept[k - 1] {
+                        corridor_open.push(a);
+                    }
+                    if kept.get(k + 1) == Some(&false) {
+                        corridor_open.push(b);
+                    }
                     for (is_end, cut, n) in [(k == 0, line.cut[0], a), (k == last, line.cut[1], b)] {
                         if !is_end {
                             continue;
@@ -195,7 +211,7 @@ impl StreetGraph {
                         ends.push((n, cut, line_id, is_structure));
                     }
                     if a != b {
-                        raw.push(RawSeg { a, b, class, line: line_id });
+                        raw.push(RawSeg { a, b, class, line: line_id, fwd: true });
                     }
                 }
             }
@@ -212,7 +228,7 @@ impl StreetGraph {
                 structure_end[n as usize] |= is_structure;
             }
         }
-        let segs =
+        let (segs, rep) =
             repair(&nodes, &node_level, &line_end, &structure_end, &cut_ends, raw, &class_level, &levels);
         let segs: Vec<GraphSeg> = segs
             .into_iter()
@@ -223,6 +239,7 @@ impl StreetGraph {
                 class: s.class,
                 level: levels[class_level[s.class as usize] as usize],
                 line: s.line,
+                fwd: s.fwd,
             })
             .collect();
 
@@ -250,7 +267,43 @@ impl StreetGraph {
                 })
                 .collect(),
         );
-        Self { grid, nodes, segs, classes, adj_start, adj, index, closed: RTree::bulk_load(closed) }
+        let mut graph = Self {
+            grid,
+            nodes,
+            segs,
+            classes,
+            open: Vec::new(),
+            adj_start,
+            adj,
+            index,
+            closed: RTree::bulk_load(closed),
+        };
+        // Bouts ouverts, portés par les représentants : coupure du couloir toujours ; bord de
+        // tuile seulement s'il n'a pas été recollé (une seule voisine).
+        let mut open = vec![false; graph.nodes.len()];
+        for &n in &corridor_open {
+            open[rep[n as usize] as usize] = true;
+        }
+        for &(n, _) in &cut_ends {
+            let r = rep[n as usize];
+            if graph.junction_degree(r) < 2 {
+                open[r as usize] = true;
+            }
+        }
+        graph.open = open;
+        graph
+    }
+
+    /// Nombre de nœuds voisins distincts (segments parallèles comptés une fois) : une jonction du
+    /// graphe des rues ouvertes au vélo a un degré différent de 2 (api 1.7).
+    pub fn junction_degree(&self, node: NodeId) -> usize {
+        let mut seen: Vec<NodeId> = Vec::with_capacity(4);
+        for &(_, other) in self.neighbours(node) {
+            if other != node && !seen.contains(&other) {
+                seen.push(other);
+            }
+        }
+        seen.len()
     }
 
     pub fn neighbours(&self, node: NodeId) -> &[(SegId, NodeId)] {
@@ -272,7 +325,8 @@ impl StreetGraph {
 }
 
 /// Recollage aux bords de tuile (même niveau), jonctions inter-niveaux par les culées, jonctions
-/// perdues à la simplification. Renvoie les segments, renumérotés sur les représentants.
+/// perdues à la simplification. Renvoie les segments, renumérotés sur les représentants, et le
+/// représentant de chaque nœud.
 #[allow(clippy::too_many_arguments)]
 fn repair(
     nodes: &[[f64; 2]],
@@ -283,7 +337,7 @@ fn repair(
     raw: Vec<RawSeg>,
     class_level: &[u8],
     levels: &[Level],
-) -> Vec<RawSeg> {
+) -> (Vec<RawSeg>, Vec<NodeId>) {
     let n = nodes.len();
     let mut degree = vec![0u32; n];
     for s in &raw {
@@ -382,7 +436,13 @@ fn repair(
         .into_iter()
         .filter_map(|s| {
             let (a, b) = (uf.find(s.a), uf.find(s.b));
-            (a != b).then(|| RawSeg { a: a.min(b), b: a.max(b), line: lines.find(s.line), ..s })
+            (a != b).then(|| RawSeg {
+                a: a.min(b),
+                b: a.max(b),
+                line: lines.find(s.line),
+                fwd: s.fwd == (a < b),
+                ..s
+            })
         })
         .collect();
     segs.sort_unstable();
@@ -456,5 +516,6 @@ fn repair(
             out.push(RawSeg { a: prev, b: s.b, ..*s });
         }
     }
-    out
+    let rep = (0..n as u32).map(|i| uf.find(i)).collect();
+    (out, rep)
 }

@@ -76,6 +76,8 @@ pub struct RequestOptions {
     pub debug: bool,
     /// Profil de traitement (api 1.5) : `Full` par défaut.
     pub profile: Profile,
+    /// Arêtes du graphe des rues parcourues, `edges[]` (api 1.7).
+    pub edges: bool,
 }
 
 impl Default for RequestOptions {
@@ -89,6 +91,7 @@ impl Default for RequestOptions {
             accept_partial: false,
             debug: false,
             profile: Profile::Full,
+            edges: false,
         }
     }
 }

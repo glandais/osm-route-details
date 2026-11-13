@@ -3265,7 +3265,7 @@ mod tests {
 
     #[test]
     fn perimeter_is_read_in_the_campaign_tiles() {
-        use ord_domain::street::{StreetLine, SurfaceTag, WayAttrs};
+        use ord_domain::street::{OnewayTag, StreetLine, SurfaceTag, WayAttrs};
         let grid = Shortbread::GRID;
         let mid = LatLon::new(47.2, -1.5);
         let u = grid.to_units(mid);
@@ -3281,6 +3281,7 @@ mod tests {
             structure,
             layer: None,
             smoothness: None,
+            oneway: OnewayTag::No,
             osm_id: None,
             raw: None,
         };
@@ -3378,6 +3379,7 @@ mod tests {
             structure,
             layer: None,
             smoothness: None,
+            oneway: ord_domain::street::OnewayTag::No,
             osm_id: None,
             raw: None,
         }

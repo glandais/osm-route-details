@@ -299,6 +299,47 @@ async fn off_network_is_unmatched_but_complete() {
     assert_eq!(last["structure"], "unknown");
     assert_eq!(last["matched"], false);
     assert_eq!(last["surface"], json!({"class": "unknown", "source": "none"}));
+    assert_eq!(last["unmatched_reason"], "off_network");
+    let segs = r["segments"].as_array().unwrap();
+    assert!(
+        segs.iter().filter(|s| s["matched"] == true).all(|s| s.get("unmatched_reason").is_none()),
+        "seulement si non apparié : {segs:?}"
+    );
+}
+
+#[tokio::test]
+async fn edges_are_returned_only_on_request() {
+    let (server, dir) = served(|_, _| None).await;
+    let pts = meridian(START, 2_000.0, 5);
+    let config = online_config(&server, dir.path());
+    let plain = send(app_with(&config), post_json(&request_body(&pts, None))).await.json();
+    assert!(plain.get("edges").is_none(), "absent par défaut");
+    let body = request_body(&pts, Some(json!({"edges": true, "sections": ["summary"]})));
+    let r = send(app_with(&config), post_json(&body)).await.json();
+    assert_eq!(r["meta"]["api_version"], "1.7");
+    assert!(r.get("segments").is_none(), "edges ne dépend pas de sections");
+    let edges = r["edges"].as_array().expect("edges");
+    assert!(!edges.is_empty(), "{r}");
+    assert_eq!(edges[0]["from_m"], 0.0);
+    assert!((edges.last().unwrap()["to_m"].as_f64().unwrap() - 2_000.0).abs() < 0.02);
+    for w in edges.windows(2) {
+        assert_eq!(w[0]["to_m"], w[1]["from_m"]);
+        assert_eq!(w[0]["to_node"]["id"], w[1]["from_node"]["id"]);
+    }
+    for e in edges {
+        assert!(e["geometry"].as_str().is_some_and(|g| !g.is_empty()), "{e}");
+        let node = &e["from_node"];
+        assert!(node["id"].as_str().is_some_and(|id| id.starts_with("z14:")), "{e}");
+        assert!(node["lat"].is_f64() && node["degree"].is_u64());
+        assert!(e["to_gain_cum_m"].as_f64().unwrap() >= e["from_gain_cum_m"].as_f64().unwrap());
+        assert_eq!(e["oneway"], "both");
+        assert!(e["traversed_m"].as_f64().unwrap() > 0.0);
+    }
+    let gain = r["summary"]["gain_m"].as_f64().unwrap();
+    assert!((edges.last().unwrap()["to_gain_cum_m"].as_f64().unwrap() - gain).abs() < 0.05, "{r}");
+    if std::env::var_os("ORD_DUMP_EDGES").is_some() {
+        println!("{}", serde_json::to_string_pretty(&r["edges"]).unwrap());
+    }
 }
 
 #[tokio::test]

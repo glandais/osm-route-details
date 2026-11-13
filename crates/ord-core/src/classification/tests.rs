@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ord_domain::street::{
-    PavedGroup, SchemaCapabilities, StructureTag, SurfaceFidelity, SurfaceTag, TrackType, WayAttrs,
+    OnewayTag, PavedGroup, SchemaCapabilities, StructureTag, SurfaceFidelity, SurfaceTag, TrackType, WayAttrs,
 };
 
 use super::tables::{bicycle_routable, ROUTABLE_KINDS};
@@ -20,6 +20,7 @@ pub(crate) fn caps() -> SchemaCapabilities {
         covered_distinct: false,
         osm_id: false,
         smoothness: false,
+        oneway: false,
         lines_merged: true,
     }
 }
@@ -36,6 +37,7 @@ pub(crate) fn way(kind: &str) -> WayAttrs {
         structure: StructureTag::None,
         layer: None,
         smoothness: None,
+        oneway: OnewayTag::No,
         osm_id: None,
         raw: None,
     }

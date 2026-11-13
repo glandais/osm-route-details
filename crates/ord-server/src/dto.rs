@@ -7,13 +7,13 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ord_core::assemble::{ReportSegment, RouteReport, Status};
+use ord_core::assemble::{ReportEdge, ReportSegment, RouteReport, Status};
 use ord_core::classification::{
     StructureClass, StructureSource, SurfaceClass, SurfaceDetail, SurfaceSource, WayKind,
 };
 use ord_core::elevation::fusion::{CorrectionStatus, OutcomeMethod};
 use ord_core::elevation::{BreakpointReason, EleMethod, PointOrigin};
-use ord_core::typology::StructureKind;
+use ord_core::typology::{EdgeNode, EdgeOneway, StructureKind, UnmatchedReason};
 use ord_domain::budget::RequestId;
 use ord_domain::catalog::DataVersions;
 use ord_domain::elevation::TerrainOrigin;
@@ -79,6 +79,9 @@ pub struct OptionsV1 {
     pub debug: Option<bool>,
     /// Default: `full` (api 1.5).
     pub profile: Option<Profile>,
+    /// Return `edges[]`, the street graph edges travelled by the matched route (api 1.7).
+    /// Default: `false`. Independent of `sections`.
+    pub edges: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -137,6 +140,10 @@ pub struct RouteDetailsResponseV1 {
     /// Contiguous homogeneous stretches covering the whole route (section `typology`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub segments: Option<Vec<SegmentV1>>,
+    /// Street graph edges travelled by the matched route, in travel order (api 1.7); only with
+    /// `options.edges`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edges: Option<Vec<EdgeV1>>,
     /// Route aggregates (section `summary`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<SummaryV1>,
@@ -546,6 +553,12 @@ pub struct SegmentV1 {
     /// `false` but carries the `structure`, `surface` and `way_kind` of that way, with the
     /// warnings `unmatched_range` and `bicycle_forbidden`; its structures are not corrected.
     pub matched: bool,
+    /// Only when `matched` is `false` (api 1.7): `closed_to_bicycles` (a way closed to bicycles is
+    /// followed, warning `bicycle_forbidden`), `off_network` (no street of the bicycle network
+    /// within reach: way missing from the tiles, stray GPS points), `no_data` (street tiles
+    /// missing or failed). Segments also split on a change of reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unmatched_reason: Option<UnmatchedReasonV1>,
     /// Dominant elevation method on the stretch.
     pub ele_method: EleMethodV1,
     /// Elevation at `from_m`; `null` when missing.
@@ -620,11 +633,193 @@ fn segment_dto(s: &ReportSegment) -> SegmentV1 {
         },
         way_kind: t.way_kind.into(),
         matched: t.matched,
+        unmatched_reason: t.unmatched_reason.map(Into::into),
         ele_method: s.ele_method.into(),
         ele_start: s.ele_start,
         ele_end: s.ele_end,
         grade_pct: s.grade_pct,
         osm: s.osm.as_ref().map(osm_attributes),
+    }
+}
+
+/// Why a segment is not matched (api 1.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum UnmatchedReasonV1 {
+    ClosedToBicycles,
+    OffNetwork,
+    NoData,
+}
+
+impl UnmatchedReasonV1 {
+    pub const ALL: [Self; 3] = [Self::ClosedToBicycles, Self::OffNetwork, Self::NoData];
+}
+
+impl From<UnmatchedReason> for UnmatchedReasonV1 {
+    fn from(v: UnmatchedReason) -> Self {
+        match v {
+            UnmatchedReason::ClosedToBicycles => Self::ClosedToBicycles,
+            UnmatchedReason::OffNetwork => Self::OffNetwork,
+            UnmatchedReason::NoData => Self::NoData,
+        }
+    }
+}
+
+/// One-way restriction of the travelled part of an edge, relative to the travel direction (general
+/// OSM `oneway`; `oneway:bicycle` is not in the tiles).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeOnewayV1 {
+    /// Two-way everywhere.
+    Both,
+    /// One-way somewhere, always travelled in the allowed direction.
+    Forward,
+    /// Travelled against a one-way restriction (likely a contraflow cycle lane).
+    Against,
+}
+
+impl EdgeOnewayV1 {
+    pub const ALL: [Self; 3] = [Self::Both, Self::Forward, Self::Against];
+}
+
+/// Prefix of `edges[].from_node.id`: the node position on the street tile grid.
+pub const EDGE_NODE_ID_PREFIX: &str = "z14";
+/// Precision of `edges[].geometry`.
+pub const EDGE_POLYLINE_PRECISION: u8 = 6;
+
+/// End of an edge: a junction of the bicycle street graph (degree other than 2).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EdgeNodeV1 {
+    /// `z14:<x>:<y>`: integer position on the global zoom 14, extent 4096 tile grid (about 0.4 to
+    /// 0.6 m in France). The same junction gives the same id for every route on the same
+    /// `data_versions.streets`; it stays stable across data updates while the OSM node does not
+    /// move and survives tile simplification. Not an OSM id.
+    pub id: String,
+    pub lat: f64,
+    pub lon: f64,
+    /// Number of distinct neighbouring nodes among the streets open to bicycles: 1 for a dead end,
+    /// 3 or more for a junction.
+    pub degree: u32,
+}
+
+/// A street graph edge travelled by the matched route (api 1.7). Edges are cut at junctions
+/// (degree other than 2, dead ends included), never at tile borders, way ends or attribute
+/// changes. Unmatched stretches give no edge (a gap in `from_m`/`to_m`); a U-turn closes the
+/// edge being travelled, so the same edge may appear twice, once in each direction.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EdgeV1 {
+    /// Distance along the route, on the same scale as `segments[]`.
+    pub from_m: f64,
+    pub to_m: f64,
+    /// Client index of the last input point at or before `from_m`.
+    pub from_index: u32,
+    /// Client index of the first input point at or after `to_m`.
+    pub to_index: u32,
+    /// End of the whole edge on the entry side, in travel direction; `null` when it lies outside
+    /// the street graph read around the route (corridor of `typology_rules`, unread tile).
+    #[schema(required = true)]
+    pub from_node: Option<EdgeNodeV1>,
+    /// End of the whole edge on the exit side; `null` as `from_node`.
+    #[schema(required = true)]
+    pub to_node: Option<EdgeNodeV1>,
+    /// The route does not travel the edge from one end to the other (route start or end, U-turn,
+    /// unknown end).
+    pub partial: bool,
+    /// Network length of the whole edge, in metres; `null` when an end is unknown.
+    #[schema(required = true)]
+    pub length_m: Option<f64>,
+    /// Network length travelled, in metres.
+    pub traversed_m: f64,
+    /// Entry position along the whole edge, from `from_node`; `null` when `from_node` is.
+    #[schema(required = true)]
+    pub from_offset_m: Option<f64>,
+    /// Exit position along the whole edge, from `from_node`; `null` when `from_node` is.
+    #[schema(required = true)]
+    pub to_offset_m: Option<f64>,
+    pub oneway: EdgeOnewayV1,
+    /// Travelled geometry snapped on the street, in travel direction: encoded polyline (Google
+    /// algorithm), precision 6.
+    pub geometry: String,
+    /// Cumulative elevation gain and loss at `from_m` and `to_m`, on the profile of
+    /// `points[].gain_cum_m`: the gain of the edge is `to_gain_cum_m - from_gain_cum_m`.
+    pub from_gain_cum_m: f64,
+    pub to_gain_cum_m: f64,
+    pub from_loss_cum_m: f64,
+    pub to_loss_cum_m: f64,
+    /// Source structure of the travelled ways, when the same all along (no structure heuristic).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure: Option<StructureV1>,
+    /// Surface of the travelled ways, when the same all along; otherwise cross with `segments[]`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub surface: Option<SurfaceV1>,
+    /// Way kind of the travelled ways, when the same all along.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub way_kind: Option<WayKindV1>,
+}
+
+fn node_dto(n: &EdgeNode) -> EdgeNodeV1 {
+    EdgeNodeV1 {
+        id: format!("{EDGE_NODE_ID_PREFIX}:{}:{}", n.key[0], n.key[1]),
+        lat: n.at.lat,
+        lon: n.at.lon,
+        degree: n.degree,
+    }
+}
+
+/// Polyline encodée (algorithme Google) à `precision` décimales.
+pub fn encode_polyline(points: impl IntoIterator<Item = (f64, f64)>, precision: u8) -> String {
+    let factor = 10f64.powi(i32::from(precision));
+    let mut out = String::new();
+    let (mut plat, mut plon) = (0i64, 0i64);
+    let mut push = |v: i64| {
+        let mut v = if v < 0 { !(v << 1) } else { v << 1 };
+        while v >= 0x20 {
+            out.push(char::from((((v & 0x1f) | 0x20) + 63) as u8));
+            v >>= 5;
+        }
+        out.push(char::from((v + 63) as u8));
+    };
+    for (lat, lon) in points {
+        let (la, lo) = ((lat * factor).round() as i64, (lon * factor).round() as i64);
+        push(la - plat);
+        push(lo - plon);
+        plat = la;
+        plon = lo;
+    }
+    out
+}
+
+fn edge_dto(r: &ReportEdge) -> EdgeV1 {
+    let e = &r.edge;
+    EdgeV1 {
+        from_m: e.from_m,
+        to_m: e.to_m,
+        from_index: r.from_index,
+        to_index: r.to_index,
+        from_node: e.from_node.as_ref().map(node_dto),
+        to_node: e.to_node.as_ref().map(node_dto),
+        partial: e.partial,
+        length_m: e.length_m,
+        traversed_m: e.traversed_m,
+        from_offset_m: e.from_offset_m,
+        to_offset_m: e.to_offset_m,
+        oneway: match e.oneway {
+            EdgeOneway::Both => EdgeOnewayV1::Both,
+            EdgeOneway::Forward => EdgeOnewayV1::Forward,
+            EdgeOneway::Against => EdgeOnewayV1::Against,
+        },
+        geometry: encode_polyline(e.geometry.iter().map(|l| (l.lat, l.lon)), EDGE_POLYLINE_PRECISION),
+        from_gain_cum_m: r.gain_cum_from_m,
+        to_gain_cum_m: r.gain_cum_to_m,
+        from_loss_cum_m: r.loss_cum_from_m,
+        to_loss_cum_m: r.loss_cum_to_m,
+        structure: r.structure.map(Into::into),
+        surface: r.surface.map(|(class, detail, source)| SurfaceV1 {
+            class: class.into(),
+            detail: detail.map(Into::into),
+            source: source.into(),
+        }),
+        way_kind: r.way_kind.map(Into::into),
     }
 }
 
@@ -735,6 +930,7 @@ pub fn to_dto(
             .collect()
     });
     let segments = sections.typology.then(|| report.segments.iter().map(segment_dto).collect());
+    let edges = report.edges.as_ref().map(|e| e.iter().map(edge_dto).collect());
     let s = &report.summary;
     let summary = sections.summary.then(|| SummaryV1 {
         length_m: s.length_m,
@@ -811,6 +1007,7 @@ pub fn to_dto(
         },
         points,
         segments,
+        edges,
         summary,
         quality: QualityV1 {
             matched_ratio: report.quality.matched_ratio,

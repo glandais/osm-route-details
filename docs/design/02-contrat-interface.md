@@ -65,6 +65,7 @@ Toutes les options sont facultatives et ont une valeur par défaut documentée d
 | `structure_correction` | booléen | `true` | `false` : MNT brut sur les ouvrages, signalé comme non corrigé. Le client ne choisit ni la source d'élévation ni la méthode : elles sont décidées par le service et exposées dans la réponse. |
 | `accept_partial` | booléen | `false` | Accepte une réponse partielle quand une source est **en panne**, au lieu d'un 503. |
 | `debug` | booléen | `false` | Attributs bruts par segment. **Réservé à un usage interne** : activé par configuration du déploiement, sinon refusé (400). |
+| `edges` | booléen | `false` | Renvoie `edges[]`, les arêtes du graphe des rues parcourues (api 1.7, §4.3 bis), en `full` comme en `fast`, indépendamment de `sections`. Absent ou `false` : réponse inchangée. |
 | `profile` | `full` \| `fast` | `full` | Profil de traitement (api 1.5). `full` : comportement complet (IGN LiDAR HD en France, MNS des ponts, heuristiques). `fast` : basse latence pour un usage interactif, détaillé ci-dessous. |
 
 **Profil `fast`** (api 1.5). Pour un client interactif (tracé au clic, aperçu d'un import), qui
@@ -119,6 +120,7 @@ raffine ensuite par un appel `full` :
 | `status` | `complete` ou `partial`. `partial` signifie qu'une **source** n'a pas fourni de donnée sur une partie du parcours : panne acceptée par `accept_partial`, ou plage hors de l'emprise des données configurées (`elevation_missing`, `typology_missing`). Une portion non appariée alors que les tuiles sont lues ne rend **pas** la réponse partielle : elle est signalée dans `quality`. |
 | `points[]` | Par défaut, les points d'entrée et les points de rupture insérés (`input_with_breakpoints`) ; un élément par point d'entrée (`input`) ou par pas (`distance`) sur demande. Section `elevation`. |
 | `segments[]` | Tronçons contigus et homogènes qui couvrent **tout** le parcours. Section `typology`. |
+| `edges[]` | Arêtes du graphe des rues parcourues, dans l'ordre de la trace (api 1.7, §4.3 bis). Seulement avec l'option `edges`. |
 | `summary` | Agrégats du parcours. Section `summary`. |
 | `quality` | Provenance factuelle (dont le terrain lu par tronçon), statut des corrections et avertissements. Toujours présent. |
 | `attribution` | Mentions obligatoires et lien vers `/v1/attribution`. **Toujours présent**, quelles que soient les sections (§4.7). |
@@ -169,16 +171,57 @@ d'une sous-plage se lit dans les cumuls `gain_cum_m` / `loss_cum_m` (api 1.5).
 | `surface.source` | `tagged`, `inferred_tracktype`, `inferred_highway`, `none`. |
 | `way_kind` | `major_road`, `minor_road`, `track`, `path`, `cycleway`, `footway`, `steps`, `unknown`. |
 | `matched` | `false` sur une portion non appariée. En V1, un ouvrage détecté par l'heuristique seule sur une portion non appariée est un segment `structure: bridge` ou `tunnel`, `structure_source: heuristic`, `matched: false`, revêtement et `way_kind` à `unknown` : `matched: false` n'implique donc pas `structure: unknown`. Depuis l'api 1.1, une portion qui suit une voie **fermée au vélo** (autoroute, trunk, route `bicycle=no`…) reste `matched: false` (elle n'est pas sur le réseau vélo) mais porte `structure`, `surface` et `way_kind` de cette voie, avec les avertissements `unmatched_range` et `bicycle_forbidden` ; un pont ou un tunnel de cette voie n'est pas corrigé. |
+| `unmatched_reason` | Seulement si `matched: false` (api 1.7) : `closed_to_bicycles` (voie fermée au vélo suivie, avertissement `bicycle_forbidden`), `off_network` (pas de rue du réseau vélo à portée : voie absente des tuiles, trace aberrante), `no_data` (tuiles de rues absentes ou en panne). |
 | `ele_method` | Méthode d'élévation dominante sur le tronçon. |
 | `ele_start`, `ele_end`, `grade_pct` | Altitudes aux bornes et pente moyenne. |
 | `osm` | Seulement avec `debug` : attributs bruts de la source. |
 
 Un nouveau segment commence dès que l'un de ces attributs change : `structure`, `structure_source`,
-`surface.class`, `surface.detail` (api 1.6), `surface.source`, `way_kind`, `matched`, ainsi qu'à chaque extrémité d'ouvrage (deux
+`surface.class`, `surface.detail` (api 1.6), `surface.source`, `way_kind`, `matched`, `unmatched_reason` (api 1.7), ainsi qu'à chaque extrémité d'ouvrage (deux
 ponts contigus restent deux segments, mais forment une seule entrée de `summary.structures[]`). Un
 changement de `ele_method` ou d'origine du terrain seul ne coupe pas.
 
-### 4.4 `summary`
+### 4.3 bis `edges[]` (api 1.7)
+
+Pour un client qui construit un graphe à partir des rues réellement roulées (générateur de boucles
+d'une équipe, par exemple). Une **arête** est une suite maximale de segments du graphe des rues
+ouvertes au vélo entre deux **jonctions** : nœud de degré différent de 2 (carrefour de trois voies
+ou plus, impasse). Les bords de tuile recollés, les changements d'attributs et les coupures de
+lignes fusionnées par les tuiles sont de degré 2 et ne coupent **pas** une arête. Les routes fermées
+au vélo n'entrent pas au graphe : elles ne comptent pas dans le degré.
+
+La suite suit l'ordre de la trace. Une portion non appariée (`matched: false`) ne produit pas
+d'arête : un trou dans la suite, qui se lit sur `from_m` / `to_m`. Un saut entre deux rues non
+reliées interrompt aussi la suite. Un demi-tour ferme l'arête en cours (partielle) et en ouvre une
+dans l'autre sens : une même arête peut apparaître deux fois, dans un sens puis dans l'autre. Un
+aller-retour de moins de 5 m (projection qui déborde sur une rue voisine au carrefour) et un bout
+d'arête de moins de 5 m en tête ou en queue de suite ne sont pas des usages de la rue : ils sont
+rattachés à l'arête voisine.
+
+| Champ | Sens |
+|---|---|
+| `from_m`, `to_m` | Plage le long de la trace, à la même échelle que `segments[]`. |
+| `from_index`, `to_index` | Points d'entrée qui encadrent la plage (même règle que `segments[]`). |
+| `from_node`, `to_node` | Bouts de l'arête **complète**, dans le sens de parcours, même quand la trace ne les atteint pas : `id`, `lat`, `lon`, `degree` (voisins distincts parmi les rues ouvertes au vélo : 1 pour une impasse). `null` quand ce bout est hors du graphe lu autour de la trace (couloir de la typologie, tuile non lue). |
+| `partial` | La trace ne parcourt pas l'arête d'un bout à l'autre (début ou fin de trace, demi-tour, bout inconnu). |
+| `length_m` | Longueur réseau de l'arête complète ; `null` si un bout est inconnu. |
+| `traversed_m` | Longueur réseau parcourue. |
+| `from_offset_m`, `to_offset_m` | Positions d'entrée et de sortie le long de l'arête complète, comptées depuis `from_node` ; `null` si `from_node` l'est. Une arête complète va de 0 à `length_m`. |
+| `oneway` | `both` (double sens partout), `forward` (un sens unique au moins, toujours parcouru dans le sens autorisé), `against` (parcourue à contresens d'un sens unique). C'est le `oneway` général d'OSM : les tuiles ne portent pas `oneway:bicycle`, un contresens cyclable sort en `against`. |
+| `geometry` | Géométrie parcourue, recalée sur la rue, dans le sens de parcours : polyligne encodée (algorithme Google), précision 6. |
+| `from_gain_cum_m`, `to_gain_cum_m`, `from_loss_cum_m`, `to_loss_cum_m` | D+ et D− cumulés aux bornes, sur le même profil que `points[].gain_cum_m` : le D+ de l'arête est la différence. |
+| `structure`, `surface`, `way_kind` | Typologie des voies parcourues (attributs OSM, sans heuristique d'ouvrage), **seulement si elle est la même tout du long** ; sinon absents, à recouper avec `segments[]` par `from_m` / `to_m`. |
+
+**Identifiant de nœud.** Il n'y a pas d'identifiant OSM dans les tuiles VersaTiles (ni de way, ni
+de nœud, et les lignes de mêmes attributs y sont fusionnées) : `edges[]` ne porte pas de `way_id`.
+`id` vaut `z14:<x>:<y>`, la position entière du nœud sur la grille globale des tuiles de rues (zoom
+14, extent 4096 : 0,4 à 0,6 m en France). Deux traces qui passent par le même carrefour, sur les
+mêmes `data_versions`, donnent le même `id`. D'une mise à jour des tuiles à l'autre, il reste stable
+tant que le nœud OSM ne bouge pas et que la simplification des tuiles le garde ; une rue latérale
+ajoutée coupe une arête en deux. Un client qui fusionne les nœuds à moins de 2 ou 3 m absorbe ces
+cas. Grille, préfixe et précision sont publiés dans `capabilities.data.edges`.
+
+
 
 - `length_m` ;
 - `gain_m` et `loss_m`, **toujours accompagnés de leurs paramètres effectifs** (`gain_params` :
@@ -431,7 +474,12 @@ Mapterhorn seul, file séparée, §3.2), `meta.profile`, les cumuls `points[].ga
 (2026-11-06) remplit `segments[].surface.detail` (§4.3), ajoute `summary.by_surface_detail_m` et
 `enums.surface_detail`, et passe `capabilities.data.surface_detail` à `true` (VersaTiles
 shortbread@1.1). Les segments se coupent aussi sur un changement de `detail` : une portion de même
-classe peut donner plusieurs segments là où la 1.5 n'en rendait qu'un.
+classe peut donner plusieurs segments là où la 1.5 n'en rendait qu'un. `1.7` (2026-11-13) ajoute
+l'option `edges` et `edges[]` (§4.3 bis), `segments[].unmatched_reason`, `defaults.edges`,
+`enums.unmatched_reason`, `enums.edge_oneway` et `data.edges` dans `/v1/capabilities`. Sans l'option
+`edges`, seuls les segments non appariés changent : `unmatched_reason` en plus, et deux portions
+non appariées contiguës de raisons différentes ne sont plus fusionnées. Ni `rules_version` ni la
+clé d'idempotence ne changent (l'option fait partie de la requête).
 
 Règles d'évolution à l'intérieur de la v1 :
 

@@ -100,7 +100,9 @@ doc exploration 02 §4), toute autre valeur non vide → `Raw` (shortbread@1.1, 
 2026-10-27 : valeur OSM brute), rangée par la classification (§7), jamais par l'adaptateur ;
 `bicycle` est gardé tel quel (brut en 1.0, normalisé `yes` / `limited` / `no` en 1.1, §4.2) ; `bridge=true` →
 `Bridge` (y compris les gués bétonnés `low_water_crossing`, doc 01 §5.3) ; `tunnel=true` → `Tunnel`
-(y compris `covered` et `building_passage`, indiscernables). `oneway`, `horse` ne sont plus lus.
+(y compris `covered` et `building_passage`, indiscernables). `horse` n'est pas lu ; `oneway` et
+`oneway_reverse` le sont depuis l'api 1.7 (`OnewayTag`, rapporté au sens de la géométrie, que
+VersaTiles conserve : giratoires vérifiés dans le sens trigonométrique), pour `edges[].oneway` seulement.
 
 **V2, « route-details »** (Planetiler) : `surface` → `Raw`, `ford` ways → `Ford`, nœuds `ford=yes`
 → `PointFeature`, `covered` distinct, `layer`, `osm_id`, sans fusion de lignes : un adaptateur et une
@@ -404,6 +406,31 @@ posée (≤ `MERGE_UNITS`) sur une autre ligne de pont est une jonction du même
 au-dessus de la voie du dessous), pas une culée : `end_m` ne la lit pas. Limite : une
 ligne coupée au bord de tuile n'a pas d'extrémité réelle de ce côté ; une culée juste au-delà du
 bord n'est pas vue (`end_m` infini de ce côté).
+
+### 6.5 Arêtes parcourues (`edges`, api 1.7)
+
+`typology::edges::extract` relit le chemin apparié (morceaux du HMM) avec le même prorata que
+`runs` (§6.1), donc les mêmes abscisses que les segments. Les morceaux contigus d'un même segment,
+dans le même sens, sont fusionnés. Une suite s'interrompt sur un saut, une observation non
+appariée, hors graphe ou sans donnée, ou un changement de chaîne. Dans une suite, l'arête en cours
+est fermée à un nœud **jonction** (`junction_degree` ≠ 2 : voisins distincts, segments parallèles
+comptés une fois), à un bout **ouvert** ou à un demi-tour (même segment repris à rebours, ou retour
+vers le nœud d'où l'on vient). L'arête complète se lit en remontant et en descendant les nœuds de
+degré 2 jusqu'aux jonctions (`chain`).
+
+Bouts ouverts (`StreetGraph::open`), portés par les représentants après réparation : nœud dont le
+segment voisin de la même ligne est hors du couloir (toujours), et extrémité coupée au bord de
+tuile restée de degré 1 (tuile voisine non lue). Un bout ouvert est inconnu : `null` au contrat,
+longueur complète inconnue. Un anneau sans jonction aussi.
+
+Indépendance vis-à-vis de la trace : un carrefour traversé est à portée de la trace, donc tous les
+segments qui en partent touchent le couloir et entrent au graphe ; son degré et sa position (sommet
+de tuile, représentant de plus haut degré) ne dépendent que des tuiles. Seule exception connue : un
+sommet simplifié à moins de `MERGE_UNITS` d'un autre, dont le représentant pourrait changer selon
+les nœuds présents dans le couloir.
+
+`GraphSeg::fwd` garde le sens de la géométrie à travers la normalisation `a < b` de `repair`, pour
+lire `oneway` (`OnewayTag`) dans le sens de parcours.
 
 ## 7. Classification (règles versionnées)
 
