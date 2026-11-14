@@ -86,6 +86,9 @@ async fn sentinel_route_leaves_no_coordinate_in_logs_or_metrics() {
     let writer = captured.clone();
     tracing_subscriber::fmt()
         .json()
+        // Sans horodatage : ses fractions de seconde (`09:51:31.559878Z`) contiennent au hasard un
+        // fragment interdit court (« 1.55 »), faux positif sans rapport avec le parcours.
+        .without_time()
         .with_current_span(true)
         .with_span_list(true)
         .with_env_filter("debug,ord_server=trace,ord_pipeline=trace,ord_data=trace,ord_core=trace,ord_adapters=trace,tower_http=trace")
