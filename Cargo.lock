@@ -1426,6 +1426,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "ord-loops"
+version = "1.8.0"
+dependencies = [
+ "ord-graph",
+ "rustc-hash",
+ "tempfile",
+]
+
+[[package]]
+name = "ord-loops-bench"
+version = "1.8.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ord-graph",
+ "ord-loops",
+ "ord-loops-check",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "ord-loops-check"
+version = "1.8.0"
+dependencies = [
+ "ord-graph",
+ "ord-loops",
+ "tempfile",
+]
+
+[[package]]
 name = "ord-pipeline"
 version = "1.8.0"
 dependencies = [

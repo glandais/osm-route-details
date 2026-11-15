@@ -473,3 +473,62 @@ fn view_files_are_deterministic() {
     let digests = |g: &GraphFile<Vec<u8>>| g.section_digests();
     assert_eq!(digests(&view_of(&g, "road")), digests(&view_of(&g, "road")));
 }
+
+#[test]
+fn road_view_keeps_greenways_and_paved_tracks_but_never_known_unpaved() {
+    use ord_graph::attrs::classify;
+    let a = |extra: &[(&str, &str)], hw: &str| classify(&tags(hw, extra)).unwrap().attrs;
+    // Voies vertes : désignées aux vélos, surface revêtue ou inconnue.
+    for hw in ["path", "footway", "pedestrian", "bridleway"] {
+        assert!(ViewKind::Road.keep(a(&[("bicycle", "designated")], hw)), "{hw} désigné sans surface");
+        assert!(
+            ViewKind::Road.keep(a(&[("bicycle", "designated"), ("surface", "asphalt")], hw)),
+            "{hw} asphalte"
+        );
+        assert!(
+            !ViewKind::Road.keep(a(&[("bicycle", "designated"), ("surface", "gravel")], hw)),
+            "{hw} gravier"
+        );
+        assert!(!ViewKind::Road.keep(a(&[("bicycle", "yes")], hw)), "{hw} seulement permis");
+        assert!(!ViewKind::Road.keep(a(&[], hw)), "{hw} sans tag");
+    }
+    // `track` : grade1 ou surface connue revêtue ; sans surface ni grade, écarté.
+    assert!(ViewKind::Road.keep(a(&[("tracktype", "grade1")], "track")));
+    assert!(ViewKind::Road.keep(a(&[("surface", "asphalt")], "track")));
+    assert!(!ViewKind::Road.keep(a(&[], "track")));
+    assert!(!ViewKind::Road.keep(a(&[("tracktype", "grade3")], "track")));
+    assert!(
+        !ViewKind::Road.keep(a(&[("tracktype", "grade1"), ("surface", "gravel")], "track")),
+        "jamais de non-revêtu connu"
+    );
+    // Toujours un sous-ensemble de gravel.
+    for (extra, hw) in [(vec![("bicycle", "designated")], "path"), (vec![("tracktype", "grade1")], "track")] {
+        let x = a(&extra, hw);
+        assert!(!ViewKind::Road.keep(x) || ViewKind::Gravel.keep(x), "{hw}");
+    }
+}
+
+#[test]
+fn view_headings_follow_the_chain_geometry() {
+    use ord_graph::view::{heading_from_u16, polyline_heading};
+    // Rue qui part plein est, puis tourne plein nord.
+    let mut s = MemSource::default();
+    at(&mut s, 1, 0, 0);
+    at(&mut s, 2, 0, 2);
+    at(&mut s, 3, 2, 2);
+    s.way(10, &[1, 2, 3], &tags("residential", &[]));
+    let g = base(&mut s, 11);
+    let road = view_of(&g, "road");
+    let h = road.view_headings().expect("section VIEW_HEADING");
+    assert_eq!(h.len() as u64, road.header().edges);
+    let (start, end) = (heading_from_u16(h[0][0]), heading_from_u16(h[0][1]));
+    let near = |x: f64, y: f64| ((x - y + 540.0).rem_euclid(360.0) - 180.0).abs() < 2.0;
+    assert!(
+        (near(start, 90.0) && near(end, 0.0)) || (near(start, 180.0) && near(end, 270.0)),
+        "caps {start} / {end}"
+    );
+    // Fonction pure : ligne droite plein sud.
+    let pts = [(472_000_000, -15_600_000), (471_990_000, -15_600_000), (471_980_000, -15_600_000)];
+    assert!((polyline_heading(&pts, true) - 180.0).abs() < 0.5);
+    assert!((polyline_heading(&pts, false) - 180.0).abs() < 0.5);
+}

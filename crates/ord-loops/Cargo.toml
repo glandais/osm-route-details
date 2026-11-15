@@ -1,0 +1,20 @@
+[package]
+name = "ord-loops"
+description = "Moteur de génération de boucles sur graphe OSM en mode « raccords » (lot 2) : strict, équipe d'abord, découverte"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ord-graph.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+# L'exemple sur la vraie région ouvre les fichiers par mmap ; le crate lui-même n'en a pas besoin.
+ord-graph = { workspace = true, features = ["mmap"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

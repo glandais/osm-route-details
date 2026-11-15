@@ -27,7 +27,7 @@ use crate::attrs::{Access, Attrs, HighwayClass};
 use crate::build::{CellSpec, EdgeData, ExtraSection, GraphData, NodeData, SourceMeta};
 use crate::format::{
     FormatError, GraphFile, DIR_BIT, KIND_VIEW_BASE_NODE, KIND_VIEW_CHAIN, KIND_VIEW_CHAIN_OFF,
-    KIND_VIEW_META, KIND_VIEW_WEIGHT,
+    KIND_VIEW_HEADING, KIND_VIEW_META, KIND_VIEW_WEIGHT,
 };
 use crate::search::edge_cost;
 use crate::stats::BuildStats;
@@ -38,7 +38,8 @@ pub const NO_WEIGHT: u32 = u32::MAX;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ViewKind {
-    /// Route revêtue : classes routières et pistes cyclables.
+    /// Route revêtue : classes routières et pistes cyclables, voies vertes (`path`, `footway`, `pedestrian`,
+    /// `bridleway` désignés aux vélos, sans surface connue non revêtue) et `track` revêtus (lot 2, §1.1).
     Road,
     /// Route + chemins, pistes et sentiers roulables.
     Gravel,
@@ -88,7 +89,20 @@ impl ViewKind {
                 | HighwayClass::Busway
         );
         match self {
-            Self::Road => road_class && !a.is_unpaved(),
+            Self::Road => {
+                // Voies vertes : désignées aux vélos (`bicycle=designated`), jamais de non-revêtu connu.
+                let greenway = matches!(
+                    class,
+                    HighwayClass::Path
+                        | HighwayClass::Footway
+                        | HighwayClass::Pedestrian
+                        | HighwayClass::Bridleway
+                ) && a.bicycle_tag() == 2;
+                // `track` revêtu : `tracktype=grade1` ou surface connue revêtue (règle Java, plan §5.5).
+                let paved_track = class == HighwayClass::Track
+                    && (a.tracktype() == 1 || (a.surface() != 0 && !a.is_unpaved()));
+                (road_class || greenway || paved_track) && !a.is_unpaved()
+            }
             Self::Gravel => {
                 road_class
                     || matches!(class, HighwayClass::Track | HighwayClass::Path | HighwayClass::Bridleway)
@@ -466,6 +480,69 @@ struct ViewEdge {
     attrs: Attrs,
 }
 
+// --- Caps des chaînes (lot 2, §4) ----------------------------------------------------------------------------
+
+/// Fenêtre de cap : les points à 30 m et à 50 m du bout de la chaîne (constantes Java, plan §2.2).
+pub const HEADING_NEAR_M: f64 = 30.0;
+pub const HEADING_FAR_M: f64 = 50.0;
+
+/// Cap (degrés, 0 = nord, sens horaire, `[0, 360)`) d'une polyligne `(lat, lon)` en E7, à son début ou à sa
+/// fin : direction entre les points situés à `near` et `far` mètres du bout (`RouteGuarantees.pathHeading`),
+/// repli sur la corde de la polyligne si ces deux points sont à moins de 0,5 m l'un de l'autre.
+pub fn polyline_heading(pts: &[(i32, i32)], at_start: bool) -> f64 {
+    if pts.len() < 2 {
+        return 0.0;
+    }
+    let lat0 = f64::from(pts[0].0) * 1e-7;
+    let (ky, kx) = (111_194.926_6, 111_194.926_6 * lat0.to_radians().cos());
+    let xy: Vec<(f64, f64)> = pts
+        .iter()
+        .map(|&(la, lo)| ((f64::from(lo - pts[0].1)) * 1e-7 * kx, (f64::from(la - pts[0].0)) * 1e-7 * ky))
+        .collect();
+    let seg: Vec<f64> = xy.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).collect();
+    let total: f64 = seg.iter().sum();
+    let far = HEADING_FAR_M.min(total);
+    let near = HEADING_NEAR_M.min(far / 2.0);
+    let (from, to) = if at_start { (near, far) } else { (total - far, total - near) };
+    let along = |offset: f64| -> (f64, f64) {
+        let mut acc = 0.0;
+        for (i, &s) in seg.iter().enumerate() {
+            if acc + s >= offset && s > 0.0 {
+                let t = (offset - acc) / s;
+                return (xy[i].0 + t * (xy[i + 1].0 - xy[i].0), xy[i].1 + t * (xy[i + 1].1 - xy[i].1));
+            }
+            acc += s;
+        }
+        xy[xy.len() - 1]
+    };
+    let (mut a, mut b) = (along(from), along(to));
+    if (b.0 - a.0).hypot(b.1 - a.1) < 0.5 {
+        a = xy[0];
+        b = xy[xy.len() - 1];
+    }
+    let deg = (b.0 - a.0).atan2(b.1 - a.1).to_degrees();
+    if deg < 0.0 {
+        deg + 360.0
+    } else {
+        deg
+    }
+}
+
+/// Cap en degrés vers sa forme stockée (`u16`, 360/65536 degrés).
+pub fn heading_to_u16(deg: f64) -> u16 {
+    ((deg.rem_euclid(360.0) / 360.0 * 65_536.0).round() as u32 & 0xffff) as u16
+}
+
+/// Cap stocké vers degrés.
+pub fn heading_from_u16(h: u16) -> f64 {
+    f64::from(h) * 360.0 / 65_536.0
+}
+
+/// `[début, fin]` des caps d'une polyligne, déjà en forme stockée.
+pub fn polyline_heading_pair(pts: &[(i32, i32)]) -> [u16; 2] {
+    [heading_to_u16(polyline_heading(pts, true)), heading_to_u16(polyline_heading(pts, false))]
+}
+
 /// Construit la vue `spec` du graphe de base `g` : les données prêtes pour `write_graph`.
 pub fn build_view<B: AsRef<[u8]>>(g: &GraphFile<B>, spec: &ViewSpec) -> Result<GraphData, FormatError> {
     let be = BaseEdges::load(g);
@@ -557,10 +634,12 @@ pub fn build_view<B: AsRef<[u8]>>(g: &GraphFile<B>, spec: &ViewSpec) -> Result<G
     let mut chain_off: Vec<u32> = vec![0];
     let mut chain_links: Vec<u32> = Vec::new();
     let mut weights: Vec<u32> = Vec::with_capacity(vedges.len());
+    let mut headings: Vec<u8> = Vec::with_capacity(vedges.len() * 4);
     for ve in &vedges {
         let lo = refs.len() as u32;
         let (p0, p1) = g.node_pos(base_nodes[ve.a as usize]);
         put(p0, p1, &mut refs);
+        let mut poly: Vec<(i32, i32)> = vec![(p0, p1)];
         for &(e, rev) in &ve.links {
             let mut inner = g.geometry(e);
             if rev {
@@ -568,12 +647,17 @@ pub fn build_view<B: AsRef<[u8]>>(g: &GraphFile<B>, spec: &ViewSpec) -> Result<G
             }
             for (la, lo_) in inner {
                 put(la, lo_, &mut refs);
+                poly.push((la, lo_));
             }
             let (nl, nn) = g.node_pos(link_to(&be, (e, rev)));
             put(nl, nn, &mut refs);
+            poly.push((nl, nn));
             chain_links.push(e | if rev { DIR_BIT } else { 0 });
         }
         let hi = refs.len() as u32 - 1;
+        for h in polyline_heading_pair(&poly) {
+            headings.extend_from_slice(&h.to_le_bytes());
+        }
         chain_off.push(chain_links.len() as u32);
         weights.push(ve.weight);
         let way = g.identity(ve.links[0].0).0;
@@ -620,6 +704,7 @@ pub fn build_view<B: AsRef<[u8]>>(g: &GraphFile<B>, spec: &ViewSpec) -> Result<G
         ExtraSection { kind: KIND_VIEW_CHAIN_OFF, bytes: u32_bytes(&chain_off) },
         ExtraSection { kind: KIND_VIEW_CHAIN, bytes: u32_bytes(&chain_links) },
         ExtraSection { kind: KIND_VIEW_BASE_NODE, bytes: u32_bytes(&base_nodes) },
+        ExtraSection { kind: KIND_VIEW_HEADING, bytes: headings },
     ];
     Ok(GraphData {
         zoom: h.zoom,
@@ -655,6 +740,17 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
     /// Poids de chaque arête de la vue (`NO_WEIGHT` : inutilisable).
     pub fn view_weights(&self) -> Option<&[U32]> {
         <[U32]>::ref_from_bytes(self.optional_section(KIND_VIEW_WEIGHT)?).ok()
+    }
+
+    /// Caps de début et de fin de chaque arête de vue (`[début, fin]`, 360/65536 degrés, dans le sens `a → b`),
+    /// si la vue les porte (format minor 2) ; voir [`polyline_heading`].
+    pub fn view_headings(&self) -> Option<Vec<[u16; 2]>> {
+        let b = self.optional_section(KIND_VIEW_HEADING)?;
+        Some(
+            b.chunks_exact(4)
+                .map(|c| [u16::from_le_bytes([c[0], c[1]]), u16::from_le_bytes([c[2], c[3]])])
+                .collect(),
+        )
     }
 
     /// Nœud de base de chaque nœud de la vue (croissant).

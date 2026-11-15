@@ -1,0 +1,20 @@
+[package]
+name = "ord-loops-check"
+description = "Contrôleur indépendant des garanties d'un parcours de boucle (lot 2) : écrit depuis la note de conception et RouteGuarantees.java, sans le code du moteur"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ord-graph.workspace = true
+# Seulement les types publics de requête et de résultat (Request, Route, Step, Position, Mode, RideType) :
+# aucune fonction du moteur n'est appelée.
+ord-loops = { path = "../ord-loops" }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -17,7 +17,9 @@ use crate::build::GraphData;
 pub const MAGIC: [u8; 8] = *b"ORDGRAPH";
 pub const FORMAT_MAJOR: u16 = 1;
 /// 1 : sections optionnelles d'une vue (`VIEW_*`, voir `view.rs`) ; un fichier de minor 0 reste lisible.
-pub const FORMAT_MINOR: u16 = 1;
+/// 2 : section optionnelle `VIEW_HEADING` (caps de début et de fin de chaque arête de vue, lot 2) ; un fichier
+/// de minor 1 reste lisible (le moteur recalcule alors les caps au chargement).
+pub const FORMAT_MINOR: u16 = 2;
 const ENDIAN_MARK: u32 = 0x0102_0304;
 const HEADER_LEN: usize = 256;
 const BLOCK_ALIGN: u64 = 4096;
@@ -35,10 +37,12 @@ pub const KIND_VIEW_WEIGHT: u32 = 8;
 pub const KIND_VIEW_CHAIN_OFF: u32 = 9;
 pub const KIND_VIEW_CHAIN: u32 = 10;
 pub const KIND_VIEW_BASE_NODE: u32 = 11;
+/// Caps de chaque arête de vue (minor 2) : deux `u16` par arête, début puis fin, en 360/65536 degrés.
+pub const KIND_VIEW_HEADING: u32 = 12;
 /// Drapeau : pas de somme au niveau de la section, une par entrée de l'index des cellules.
 const FLAG_PER_ENTRY_HASH: u32 = 1;
 
-const SECTION_NAMES: [(u32, &str); 11] = [
+const SECTION_NAMES: [(u32, &str); 12] = [
     (KIND_CELL_INDEX, "CELL_INDEX"),
     (KIND_CELL_BLOCKS, "CELL_BLOCKS"),
     (KIND_GEOMETRY, "GEOMETRY"),
@@ -50,6 +54,7 @@ const SECTION_NAMES: [(u32, &str); 11] = [
     (KIND_VIEW_CHAIN_OFF, "VIEW_CHAIN_OFF"),
     (KIND_VIEW_CHAIN, "VIEW_CHAIN"),
     (KIND_VIEW_BASE_NODE, "VIEW_BASE_NODE"),
+    (KIND_VIEW_HEADING, "VIEW_HEADING"),
 ];
 
 fn section_name(kind: u32) -> &'static str {
@@ -550,6 +555,10 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
                 && len_of(KIND_VIEW_CHAIN).is_some_and(|l| l % 4 == 0);
             if !ok {
                 return Err(truncated("sections de vue"));
+            }
+            // `VIEW_HEADING` est facultative (minor 2) : si elle est là, deux `u16` par arête.
+            if len_of(KIND_VIEW_HEADING).is_some_and(|l| l != edges * 4) {
+                return Err(truncated("section VIEW_HEADING"));
             }
         }
         self.first_node = cells.iter().map(|c| c.first_node).collect();
