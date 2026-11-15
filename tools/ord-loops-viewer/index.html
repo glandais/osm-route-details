@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Parcours générés — ord-loops</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css" />
+    <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js"></script>
+    <style>
+      :root {
+        --ink: #1d2733;
+        --muted: #66727f;
+        --line: #dfe4ea;
+        --panel: #ffffff;
+        --accent: #0b6e4f;
+        --c0: #d7263d;
+        --c1: #1b6ec2;
+        --c2: #8e44ad;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font: 14px/1.4 system-ui, sans-serif;
+        color: var(--ink);
+      }
+      body {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+      }
+      aside {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+      }
+      header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 8px;
+      }
+      .row > span {
+        color: var(--muted);
+        font-size: 12px;
+        width: 100%;
+      }
+      button,
+      select {
+        font: inherit;
+        color: inherit;
+        padding: 5px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+      button[aria-pressed='true'] {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      #requests {
+        flex: 1;
+        overflow: auto;
+        padding: 6px 0;
+      }
+      #requests h2 {
+        margin: 10px 14px 4px;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #requests button {
+        display: flex;
+        justify-content: space-between;
+        width: calc(100% - 16px);
+        margin: 2px 8px;
+        text-align: left;
+        border-color: transparent;
+      }
+      #requests button:hover {
+        border-color: var(--line);
+      }
+      #requests .modes {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #requests button[aria-pressed='true'] .modes {
+        color: #dff3ea;
+      }
+      #cards {
+        border-top: 1px solid var(--line);
+        padding: 10px 14px;
+        max-height: 45%;
+        overflow: auto;
+      }
+      .card {
+        display: grid;
+        grid-template-columns: 14px 1fr;
+        gap: 4px 8px;
+        padding: 8px;
+        margin-bottom: 6px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .card.off {
+        opacity: 0.45;
+      }
+      .card .dot {
+        width: 12px;
+        height: 12px;
+        margin-top: 3px;
+        border-radius: 50%;
+      }
+      .card b {
+        font-variant-numeric: tabular-nums;
+      }
+      .card small {
+        grid-column: 2;
+        color: var(--muted);
+      }
+      .card .bad {
+        color: var(--c0);
+      }
+      #note {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 8px;
+      }
+      #map {
+        min-height: 0;
+      }
+      kbd {
+        padding: 0 4px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <header>
+        <h1>Parcours générés</h1>
+        <div class="row" id="modes">
+          <span>Mode <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span>
+        </div>
+        <div class="row">
+          <span>Fond de carte</span>
+          <select id="basemap">
+            <option value="style">Cycling</option>
+            <option value="style-road">Cycling, route</option>
+            <option value="style-dark">Cycling, sombre</option>
+            <option value="style-road-dark">Cycling, route sombre</option>
+          </select>
+          <button id="network" aria-pressed="true">Réseau de l'équipe</button>
+        </div>
+      </header>
+      <div id="requests"></div>
+      <div id="cards">
+        <p id="note">Requête suivante ou précédente : <kbd>↓</kbd> <kbd>↑</kbd></p>
+        <div id="list"></div>
+      </div>
+    </aside>
+    <div id="map"></div>
+    <script>
+      const STYLE = (name) => `https://cdn.jsdelivr.net/npm/@glandais/cycling-style@1/dist/${name}.json`
+      const MODES = [
+        { key: 'strict', label: 'Strict' },
+        { key: 'team', label: "Équipe d'abord" },
+        { key: 'discovery', label: 'Découverte' },
+      ]
+      const COLORS = ['#d7263d', '#1b6ec2', '#8e44ad']
+      const EMPTY = { type: 'FeatureCollection', features: [] }
+
+      const state = { requests: [], current: 0, mode: 'team', hidden: new Set(), network: true, data: EMPTY }
+      const cache = new Map()
+
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: STYLE('style'),
+        center: [-1.55, 47.22],
+        zoom: 8,
+        attributionControl: { compact: true },
+      })
+      map.addControl(new maplibregl.NavigationControl(), 'top-right')
+      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }))
+
+      // Les couches sont reposées après chaque changement de fond : setStyle les efface.
+      // Flèche de sens dessinée ici : les polices du fond n'ont pas de glyphe pour un triangle.
+      function arrowImage() {
+        const size = 24
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = size
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath()
+        ctx.moveTo(7, 5)
+        ctx.lineTo(19, 12)
+        ctx.lineTo(7, 19)
+        ctx.closePath()
+        ctx.fill()
+        return ctx.getImageData(0, 0, size, size)
+      }
+
+      function addLayers() {
+        if (map.getSource('gen')) return
+        if (!map.hasImage('arrow')) map.addImage('arrow', arrowImage())
+        // tolerance 0 : sinon les arêtes d'équipe, plus courtes qu'un pixel aux petits zooms, sont
+        // retirées une à une par la simplification et le réseau disparaît.
+        map.addSource('gen', { type: 'geojson', data: state.data, tolerance: 0 })
+        map.addLayer({
+          id: 'team-edges',
+          type: 'line',
+          source: 'gen',
+          filter: ['==', ['get', 'role'], 'team_edge'],
+          layout: { visibility: state.network ? 'visible' : 'none' },
+          paint: { 'line-color': '#00a0a8', 'line-opacity': 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 13, 3] },
+        })
+        map.addLayer({
+          id: 'candidates-casing',
+          type: 'line',
+          source: 'gen',
+          filter: ['==', ['get', 'role'], 'candidate'],
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.9 },
+        })
+        map.addLayer({
+          id: 'candidates',
+          type: 'line',
+          source: 'gen',
+          filter: ['==', ['get', 'role'], 'candidate'],
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': ['match', ['get', 'index'], 0, COLORS[0], 1, COLORS[1], 2, COLORS[2], '#444'],
+            'line-width': 4,
+          },
+        })
+        map.addLayer({
+          id: 'arrows',
+          type: 'symbol',
+          source: 'gen',
+          filter: ['==', ['get', 'role'], 'candidate'],
+          layout: {
+            'symbol-placement': 'line',
+            'symbol-spacing': 140,
+            'icon-image': 'arrow',
+            'icon-size': 0.5,
+            'icon-allow-overlap': true,
+          },
+        })
+        map.addLayer({
+          id: 'start',
+          type: 'circle',
+          source: 'gen',
+          filter: ['==', ['geometry-type'], 'Point'],
+          paint: {
+            'circle-radius': 7,
+            'circle-color': '#ffffff',
+            'circle-stroke-color': '#1d2733',
+            'circle-stroke-width': 3,
+          },
+        })
+        applyFilters()
+      }
+      map.on('style.load', addLayers)
+
+      function applyFilters() {
+        if (!map.getLayer('candidates')) return
+        const shown = ['all', ['==', ['get', 'role'], 'candidate'], ['!', ['in', ['get', 'index'], ['literal', [...state.hidden]]]]]
+        for (const id of ['candidates', 'candidates-casing', 'arrows']) map.setFilter(id, shown)
+        map.setLayoutProperty('team-edges', 'visibility', state.network ? 'visible' : 'none')
+      }
+
+      async function load(file) {
+        if (!file) return EMPTY
+        if (!cache.has(file)) cache.set(file, fetch(`/data/${file}`).then((r) => r.json()))
+        return cache.get(file)
+      }
+
+      function bounds(features) {
+        const b = new maplibregl.LngLatBounds()
+        for (const f of features) {
+          const coords = f.geometry.type === 'Point' ? [f.geometry.coordinates] : f.geometry.coordinates
+          for (const c of coords) b.extend(c)
+        }
+        return b
+      }
+
+      async function show({ fit }) {
+        const request = state.requests[state.current]
+        if (!request) return
+        const file = request.modes[state.mode]
+        const wanted = `${state.current}/${state.mode}`
+        state.wanted = wanted
+        const data = await load(file)
+        if (state.wanted !== wanted) return
+        state.data = data
+        state.hidden.clear()
+        if (map.getSource('gen')) map.getSource('gen').setData(data)
+        applyFilters()
+        const candidates = data.features.filter((f) => f.properties.role === 'candidate')
+        const points = data.features.filter((f) => f.geometry.type === 'Point')
+        if (fit) {
+          const target = candidates.length ? [...candidates, ...points] : points
+          if (target.length) map.fitBounds(bounds(target), { padding: 60, maxZoom: 13, duration: 300 })
+        }
+        render(request, candidates, points, Boolean(file))
+      }
+
+      function render(request, candidates, points, exported) {
+        for (const b of document.querySelectorAll('#requests button'))
+          b.setAttribute('aria-pressed', String(Number(b.dataset.i) === state.current))
+        for (const b of document.querySelectorAll('#modes button')) {
+          b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode))
+          b.disabled = !request.modes[b.dataset.mode]
+        }
+        const list = document.getElementById('list')
+        list.replaceChildren()
+        const snap = points[0]?.properties.snap_m
+        const head = document.createElement('p')
+        head.id = 'note'
+        head.textContent =
+          `Équipe ${request.team}, requête ${request.request}` +
+          (snap != null ? ` — départ accroché à ${Math.round(snap)} m` : '')
+        list.append(head)
+        if (!candidates.length) {
+          const p = document.createElement('p')
+          p.textContent = exported ? 'Aucun parcours rendu dans ce mode.' : 'Mode non exporté pour cette requête.'
+          list.append(p)
+          return
+        }
+        for (const f of candidates) {
+          const p = f.properties
+          const card = document.createElement('div')
+          card.className = 'card'
+          const violations = Array.isArray(p.violations) ? p.violations : []
+          card.innerHTML =
+            `<span class="dot" style="background:${COLORS[p.index] ?? '#444'}"></span>` +
+            `<span><b>${p.length_km.toFixed(1)} km</b> · ${Math.round(p.team_share * 100)} % sur les routes de l'équipe</span>` +
+            `<small>${((p.over_target - 1) * 100).toFixed(1).replace('-', '−')} % par rapport à la distance demandée</small>` +
+            (violations.length ? `<small class="bad">Garanties : ${violations.join(', ')}</small>` : '')
+          card.onclick = () => {
+            state.hidden.has(p.index) ? state.hidden.delete(p.index) : state.hidden.add(p.index)
+            card.classList.toggle('off', state.hidden.has(p.index))
+            applyFilters()
+          }
+          list.append(card)
+        }
+      }
+
+      function select(i) {
+        state.current = (i + state.requests.length) % state.requests.length
+        const request = state.requests[state.current]
+        if (!request.modes[state.mode]) state.mode = MODES.find((m) => request.modes[m.key])?.key ?? state.mode
+        document.querySelector(`#requests button[data-i="${state.current}"]`)?.scrollIntoView({ block: 'nearest' })
+        show({ fit: true })
+      }
+
+      function setMode(mode) {
+        if (!state.requests[state.current]?.modes[mode]) return
+        state.mode = mode
+        show({ fit: false })
+      }
+
+      const modesRow = document.getElementById('modes')
+      for (const m of MODES) {
+        const b = document.createElement('button')
+        b.textContent = m.label
+        b.dataset.mode = m.key
+        b.onclick = () => setMode(m.key)
+        modesRow.append(b)
+      }
+      document.getElementById('basemap').onchange = (e) => map.setStyle(STYLE(e.target.value))
+      document.getElementById('network').onclick = (e) => {
+        state.network = !state.network
+        e.target.setAttribute('aria-pressed', String(state.network))
+        applyFilters()
+      }
+      addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'SELECT') return
+        if (e.key === 'ArrowDown') select(state.current + 1)
+        else if (e.key === 'ArrowUp') select(state.current - 1)
+        else if (['1', '2', '3'].includes(e.key)) setMode(MODES[Number(e.key) - 1].key)
+        else return
+        e.preventDefault()
+      })
+
+      fetch('/data/index.json')
+        .then((r) => r.json())
+        .then((requests) => {
+          state.requests = requests
+          const box = document.getElementById('requests')
+          let team = null
+          requests.forEach((r, i) => {
+            if (r.team !== team) {
+              team = r.team
+              const h = document.createElement('h2')
+              h.textContent = `Équipe ${team}`
+              box.append(h)
+            }
+            const b = document.createElement('button')
+            b.dataset.i = i
+            const missing = MODES.filter((m) => !r.modes[m.key]).map((m) => m.label)
+            b.innerHTML =
+              `<span>Requête ${r.request}</span>` +
+              `<span class="modes">${missing.length ? 'sans ' + missing.join(', ') : ''}</span>`
+            b.onclick = () => select(i)
+            box.append(b)
+          })
+          if (requests.length) map.loaded() ? select(0) : map.once('load', () => select(0))
+        })
+    </script>
+  </body>
+</html>
