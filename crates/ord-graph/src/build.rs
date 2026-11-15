@@ -152,6 +152,13 @@ pub struct EdgeData {
     pub hi: u32,
 }
 
+/// Section supplémentaire écrite telle quelle après les identifiants (sections d'une vue).
+#[derive(Clone, Debug)]
+pub struct ExtraSection {
+    pub kind: u32,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Debug)]
 pub struct GraphData {
     pub zoom: u8,
@@ -164,6 +171,8 @@ pub struct GraphData {
     pub coords: Vec<AtomicU64>,
     pub stats: BuildStats,
     pub meta: SourceMeta,
+    /// Sections optionnelles (vide pour le graphe de base).
+    pub extras: Vec<ExtraSection>,
 }
 
 const MISSING: u32 = 0x8000_0000;
@@ -546,5 +555,5 @@ pub fn build_graph(
     stats.edges = edges.len() as u64;
     lap(&mut stats, &mut clock, "sommets, cellules, tri des arêtes");
 
-    Ok(GraphData { zoom, nodes, cells, edges, refs, coords, stats, meta })
+    Ok(GraphData { zoom, nodes, cells, edges, refs, coords, stats, meta, extras: Vec::new() })
 }

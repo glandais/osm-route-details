@@ -8,7 +8,7 @@ use ord_graph::attrs::{Access, Attrs, ROUTE_REGIONAL};
 use ord_graph::build::{build_graph, BuildOptions, GraphData, MemSource};
 use ord_graph::format::{write_graph, BlockLayout, FormatError, GraphFile, DIR_BIT};
 use ord_graph::grid;
-use ord_graph::search::{edge_cost, FlatGraph, FlatSearcher, SearchConfig, Searcher};
+use ord_graph::search::{edge_cost, FlatGraph, FlatSearcher, SearchConfig, Searcher, StateKind};
 use ord_graph::stats::GraphStats;
 
 const LAT0: f64 = 47.2;
@@ -466,8 +466,8 @@ fn pbf_output_does_not_depend_on_threads_or_batch_size() {
 
 // --- 7. Recherche ----------------------------------------------------------------------------------------------------
 
-fn full_cfg(forbid: bool, dense: bool) -> SearchConfig {
-    SearchConfig { radius_m: 1e7, forbid_uturn: forbid, dense, collect_nodes: true }
+fn full_cfg(forbid: bool, state: StateKind) -> SearchConfig {
+    SearchConfig { radius_m: 1e7, forbid_uturn: forbid, state, collect_nodes: true }
 }
 
 /// Dijkstra par nœuds de référence, mêmes poids que `edge_cost`.
@@ -571,9 +571,9 @@ fn edge_search_without_uturn_ban_equals_node_dijkstra() {
     let mut searcher = Searcher::new(&g);
     for start in [0u32, 5, 17, (g.header().nodes / 2) as u32] {
         let reference = reference_node_dijkstra(&g, start);
-        for dense in [false, true] {
+        for dense in StateKind::ALL {
             let r = searcher.run(start, &full_cfg(false, dense));
-            assert_eq!(r.node_dist, reference, "départ {start}, dense={dense}");
+            assert_eq!(r.node_dist, reference, "départ {start}, state={dense:?}");
         }
     }
 }
@@ -584,7 +584,7 @@ fn edge_search_with_uturn_ban_matches_reference_and_never_improves() {
     let (_, g) = graph(&mut s, 11);
     let mut searcher = Searcher::new(&g);
     for start in [1u32, 9, 40, (g.header().nodes / 3) as u32] {
-        let r = searcher.run(start, &full_cfg(true, false));
+        let r = searcher.run(start, &full_cfg(true, StateKind::Map));
         assert_eq!(r.node_dist, reference_edge_dijkstra(&g, start, true, 1e7), "départ {start}");
         let free: std::collections::HashMap<_, _> = reference_node_dijkstra(&g, start).into_iter().collect();
         for (n, d) in &r.node_dist {
@@ -603,15 +603,17 @@ fn dead_end_allows_the_uturn_and_disc_and_no_access_are_respected() {
     let (data, g) = graph(&mut s, 11);
     let id = |osm: i64| data.nodes.iter().position(|n| n.osm_id == osm).unwrap() as u32;
     let mut searcher = Searcher::new(&g);
-    let r = searcher
-        .run(id(2), &SearchConfig { radius_m: 1e7, forbid_uturn: true, dense: false, collect_nodes: true });
+    let r = searcher.run(
+        id(2),
+        &SearchConfig { radius_m: 1e7, forbid_uturn: true, state: StateKind::Map, collect_nodes: true },
+    );
     // Depuis 2 : vers 1 (impasse : demi-tour permis, d'où 2 états), mais 3 est interdit (accès `No`).
     assert_eq!(r.stats.settled, 2);
     assert!(r.node_dist.iter().all(|(n, _)| *n != id(3) && *n != id(4)));
     // Disque : 130 m autour de 1 ne contient pas 3 (≈ 260 m).
     let r = searcher.run(
         id(1),
-        &SearchConfig { radius_m: 130.0, forbid_uturn: false, dense: false, collect_nodes: true },
+        &SearchConfig { radius_m: 130.0, forbid_uturn: false, state: StateKind::Map, collect_nodes: true },
     );
     assert!(r.node_dist.iter().all(|(n, _)| *n == id(1) || *n == id(2)));
 }
@@ -625,7 +627,8 @@ fn uturn_is_allowed_when_the_only_other_exits_are_unusable() {
     s.way(12, &[3, 4], &residential());
     let (data, g) = graph(&mut s, 11);
     let id = |osm: i64| data.nodes.iter().position(|n| n.osm_id == osm).unwrap() as u32;
-    let cfg = |radius_m| SearchConfig { radius_m, forbid_uturn: true, dense: false, collect_nodes: true };
+    let cfg =
+        |radius_m| SearchConfig { radius_m, forbid_uturn: true, state: StateKind::Map, collect_nodes: true };
     let mut searcher = Searcher::new(&g);
     // Départ en 1, arrivée en 2 : la seule autre sortie de 2 est fermée (`No`) : demi-tour permis, 2 états.
     // (Avant correction, la sortie fermée comptait comme « autre » : 1 seul état.)
@@ -655,7 +658,12 @@ fn disc_cuts_the_search_like_the_reference_and_flat_equals_cells() {
     for start in [0u32, 7, 123, (g.header().nodes / 2) as u32] {
         for radius_m in [1500.0, 4000.0, 9000.0] {
             for forbid in [true, false] {
-                let cfg = SearchConfig { radius_m, forbid_uturn: forbid, dense: true, collect_nodes: true };
+                let cfg = SearchConfig {
+                    radius_m,
+                    forbid_uturn: forbid,
+                    state: StateKind::Dense,
+                    collect_nodes: true,
+                };
                 let r = searcher.run(start, &cfg);
                 let full = searcher.run(start, &SearchConfig { radius_m: 1e7, ..cfg });
                 if forbid {
@@ -687,7 +695,8 @@ fn disc_cuts_the_search_like_the_reference_and_flat_equals_cells() {
 #[test]
 fn same_cell_lookups_skip_the_binary_search() {
     // Une seule cellule (zoom 4 : tuiles de ≈ 22°) : aucune dichotomie ; plusieurs : seulement aux bords.
-    let cfg = SearchConfig { radius_m: 1e7, forbid_uturn: true, dense: true, collect_nodes: false };
+    let cfg =
+        SearchConfig { radius_m: 1e7, forbid_uturn: true, state: StateKind::Dense, collect_nodes: false };
     let (_, one) = graph(&mut random_source(5), 4);
     assert_eq!(one.n_cells(), 1);
     let r = Searcher::new(&one).run(3, &cfg);
@@ -734,6 +743,92 @@ fn corrupted_structure_is_refused_by_validation_not_by_a_panic() {
         let _ = g.geometry(e);
     }
     assert!(g.validate_structure().is_err());
+}
+
+/// Recalcule la somme d'une section dans la table des sections (un fichier « forgé » qui passe les sommes).
+fn refresh_section_hash(bytes: &mut [u8], section: &str) {
+    let g = GraphFile::open(bytes.to_vec()).unwrap_or_else(|_| panic!("ouverture"));
+    let (off, len) = g.section_range(section).expect("section");
+    let h = xxhash_rust::xxh3::xxh3_64(&bytes[off as usize..(off + len) as usize]);
+    // Table des sections à 256 : 32 o par entrée (type u32, drapeaux u32, position u64, longueur u64, somme u64).
+    for i in 0..16usize {
+        let e = 256 + i * 32;
+        let pos = u64::from_le_bytes(bytes[e + 8..e + 16].try_into().unwrap());
+        if pos == off {
+            bytes[e + 24..e + 32].copy_from_slice(&h.to_le_bytes());
+            return;
+        }
+    }
+    panic!("section {section} absente de la table");
+}
+
+#[test]
+fn forged_id_edges_endpoints_pass_the_checksums_but_not_verify() {
+    let mut s = random_source(17);
+    let mut data = built(&mut s, 11);
+    let dir = tempfile::tempdir().unwrap();
+    let path = written(&mut data, dir.path(), "f.ordg");
+    let good = std::fs::read(&path).unwrap();
+    let probe = GraphFile::open(good.clone()).unwrap();
+    probe.verify().expect("un fichier sain passe");
+    let (off, len) = probe.section_range("ID_EDGES").unwrap();
+    assert_eq!(len, probe.header().edges * 16);
+    // Extrémité `a` (octets 8..12) puis `b` (12..16) de la première arête, hors des nœuds.
+    for field in [8usize, 12] {
+        let mut bytes = good.clone();
+        let at = off as usize + field;
+        bytes[at..at + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        refresh_section_hash(&mut bytes, "ID_EDGES");
+        let g = GraphFile::open(bytes).unwrap();
+        // Sans la validation, `geometry` ou `edge_ends` sortiraient du tableau des nœuds : `verify()` refuse.
+        match g.verify() {
+            Err(FormatError::Truncated(m)) => assert!(m.contains("ID_EDGES"), "{m}"),
+            other => panic!("attendu un refus de ID_EDGES, obtenu {other:?}"),
+        }
+    }
+}
+
+// --- État local au disque ------------------------------------------------------------------------------------------
+
+#[test]
+fn local_state_equals_dense_and_map_and_is_sized_by_the_disc() {
+    // Zoom 13 : beaucoup de petites cellules, pour qu'un disque n'en touche qu'une partie.
+    let mut s = random_source(51);
+    let (_, g) = graph(&mut s, 13);
+    assert!(g.n_cells() > 20, "{} cellules", g.n_cells());
+    let mut by_kind: Vec<Searcher<'_, Vec<u8>>> = StateKind::ALL.iter().map(|_| Searcher::new(&g)).collect();
+    let mut small_local = u64::MAX;
+    let mut dense_bytes = 0;
+    // Les mêmes `Searcher` servent à tous les tours : la remise à zéro des pages est éprouvée.
+    for (start, radius_m, forbid) in [
+        (3u32, 2500.0, true),
+        (700, 2500.0, true),
+        (3, 9000.0, true),
+        (900, 4000.0, false),
+        (3, 2500.0, true),
+        (50, 1e7, true),
+        (3, 2500.0, false),
+    ] {
+        let mut results = Vec::new();
+        for (searcher, kind) in by_kind.iter_mut().zip(StateKind::ALL) {
+            let cfg = SearchConfig { radius_m, forbid_uturn: forbid, state: kind, collect_nodes: true };
+            results.push((kind, searcher.run(start, &cfg)));
+        }
+        let (_, reference) = &results[0];
+        for (kind, r) in &results[1..] {
+            assert_eq!(r.node_dist, reference.node_dist, "{kind:?}, départ {start}, rayon {radius_m}");
+            assert_eq!(
+                (r.stats.settled, r.stats.pushed, r.stats.heap_max),
+                (reference.stats.settled, reference.stats.pushed, reference.stats.heap_max)
+            );
+        }
+        if radius_m < 3000.0 {
+            small_local = small_local.min(results[2].1.stats.state_bytes);
+            dense_bytes = results[1].1.stats.state_bytes;
+        }
+    }
+    // Sur un petit disque l'état local est bien plus petit que le tableau dense du graphe entier.
+    assert!(small_local * 3 < dense_bytes, "local {small_local} o contre dense {dense_bytes} o");
 }
 
 // --- Source PBF réelle (minuscule) -------------------------------------------------------------------------------------

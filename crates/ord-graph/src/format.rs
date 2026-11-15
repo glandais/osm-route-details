@@ -16,7 +16,8 @@ use crate::build::GraphData;
 
 pub const MAGIC: [u8; 8] = *b"ORDGRAPH";
 pub const FORMAT_MAJOR: u16 = 1;
-pub const FORMAT_MINOR: u16 = 0;
+/// 1 : sections optionnelles d'une vue (`VIEW_*`, voir `view.rs`) ; un fichier de minor 0 reste lisible.
+pub const FORMAT_MINOR: u16 = 1;
 const ENDIAN_MARK: u32 = 0x0102_0304;
 const HEADER_LEN: usize = 256;
 const BLOCK_ALIGN: u64 = 4096;
@@ -28,16 +29,27 @@ const KIND_GEOMETRY: u32 = 3;
 const KIND_ID_NODES: u32 = 4;
 const KIND_ID_EDGES: u32 = 5;
 const KIND_STATS: u32 = 6;
+/// Sections d'une vue (minor 1) : méta JSON, poids par arête, chaînes d'arêtes de base, nœud de base par nœud.
+pub const KIND_VIEW_META: u32 = 7;
+pub const KIND_VIEW_WEIGHT: u32 = 8;
+pub const KIND_VIEW_CHAIN_OFF: u32 = 9;
+pub const KIND_VIEW_CHAIN: u32 = 10;
+pub const KIND_VIEW_BASE_NODE: u32 = 11;
 /// Drapeau : pas de somme au niveau de la section, une par entrée de l'index des cellules.
 const FLAG_PER_ENTRY_HASH: u32 = 1;
 
-const SECTION_NAMES: [(u32, &str); 6] = [
+const SECTION_NAMES: [(u32, &str); 11] = [
     (KIND_CELL_INDEX, "CELL_INDEX"),
     (KIND_CELL_BLOCKS, "CELL_BLOCKS"),
     (KIND_GEOMETRY, "GEOMETRY"),
     (KIND_ID_NODES, "ID_NODES"),
     (KIND_ID_EDGES, "ID_EDGES"),
     (KIND_STATS, "STATS"),
+    (KIND_VIEW_META, "VIEW_META"),
+    (KIND_VIEW_WEIGHT, "VIEW_WEIGHT"),
+    (KIND_VIEW_CHAIN_OFF, "VIEW_CHAIN_OFF"),
+    (KIND_VIEW_CHAIN, "VIEW_CHAIN"),
+    (KIND_VIEW_BASE_NODE, "VIEW_BASE_NODE"),
 ];
 
 fn section_name(kind: u32) -> &'static str {
@@ -432,6 +444,16 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
             .ok_or_else(|| truncated(format!("section {} absente", section_name(kind))))
     }
 
+    /// Octets d'une section optionnelle, si le fichier la porte.
+    pub(crate) fn optional_section(&self, kind: u32) -> Option<&[u8]> {
+        self.sections.iter().find(|s| s.kind == kind).map(|s| self.section_bytes(s))
+    }
+
+    /// Position et longueur `(offset, longueur)` d'une section, par son nom (tests, outils).
+    pub fn section_range(&self, name: &str) -> Option<(u64, u64)> {
+        self.sections.iter().find(|s| section_name(s.kind) == name).map(|s| (s.off, s.len))
+    }
+
     fn section_bytes(&self, s: &SectionInfo) -> &[u8] {
         &self.data.as_ref()[s.off as usize..(s.off + s.len) as usize]
     }
@@ -489,6 +511,21 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
         }
         if self.section(KIND_ID_NODES)?.len != nodes * 8 || self.section(KIND_ID_EDGES)?.len != edges * 16 {
             return Err(truncated("sections d'identifiants"));
+        }
+        // Sections d'une vue : présentes toutes ou aucune, longueurs liées aux comptes.
+        let view_kinds =
+            [KIND_VIEW_META, KIND_VIEW_WEIGHT, KIND_VIEW_CHAIN_OFF, KIND_VIEW_CHAIN, KIND_VIEW_BASE_NODE];
+        let present = view_kinds.iter().filter(|k| self.sections.iter().any(|s| s.kind == **k)).count();
+        if present != 0 {
+            let len_of = |k: u32| self.sections.iter().find(|s| s.kind == k).map(|s| s.len);
+            let ok = present == view_kinds.len()
+                && len_of(KIND_VIEW_WEIGHT) == Some(edges * 4)
+                && len_of(KIND_VIEW_CHAIN_OFF) == Some((edges + 1) * 4)
+                && len_of(KIND_VIEW_BASE_NODE) == Some(nodes * 4)
+                && len_of(KIND_VIEW_CHAIN).is_some_and(|l| l % 4 == 0);
+            if !ok {
+                return Err(truncated("sections de vue"));
+            }
         }
         self.first_node = cells.iter().map(|c| c.first_node).collect();
         self.first_edge = cells.iter().map(|c| c.first_edge).collect();
@@ -635,6 +672,10 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
         let bad = |i: usize, c: &CellInfo, what: &str| {
             truncated(format!("cellule {i} (x={}, y={}) : {what}", c.x, c.y))
         };
+        // Extrémités des arêtes (ID_EDGES) : `geometry` et les comptes les lisent comme des nœuds globaux.
+        if self.id_edges().iter().any(|r| u64::from(r.a.get()) >= nodes || u64::from(r.b.get()) >= nodes) {
+            return Err(truncated("ID_EDGES : extrémité d'arête hors des nœuds"));
+        }
         for (i, c) in self.cells.iter().enumerate() {
             let v = self.cell(i);
             let n = c.n_nodes as usize;
@@ -669,7 +710,7 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
                 }
             }
         }
-        Ok(())
+        self.validate_view()
     }
 
     /// Vérifie les sommes de toutes les sections et de tous les blocs ; l'erreur nomme la cellule.
@@ -989,6 +1030,9 @@ fn write_inner(
         .collect();
     sections.push(small(KIND_ID_EDGES, eids.as_slice().as_bytes(), &mut out)?);
     drop(eids);
+    for extra in &data.extras {
+        sections.push(small(extra.kind, &extra.bytes, &mut out)?);
+    }
     let stats_json = serde_json::to_vec(&data.stats).map_err(|e| FormatError::Build(e.to_string()))?;
     sections.push(small(KIND_STATS, &stats_json, &mut out)?);
     out.w.flush()?;

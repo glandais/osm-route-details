@@ -1,6 +1,7 @@
 # Graphe vélo OSM en cellules — lot 0 : construction, format, mesure
 
-> Statut : conception technique, **implémentée** (§9 résultats, §10 écarts). Exigences : plan Pédalons `docs/plans/2026-11-15-generateur-parcours-osm.md`
+> Statut : conception technique, **implémentée** (§9 résultats, §10 écarts, **§11 lot 0 bis** : vues par type de
+> parcours et état de recherche local au disque, format 1.1). Exigences : plan Pédalons `docs/plans/2026-11-15-generateur-parcours-osm.md`
 > (§1, §3, §4, §11, §12 ; ledger `API-204`). Ce lot **mesure** : ses chiffres décident du reste du plan et passent
 > avant les fonctions. **[mesuré]** : relevé du 15 novembre 2026 sur l'extrait ci-dessous ; **[estimé]** : à confirmer.
 
@@ -360,6 +361,14 @@ dans la zone chronométrée du froid. Le rapport de `measure --flat` mesure main
    Coutures et allées ensemble retirent ≈ 251 000 arêtes (15 %) : **ne ramènent pas** le graphe au repère (il faudrait en retirer la moitié). Le premier gain est dans la fusion de coutures ; le second, dans le repliement des `footway` courts (trottoirs, traversées) qui ne servent pas la génération. **Extrapolation à la France** : reprise sur les arêtes (×12,6 sur le poids du PBF, §5) : 1 653 822 × 12,6 ≈ **20,8 M d'arêtes** ; ×17 sur la surface donne 28 M comme borne haute ; l'extrapolation « longueur ÷ longueur par arête » redonne le même nombre, car les km sont mis à l'échelle du PBF de la même façon.
 5. **Mesure incomplète à 50 et 75 km** : la région est trop petite pour des disques intérieurs (8 à 50 km, 0 à 75 km). Les p90 « tous » incluent des disques tronqués par la mer ou la frontière : ils sont **optimistes** pour la France. Une région plus large (Bretagne + Pays de la Loire + Centre-Val de Loire) est nécessaire pour trancher à 75 km.
 
+6. **Coût de l'état dense pour la France** (relevé de revue du lot 0, absent de cette note jusqu'ici) : `DenseState::new`
+   alloue 2 × (arêtes du **graphe entier**) emplacements de 12 o, que le disque soit de 15 ou de 75 km : 39,7 Mo ici
+   (1 653 822 × 24 o) **[mesuré]**, donc **≈ 0,50 Go** pour la France à 20,8 M d'arêtes (règle ×12,6, §5) et
+   **≈ 0,57 Go** à 24 M (règle par classes, rapport de mesures §4) **[calculé]**, **par recherche vivante**, soit le budget
+   de topologie du plan pour un seul arbre, et une requête en tient au moins deux (départ et arrivée). C'est la mémoire
+   de l'état, pas celle du graphe (30 à 47 Mo de pages lues par requête), qui décide de la limite du conteneur. Le §11
+   mesure l'une des parades, l'état local au disque.
+
 ## 10. Écarts à la conception
 
 Ce qui a été fait autrement que décrit plus haut, et ce qui n'a pas été fait.
@@ -397,3 +406,219 @@ Ce qui a été fait autrement que décrit plus haut, et ce qui n'a pas été fai
 - La variante « PBF pré-filtré par `osmium tags-filter` » (§5) et la mesure de `measure` en z10/z12 avec 50 départs (20 seulement, chaud seul).
 - `cargo deny` (non installé) : le job CI tranche, comme annoncé en §7. La durée de 3 constructions n'a pas été prise sur machine « au repos » au sens strict (navigation et agents tournaient en parallèle).
 - La mémoire de construction **France** : extrapolée, jamais mesurée.
+
+## 11. Lot 0 bis : vues par type de parcours, état de recherche local au disque (15 novembre 2026)
+
+Le lot 0 a mesuré un graphe deux fois plus fin que prévu (100 m par arête, 378 000 arêtes à 50 km, 111 ms par arbre)
+et un état dense dimensionné sur tout le graphe (§9.4, point 6). Deux remèdes étaient des hypothèses ; ce lot les rend
+**mesurables**, sans rien décider : (a) une **vue** par type de parcours, filtre d'arêtes plus contraction des chaînes
+que le filtre crée ; (b) un **état local au disque**. **[mesuré]** : relevé sur l'extrait du §0 ; les temps de §11.7 sont
+un essai de bout en bout sur machine chargée, **pas** un relevé de référence (voir §11.7).
+
+### 11.1 Défaut corrigé : les extrémités de `ID_EDGES`
+
+`validate_structure()` ne comparait pas les extrémités `a` et `b` de `ID_EDGES` au nombre de nœuds : un fichier forgé
+(ou corrompu, avec la somme de la section recalculée) passait `verify()`, puis `geometry()`, `edge_ends()` et les
+statistiques sortaient du tableau des nœuds (panique). Le contrôle est ajouté (erreur `Truncated`, « ID_EDGES : extrémité
+d'arête hors des nœuds »). Test : `forged_id_edges_endpoints_pass_the_checksums_but_not_verify` (extrémité `a` puis `b`
+à `u32::MAX`, somme de section recalculée dans la table pour que seules les valeurs soient fausses). §9.4, point 6 : le
+coût de l'état dense pour la France, qui manquait ici, est ajouté.
+
+### 11.2 Les vues et leurs filtres
+
+Une vue = (**filtre** d'arêtes de base) + (**contraction** des nœuds de degré 2 que le filtre crée) + (option
+**élagage des impasses**). Trois filtres, `ViewKind::keep` (`view.rs`) ; le suffixe `-prune` ajoute l'élagage
+(`road-prune`, `gravel-prune`, `all-prune`).
+
+| Vue | Garde | Écarte |
+|---|---|---|
+| `road` | classes routières (`motorway`/`trunk` déjà filtrés par accès, `primary`, `secondary`, `tertiary`, `unclassified`, `residential`, `living_street`, `service`, `road`, `busway`) et `cycleway` | `footway`, `path`, `track`, `steps`, `bridleway`, `pedestrian` ; accès `No` et `Private` ; `service=driveway`, `parking_aisle`, `drive-through`, `emergency_access` ; surface **connue non revêtue** (`is_unpaved`) |
+| `gravel` | tout `road` (surfaces non revêtues comprises), plus `track`, `path`, `bridleway`, et `footway` / `pedestrian` **seulement** avec `bicycle=designated` | `steps` (même avec `bicycle=yes`) ; accès `No` et `Private` ; les mêmes `service=*` |
+| `all` | tout, y compris l'accès `No` (témoin) | rien |
+
+**Décisions.** *Surface inconnue ou absente* : **gardée** dans `road` sur une classe routière (la classe laisse présumer
+un revêtement ; **choix, non vérifié sur l'extrait** : la part de `unclassified` et de `service` sans `surface` n'a pas
+été comptée), seul un `surface` connu non revêtu écarte l'arête.
+Une valeur hors de la table (`SURFACE_OTHER`) ou `wood` / `metal` (ponts) compte comme revêtue. *`Destination`* :
+**gardé** dans `road` et `gravel` (roulable en droit, déjà pénalisé ×1,25 par le coût synthétique) ; `Private` et `No`
+sont écartés (le coût les rend triples ou infinis, la vue les retire). `path` désigné aux vélos et revêtu **reste
+hors** de `road` (le cahier dit « pas de `path` ») : à rouvrir si les pistes vertes comptent. Ces règles sont des
+**hypothèses de mesure** ; le poids réel et les préférences par type viendront du moteur de coût (plan §6.5).
+
+### 11.3 Contraction
+
+Un nœud est **fondu** s'il a exactement deux arêtes vivantes (retenues, non élaguées) distinctes et si elles ouvrent
+**les mêmes sens le long de la chaîne** : `(sens ouvert de e1 vers x, sens ouvert de x vers e1)` égal à
+`(sens de x vers e2, sens de e2 vers x)`. Deux doubles sens, ou deux sens uniques de même orientation, fondent ; un
+double sens suivi d'un sens unique, un puits (deux sens uniques qui entrent) et une source (deux qui sortent) **gardent
+leur nœud** : fondus, un nœud atteignable (le puits, ou l'intérieur d'une impasse à sens unique) cesserait de l'être.
+Dans la vue `all`, les attributs doivent en plus être **égaux relus dans le sens de la chaîne** (`oriented_attrs`
+échange sens ouverts et sens voiture), ce qui couvre les deux ways écrites en sens opposés.
+
+Une arête de vue est une **chaîne** `[(arête de base, sens)]` de `a` vers `b` (id de vue de `a` < id de `b`) :
+- **(a) longueur** : somme des `len_dm` ; **poids** : somme des coûts de base (`edge_cost`), stockée, égale au coût de
+  l'arête seule quand la chaîne n'en a qu'une (`NO_WEIGHT` si l'une n'a pas de coût, accès `No`, vue `all` seulement) ;
+- **(b) identités** : la liste ordonnée des ids d'arêtes de base (bit 31 : parcourue de `b` vers `a`), plus la géométrie
+  complète de la chaîne, nœuds fondus compris : géométrie, attributs et surcouches par arête de base restent accessibles ;
+- **(c) sens** : la chaîne est ouverte dans un sens si **toutes** ses arêtes le sont ; ses attributs sont ceux de
+  l'arête la plus longue de la chaîne, relus dans son sens, avec les sens de la chaîne, l'accès **le plus restrictif**
+  et l'OU des bits d'itinéraire (approximation : la classe d'une chaîne mixte est celle de sa plus longue arête) ;
+- **pas de boucle** : une chaîne qui revient à son point de départ est coupée en son milieu, le nœud du milieu devient
+  un sommet (deux arêtes parallèles) ; un anneau sans aucune jonction est coupé au plus petit nœud et en son milieu ;
+- **pas de perte d'arêtes parallèles** : deux chaînes entre les mêmes sommets restent deux arêtes (états distincts de la
+  recherche) ; `check_view_structure` le vérifie (chaque arête de base vivante est dans **une** chaîne, aucune autre).
+
+**Élagage** (option) : retrait itératif des nœuds de degré 1 **avant** la contraction, sur les arêtes retenues. Une
+impasse entière disparaît ; un arbre tout entier disparaît (`road-prune` d'une rue sans boucle : 0 arête). Un départ
+dans une impasse élaguée est rattaché à l'extrémité la plus proche de la vue (§11.6).
+
+### 11.4 Stockage : format 1.1
+
+Une vue est un **fichier frère** `<graphe>.<vue>.ordv`, au **même format** que le graphe de base (mêmes cellules, mêmes
+sections, `open`, `verify`, `mmap`, `GraphStats` tels quels), avec cinq sections de plus et `format_minor` = 1 (un fichier
+de minor 0 reste lisible ; le lot 0 est inchangé pour le reste) :
+
+| Section | Contenu |
+|---|---|
+| `VIEW_META` | JSON : nom, filtre, élagage, comptes et empreinte du graphe de base (nœuds, arêtes, xxh3 du PBF, date), arêtes filtrées / élaguées, nœuds fondus, boucles coupées, anneaux |
+| `VIEW_WEIGHT` | `u32` par arête : somme des coûts de base (`u32::MAX` : inutilisable) |
+| `VIEW_CHAIN_OFF`, `VIEW_CHAIN` | décalages (`u32`, n + 1) puis arêtes de base de chaque chaîne (`u32`, bit 31 = sens inverse) |
+| `VIEW_BASE_NODE` | `u32` par nœud de vue : id du nœud dans le graphe de base (croissant : recherche dichotomique) |
+
+`ID_NODES` garde l'id OSM de chaque nœud de vue ; `ID_EDGES` la way de la première arête de la chaîne et les extrémités.
+Les longueurs de section sont liées aux comptes à l'`open` ; `validate_structure` (donc `verify()`) contrôle la
+monotonie des décalages, les ids dans les comptes du graphe de base et l'ordre de `VIEW_BASE_NODE`. Le fichier se
+construit hors ligne, **0,4 à 1,4 s par vue** et 618 Mo de pic (cinq vues dans un processus, graphe de base mmap) sur
+la région **[mesuré]**. Choix d'un fichier frère plutôt que de sections dans le fichier de base : le graphe de base
+reste immuable et partageable, chaque vue se reconstruit ou se retire sans réécrire 124 Mo, et le lecteur n'a rien à
+distinguer. Contre : une vue répète géométrie et identités (la vue `all` pèse **144 Mo contre 125**, §11.7).
+
+### 11.5 Un seul code de recherche
+
+`Searcher::run` lit les poids par un trait (`Weights`) : `Synthetic` (coût décodé des attributs à chaque relâchement,
+le graphe de base, comme au lot 0) ou `Stored` (section `VIEW_WEIGHT`, une vue). La recherche est monomorphisée par
+poids : le graphe de base n'a **pas** de branche de plus. Une vue passe donc par les mêmes cellules, le même tas, les
+mêmes états, la même interdiction de demi-tour et le même disque ; `disc_content`, `FlatGraph` (référence à plat,
+poids stockés copiés) et `GraphStats` marchent tels quels sur une vue. Écart de mesure à garder en tête : le poids d'une
+vue est **lu** dans un tableau de 4 o par arête au lieu d'être **décodé** des attributs : à nombre d'états égal une vue
+n'a pas tout à fait le même coût par état que la base (non quantifié).
+
+Demi-tour : l'interdiction porte sur la même arête **de vue** ; il reste permis quand aucune autre sortie n'est
+utilisable, et un nœud de degré 1 de la vue est un cul-de-sac comme en base. Dans une chaîne, un demi-tour au milieu
+d'une impasse à sens unique (permis en base, où le nœud existe) n'existe plus : c'est la contrepartie des chaînes
+tout-ou-rien, et la raison pour laquelle le contrôle de §11.8 se fait **sans** interdiction de demi-tour.
+
+### 11.6 État local au disque (`--state local`)
+
+`StateKind::{Map, Dense, Local}` remplace le booléen `dense` de `SearchConfig`. L'état local est un tableau à
+estampilles **par pages** : `pages[arête >> 8]` donne la page (512 emplacements de 12 o) de ces 256 arêtes ou `NO_PAGE`.
+Au début de chaque recherche, `prepare` remet à zéro les pages du tour précédent, calcule les tuiles de la boîte
+englobante du disque (arithmétique, `find_cell`) et attribue une page à chaque tranche de 256 arêtes des cellules touchées.
+**Pourquoi c'est exact** : une arête n'est poussée que si sa source (départ ou nœud fixé, donc dans le disque) et sa
+cible (testée) sont dans le disque, donc son propriétaire (la cellule de `a`) est une cellule que le disque touche. Pas de
+nouvelle dichotomie, pas de cellule dans le tas : deux lectures de tableau au lieu d'une.
+**Mémoire** : 12 o × 512 par page attribuée (le tableau garde la capacité du plus gros tour ; `state_mb` rapporte le
+tour) plus la table des pages (4 o par 256 arêtes du graphe : 0,3 Mo pour la France **[calculé]**, négligeable devant 0,5 Go).
+Test : `local_state_equals_dense_and_map_and_is_sized_by_the_disc` (mêmes distances, mêmes états fixés et poussés, même
+tas maximal que `map` et `dense`, tours successifs sur les mêmes `Searcher` ; état local plus de trois fois plus petit
+sur un petit disque) ; et, dans `measure --check`, sur le graphe de base et chaque vue.
+
+### 11.7 `views` et `measure`
+
+```sh
+ord-graph-build views   --graph G.ordg [--views road,gravel,all,road-prune,gravel-prune] [--out-dir D] [--report R.json]
+ord-graph-build measure --graph G.ordg --views road,gravel,all,road-prune --state dense,local,map \
+                        [--view-dir D] [--check] [--check-starts 5] [--skip-timing] [--flat] [--poly P] --out R.json
+```
+
+`views` écrit chaque vue, la relit et la contrôle contre le graphe de base (`check_view_structure`) avant de rendre la
+main. `measure` tire **les mêmes départs** (graine, candidats et tri inchangés) dans le graphe de base ; pour une vue, un
+départ qui est un nœud fondu ou élagué est **rattaché** au nœud de la vue le plus proche en nombre d'arêtes (parcours des
+arêtes que le filtre retient, sens ignorés), le disque est centré sur ce nœud ; un départ sans arête retenue est
+écarté de cette vue (compté : `available_starts`). Le rapport (`targets[]`, un par graphe) donne, par graphe et par état
+(`states[]`) et par rayon : arêtes, km, mètres par arête, octets, octets par arête (`graph_stats`), arêtes du disque,
+états fixés, médiane / p90 / max chaud et froid, mémoire de l'état, cellules, `RssFile` / `RssAnon`, avec le même
+protocole que §5 (froid par requête sur une vue neuve après `DONTNEED`, tour jeté puis médiane de `--warm-runs` à chaud ;
+l'état local est dimensionné par un passage à vide avant la phase froide, comme le tableau dense est alloué avant elle).
+Le schéma JSON change (`targets[].states[].radii[]`) ; les rapports du lot 0 gardent le leur.
+
+**Premier relevé de bout en bout** (`measure-smoke.json` dans `~/.cache/osm-route-details/graph/lot0bis/`, 20 départs,
+rayons 15, 25, 50 km, **un seul** tour chaud, référence à plat, `--check` : 2 min 34 s). **Les temps ne sont pas
+exploitables** : des compilations et des tests tournaient sur la machine pendant les passes de la base et de `road`
+(écart `all` 83 ms contre `base` 111 ms à 50 km pour 3 % d'états en moins, incompatible avec un coût par état égal) ;
+les comptes, eux, sont exacts et ne dépendent pas de la charge. **Relevé de référence** (50 départs, quatre rayons, trois
+tours chauds, trois passes, six vues, trois états, km retirés par classe, extrapolation France, verdict sur la cible de
+500 ms) : [ord-graph-lot0bis-mesures.md](ord-graph-lot0bis-mesures.md) ; en cas d'écart avec cette section, il prime.
+
+| Graphe | Nœuds | Arêtes | km | m / arête | Fichier | o / arête | Arêtes à 50 km (méd., 20 départs) | États fixés à 50 km |
+|---|---|---|---|---|---|---|---|---|
+| base | 1 290 856 | 1 653 822 | 165 290 | 99,9 | 124,5 Mo | 75,3 | 366 881 | 690 653 |
+| `road` | 477 074 | 589 715 | 95 747 | 162,4 | 60,2 Mo | 102,1 | 132 805 | 239 703 |
+| `gravel` | 702 348 | 893 341 | 143 511 | 160,6 | 88,6 Mo | 99,1 | 192 606 | 356 733 |
+| `all` | 1 220 046 | 1 583 012 | 165 290 | 104,4 | 144,2 Mo | 91,1 | 356 178 | 671 057 |
+| `road-prune` | 222 584 | 337 934 | 74 437 | 220,3 | 36,6 Mo | 108,4 | 75 089 | 127 718 |
+| `gravel-prune` | 364 607 | 560 876 | 114 904 | 204,9 | 57,8 Mo | 103,1 | non mesuré dans ce relevé | — |
+
+Lecture **[mesuré]** : `road` ramène le graphe à **0,36 fois** les arêtes de la base (÷ 2,8) et `road-prune` à 0,20 fois
+(÷ 4,9), à 162 et 220 m par arête : la hypothèse « retirer le non-roulable puis fondre » est la bonne, la fusion des
+seules coutures d'attributs identiques (`all`) n'enlève que 4,3 % des arêtes. À 50 km, `road` a 133 000 arêtes, **sous**
+le repère de 180 000 du plan. Une vue **pèse plus par arête** (91 à 108 o contre 75) : elle répète la géométrie
+(polyligne complète) et les identités, et porte ses chaînes et ses poids ; en octets absolus `road` fait la moitié de la base.
+État à 50 km, médiane (Mo) : **dense** 39,7 (base), 14,2 (`road`), 21,4 (`gravel`) ; **local** 16,7 (base), 5,7 (`road`),
+8,7 (`gravel`) ; **map** 11,9, 6,0, 6,0. Sur la région (245 cellules) un disque de 50 km touche une part notable des cellules, donc l'état local ne gagne
+que ×2,4 sur la base ; pour la France la table des cellules touchées ne grandit pas avec le graphe : même ordre de
+grandeur absolu (**≈ 17 Mo** à 50 km, contre ≈ 0,5 Go dense) **[calculé, non mesuré sur la France]**. Les temps locaux
+à 15 et 50 km sont dans le bruit du dense (±3 %) sur ce relevé, ce que ne tranche pas un relevé chargé.
+
+Rattachement des départs (50 tirés) **[mesuré]** : `road` 19 rattachés (médiane 48 m, maximum 570 m), `gravel` 16 (48 m,
+252 m), `all` 1, `road-prune` 31 (110 m, 931 m), `gravel-prune` 25 (69 m, 547 m).
+
+### 11.8 Correction : le contrôle
+
+Deux niveaux, toujours alignés sur ce que la vue **promet** (distances aux nœuds de la vue, pas aux nœuds fondus).
+
+1. **Structure** (`check_view_structure`, exhaustive, appelée par `views` et par `measure --check`) : chaque chaîne est
+   contiguë, relie bien les nœuds de base de `a` et de `b`, somme exactement ses longueurs et ses poids, a les sens de ses
+   arêtes ; aucune boucle ; chaque arête de base vivante (filtre, puis élagage recalculés depuis la méta) est dans
+   exactement une chaîne, et aucune arête écartée n'y est ; empreinte du graphe de base vérifiée.
+2. **Distances** : depuis les `--check-starts` premiers départs (rattachés), un Dijkstra par nœuds sur le **graphe de base
+   filtré** (`filtered_reference_distances`, mêmes poids, sans disque ni interdiction de demi-tour) comparé à la recherche
+   de la vue (rayon infini, sans interdiction de demi-tour, état dense) pour **tous** les nœuds de la vue : atteint ou non,
+   et distance, égalité exacte. Au premier désaccord `measure` s'arrête (`CONTRÔLE ÉCHOUÉ`). Puis les trois états
+   rendent les mêmes distances et les mêmes comptes de la base et de chaque vue (25 km, demi-tour interdit).
+
+Sur la région, 5 départs par vue **[mesuré]** (`check-only.json`) : `road` 2 385 370 distances de nœuds comparées,
+2 335 400 atteintes, 0 écart ; `gravel` 3 511 740 / 3 418 555 ; `all` 6 100 230 / 6 010 905 ; `road-prune` 1 112 920 /
+1 104 590 ; `gravel-prune` 1 823 035 / 1 806 935 ; chaînes les plus longues : 38 arêtes de base (`road`), 36 (`gravel`) ;
+sens uniques : 100 560 arêtes de vue (`road`), 106 039 (`gravel`) ; paires d'arêtes parallèles : 12 371 (`road`),
+14 812 (`gravel`). Le contrôle est de 1 à 5 s par vue.
+
+Tests (`tests/views.rs`, graphes à la main puis pseudo-aléatoires) : filtre (chaque décision de §11.2) ; rue avec
+trottoir (nœud fondu, géométrie, longueur, chaîne) ; `all` ne fond que les coutures identiques ; sens uniques de même
+orientation fondus et sens uniques opposés, double sens + sens unique, non fondus ; boucle coupée avec arêtes parallèles
+gardées ; anneau sans jonction ; élagage itératif et arbre entier ; poids = somme des coûts de base et accès `No`
+seulement dans `all` ; rattachement d'un départ fondu ; vue corrompue refusée à l'écriture ; **équivalence des distances
+avec le graphe de base filtré, pour six vues et les trois états, sur un graphe pseudo-aléatoire** ; géométrie de la vue =
+concaténation de celle de ses arêtes de base ; fichiers de vue déterministes.
+
+### 11.9 Écarts et ce qui n'est pas fait
+
+1. **Poids stockés** : une vue lit son poids au lieu de le décoder (§11.5) ; le coût par état d'une vue et celui de la base
+   ne sont comparables qu'à cette réserve près.
+2. **Demi-tour** : l'équivalence avec le graphe de base filtré est démontrée **sans** interdiction de demi-tour (distances
+   aux nœuds). Avec l'interdiction, une vue et la base filtrée peuvent différer sur le seul cas des impasses à sens unique
+   décrit en §11.5 ; non mesuré.
+3. **Rattachement** : les départs fondus ou élagués sont déplacés (médiane 48 à 110 m, maximum 931 m) : le disque d'une
+   vue n'est pas exactement celui de la base.
+4. **Attributs d'une chaîne mixte** : approchés (arête la plus longue, accès le plus restrictif) ; la classe exacte de
+   chaque arête de base reste dans la chaîne.
+5. **Format** : un `format_minor` = 1 est aussi écrit pour les graphes de base ; le graphe du lot 0 (minor 0) reste lisible
+   et inchangé, mais n'est pas reconstruit.
+6. **API** : `SearchConfig.dense: bool` devient `state: StateKind` ; `Searcher::with_state` prend un `SearchState`
+   (`DenseState` reste exporté). Le JSON de `measure` change de schéma.
+7. **Non fait** : mesure sur un extrait de plusieurs régions ; WASM ; surcouche par arête de base (les chaînes la rendent
+   possible, aucune n'est écrite) ; fusion de chaînes à travers un nœud de jonction de degré > 2 (hors sujet). Faits
+   depuis, dans [ord-graph-lot0bis-mesures.md](ord-graph-lot0bis-mesures.md) : relevé de référence des temps ; `all-prune`
+   et `gravel-prune` construits, contrôlés et chronométrés ; part de `road` au revêtement présumé (70,4 % des km sans
+   `surface`) ; km retirés par classe et par itinéraire, exacts (les `graph_stats` d'une vue sont approchés pour les km
+   par classe, accès et itinéraire : voir le §5.2 du rapport).

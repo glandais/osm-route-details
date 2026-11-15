@@ -185,6 +185,8 @@ pub struct GraphStats {
     pub edges_per_cell: Quantiles,
     pub edge_length_m: Quantiles,
     pub km_total: f64,
+    /// Longueur moyenne d'une arête, en mètres (km × 1000 / arêtes).
+    pub m_per_edge: f64,
     pub km_by_class: BTreeMap<String, f64>,
     pub km_by_access: BTreeMap<String, f64>,
     pub km_by_service: BTreeMap<String, f64>,
@@ -360,6 +362,7 @@ impl GraphStats {
             }
         }
         s.distinct_attrs = distinct.len() as u64;
+        s.m_per_edge = s.km_total * 1000.0 / h.edges.max(1) as f64;
         s.edges_per_cell = Quantiles::of(per_cell_edges);
         s.edge_length_m = Quantiles::of(lengths);
         let (_, big) = largest_component(g);
