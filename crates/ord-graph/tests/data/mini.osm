@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version="0.6" generator="ord-graph test">
+  <node id="1" version="1" lat="47.2000000" lon="-1.5600000"/>
+  <node id="2" version="1" lat="47.2010000" lon="-1.5590000"/>
+  <node id="3" version="1" lat="47.2020000" lon="-1.5580000"/>
+  <node id="4" version="1" lat="47.2030000" lon="-1.5570000"/>
+  <node id="5" version="1" lat="47.2010000" lon="-1.5570000"/>
+  <node id="6" version="1" lat="47.2000000" lon="-1.5570000"/>
+  <node id="7" version="1" lat="47.2040000" lon="-1.5560000"/>
+  <node id="8" version="1" lat="47.2050000" lon="-1.5550000"/>
+  <way id="100" version="1">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/>
+    <tag k="surface" v="asphalt"/>
+  </way>
+  <way id="101" version="1">
+    <nd ref="2"/><nd ref="5"/><nd ref="6"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="102" version="1">
+    <nd ref="4"/><nd ref="7"/><nd ref="8"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="oneway" v="yes"/>
+    <tag k="oneway:bicycle" v="no"/>
+  </way>
+  <way id="103" version="1">
+    <nd ref="6"/><nd ref="8"/>
+    <tag k="highway" v="trunk"/>
+  </way>
+  <way id="104" version="1">
+    <nd ref="1"/><nd ref="6"/>
+    <tag k="building" v="yes"/>
+  </way>
+  <relation id="900" version="1">
+    <member type="way" ref="100" role=""/>
+    <member type="way" ref="101" role=""/>
+    <tag k="type" v="route"/>
+    <tag k="route" v="bicycle"/>
+    <tag k="network" v="rcn"/>
+  </relation>
+</osm>

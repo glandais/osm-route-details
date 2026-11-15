@@ -16,8 +16,14 @@ ord-adapters = { path = "crates/ord-adapters" }
 ord-data = { path = "crates/ord-data" }
 ord-pipeline = { path = "crates/ord-pipeline" }
 ord-testkit = { path = "crates/ord-testkit" }
+ord-graph = { path = "crates/ord-graph", default-features = false }
 
 anyhow = "1"
+memmap2 = "0.9"
+osmpbf = "0.3"
+rayon = "1"
+rustix = { version = "1", features = ["fs", "param"] }
+zerocopy = { version = "0.8", features = ["derive"] }
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 image-webp = "0.2"

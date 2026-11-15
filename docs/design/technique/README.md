@@ -17,6 +17,8 @@
 | T06 | [06-assembleur.md](06-assembleur.md) | Assembleur | Calcul de chaque champ de `segments[]`, `summary` et `quality` (dont `summary.structures[]` : `kept_ground`, ouvrage mixte en entrées contiguës) ; `status` ; producteur de chaque avertissement |
 | T07 | [07-configuration.md](07-configuration.md) | API HTTP (configuration) | Sources et priorité de la configuration, table des clés et défauts, bornes des options, une seule instance, `/v1/capabilities` |
 
+Hors série : [ord-graph-lot0.md](ord-graph-lot0.md), lot 0 du générateur de parcours (graphe vélo en cellules construit depuis OSM, format de fichier lu par `mmap`, mesures sur les Pays de la Loire), et son relevé de mesures [ord-graph-lot0-mesures.md](ord-graph-lot0-mesures.md). Crates `ord-graph` et `tools/ord-graph-build`, indépendants du pipeline ci-dessus.
+
 ## 2. Ordre de lecture
 
 1. **T01 §0** (carte des types) et **T01 §5** (pipeline, décision), puis **T06** (assembleur) et

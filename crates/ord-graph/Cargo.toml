@@ -1,0 +1,44 @@
+[package]
+name = "ord-graph"
+description = "Graphe vélo en cellules : construction depuis OSM, format de fichier lu par mmap, recherche de mesure (lot 0)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+default = ["pbf", "mmap"]
+# Tris et décodage parallèles (rayon) ; inutile pour la cible WASM.
+parallel = ["dep:rayon"]
+# Lecture d'un extrait `.osm.pbf` (osmpbf).
+pbf = ["parallel", "dep:osmpbf"]
+# Ouverture du fichier par projection mémoire : le seul `unsafe` du crate (module `mmap`).
+mmap = ["dep:memmap2"]
+
+[dependencies]
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+xxhash-rust.workspace = true
+zerocopy.workspace = true
+memmap2 = { workspace = true, optional = true }
+osmpbf = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+ord-domain.workspace = true
+rayon.workspace = true
+tempfile.workspace = true
+
+# Le `forbid` du workspace ne se relâche pas par module (E0453) : ce crate recopie la table avec `deny`,
+# et seul `mod mmap` porte `#[allow(unsafe_code)]`.
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+undocumented_unsafe_blocks = "deny"
