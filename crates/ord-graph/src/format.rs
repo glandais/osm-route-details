@@ -354,6 +354,31 @@ pub struct GraphFile<B> {
     first_edge: Vec<u32>,
 }
 
+/// Ce qui fixe le sens d'un id d'arête de base. `pbf_xxh3` et `replication_timestamp` sont de la provenance :
+/// ils ne comptent pas dans [`GraphIdentity::same_ids`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GraphIdentity {
+    pub format_major: u16,
+    pub attr_layout: u16,
+    pub zoom: u8,
+    pub nodes: u64,
+    pub edges: u64,
+    pub directed: u64,
+    pub id_edges_xxh3: u64,
+    pub id_nodes_xxh3: u64,
+    pub pbf_xxh3: u64,
+    pub replication_timestamp: i64,
+}
+
+impl GraphIdentity {
+    /// Deux graphes donnent le même sens aux ids d'arête de base (provenance exclue).
+    pub fn same_ids(&self, other: &GraphIdentity) -> bool {
+        (self.format_major, self.attr_layout, self.zoom, self.nodes, self.edges, self.directed)
+            == (other.format_major, other.attr_layout, other.zoom, other.nodes, other.edges, other.directed)
+            && (self.id_edges_xxh3, self.id_nodes_xxh3) == (other.id_edges_xxh3, other.id_nodes_xxh3)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct VerifyReport {
     pub sections_checked: usize,
@@ -744,6 +769,24 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
             .filter(|s| s.kind != KIND_STATS)
             .map(|s| (section_name(s.kind), xxh3_64(self.section_bytes(s))))
             .collect()
+    }
+
+    /// Identité du graphe pour les fichiers qui référencent ses ids d'arête (surcouches) : comptes et sommes
+    /// **stockées** de `ID_EDGES` et `ID_NODES`, sans recalcul. Fiable si `verify()` a passé.
+    pub fn graph_identity(&self) -> GraphIdentity {
+        let sum = |kind| self.section(kind).map_or(0, |s| s.xxh3);
+        GraphIdentity {
+            format_major: self.header.major,
+            attr_layout: self.header.attr_layout,
+            zoom: self.header.zoom,
+            nodes: self.header.nodes,
+            edges: self.header.edges,
+            directed: self.header.directed,
+            id_edges_xxh3: sum(KIND_ID_EDGES),
+            id_nodes_xxh3: sum(KIND_ID_NODES),
+            pbf_xxh3: self.header.pbf_xxh3,
+            replication_timestamp: self.header.replication_timestamp,
+        }
     }
 
     /// Contenu brut de la section `STATS` (JSON de construction).

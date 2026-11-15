@@ -12,12 +12,14 @@ pub mod grid;
 #[cfg(feature = "mmap")]
 #[allow(unsafe_code)]
 pub mod mmap;
+pub mod overlay;
 #[cfg(feature = "pbf")]
 pub mod pbf;
 pub mod search;
 pub mod stats;
+pub mod util;
 pub mod view;
 
 pub use attrs::{Access, Attrs, HighwayClass};
 pub use build::{build_graph, BuildError, BuildOptions, GraphData, MemSource, OsmSource};
-pub use format::{write_graph, FormatError, GraphFile};
+pub use format::{write_graph, FormatError, GraphFile, GraphIdentity};

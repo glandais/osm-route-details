@@ -1,0 +1,27 @@
+[package]
+name = "ord-graph-overlay"
+description = "Rattache ce que les équipes ont roulé au graphe vélo OSM : surcouche par équipe et mesure de couverture (lot 1)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+ord-graph = { workspace = true, features = ["mmap", "parallel"] }
+
+anyhow.workspace = true
+clap.workspace = true
+flate2.workspace = true
+rayon.workspace = true
+rstar.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+xxhash-rust.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

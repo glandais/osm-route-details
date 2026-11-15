@@ -1409,6 +1409,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ord-graph-overlay"
+version = "1.8.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flate2",
+ "ord-graph",
+ "rayon",
+ "rstar",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "xxhash-rust",
+]
+
+[[package]]
 name = "ord-pipeline"
 version = "1.8.0"
 dependencies = [

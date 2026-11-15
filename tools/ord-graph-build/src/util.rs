@@ -1,39 +1,6 @@
-//! Petits outils : aléa SplitMix64, dates, polygone `.poly` de Geofabrik, médianes.
+//! Petits outils propres à l'outil : dates. L'aléa et le polygone `.poly` vivent dans `ord_graph::util`.
 
-use std::path::Path;
-
-use anyhow::{bail, Context};
-
-/// SplitMix64, écrit ici pour qu'aucun algorithme tiers ne puisse changer les tirages.
-#[derive(Clone, Debug)]
-pub struct SplitMix64(pub u64);
-
-impl SplitMix64 {
-    pub fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    }
-
-    /// Entier dans `0..n` (biais négligeable pour `n` ≪ 2^64).
-    pub fn below(&mut self, n: usize) -> usize {
-        (self.next() % n as u64) as usize
-    }
-}
-
-/// `k` éléments distincts de `0..n`, tirés sans remise (mélange partiel de Fisher-Yates).
-pub fn sample_without_replacement(rng: &mut SplitMix64, n: usize, k: usize) -> Vec<usize> {
-    let mut idx: Vec<usize> = (0..n).collect();
-    let k = k.min(n);
-    for i in 0..k {
-        let j = i + rng.below(n - i);
-        idx.swap(i, j);
-    }
-    idx.truncate(k);
-    idx
-}
+pub use ord_graph::util::{sample_without_replacement, Poly, SplitMix64};
 
 /// Date civile `AAAAMMJJ` d'un horodatage Unix (algorithme de Howard Hinnant).
 pub fn yyyymmdd(epoch_s: i64) -> String {
@@ -50,126 +17,14 @@ pub fn yyyymmdd(epoch_s: i64) -> String {
     format!("{y:04}{m:02}{d:02}")
 }
 
-/// Polygone d'un fichier `.poly` : anneaux extérieurs et trous, en `(lon, lat)`.
-#[derive(Clone, Debug, Default)]
-pub struct Poly {
-    outer: Vec<Vec<(f64, f64)>>,
-    holes: Vec<Vec<(f64, f64)>>,
-}
-
-fn in_ring(ring: &[(f64, f64)], x: f64, y: f64) -> bool {
-    let mut inside = false;
-    let mut j = ring.len().wrapping_sub(1);
-    for i in 0..ring.len() {
-        let ((xi, yi), (xj, yj)) = (ring[i], ring[j]);
-        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
-            inside = !inside;
-        }
-        j = i;
-    }
-    inside
-}
-
-impl Poly {
-    pub fn parse(text: &str) -> anyhow::Result<Poly> {
-        let mut poly = Poly::default();
-        let mut lines = text.lines();
-        lines.next().context("fichier .poly vide")?;
-        let mut current: Option<(bool, Vec<(f64, f64)>)> = None;
-        for line in lines {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if line == "END" {
-                match current.take() {
-                    Some((hole, ring)) if hole => poly.holes.push(ring),
-                    Some((_, ring)) => poly.outer.push(ring),
-                    None => {} // « END » final du fichier
-                }
-            } else if current.is_none() {
-                current = Some((line.starts_with('!'), Vec::new()));
-            } else {
-                let mut it = line.split_whitespace();
-                let (Some(x), Some(y)) = (it.next(), it.next()) else {
-                    bail!("ligne .poly illisible : {line}")
-                };
-                current.as_mut().expect("anneau ouvert").1.push((x.parse()?, y.parse()?));
-            }
-        }
-        if poly.outer.is_empty() {
-            bail!("aucun anneau extérieur dans le .poly");
-        }
-        Ok(poly)
-    }
-
-    pub fn read(path: &Path) -> anyhow::Result<Poly> {
-        Self::parse(&std::fs::read_to_string(path).with_context(|| path.display().to_string())?)
-    }
-
-    pub fn contains(&self, lon: f64, lat: f64) -> bool {
-        self.outer.iter().any(|r| in_ring(r, lon, lat)) && !self.holes.iter().any(|r| in_ring(r, lon, lat))
-    }
-
-    /// Vrai si 32 points du cercle de rayon `radius_m` autour de `(lat, lon)` sont tous dans le polygone.
-    pub fn contains_disc(&self, lat: f64, lon: f64, radius_m: f64) -> bool {
-        const R: f64 = 6_371_008.8;
-        (0..32).all(|k| {
-            let t = f64::from(k) / 32.0 * std::f64::consts::TAU;
-            let dlat = (radius_m * t.sin() / R).to_degrees();
-            let dlon = (radius_m * t.cos() / (R * lat.to_radians().cos())).to_degrees();
-            self.contains(lon + dlon, lat + dlat)
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn splitmix_is_the_reference_sequence() {
-        // Vecteurs de référence de SplitMix64 pour la graine 0.
-        let mut r = SplitMix64(0);
-        assert_eq!(r.next(), 0xE220_A839_7B1D_CDAF);
-        assert_eq!(r.next(), 0x6E78_9E6A_A1B9_65F4);
-    }
-
-    #[test]
-    fn same_seed_same_starts_and_no_repeats() {
-        let pick = |seed| sample_without_replacement(&mut SplitMix64(seed), 1000, 50);
-        assert_eq!(pick(20_261_115), pick(20_261_115));
-        assert_ne!(pick(20_261_115), pick(20_261_116));
-        let mut p = pick(1);
-        p.sort_unstable();
-        p.dedup();
-        assert_eq!(p.len(), 50);
-        assert_eq!(sample_without_replacement(&mut SplitMix64(1), 3, 10).len(), 3);
-    }
 
     #[test]
     fn dates() {
         assert_eq!(yyyymmdd(0), "19700101");
         assert_eq!(yyyymmdd(1_794_691_241), "20261114"); // 2026-11-14T21:20:41Z
         assert_eq!(yyyymmdd(951_782_400), "20000229");
-    }
-
-    #[test]
-    fn poly_with_hole() {
-        let text = "pays\n1\n   0.0 0.0\n   10.0 0.0\n   10.0 10.0\n   0.0 10.0\n   0.0 0.0\nEND\n!2\n   4.0 4.0\n   6.0 4.0\n   6.0 6.0\n   4.0 6.0\n   4.0 4.0\nEND\nEND\n";
-        let p = Poly::parse(text).unwrap();
-        assert!(p.contains(1.0, 1.0));
-        assert!(!p.contains(5.0, 5.0));
-        assert!(!p.contains(11.0, 1.0));
-        assert!(Poly::parse("x\nEND\n").is_err());
-    }
-
-    #[test]
-    fn disc_interior_needs_the_whole_circle() {
-        let text = "t\n1\n   -2.0 47.0\n   -1.0 47.0\n   -1.0 48.0\n   -2.0 48.0\n   -2.0 47.0\nEND\nEND\n";
-        let p = Poly::parse(text).unwrap();
-        assert!(p.contains_disc(47.5, -1.5, 10_000.0));
-        assert!(!p.contains_disc(47.5, -1.5, 80_000.0));
-        assert!(!p.contains_disc(47.5, -1.02, 10_000.0));
     }
 }
