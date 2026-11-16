@@ -1,174 +1,171 @@
 # Générateur de parcours — lot 6 : relevés (France entière dans 2 Go)
 
-> Relevés du 16 novembre 2026, binaires `release` de la branche `feat/ord-loops-window` (commits du lot 6), poste de
-> développement (AMD Ryzen 7 4800H, 16 fils, 30 Go). Graphe et vues France construits le 16 novembre (extrait Geofabrik du
-> 15/11) ; région : Pays de la Loire. Conception : [`ord-loops-lot6.md`](ord-loops-lot6.md). Mo et Go sont décimaux.
-> Les neuf équipes sont lettrées A à I ; aucune coordonnée de départ, aucun identifiant d'équipe ni secret ici. Les seuls
-> lieux nommés (Paris, Lyon, Nantes, Clermont-Ferrand) sont quatre centres-villes publics, sans lien avec les départs.
-> Les relevés ont tourné en même temps que d'autres tâches de la machine (charge 3 à 4) : les temps sont des **ordres de
-> grandeur**, la mémoire et l'équivalence sont exactes. Chaque ligne dit comment la relever.
+> Relevés de relecture du 16 novembre 2026, binaires `release` du commit `c3bbd51` de la branche
+> `feat/ord-loops-window` et du tag `v1.9.0` (moteur à plat, code identique à `develop`), Rust 1.100.0, poste de
+> développement (AMD Ryzen 7 4800H, 16 fils, 30 Go, NVMe). Graphe et vues France : extrait Geofabrik du 15/11 ;
+> région : Pays de la Loire, extrait du 14/11. Conception : [`ord-loops-lot6.md`](ord-loops-lot6.md). Mo et Go
+> décimaux. Équipes désignées par les lettres A à I ; aucune coordonnée de départ, aucun identifiant d'équipe ni secret.
+> Les seuls lieux nommés sont des centres-villes publics, sans lien avec les départs des équipes.
+>
+> Tout ce qui suit a été **remesuré** à la relecture, sauf la §6 (relevés du premier passage, non refaits). Les deux
+> binaires du banc ont reçu, hors dépôt, la même instrumentation d'une vingtaine de lignes : par requête, l'empreinte
+> FNV-1a du `Debug` complet du résultat et des diagnostics, **et la liste des arêtes de base orientées** de chaque
+> parcours.
 
-## 1. Équivalence : zéro écart
+## 1. Équivalence
 
 | Quoi | Comment | Résultat |
 |---|---|---|
-| Sorties figées du moteur à plat d'avant le lot | `cargo test -p ord-loops` : 140 requêtes (boucles et allers simples, trois modes, trois types, avec et sans cap) sur un graphe synthétique de 48 × 48 carrefours, à z11 et à z16 ; la fenêtre des tuiles nécessaires, la classe de fenêtre, la fenêtre de toutes les tuiles et des sur-ensembles tirés rendent chacune l'empreinte écrite **avant** le moteur fenêtré | identiques |
-| Fenêtres partielles sur grille dense z16 | 60 requêtes × 3 fenêtres (nécessaires, classe, sur-ensemble tiré) contre la fenêtre de toutes les tuiles ; un tiers au moins des fenêtres sont de moins de la moitié des tuiles | identiques, 0 échappement |
-| Garde-fou | fenêtre réduite de moitié : lève `WindowEscape` ou rend la même réponse, jamais une réponse différente | levé, jamais de réponse fausse |
-| Index globaux contre la force brute | `--self-check` du banc : chaînes étrangères (boîtes de tous les segments), longueurs de composantes (Tarjan à plat depuis les sens ouverts), degré admis de chaque nœud de base, aucune arête de base bouclée | **région** 9 051 + 13 293 étrangères, 9 518 + 15 782 chaînes sous le plafond, 820 044 + 977 849 nœuds, 1,5 s : identiques ; **France** 119 803 + 219 922, 146 004 + 215 777, 10 921 939 + 14 113 543 nœuds, 23 477 176 arêtes, 24,3 s : identiques |
-| Fenêtré contre à plat, même processus | `--compare` : chaque requête jouée sur le moteur fenêtré (cache de fenêtres) **et** sur la fenêtre de toutes les tuiles, comparaison de `Debug` du résultat et des diagnostics | **région** 1 292 requêtes (323 × 4 crans du curseur) : 0 différence ; **France** 688 requêtes (30 premières de chaque équipe × 4 crans) : 0 différence |
-| Binaire d'avant le lot contre ce binaire | `--dump` : une empreinte FNV par requête de la sortie complète, binaire du tag `v1.9.0` (plus l'option `--dump`, 8 lignes, hors dépôt) contre le binaire du lot, région, 1 292 requêtes | **1 292 empreintes identiques** (`diff` vide) |
-| Contrôleur indépendant, tables bornées | tests : tables de la zone = tables du graphe entier (5 surcouches, trois types, trous comblés), degrés des nœuds avec une arête plus large qu'une cellule | identiques ; au banc, 0 parcours refusé par le contrôleur alors que le contrôle interne l'avait accepté, 0 écart de mesure sur 217 + 989 + 1 051 + 1 262 parcours (France) |
-| Index des dépôts | `CellIndex` avec liste d'exceptions contre `SegIndex`, arêtes de 20 km sur une grille à cellules de 13 km | mêmes `Hit` |
+| Moteur fenêtré contre moteur à plat d'avant le lot, région | `ord-loops-bench --modes strict,team,discovery --rounds 0` : binaire `v1.9.0` puis binaire du lot (moteur fenêtré, cache sous 900 Mo), **toutes** les requêtes du banc, 323 × 3 modes = **969** ; fichiers d'empreintes triés et comparés octet à octet | **969 / 969 identiques**, empreinte du `Debug` complet **et** liste des arêtes de base ; 696 requêtes rendent des parcours (strict 91, équipe d'abord 300, découverte 305), 273 échouent de la même façon des deux côtés |
+| Fenêtré contre fenêtre de toutes les tuiles, même processus, région | `--compare` sur les mêmes 969 requêtes | 0 différence |
+| Index globaux contre la force brute, région | `--self-check` | chaînes étrangères 9 051 + 13 293, chaînes sous le plafond 9 518 + 15 782, degré admis de 820 044 + 977 849 nœuds : identiques (1,5 s) |
+| Référence figée, graphe synthétique | `cargo test --workspace --locked` ; la fixture `window_reference.txt` (140 requêtes, z11 et z16) n'a pas changé depuis le commit de l'étape 0, écrit avant le moteur fenêtré | tests verts |
+| France contre région, mêmes requêtes | banc fenêtré France (surcouches France, mêmes 969 requêtes) contre le banc fenêtré région | requêtes **intérieures** à la région (disque de la requête dans le polygone) : **591 / 591 même issue** ; sur les 435 qui rendent des parcours, 386 ont des géométries identiques (empreinte `geom_xxh3`), 48 des parcours de mêmes longueurs au mètre mais d'autres géométries, 1 des longueurs égales au décimètre. Requêtes **de bord** : 370 / 378 même issue, 8 échecs « aucun candidat » de la région réussissent sur la France (le graphe ne s'arrête plus à la frontière régionale) |
+
+Les écarts de géométrie France / région ne mettent pas le moteur en cause : les deux graphes sont des extraits de dates
+différentes (14 et 15 novembre) et **numérotent autrement** nœuds et arêtes ; or le moteur départage les coûts égaux par
+le plus petit identifiant. Des parcours de même longueur et d'autre tracé sont la signature de tels départages.
+L'équivalence exacte se prouve sur un même graphe : c'est la première ligne.
 
 ## 2. Mémoire
 
-### 2.1 Ce que tient le moteur
+### 2.1 Banc France sous 2 Go, cache de pages froid
 
-| | Avant (à plat, mesuré au lot 6) | Maintenant |
-|---|---|---|
-| Moteur ouvert, France | 2,9 Go de tas (8,0 Go de RSS maximal au banc) | **8,5 Mo** (index des chaînes étrangères et composantes creuses) ; `RssAnon` du service au démarrage : **28 Mo** |
-| Région | ~150 Mo | 0,6 Mo |
-| Une équipe en cache, France | 736 Mo | quelques Mo (arêtes d'équipe, composantes strictes) |
+`posix_fadvise(DONTNEED)` des trois fichiers avant le lancement (sinon les pages déjà en cache ne sont pas comptées au
+groupe de contrôle et la limite n'est pas éprouvée), puis
+`systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0 ord-loops-bench … --modes strict,team,discovery
+--rounds 1 --budget-mb 900`, neuf équipes, surcouches France, **1 644 requêtes** :
 
-### 2.2 Construction des données d'une équipe (France, une à la fois, `RssAnon` échantillonné toutes les 25 ms)
+- code 0, sans mise à mort (le groupe reste à 2 Go, les pages de fichier sont reprises au fil de l'eau) ; `VmHWM`
+  2 031 Mo, dont 853 Mo de pages de fichier à la fin ;
+- 55 fenêtres construites, 1 589 servies du cache, 8 évincées, **0 échappement** ; fenêtres de 244 464 chaînes en
+  médiane, 590 262 au plus ; mémoire comptée au plus 900 Mo ;
+- `RssAnon` : 1 050 Mo à la fin ; **1 459 Mo au plus**, pendant la construction des données de l'équipe D. Le banc ne
+  réserve pas la construction d'une équipe dans son budget (le service, si) : les fenêtres en cache (jusqu'à 900 Mo) et
+  la construction de D s'additionnent. La ligne « pic au total » du résumé du banc (1 050 Mo) ne couvre pas ces
+  constructions.
 
-| Équipe | A | B | C | D | E | F | G | H | I |
-|---|---|---|---|---|---|---|---|---|---|
-| `TeamData` : temps | 1,7 s | 0,2 s | 1,8 s | 3,1 s | 0,4 s | 0,1 s | 0,1 s | 0,1 s | 0,1 s |
-| pic anonyme (Mo, dont 32 de banc) | 347 | 55 | 434 | **704** | 106 | 26 | 32 | 32 | 32 |
-| estimation réservée au budget (Mo) à 150 o par chaîne, avant réglage | 229 | 31 | 334 | 535 | 70 | 15 | 16 | 13 | 13 |
-| tables du contrôleur (`TeamCheck`) : temps / pic | 1,0 s / 232 | 0,2 s / 55 | 1,3 s / 283 | 1,9 s / 418 | 0,2 s / 108 | 0,1 s / 32 | 0,1 s / 32 | 0,1 s / 32 | 0,1 s / 32 |
+### 2.2 Le service sur la France (`osm-route-details`, configuration par `ORD_GENERATOR__*`)
 
-La première estimation (150 o par chaîne de la zone) sous-estimait de 20 à 30 % ; elle est maintenant de **210 o** : à ce
-tarif les estimations couvrent les pics mesurés (A 321, C 468, D 749 Mo, contre 315, 402, 672 mesurés à 32 Mo de banc près).
-Le pic de la plus grande équipe (D) est de 704 Mo pendant 3 s : **c'est la plus grosse part du budget de 900 Mo**.
+Lancé sur `127.0.0.1`, sans altitude (`ORD_CACHE__OFFLINE=true`, IGN désactivé), sous
+`systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0`, `MALLOC_ARENA_MAX=2`, budget de 900 Mo, cache de pages
+des trois fichiers évincé au départ, polygone de couverture rectangulaire autour des nœuds (voir §4). Clé d'espace de
+noms tirée au hasard par le pilote, jamais écrite. Déroulé : cinq dépôts réels (703, 67, 38, 30 et 6 Mo de NDJSON),
+puis 70 générations en série dans dix villes (Paris, Lyon, Marseille, Toulouse, Bordeaux, Lille, Strasbourg, Brest,
+Grenoble, Nantes : boucles de 50, 100 et 200 km en route et en gravel, et un aller simple de 200 km par ville, en
+découverte), deux fois ; 60 générations en série depuis les réseaux déposés (30 à 200 km, trois types, curseurs 0,
+0,25 et 1) ; puis 150 générations (réseaux et villes) à 4 clients et à 12 clients : 500 générations par séance.
+`anon` du groupe échantillonné toutes les 0,25 à 0,5 s, `memory.events` relu à la fin. La colonne « 1,5 Go » retire de
+la limite les 512 Mo des deux caches de l'altitude, qui partage le conteneur en production.
 
-### 2.3 Banc France sous 2 Go (`systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0`)
+| | 2 Go, `MALLOC_MMAP_THRESHOLD_=1048576` | 2 Go, sans ce réglage | 1,5 Go, avec le réglage |
+|---|---|---|---|
+| écoute / `load_ms` (pages froides) | 7,9 s / 7 605 ms | 8,1 s / 7 725 ms | 9,2 s / 8 875 ms |
+| `anon` au démarrage (index), au plus | 286 Mo | 358 Mo | 305 Mo |
+| `anon` après les cinq dépôts | 210 Mo | 267 Mo | 210 Mo |
+| `anon` au plus, sur la séance | **1 101 Mo** | **1 743 Mo** | **1 106 Mo** |
+| pages de fichier au plus bas | 1 026 Mo | 540 Mo | 476 Mo |
+| `oom` / `oom_kill` | 0 / 0 | 0 / 0 | 0 / 0 |
+| villes, 2 × 70 en série (méd. / p90 / max, 2e passage) | 140 × 200 ; 0,96 / 2,72 / 5,28 s | 140 × 200 ; 0,92 / 2,41 / 5,05 s | 140 × 200 ; 0,98 / 2,50 / 5,30 s |
+| réseaux, 60 en série | 38 × 200, 21 × 422, **1 × 504** (8,04 s) | 38 × 200, 21 × 422, **1 × 504** (8,60 s) | 38 × 200, 21 × 422, **1 × 504** (8,91 s) |
+| 150 à 4 clients | 123 × 200, 27 × 422 ; 1,39 / 3,20 / 7,42 s | 123 × 200, 27 × 422 ; 1,32 / 3,20 / 6,62 s | 123 × 200, 27 × 422 ; 1,35 / 3,38 / 7,23 s |
+| 150 à 12 clients | 100 × 200, 22 × 422, 23 × 503, **5 × 504** | 102 × 200, 24 × 422, 23 × 503, **1 × 504** | 101 × 200, 23 × 422, 23 × 503, **3 × 504** |
 
-`ord-loops-bench --cursors 0,0.01,0.25,1 --rounds 1`, moteur fenêtré, budget 900 Mo, neuf équipes, **2 192 requêtes**
-(toutes celles de chaque équipe dans le périmètre France, quatre crans) : termine, code 0, sans OOM.
+Les 422 sont les échecs ordinaires de ces tirages (départ hors couverture, trop loin du réseau strict, réseau trop
+petit, aucun candidat). Les 503 `overloaded` à 12 clients sont la file pleine (2 calculs, 8 en attente), comme au
+lot 3a. Les **504** sont des générations qui dépassent le budget de 8 s ; celle de la série tombe sur une des premières
+requêtes d'un réseau tout juste déposé (voir §3.3).
 
-- 55 fenêtres construites, 2 137 servies du cache, 8 évincées, **0 échappement** ; fenêtres de 244 464 chaînes en médiane
-  et 590 262 au plus ; mémoire comptée au plus **900 Mo** (le budget est atteint) ;
-- construction à froid d'une fenêtre : **77 / 165 / 198 ms** (médiane / p90 / maximum) ; agrégats d'équipe 13 / 29 / 37 ms ;
-- `RssAnon` à la fin : **1 128 Mo** (budget 900 Mo, plus les données d'équipe, le rapport du banc et les restes du
-  tas) ; `VmHWM` 3,4 Go dont 2,1 Go de pages de fichier récupérables : sous 2 Go de cgroup, le noyau les reprend au fil de
-  l'eau.
+Métriques à la fin (2 Go, avec le réglage) : `ord_generator_memory_bytes` fenêtres 418 Mo, agrégats d'équipe 120 Mo,
+espaces de travail en réserve 259 Mo ; 318 fenêtres construites (146 route, 172 gravel) pour 149 servies du cache, 309
+évincées : dix villes à trois distances et deux vues ne tiennent pas ensemble dans 900 Mo, le cache tourne ;
+0 échappement, 0 parcours refusé par le contrôleur indépendant.
 
-### 2.4 Le service sur la France, dans 2 Go (`ord-server`, neuf dépôts puis la génération par HTTP)
-
-Service lancé sous `systemd-run --user --scope --unit=… -p MemoryMax=2G -p MemorySwapMax=0` avec `MALLOC_ARENA_MAX=2`,
-graphe, vues, neuf dépôts réels (850 Mo de NDJSON, dépôts par `PUT`), puis 60 requêtes en série, 108 à 4 clients, 108
-à 12 clients (mélange de distances de 20 à 180 km, trois types, curseurs 0, 0,25 et 1, départs pris sur les réseaux
-déposés ; les 422 sont des échecs de génération de la catégorie « départ trop loin », « réseau trop petit », « aucun
-candidat », propres à ces tirages). Le polygone est un rectangle autour des nœuds (voir §4).
-
-| | sans `MALLOC_MMAP_THRESHOLD_` | avec `MALLOC_MMAP_THRESHOLD_=1048576` |
-|---|---|---|
-| démarrage (`load_ms`) | 4 818 ms (index 3 612 + 1 072) | 4 604 ms (index 3 411 + 1 077) |
-| `anon` après les neuf dépôts | **513 Mo** | **216 Mo** |
-| `anon` au plus, série (échantillonné) | 1 355 Mo | 1 022 Mo |
-| `anon` au plus, 4 clients | 1 538 Mo | 1 026 Mo |
-| `anon` au plus, 12 clients | 1 634 Mo | 1 020 Mo |
-| `memory.peak` du cgroup (au plus) | **1 741 Mo** | **1 076 Mo** |
-| réponses 5xx autres que 503 | 0 | 0 |
-| 503 `overloaded` à 12 clients | 18 (file pleine : 2 calculs, 8 en attente, comme au lot 3a) | 18 |
-| latence médiane / p90 / max (série) | 0,34 / 1,60 / 5,12 s | 0,34 / 1,70 / 5,18 s |
-| latence médiane / p90 / max (4 clients) | 0,66 / 2,40 / 4,46 s | 0,67 / 2,74 / 4,09 s |
-
-Sans le réglage, la fragmentation de `malloc` laisse **400 à 600 Mo** de plus d'anonyme au service que ce que compte son
-budget : le tas ne rend pas au système les grands tableaux libérés (le seuil de `mmap` de glibc monte tout seul jusqu'à
-32 Mo après chaque libération). `MALLOC_MMAP_THRESHOLD_=1048576` les fait toujours passer par `mmap`, donc revenir au
-système à la libération : c'est la décision 3 de la note, **chiffrée**. Métriques relevées à la fin (avec le réglage) :
-`ord_generator_memory_bytes` fenêtres 226 Mo, agrégats d'équipe 178 Mo, espaces de travail en réserve 285 Mo ;
-fenêtres 30 + 44 construites, 175 servies du cache, 1 attente d'une construction en cours ; 67 fenêtres et 127 agrégats
-évincés ; `ord_generator_window_escapes_total` à 0.
-
-Le conteneur de production partage ces 2 Go avec l'altitude (deux caches de 256 Mo) : 1,08 Go de pic de cgroup pour le
-générateur plus 0,5 Go d'altitude laisse de la marge **avec** le réglage ; **sans**, 1,74 + 0,5 dépasse 2 Go. Je n'ai pas
-mesuré les deux ensemble (l'altitude lit l'IGN et Mapterhorn par le réseau).
-
-### 2.5 Fenêtres autour de quatre centres-villes (`cargo run --release -p ord-loops --example window_probe`)
-
-Classe de fenêtre (pas de rayon de 10 km), pages chaudes ; construction, un `generate_in` en découverte, octets tenus
-(les espaces de travail sont ceux du premier usage, sans réemploi).
-
-| Centre | Type | D | tuiles | chaînes | construction | fenêtre | espace de travail |
-|---|---|---|---|---|---|---|---|
-| Paris | route | 100 km | 89 | 584 865 | 156 ms | 39 Mo | 82 Mo |
-| Paris | gravel | 100 km | 89 | 804 251 | 229 ms | 56 Mo | 108 Mo |
-| Paris | route | 200 km | 268 | 929 417 | 253 ms | 62 Mo | 136 Mo |
-| Paris | gravel | 200 km | 268 | 1 382 579 | 389 ms | **96 Mo** | 188 Mo |
-| Paris | gravel | 300 km, aller simple | 534 | 2 084 489 | 619 ms | 145 Mo | 297 Mo |
-| Lyon | gravel | 300 km, aller simple | 481 | **2 234 108** | 677 ms | **158 Mo** | **316 Mo** |
-| Nantes | gravel | 200 km | 247 | 1 050 270 | 303 ms | 75 Mo | 150 Mo |
-| Clermont-Ferrand | gravel | 200 km | 241 | 817 960 | 221 ms | 58 Mo | 110 Mo |
-
-- Une boucle de 200 km tient dans **96 Mo** de fenêtre et 188 Mo d'espace de travail (la conception disait 89 et 152) ; le
-  pire aller simple de 300 km (Lyon) dans **158 Mo** et **316 Mo** (conception : 144 et 246). L'espace de travail est de
-  **142 à 146 o par chaîne**, pas 118 : les listes d'états fixés grossissent. La réservation du service est passée à 150 o.
-- Fenêtre à froid : **156 à 253 ms à 100 et 200 km** en route, **229 à 412 ms** en gravel ; **617 ms** pour le pire aller simple
-  de 300 km. Pages du fichier évincées (`posix_fadvise(DONTNEED)` des trois fichiers) : 207 à 487 ms en route, 249 à
-  617 ms en gravel — le disque est un NVMe, la lecture ne coûte presque rien. Critère « ≤ 2 s pour 100 km » : **tenu avec
-  un facteur 8**. Sur un disque réseau, le §16 de la note reste à relever.
-- Génération en découverte : 0,2 à 2,1 s jusqu'à 200 km, **1,4 à 3,9 s** pour l'aller simple de 300 km (budget du service :
-  8 s).
+**Le réglage `MALLOC_MMAP_THRESHOLD_` est indispensable** : sans lui, le tas garde 640 Mo de plus que ce que le budget
+compte, et les pages de fichier tombent à 540 Mo ; avec les 512 Mo de caches de l'altitude dans le même conteneur, le
+service sans réglage dépasserait 2 Go. Avec le réglage, le générateur tient dans 1,5 Go sans perte de temps mesurable.
+Le réglage n'est posé ni dans le `Dockerfile` du dépôt ni dans le code.
 
 ## 3. Temps
 
-| | Avant | Maintenant |
-|---|---|---|
-| Ouverture du moteur, France | 16,9 s (chargement à plat) + 16 s (contrôle `fits`) | **4,5 à 5,9 s** (index 2,9 à 3,9 s + 0,7 à 1,1 s en route, 4,7 à 5,7 s + 1,1 à 1,2 s en gravel, une vue par fil) ; service : `load_ms` **4,6 à 4,8 s**, écoute au bout de ~5,4 s |
-| Ouverture, région | 0,4 s | 0,35 à 0,4 s (index 0,2 + 0,05 s) |
-| Contrôle de l'index des dépôts | 16,0 s (`CellIndex::fits`) | ~0,3 s (`exceptions` ; 1 arête sur la France) |
-| Préparation d'une équipe, France | ~2 s par équipe | A 1,7 s, C 1,8 s, **D 3,1 s**, les autres ≤ 0,4 s ; tables du contrôleur 0,1 à 1,9 s |
-| Génération à chaud, région (même banc, deux binaires) | voir §3.1 | voir §3.1 |
-| Dépôts sur la France | impossible (index entier de 107 M de segments) | 703 Mo en 71 s, 67 Mo en 5,4 s, 38 Mo en 88 s, 30 Mo en 58 s, les petits en 1 à 8 s |
+### 3.1 Génération à chaud, région : moteur fenêtré contre moteur à plat
 
-Les dépôts de 30 à 40 Mo qui durent une minute viennent de la construction, cellule par cellule, de l'index spatial des
-dépôts (`CellIndex` neuf à chaque dépôt, 3 × 3 cellules relues à chaque cellule touchée). Ce n'est pas le moteur ; la durée n'a
-pas été comparée à celle d'un dépôt sur la région dans ces relevés.
+`ord-loops-bench --modes strict,team,discovery --rounds 3 --limit 25` (129 requêtes × 3 modes), un fil, l'un après
+l'autre sur la machine peu chargée : binaire du lot, binaire `v1.9.0`, binaire du lot une seconde fois (pour la
+dispersion). Médiane des trois tours chauds par requête, puis **médiane / p90 / maximum en ms** :
 
-### 3.1 Génération à chaud, région : le moteur fenêtré contre le moteur à plat
+| Mode | à plat (`v1.9.0`) | fenêtré, 1er passage | fenêtré, 2e passage | écart de médiane |
+|---|---|---|---|---|
+| strict | 2 / 68 / 199 | 2 / 72 / 207 | 2 / 71 / 207 | égale |
+| équipe d'abord | 247 / 772 / 1 886 | 256 / 791 / 1 945 | 257 / 790 / 1 938 | **+ 4 %** |
+| découverte | 175 / 559 / 1 006 | 178 / 569 / 1 008 | 181 / 562 / 1 007 | **+ 2 à + 3 %** |
+| tout | 111 / 618 / 1 886 | 116 / 629 / 1 945 | 115 / 629 / 1 938 | + 4 % |
 
-`ord-loops-bench --cursors 0,0.25,1 --rounds 3 --limit 25` (129 requêtes de la région, 387 requêtes × crans), un fil, le binaire
-du tag `v1.9.0` (moteur à plat) puis le binaire du lot (fenêtres), l'un après l'autre sur la machine au repos
-(charge 1,6 à 2,6) ; médiane des trois tours chauds, **médiane / p90 / maximum en ms** :
+RSS maximal : 644 à 652 Mo fenêtré, 723 Mo à plat. Durée du banc : 5 min 57 s fenêtré, 5 min 40 s à plat (la
+construction des données d'équipe sur zone et des tables du contrôleur compte dedans).
 
-| Cran du curseur | moteur à plat (`v1.9.0`) | moteur fenêtré | médiane |
-|---|---|---|---|
-| 0 (strict) | 2 / 49 / 265 | 2 / 50 / 256 | égale |
-| 0,25 | 245 / 768 / 1 369 | 257 / 791 / 1 313 | **+ 4,9 %** |
-| 1 (découverte) | 175 / 581 / 1 019 | 182 / 572 / 1 033 | **+ 4,0 %** |
-| 0,25, D ≤ 100 km | 150 / 456 / 996 | 157 / 458 / 1 046 | + 4,7 % |
-| 1, D ≤ 100 km | 114 / 275 / 460 | 119 / 275 / 467 | + 4,4 % |
+### 3.2 France
 
-Critère « du même ordre, ≤ + 10 % » : **tenu** (+ 4 à + 5 %, le surcoût est la lecture du graphe de base dans le fichier,
-`make_anchor` et le contrôle interne). Moteur fenêtré sur la région : 14 fenêtres construites pour 387 requêtes, 373 servies
-du cache, construction à froid **65 / 124 / 124 ms**, 287 Mo comptés au plus, RSS maximal 641 Mo (725 Mo à plat),
-0 échappement. Sur la région, une fenêtre de classe couvre déjà une bonne part du graphe : le gain de mémoire se lit sur la
-France (§2).
+| | Mesure |
+|---|---|
+| Ouverture du moteur, banc, pages froides | 5,9 s (index : route 2,9 + 0,66 s, gravel 4,8 + 1,1 s, une vue par fil) ; 8,5 Mo tenus |
+| Démarrage du service, pages froides | écoute à 7,9 à 9,2 s, `load_ms` 7,6 à 8,9 s (§2.2) |
+| Génération, banc France (1 tour chaud) | strict 2 / 92 / 271 ms, équipe d'abord 258 / 886 / 2 058 ms, découverte 171 / 496 / 1 177 ms (médiane / p90 / max) ; même ordre que la région au même banc (4 / 108 / 326, 255 / 865 / 1 942, 162 / 495 / 1 187) |
+| Fenêtre à froid, banc France | 88 / 198 / 464 ms (médiane / p90 / max, 55 constructions) |
+| Fenêtre à froid, service France (2 Go) | gravel 0,30 / 0,52 / 0,72 s, route 0,11 / 0,28 / 0,37 s (médiane / p90 / max, 172 et 146 constructions, fenêtres jusqu'à 929 417 chaînes en route) |
+| Dépôts, service France | 703 Mo en 72 s, 67 Mo en 5,5 s, 38 Mo en 88 s, 30 Mo en 58 s, 6 Mo en 8 s (mêmes durées aux trois séances) |
 
-## 4. Ce que les relevés ont trouvé en dehors du moteur
+Critère « fenêtre à froid ≤ 2 s pour 100 km » : tenu (0,72 s au plus, toutes distances jusqu'à 200 km confondues).
 
-- **Le polygone `france.poly` de Geofabrik ne passe pas `polygon_fits`** : sa boîte est `[-6,94 ; 41,24 ; 9,9 ; 51,43]`,
-  celle des nœuds du graphe `[-5,14 ; 41,33 ; 9,84 ; 51,09]` ; il déborde de 1,8° à l'ouest (plus de 15 km). Le
-  générateur s'éteint avec `reason = polygon_mismatch`. Les relevés du §2.4 ont utilisé un rectangle autour des nœuds.
-  Pour déployer la France, il faut un polygone de couverture à sa mesure (ou une décision sur `POLY_OVERHANG_M`).
-- **Dépôts** : voir §3 ; ils marchent sur la France depuis ce lot (l'index par cellule gère l'unique arête plus large
-  qu'une cellule).
+### 3.3 Données d'une équipe sur la France : la première requête
 
-## 5. Reproduction (hors dépôt)
+Le banc France sous 2 Go, pages froides, relève par équipe la construction de `TeamData` puis des tables du
+contrôleur (`TeamCheck`) : A 2,4 + 1,0 s, C 3,4 + 1,5 s, **D 6,3 + 2,5 s, soit 8,8 s**, les autres sous 0,5 s.
+Le service fait ces deux constructions **dans la première génération** qui suit un dépôt ou un redémarrage, sous son
+budget de 8 s : pour D, elles dépassent à elles seules le budget quand les pages sont froides, et pour A et C une
+génération de quelques secondes suffit à le dépasser. Les 504 de la série du §2.2 (un par séance, toujours parmi les
+premières requêtes des réseaux déposés) sont de cette nature.
 
-```sh
-ord-loops-bench --self-check --compare --cursors 0,0.01,0.25,1 --rounds 1 --dump <fichier> …          # région
-ord-loops-bench --graph <france.ordg> --road … --gravel … --overlays <overlays France> --poly <france.poly> \
-    --cursors 0,0.01,0.25,1 --rounds 1                                                               # France, sous systemd-run
-cargo run --release -p ord-loops --example window_probe -- <france.ordg> <road.ordv> <gravel.ordv>
-```
+## 4. Ce que les relevés ont trouvé hors du moteur
 
-Le service : variables `ORD_GENERATOR__GRAPH`, `…__VIEW_ROAD`, `…__VIEW_GRAVEL`, `…__COVERAGE_POLY`, `…__OVERLAY_DIR`,
-`MALLOC_ARENA_MAX=2`, `MALLOC_MMAP_THRESHOLD_=1048576`, sous `systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0` ;
-dépôts par `PUT /v1/generator/overlay` (en-têtes `ord-namespace-key`, `ord-team`), génération par
-`POST /v1/generator/routes`, `memory.stat` et `memory.peak` du cgroup échantillonnés par un script local.
+- **Le polygone `france.poly` de Geofabrik éteint le générateur** : au démarrage, « generator coverage polygon does not
+  match the graph extent » (sa boîte déborde de 1,8° à l'ouest de celle des nœuds, au-delà des 15 km admis). Les relevés
+  ont tourné avec un rectangle autour des nœuds. Il faut un polygone de couverture à la mesure du graphe avant tout
+  déploiement de la France.
+- **Dépôts lents** : 38 Mo en 88 s et 30 Mo en 58 s, plus lents que 703 Mo en 72 s ; non comparé à la région.
+
+## 5. Ce qui n'a pas été mesuré
+
+- Le service **avec l'altitude** dans le même conteneur : seulement approché en abaissant la limite du groupe à 1,5 Go
+  (§2.2).
+- **Docker** : relevés sous `systemd-run` seulement.
+- Un **disque lent** (réseau) : fichiers sur NVMe ; une fenêtre froide coûte surtout de la lecture de pages.
+- Le chemin « échappement, puis fenêtre élargie » du service : aucun échappement aux relevés (0 sur 969 + 1 644
+  requêtes au banc et 1 500 générations au service).
+- Les distances au-delà de 200 km par HTTP (le contrat s'arrête à 200 km) ; le pire aller simple de 300 km n'est relevé
+  qu'en §6.
+
+## 6. Relevés du premier passage, non refaits
+
+Repris de la version précédente de ces relevés, sans les avoir rejoués :
+
+- sonde `window_probe` (fenêtres de classe autour de Paris, Lyon, Nantes et Clermont-Ferrand) : boucle de 200 km en
+  gravel à Paris, 1 382 579 chaînes, 96 Mo de fenêtre et 188 Mo d'espace de travail ; pire aller simple de 300 km
+  (Lyon, gravel) 2 234 108 chaînes, 158 Mo et 316 Mo, construit en 0,68 s ; espace de travail mesuré à 142 à 146 o par
+  chaîne ;
+- pic de mémoire transitoire de la construction des données d'équipe, une à une : D 704 Mo, C 434 Mo, A 347 Mo
+  (estimation réservée à 210 o par chaîne : 749, 468, 321 Mo) ;
+- comparaison des empreintes `--dump` du binaire `v1.9.0` et du binaire du lot sur 1 292 requêtes de la région (quatre
+  crans du curseur), et `--compare` sur 688 requêtes de la France : 0 différence.
+
+## 7. Écarts à la note et au compte rendu
+
+- La note (§19 point 7) dit l'espace de travail réservé à 118 o par chaîne ; le code et le point 12 disent 150 o.
+- La note (§10.1) annonce un budget unique qui borne ce que le générateur alloue ; mesuré, il ne le borne qu'avec
+  `MALLOC_MMAP_THRESHOLD_` (§2.2), et les agrégats d'équipe d'une fenêtre neuve ne sont comptés qu'après coup.
+- Le compte rendu annonçait 0 réponse 5xx hors 503 au service : la relecture relève un 504 en série à chaque séance et
+  1 à 5 à 12 clients (§3.3).
+- Le compte rendu donnait 4,5 à 5,9 s d'ouverture du service : c'est pages chaudes ; pages froides, 7,6 à 8,9 s.
+- Les relevés mémoire du premier passage au service ont été pris pages déjà en cache : celles-ci n'étaient pas comptées
+  au groupe de contrôle (« file » à 2 Mo), si bien que la limite de 2 Go n'éprouvait que l'anonyme. Pages froides, le
+  groupe se remplit de pages de fichier jusqu'à la limite dès l'ouverture et les rend sous pression, sans mise à mort.
