@@ -19,6 +19,8 @@ mod verify;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_reference;
 
 pub use cost::{multiplier_table, RideType};
 pub use engine::{Engine, EngineError, Params};

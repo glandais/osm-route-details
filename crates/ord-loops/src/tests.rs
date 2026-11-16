@@ -14,30 +14,34 @@ use crate::team::TeamData;
 use crate::verify::{check_route, Violation};
 use crate::{Failure, LatLon, Mode, Request, Route};
 
-const LAT0: f64 = 47.2;
-const LON0: f64 = -1.56;
-const M_LAT: f64 = 111_194.926_6;
+pub(crate) const LAT0: f64 = 47.2;
+pub(crate) const LON0: f64 = -1.56;
+pub(crate) const M_LAT: f64 = 111_194.926_6;
 
-fn m_lon() -> f64 {
+pub(crate) fn m_lon() -> f64 {
     M_LAT * LAT0.to_radians().cos()
 }
 
 /// Nœud à `north` mètres au nord et `east` mètres à l'est du point de référence.
-fn pt(s: &mut MemSource, id: i64, north: f64, east: f64) {
+pub(crate) fn pt(s: &mut MemSource, id: i64, north: f64, east: f64) {
     s.node(id, LAT0 + north / M_LAT, LON0 + east / m_lon());
 }
 
-fn ll(north: f64, east: f64) -> LatLon {
+pub(crate) fn ll(north: f64, east: f64) -> LatLon {
     LatLon::new(LAT0 + north / M_LAT, LON0 + east / m_lon())
 }
 
-fn tags<'a>(highway: &'a str, extra: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
+pub(crate) fn tags<'a>(highway: &'a str, extra: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     let mut t = vec![("highway", highway)];
     t.extend_from_slice(extra);
     t
 }
 
-fn roundtrip(mut data: ord_graph::build::GraphData, dir: &std::path::Path, name: &str) -> GraphFile<Vec<u8>> {
+pub(crate) fn roundtrip(
+    mut data: ord_graph::build::GraphData,
+    dir: &std::path::Path,
+    name: &str,
+) -> GraphFile<Vec<u8>> {
     let path = dir.join(name);
     write_graph(&path, &mut data, "test", 1_700_000_000).expect("écriture");
     let g = GraphFile::open(std::fs::read(path).unwrap()).expect("ouverture");
@@ -45,9 +49,14 @@ fn roundtrip(mut data: ord_graph::build::GraphData, dir: &std::path::Path, name:
     g
 }
 
-fn engine_with(src: &mut MemSource, params: Params) -> Engine<Vec<u8>> {
+pub(crate) fn engine_with(src: &mut MemSource, params: Params) -> Engine<Vec<u8>> {
+    engine_zoomed(src, 11, params)
+}
+
+/// Comme `engine_with`, à un zoom de cellules choisi (16 : tuiles de ~400 m, une vraie fenêtre partielle).
+pub(crate) fn engine_zoomed(src: &mut MemSource, zoom: u8, params: Params) -> Engine<Vec<u8>> {
     let dir = tempfile::tempdir().unwrap();
-    let data = build_graph(src, &BuildOptions { zoom: 11 }, "test", &mut |_| {}).expect("construction");
+    let data = build_graph(src, &BuildOptions { zoom }, "test", &mut |_| {}).expect("construction");
     let base = roundtrip(data, dir.path(), "base.ordg");
     let view = |name: &str| {
         let v = roundtrip(build_view(&base, &ViewSpec::parse(name).unwrap()).unwrap(), dir.path(), name);
@@ -58,12 +67,12 @@ fn engine_with(src: &mut MemSource, params: Params) -> Engine<Vec<u8>> {
     Engine::new(base, road, gravel, params).expect("moteur")
 }
 
-fn engine_of(src: &mut MemSource) -> Engine<Vec<u8>> {
+pub(crate) fn engine_of(src: &mut MemSource) -> Engine<Vec<u8>> {
     engine_with(src, Params::default())
 }
 
 /// Arête de base entre deux nœuds OSM.
-fn edge_between(e: &Engine<Vec<u8>>, a: u64, b: u64) -> u32 {
+pub(crate) fn edge_between(e: &Engine<Vec<u8>>, a: u64, b: u64) -> u32 {
     let g = e.base();
     (0..g.header().edges as u32)
         .find(|&x| {
@@ -75,12 +84,12 @@ fn edge_between(e: &Engine<Vec<u8>>, a: u64, b: u64) -> u32 {
 }
 
 /// Comptes d'une arête : `[ROAD a→b, ROAD b→a, GRAVEL.., MTB.., MIXED..]`.
-type Counts = [u16; 8];
-const ROAD1: Counts = [1, 1, 0, 0, 0, 0, 0, 0];
-const GRAVEL1: Counts = [0, 0, 1, 1, 0, 0, 0, 0];
-const MIXED1: Counts = [0, 0, 0, 0, 0, 0, 1, 1];
+pub(crate) type Counts = [u16; 8];
+pub(crate) const ROAD1: Counts = [1, 1, 0, 0, 0, 0, 0, 0];
+pub(crate) const GRAVEL1: Counts = [0, 0, 1, 1, 0, 0, 0, 0];
+pub(crate) const MIXED1: Counts = [0, 0, 0, 0, 0, 0, 1, 1];
 
-fn overlay_of(e: &Engine<Vec<u8>>, rows: &[(u32, Counts)]) -> Overlay {
+pub(crate) fn overlay_of(e: &Engine<Vec<u8>>, rows: &[(u32, Counts)]) -> Overlay {
     let mut rows = rows.to_vec();
     rows.sort_by_key(|r| r.0);
     let meta = OverlayMeta {
@@ -98,7 +107,7 @@ fn overlay_of(e: &Engine<Vec<u8>>, rows: &[(u32, Counts)]) -> Overlay {
     Overlay::decode(&encode(&meta, &edges, &counts).unwrap()).unwrap()
 }
 
-fn request(start: LatLon, d: f64, mode: Mode) -> Request {
+pub(crate) fn request(start: LatLon, d: f64, mode: Mode) -> Request {
     Request {
         start,
         end: None,
@@ -112,7 +121,7 @@ fn request(start: LatLon, d: f64, mode: Mode) -> Request {
     }
 }
 
-fn run(e: &Engine<Vec<u8>>, team: Option<&TeamData>, r: &Request) -> Result<Vec<Route>, Failure> {
+pub(crate) fn run(e: &Engine<Vec<u8>>, team: Option<&TeamData>, r: &Request) -> Result<Vec<Route>, Failure> {
     generate(e, team, r, &mut Workspace::new(), &mut || false).map(|g| g.routes)
 }
 
@@ -132,7 +141,7 @@ fn assert_valid(e: &Engine<Vec<u8>>, team: Option<&TeamData>, r: &Request, route
 // --- Graphes ----------------------------------------------------------------------------------------------------
 
 /// Grille de `n × n` carrefours, rues de 300 m, toutes résidentielles. Nœud `(i, j)` : `1 + i n + j`.
-fn grid(n: usize, cell: f64) -> MemSource {
+pub(crate) fn grid(n: usize, cell: f64) -> MemSource {
     let mut s = MemSource::default();
     let id = |i: usize, j: usize| (1 + i * n + j) as i64;
     for i in 0..n {
