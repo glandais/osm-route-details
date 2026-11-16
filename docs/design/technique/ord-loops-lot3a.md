@@ -95,7 +95,7 @@ d'un déploiement roulant, deux instances pourraient écrire la même équipe : 
 bascule) ; `.tmp` de plus d'une heure (au démarrage : de plus de 5 minutes, pour ne pas effacer l'écriture que finit l'ancienne instance d'un déploiement « start-first ») ; dossiers vides. Au démarrage, `state = stale` (raison `graph`)
 quand le fichier n'existe que sous un autre `graph-*`.
 
-**Cache mémoire** : `(ns, team)` → `Arc<(Overlay, TeamData)>`, LRU de `team_cache_entries` (3). `TeamData` est **dense** :
+**Cache mémoire** : `(ns, team)` → `Arc<(Overlay, TeamData)>`, LRU de `team_cache_entries` (64 depuis la finition 2 du lot 6, avec `team_cache_mb` = 96 : plafonds propres aux équipes, sur les seules entrées inactives ; aucune réservation du budget n'en évince, et les octets sont rendus à la chute de l'entrée, §20.6 de la note du lot 6). `TeamData` était **dense** (la construction creuse du §20.2 du lot 6 ne change pas le résultat, seulement la mémoire transitoire) :
 52 à 56 Mio pour A **[mesuré]**, du même ordre pour toute équipe puisque les listes sont denses (lot 2 §12.2, point 3) ;
 construit en 141 à 212 ms, lecture de l'`.ordo` 3 ms **[mesuré]**. Une construction à la fois par équipe : une seconde demande
 sur la même équipe froide attend la première et réutilise son entrée (pas de seconde copie de ≈ 55 Mio).
@@ -215,7 +215,7 @@ un dépôt ≈ 200 Mio **[estimé]** ; plus une requête d'altitude à froid (ju
 
 Section `generator` (figment, `ORD_GENERATOR__…`) : `graph`, `view_road`, `view_gravel`, `coverage_poly` (chemins ;
 tous `None` par défaut), `overlay_dir`, `max_concurrent`, `max_queued`, `budget_ms`, `distance_m_min`, `distance_m_max`,
-`team_cache_entries` (16 depuis le lot 6 : une équipe ne coûte plus que quelques Mo), `memory_budget_mb`, `window_margin_m`,
+`team_cache_entries` (64), `team_cache_mb` (96), `memory_budget_mb` (800), `window_margin_m`,
 `window_radius_step_m`, `workspace_keep_mb`, `index_threads` (lot 6 : fenêtres du moteur, voir
 [`ord-loops-lot6.md`](ord-loops-lot6.md) §11), `overlay_ttl_days`, `stale_grace_h`, `storage.{max_namespaces, max_overlays_per_namespace,
 max_namespace_mb, max_total_mb, allowed_namespaces}`, `deposit.{max_concurrent, queue_wait_s, budget_s, idle_timeout_s, max_body_bytes, max_document_bytes, max_tracks,
@@ -240,7 +240,7 @@ les problèmes (pointeurs seulement), comme aujourd'hui. Métriques, **sans éti
 `ord_overlay_deposit_seconds`, `ord_overlay_cache_{hits,misses}_total`, `ord_overlays_stored`,
 `ord_overlay_purged_total{reason}`, `ord_overlay_corrupt_total` ; depuis le lot 6, sans étiquette de tuile ni de lieu :
 `ord_generator_window_requests_total{view,outcome}`, `ord_generator_window_build_seconds{view}`,
-`ord_generator_window_chains{view}`, `ord_generator_window_evictions_total{kind}`, `ord_generator_memory_bytes{kind}`,
+`ord_generator_window_chains{view}`, `ord_generator_window_evictions_total{kind}` (`kind=workspace` : la réserve évincée sous pression), `ord_generator_team_evictions_total{reason=count|bytes}`, `ord_generator_team_build_escapes_total` (doit rester à 0 : une construction d'équipe a dû être refaite à 1 km ou a échoué), `ord_generator_memory_bytes{kind}`,
 `ord_generator_memory_budget_bytes`, `ord_generator_budget_wait_seconds`, `ord_generator_window_escapes_total`.
 
 ## 11. Tests (synthétiques : graphe `MemSource`, vues construites en test, documents fabriqués)

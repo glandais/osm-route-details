@@ -8,7 +8,7 @@
 //! **Aucune tuile, aucun centre, aucun rayon de classe n'est journalisé ni étiqueté** (une tuile z11 dit à 14 km
 //! près d'où part une équipe) : les métriques ne portent que la vue, des tailles et des octets.
 
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use ord_loops::{CacheStats, Engine, TeamData, Window, WindowCache, WindowPlan, WindowTeam, Workspace};
@@ -24,15 +24,6 @@ pub enum AcquireError {
     Stopped,
     /// Le budget de mémoire n'a pas libéré de place avant l'échéance : 503 `overloaded`.
     Overloaded,
-}
-
-/// Les données d'équipe résidentes, que le gestionnaire évince quand la place manque (le stockage les tient, le
-/// gestionnaire les compte dans le budget unique). Appelé **sous le verrou du gestionnaire** : il ne doit jamais
-/// rappeler celui-ci.
-pub trait TeamEvictor: Send + Sync {
-    /// Retire la moins récemment utilisée des équipes que personne ne tient ; rend `(octets libérés, numéro de sa
-    /// construction)`, `None` s'il n'y en a pas.
-    fn evict_idle(&self) -> Option<(usize, u64)>;
 }
 
 struct Inner {
@@ -77,8 +68,8 @@ impl super::store::TeamMemory for WindowManager {
         WindowManager::hold_team(self, bytes);
     }
 
-    fn release_team(&self, bytes: usize) {
-        WindowManager::release_team(self, bytes);
+    fn release_team(&self, bytes: usize, serial: u64) {
+        WindowManager::release_team(self, bytes, serial);
     }
 }
 
@@ -87,7 +78,6 @@ pub struct WindowManager {
     cv: Condvar,
     /// Fenêtres construites depuis le démarrage (une par clé, même sous concurrence).
     built: std::sync::atomic::AtomicU64,
-    evictor: OnceLock<Weak<dyn TeamEvictor>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -114,26 +104,7 @@ impl WindowManager {
             }),
             cv: Condvar::new(),
             built: std::sync::atomic::AtomicU64::new(0),
-            evictor: OnceLock::new(),
         }
-    }
-
-    /// Branche l'éviction des équipes résidentes (une seule fois, au chargement).
-    pub fn set_evictor(&self, evictor: Weak<dyn TeamEvictor>) {
-        let _ = self.evictor.set(evictor);
-    }
-
-    /// Évince une équipe que personne ne tient ; vrai si de la place est revenue.
-    fn evict_team(&self, g: &mut Inner) -> bool {
-        let Some((bytes, serial)) = self.evictor.get().and_then(Weak::upgrade).and_then(|e| e.evict_idle())
-        else {
-            return false;
-        };
-        g.cache.release_external(bytes);
-        // Ses agrégats par fenêtre ne servent plus à personne : la prochaine construction aura un autre numéro.
-        g.cache.drop_team(serial);
-        metrics::counter!("ord_generator_team_evictions_total", "reason" => "budget").increment(1);
-        true
     }
 
     /// Libère la réserve d'espaces de travail, du plus gros au plus petit : se réallouer coûte quelques ms.
@@ -147,28 +118,22 @@ impl WindowManager {
     }
 
     /// Réserve `bytes`, en libérant dans cet ordre : **1. la réserve d'espaces de travail** (en entier), **2. les
-    /// fenêtres que personne ne tient** (la moins récemment servie d'abord) ; rien d'autre n'est évincé (§20.5).
+    /// fenêtres que personne ne tient** (la moins récemment servie d'abord) ; rien d'autre n'est évincé : jamais une
+    /// équipe résidente (§20.6).
     fn reserve_in(&self, g: &mut Inner, bytes: usize) -> bool {
-        loop {
-            if !g.cache.fits(bytes) && !g.pool.is_empty() {
-                Self::evict_pool(g);
-            }
-            if g.cache.reserve(bytes) {
-                return true;
-            }
-            if !self.evict_team(g) {
-                return false;
-            }
+        if !g.cache.fits(bytes) && !g.pool.is_empty() {
+            Self::evict_pool(g);
         }
+        g.cache.reserve(bytes)
     }
 
-    /// Ramène le total sous le budget autant que possible : octets déjà alloués, comptés après coup.
+    /// Ramène le total sous le budget autant que possible : octets déjà alloués, comptés après coup. La réserve
+    /// d'espaces de travail part d'abord, puis les fenêtres que personne ne tient ; jamais une équipe.
     fn settle(&self, g: &mut Inner) {
-        while !g.cache.make_room(0) {
-            if !self.evict_team(g) {
-                return;
-            }
+        if !g.cache.fits(0) && !g.pool.is_empty() {
+            Self::evict_pool(g);
         }
+        let _ = g.cache.make_room(0);
     }
 
     #[cfg(test)]
@@ -352,7 +317,8 @@ impl WindowManager {
     }
 
     /// Compte une équipe devenue résidente (`bytes` : surcouche, données, tables du contrôleur) : elle existe déjà, le
-    /// budget ne peut pas la refuser ; il rend de la place en évinçant ce que personne ne tient.
+    /// budget ne peut pas la refuser ; il rend de la place en libérant la réserve d'espaces de travail, puis les
+    /// fenêtres que personne ne tient (jamais une autre équipe : les plafonds sont ceux du magasin, §20.6).
     pub fn hold_team(&self, bytes: usize) {
         let mut g = lock(&self.inner);
         g.cache.hold_external(bytes);
@@ -360,10 +326,12 @@ impl WindowManager {
         self.publish(&mut g);
     }
 
-    /// Rend les octets d'une équipe qui n'est plus résidente (remplacée, supprimée, plafond de nombre).
-    pub fn release_team(&self, bytes: usize) {
+    /// Rend les octets d'une équipe dont l'entrée est tombée (remplacée, supprimée, plafond, purge) et retire ses
+    /// agrégats de toutes les fenêtres : sa construction ne servira plus à personne.
+    pub fn release_team(&self, bytes: usize, serial: u64) {
         let mut g = lock(&self.inner);
         g.cache.release_external(bytes);
+        g.cache.drop_team(serial);
         self.publish(&mut g);
         drop(g);
         self.cv.notify_all();
@@ -424,65 +392,9 @@ impl WindowManager {
 
 #[cfg(test)]
 mod tests {
+    use super::super::testkit::{engine, request};
     use super::*;
-    use ord_graph::build::{build_graph, BuildOptions, MemSource};
-    use ord_graph::format::{write_graph, GraphFile};
-    use ord_graph::view::{build_view, ViewSpec};
-    use ord_loops::{Mode, Params, Request, RideType};
-
-    /// Grille de 30 × 30 carrefours de 140 m à z16 (tuiles de ~400 m) : plusieurs fenêtres disjointes.
-    fn engine() -> Engine<Vec<u8>> {
-        let (n, cell) = (30usize, 140.0f64);
-        let (lat0, lon0, m_lat) = (47.2f64, -1.56f64, 111_194.926_6f64);
-        let m_lon = m_lat * lat0.to_radians().cos();
-        let mut s = MemSource::default();
-        let id = |i: usize, j: usize| (1 + i * n + j) as i64;
-        for i in 0..n {
-            for j in 0..n {
-                s.node(id(i, j), lat0 + i as f64 * cell / m_lat, lon0 + j as f64 * cell / m_lon);
-            }
-        }
-        let mut way = 0i64;
-        for i in 0..n {
-            for j in 0..n {
-                for (di, dj) in [(0, 1), (1, 0)] {
-                    if i + di < n && j + dj < n {
-                        way += 1;
-                        s.way(way, &[id(i, j), id(i + di, j + dj)], &[("highway", "residential")]);
-                    }
-                }
-            }
-        }
-        let dir = tempfile::tempdir().unwrap();
-        let file = |mut data: ord_graph::build::GraphData, name: &str| {
-            let path = dir.path().join(name);
-            write_graph(&path, &mut data, "test", 1_700_000_000).unwrap();
-            GraphFile::open(std::fs::read(path).unwrap()).unwrap()
-        };
-        let base =
-            file(build_graph(&mut s, &BuildOptions { zoom: 16 }, "test", &mut |_| {}).unwrap(), "b.ordg");
-        let view = |name: &str| file(build_view(&base, &ViewSpec::parse(name).unwrap()).unwrap(), name);
-        let (road, gravel) = (view("road"), view("gravel"));
-        Engine::new(base, road, gravel, Params { window_margin_m: 20.0, ..Params::default() }).unwrap()
-    }
-
-    fn request(north: f64, east: f64) -> Request {
-        let (lat0, lon0, m_lat) = (47.2f64, -1.56f64, 111_194.926_6f64);
-        Request {
-            start: ord_loops::LatLon::new(
-                lat0 + north / m_lat,
-                lon0 + east / (m_lat * lat0.to_radians().cos()),
-            ),
-            end: None,
-            bearing: None,
-            distance_m: 1500.0,
-            ride_type: RideType::Road,
-            mode: Mode::Discovery,
-            familiarity: 0.5,
-            off_team_cost_q8: 768,
-            seed: 1,
-        }
-    }
+    use ord_loops::Request;
 
     fn soon(ms: u64) -> Instant {
         Instant::now() + Duration::from_millis(ms)
@@ -664,77 +576,52 @@ mod tests {
         assert_eq!(m.pool_bytes(), one, "une seule en réserve");
     }
 
-    /// Des équipes résidentes : `(octets, numéro)`, de la plus ancienne à la plus récente ; une seule tenue n'est pas
-    /// évincée.
-    struct Teams {
-        list: Mutex<Vec<(usize, u64)>>,
-        held: Option<u64>,
-    }
-
-    impl TeamEvictor for Teams {
-        fn evict_idle(&self) -> Option<(usize, u64)> {
-            let mut l = lock(&self.list);
-            let i = l.iter().position(|(_, n)| Some(*n) != self.held)?;
-            Some(l.remove(i))
-        }
-    }
-
-    fn manager_with(budget: usize, teams: &[(usize, u64)], held: Option<u64>) -> (WindowManager, Arc<Teams>) {
-        let m = WindowManager::new(budget);
-        let t = Arc::new(Teams { list: Mutex::new(teams.to_vec()), held });
-        let weak: Weak<dyn TeamEvictor> = Arc::downgrade(&t) as Weak<dyn TeamEvictor>;
-        m.set_evictor(weak);
-        for (b, _) in teams {
-            m.hold_team(*b);
-        }
-        (m, t)
+    /// Les équipes résidentes comptent dans le budget mais **aucune réservation ne les évince** (§20.6) : une
+    /// construction qui manque de place attend, puis 503, sans rien retirer aux équipes.
+    #[test]
+    fn a_reservation_that_lacks_room_waits_then_503_and_never_touches_resident_teams() {
+        let m = WindowManager::new(1_000);
+        m.hold_team(300);
+        m.hold_team(300);
+        assert_eq!(m.counted(), 600);
+        // 600 + 500 > 1 000 : attente, 503 ; les équipes sont intactes.
+        let t = Instant::now();
+        assert!(matches!(m.reserve_build(500, soon(200), &|| false), Err(AcquireError::Overloaded)));
+        assert!(t.elapsed() >= Duration::from_millis(150));
+        assert_eq!(m.counted(), 600, "les équipes sont restées");
+        // Ce qui tient passe.
+        let g = m.reserve_build(400, soon(200), &|| false).unwrap();
+        assert_eq!(m.counted(), 1_000);
+        // Une équipe rendue (entrée tombée) libère son compte et réveille l'attente.
+        let m = &m;
+        let ok = std::thread::scope(|s| {
+            let h = s.spawn(move || m.reserve_build(300, soon(5_000), &|| false).is_ok());
+            std::thread::sleep(Duration::from_millis(100));
+            m.release_team(300, 1);
+            h.join().unwrap()
+        });
+        assert!(ok);
+        drop(g);
     }
 
     #[test]
-    fn resident_teams_count_in_the_budget_and_the_least_recent_leave_when_room_is_missing() {
-        let (m, t) = manager_with(1_000, &[(300, 1), (300, 2), (300, 3)], None);
-        assert_eq!(m.counted(), 900);
-        // 900 + 400 > 1 000 : la plus ancienne équipe part, pas les autres.
-        let g = m.reserve_build(400, soon(1_000), &|| false).unwrap();
-        assert_eq!(m.counted(), 1_000);
-        assert_eq!(*lock(&t.list), vec![(300, 2), (300, 3)]);
-        // Une réservation de plus : la suivante, dans l'ordre d'ancienneté.
-        let g2 = m.reserve_build(300, soon(1_000), &|| false).unwrap();
-        assert_eq!(*lock(&t.list), vec![(300, 3)]);
-        assert_eq!(m.counted(), 1_000);
-        drop((g, g2));
-        assert_eq!(m.counted(), 300, "les réservations rendues, il ne reste que l'équipe résidente");
-        // Une équipe rendue par le stockage (supprimée, remplacée) libère son compte.
-        m.release_team(300);
+    fn a_team_that_becomes_resident_is_never_refused_and_frees_the_pool_and_idle_windows_to_fit() {
+        let e = engine();
+        let (a, ra) = (e.plan(&request(500.0, 500.0), 0.0), request(500.0, 500.0));
+        let probe = WindowManager::new(usize::MAX / 4);
+        warm(&probe, &e, &a, &ra, 3);
+        let (pool, windows) = (probe.pool_bytes(), probe.counted() - probe.pool_bytes());
+        let m = WindowManager::new(windows + pool);
+        warm(&m, &e, &a, &ra, 3);
+        assert_eq!((m.pool_bytes(), m.cached_windows()), (pool, 1));
+        // Assez pour chasser la réserve, pas la fenêtre.
+        m.hold_team(pool / 2);
+        assert_eq!((m.pool_bytes(), m.cached_windows()), (0, 1));
+        // Plus encore : la fenêtre inactive part aussi, et l'équipe est comptée même au-dessus du budget.
+        m.hold_team(windows + pool);
+        assert_eq!(m.cached_windows(), 0);
+        assert_eq!(m.counted(), pool / 2 + windows + pool);
+        m.release_team(pool / 2 + windows + pool, 7);
         assert_eq!(m.counted(), 0);
-    }
-
-    #[test]
-    fn a_team_nobody_can_evict_makes_the_reservation_wait_then_answer_503() {
-        // La seule équipe est tenue par une génération : rien à évincer.
-        let (m, t) = manager_with(1_000, &[(700, 1)], Some(1));
-        let r = m.reserve_build(500, soon(200), &|| false);
-        assert!(matches!(r, Err(AcquireError::Overloaded)));
-        assert_eq!(lock(&t.list).len(), 1, "l'équipe tenue est restée");
-        assert_eq!(m.counted(), 700);
-        // Libérée, elle s'évince et la réservation passe.
-        let (m, t) = manager_with(1_000, &[(700, 1)], None);
-        assert!(m.reserve_build(500, soon(200), &|| false).is_ok());
-        assert!(lock(&t.list).is_empty());
-    }
-
-    #[test]
-    fn a_team_that_becomes_resident_evicts_older_ones_to_fit_and_is_never_refused() {
-        let (m, t) = manager_with(1_000, &[(400, 1), (400, 2)], None);
-        // Une équipe de 500 o de plus est déjà en mémoire : elle est comptée, la plus ancienne part pour revenir
-        // sous le budget.
-        lock(&t.list).push((500, 3));
-        m.hold_team(500);
-        assert_eq!(*lock(&t.list), vec![(400, 2), (500, 3)]);
-        assert_eq!(m.counted(), 900);
-        // Même seule au-dessus du budget, elle est comptée (elle existe) sans rien évincer d'autre qu'elle ne peut.
-        let (m, _t) = manager_with(1_000, &[], None);
-        m.hold_team(1_500);
-        assert_eq!(m.counted(), 1_500);
     }
 }

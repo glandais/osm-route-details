@@ -344,14 +344,16 @@ pub struct GeneratorConfig {
     pub budget_ms: u64,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
-    /// Équipes gardées en mémoire au plus (plafond en nombre). Leurs octets (surcouche, données, tables du contrôleur)
-    /// comptent dans `memory_budget_mb`, comme leurs agrégats par fenêtre : quand la place manque, la moins récemment
-    /// utilisée que personne ne tient est évincée et se reconstruit à la demande.
+    /// Équipes gardées en mémoire au plus (plafond en nombre) et leur plafond en octets (Mo) : leurs octets (surcouche,
+    /// données, tables du contrôleur) comptent dans `memory_budget_mb`, mais **aucune réservation ne les évince**
+    /// (finition 2 du lot 6, §20.6) ; seuls ces deux plafonds retirent la moins récemment utilisée des entrées
+    /// inactives, qui se reconstruit à la demande. Une entrée tenue par une génération n'est jamais retirée.
     pub team_cache_entries: usize,
+    pub team_cache_mb: usize,
     /// Budget de mémoire du générateur (Mo) : fenêtres, agrégats d'équipe par fenêtre, espaces de travail, mémoire
     /// transitoire des constructions d'équipe **et équipes résidentes**. Le moteur seul tient en quelques Mo ; ce budget
-    /// borne ce qui varie avec les requêtes (lot 6, §10.1). 1 000 : la plus grosse équipe de la France réserve 924 Mo
-    /// pour se construire (note, finition).
+    /// borne ce qui varie avec les requêtes (lot 6, §10.1). 800 : une construction d'équipe creuse réserve moins de
+    /// 100 Mo (finition 2, §20.9) ; le plancher est les équipes plus deux générations de 200 km en gravel dense.
     pub memory_budget_mb: usize,
     /// Marge d'arrondi (m) ajoutée aux zones d'une fenêtre.
     pub window_margin_m: f64,
@@ -384,8 +386,9 @@ impl Default for GeneratorConfig {
             budget_ms: 8_000,
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
-            team_cache_entries: 16,
-            memory_budget_mb: 1000,
+            team_cache_entries: 64,
+            team_cache_mb: 96,
+            memory_budget_mb: 800,
             window_margin_m: 1_000.0,
             window_radius_step_m: 10_000.0,
             workspace_keep_mb: 160,
@@ -593,6 +596,12 @@ impl Config {
         if !(g.distance_m_min > 0.0 && g.distance_m_min <= g.distance_m_max && g.distance_m_max.is_finite()) {
             return invalid("generator.distance_m_min", "must be positive and not above distance_m_max");
         }
+        if g.team_cache_mb == 0 || g.team_cache_mb >= g.memory_budget_mb / 2 {
+            return invalid(
+                "generator.team_cache_mb",
+                "team_cache_mb must be positive and below memory_budget_mb / 2",
+            );
+        }
         if g.memory_budget_mb == 0 || g.index_threads == 0 {
             return invalid(
                 "generator.memory_budget_mb",
@@ -706,14 +715,21 @@ mod tests {
             let c = Config::load(None).map_err(|e| e.to_string())?;
             assert_eq!(
                 (c.generator.memory_budget_mb, c.generator.workspace_keep_mb, c.generator.team_cache_entries),
-                (1000, 160, 16)
+                (800, 160, 64)
             );
+            assert_eq!(c.generator.team_cache_mb, 96);
             jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
             jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "5000");
             let c = Config::load(None).map_err(|e| e.to_string())?;
             assert_eq!((c.generator.memory_budget_mb, c.generator.window_radius_step_m), (600, 5000.0));
             jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "0");
             assert!(Config::load(None).is_err(), "budget nul");
+            jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "180");
+            assert!(Config::load(None).is_err(), "équipes à la moitié du budget ou plus");
+            jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
+            jail.set_env("ORD_GENERATOR__TEAM_CACHE_MB", "0");
+            assert!(Config::load(None).is_err(), "plafond d'équipes nul");
+            jail.set_env("ORD_GENERATOR__TEAM_CACHE_MB", "96");
             jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
             jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "0");
             assert!(Config::load(None).is_err(), "pas nul");

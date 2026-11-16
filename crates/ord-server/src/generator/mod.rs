@@ -29,6 +29,8 @@ mod deposit;
 mod generate;
 pub mod routes;
 pub mod store;
+#[cfg(test)]
+mod testkit;
 pub(crate) mod windows;
 
 pub use store::{GenEngine, TestHooks};
@@ -413,7 +415,8 @@ impl Generator {
         let graph_index = ord_loops_check::GraphIndex::build(engine.base());
         let gid = graph_id(&identity);
         let matcher_hash = ord_graph_match::agg::params_hash();
-        // Le budget de mémoire compte les équipes résidentes que le stockage lui déclare, et lui demande de les évincer.
+        // Le budget de mémoire compte les équipes résidentes que le stockage lui déclare ; elles ont leurs propres plafonds
+        // (nombre, octets) et aucune réservation ne les évince.
         let windows = Arc::new(windows::WindowManager::new(cfg.memory_budget_mb * 1_000_000));
         let store = store::Store::new(
             store::StoreConfig {
@@ -425,6 +428,7 @@ impl Generator {
                 max_namespace_bytes: cfg.storage.max_namespace_mb * 1024 * 1024,
                 allowed_namespaces: cfg.storage.allowed_namespaces.clone(),
                 team_cache_entries: cfg.team_cache_entries,
+                team_cache_bytes: cfg.team_cache_mb * 1_000_000,
             },
             gid.clone(),
             identity,
@@ -432,7 +436,6 @@ impl Generator {
             Arc::clone(&hooks),
             Arc::clone(&windows) as Arc<dyn store::TeamMemory>,
         );
-        windows.set_evictor(Arc::downgrade(&store) as std::sync::Weak<dyn windows::TeamEvictor>);
         let _ = std::fs::create_dir_all(&cfg.overlay_dir);
         // Au démarrage, tous les temporaires d'écritures interrompues partent.
         store.purge(std::time::SystemTime::now(), true);

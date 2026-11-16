@@ -17,7 +17,6 @@ use ord_graph::overlay::Overlay;
 use ord_loops::{Engine, TeamData};
 use ord_loops_check::{Config as CheckConfig, GraphIndex, TeamCheck};
 
-use super::windows::TeamEvictor;
 use serde::{Deserialize, Serialize};
 
 use super::crypto::Credentials;
@@ -45,7 +44,9 @@ pub struct StoreConfig {
     pub max_namespace_bytes: u64,
     /// Préfixes `ns8` autorisés à créer un espace ; vide : tout le monde (jusqu'à `max_namespaces`).
     pub allowed_namespaces: Vec<String>,
+    /// Plafonds des équipes résidentes (§20.6) : en nombre et en octets, sur les seules entrées inactives.
     pub team_cache_entries: usize,
+    pub team_cache_bytes: usize,
 }
 
 /// Crochets des tests : jamais activés en production.
@@ -140,8 +141,59 @@ pub type Reserve<'a> = &'a dyn Fn(usize) -> Result<Box<dyn Send + 'a>, ReadyErro
 pub trait TeamMemory: Send + Sync {
     /// Une équipe est devenue résidente : ses octets comptent, sans pouvoir être refusés.
     fn hold_team(&self, bytes: usize);
-    /// Des octets d'équipes ne sont plus résidents.
-    fn release_team(&self, bytes: usize);
+    /// Une entrée est tombée : ses octets ne comptent plus et ses agrégats par fenêtre (`serial`) partent.
+    fn release_team(&self, bytes: usize, serial: u64);
+}
+
+/// Ce qui rend les octets d'une équipe **à la chute de son entrée**, quelle que soit sa sortie (remplacement par un
+/// nouveau dépôt, `forget`, plafonds, purge) : tant qu'une génération tient l'entrée, elle reste comptée (§20.6).
+struct TeamTicket {
+    bytes: usize,
+    serial: u64,
+    memory: Arc<dyn TeamMemory>,
+}
+
+impl Drop for TeamTicket {
+    fn drop(&mut self) {
+        self.memory.release_team(self.bytes, self.serial);
+    }
+}
+
+/// Une entrée du cache d'équipes, pour les plafonds.
+trait Resident {
+    fn resident_bytes(&self) -> usize;
+}
+
+impl Resident for Entry {
+    fn resident_bytes(&self) -> usize {
+        self.bytes
+    }
+}
+
+/// Retire, de la moins récemment utilisée à la plus récente, les entrées **inactives** tant que le nombre ou les octets
+/// dépassent leur plafond ; une entrée tenue n'est jamais retirée (le dépassement se résorbe à l'insertion suivante).
+/// Rend les entrées retirées : à lâcher **hors** du verrou du cache (leur ticket prend celui du gestionnaire).
+fn evict_over_caps<K, V: Resident>(
+    cache: &mut Vec<(K, Arc<V>)>,
+    max_entries: usize,
+    max_bytes: usize,
+) -> Vec<Arc<V>> {
+    let mut removed = Vec::new();
+    loop {
+        let over_count = cache.len() > max_entries;
+        let over_bytes = cache.iter().map(|(_, e)| e.resident_bytes()).sum::<usize>() > max_bytes;
+        if !over_count && !over_bytes {
+            break;
+        }
+        let Some(i) = lru_idle(cache) else { break };
+        removed.push(cache.remove(i).1);
+        metrics::counter!(
+            "ord_generator_team_evictions_total",
+            "reason" => if over_count { "count" } else { "bytes" }
+        )
+        .increment(1);
+    }
+    removed
 }
 
 /// Une équipe prête : surcouche et données du moteur.
@@ -156,6 +208,8 @@ pub struct Entry {
     pub check: TeamCheck,
     /// Octets tenus : surcouche décodée, données du moteur et tables du contrôleur (capacités réelles).
     pub bytes: usize,
+    /// Rend ces octets au budget quand l'entrée tombe.
+    _ticket: TeamTicket,
 }
 
 static NEXT_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -203,15 +257,6 @@ pub struct Store {
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Store").field("graph_id", &self.graph_id).finish_non_exhaustive()
-    }
-}
-
-impl TeamEvictor for Store {
-    fn evict_idle(&self) -> Option<(usize, u64)> {
-        let mut cache = lock(&self.cache);
-        let i = lru_idle(&cache)?;
-        let e = cache.remove(i).1;
-        Some((e.bytes, e.serial))
     }
 }
 
@@ -263,19 +308,23 @@ impl Store {
         })
     }
 
-    /// Retire du cache les entrées dont la clé satisfait `pred` et rend leurs octets au budget.
+    /// Retire du cache les entrées dont la clé satisfait `pred` ; leurs octets sont rendus à leur chute (un ticket par
+    /// entrée), c'est-à-dire quand la dernière génération qui les tient a fini.
     fn forget(&self, pred: impl Fn(&CacheKey) -> bool) {
-        let mut freed = 0;
-        lock(&self.cache).retain(|(k, e)| {
-            let gone = pred(k);
-            if gone {
-                freed += e.bytes;
+        let mut gone = Vec::new();
+        {
+            let mut cache = lock(&self.cache);
+            let mut i = 0;
+            while i < cache.len() {
+                if pred(&cache[i].0) {
+                    gone.push(cache.remove(i).1);
+                } else {
+                    i += 1;
+                }
             }
-            !gone
-        });
-        if freed > 0 {
-            self.memory.release_team(freed);
         }
+        // Hors du verrou : le ticket prend celui du gestionnaire.
+        drop(gone);
     }
 
     /// Octets des équipes en cache (tests et jauge).
@@ -390,10 +439,10 @@ impl Store {
 
     /// L'équipe prête pour une génération : depuis le cache si le fichier n'a pas changé, sinon relue puis `TeamData`
     /// construit. `Err(State)` quand elle n'est pas prête (absente ou périmée).
-    pub fn ready(
+    pub fn ready<B: AsRef<[u8]> + Sync>(
         &self,
         c: &Credentials,
-        engine: &GenEngine,
+        engine: &Engine<B>,
         gi: &GraphIndex,
         reserve: Reserve<'_>,
     ) -> Result<Arc<Entry>, ReadyError> {
@@ -430,10 +479,10 @@ impl Store {
         Some(entry)
     }
 
-    fn ready_build(
+    fn ready_build<B: AsRef<[u8]> + Sync>(
         &self,
         c: &Credentials,
-        engine: &GenEngine,
+        engine: &Engine<B>,
         gi: &GraphIndex,
         reserve: Reserve<'_>,
         key: &CacheKey,
@@ -491,27 +540,28 @@ impl Store {
         drop(guard);
         let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
         let bytes = std::mem::size_of::<Entry>() + overlay.bytes() + team.bytes() + check.bytes();
-        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check, bytes });
-        // Comptée d'abord (le budget évince ce que personne ne tient pour lui faire de la place), cachée ensuite : elle
-        // ne peut pas s'évincer elle-même.
+        // Comptée d'abord (le budget libère la réserve d'espaces de travail puis des fenêtres inactives, jamais une
+        // autre équipe), cachée ensuite ; le ticket rend les octets quand l'entrée tombe.
         self.memory.hold_team(bytes);
-        let mut freed = 0;
-        {
+        let ticket = TeamTicket { bytes, serial, memory: Arc::clone(&self.memory) };
+        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check, bytes, _ticket: ticket });
+        let removed = {
             let mut cache = lock(&self.cache);
+            let mut removed: Vec<Arc<Entry>> = Vec::new();
             if let Some(i) = cache.iter().position(|(k, _)| *k == key) {
-                freed += cache.remove(i).1.bytes;
+                removed.push(cache.remove(i).1);
             }
             cache.push((key, Arc::clone(&entry)));
-            // Plafond en nombre : la plus ancienne part, tenue ou non (sa mémoire revient quand la génération qui la
-            // tient finit).
-            while cache.len() > self.cfg.team_cache_entries {
-                freed += cache.remove(0).1.bytes;
-                metrics::counter!("ord_generator_team_evictions_total", "reason" => "count").increment(1);
-            }
-        }
-        if freed > 0 {
-            self.memory.release_team(freed);
-        }
+            // Plafonds en nombre et en octets : la moins récemment utilisée des entrées inactives ; l'entrée neuve est
+            // tenue par nous, et une entrée tenue par une génération ne part jamais.
+            removed.extend(evict_over_caps(
+                &mut cache,
+                self.cfg.team_cache_entries,
+                self.cfg.team_cache_bytes,
+            ));
+            removed
+        };
+        drop(removed);
         Ok(entry)
     }
 
@@ -800,6 +850,7 @@ mod tests {
                 max_namespace_bytes: max_total,
                 allowed_namespaces: Vec::new(),
                 team_cache_entries: 2,
+                team_cache_bytes: usize::MAX,
             },
             "g1".into(),
             identity(),
@@ -813,7 +864,224 @@ mod tests {
 
     impl TeamMemory for NoMemory {
         fn hold_team(&self, _: usize) {}
-        fn release_team(&self, _: usize) {}
+        fn release_team(&self, _: usize, _: u64) {}
+    }
+
+    /// Un budget qui note ce qui entre et ce qui sort : `(octets comptés, constructions rendues)`.
+    #[derive(Default)]
+    struct Ledger {
+        state: Mutex<(usize, Vec<(usize, u64)>)>,
+    }
+
+    impl TeamMemory for Ledger {
+        fn hold_team(&self, bytes: usize) {
+            lock(&self.state).0 += bytes;
+        }
+        fn release_team(&self, bytes: usize, serial: u64) {
+            let mut s = lock(&self.state);
+            s.0 -= bytes;
+            s.1.push((bytes, serial));
+        }
+    }
+
+    impl Ledger {
+        fn counted(&self) -> usize {
+            lock(&self.state).0
+        }
+        fn released(&self) -> Vec<(usize, u64)> {
+            lock(&self.state).1.clone()
+        }
+    }
+
+    /// Un magasin sur le petit moteur de test : de vraies équipes (`ready` construit leurs données), plafonds réglables.
+    struct Rig {
+        store: Arc<Store>,
+        engine: Engine<Vec<u8>>,
+        gi: GraphIndex,
+        ledger: Arc<Ledger>,
+        _dir: tempfile::TempDir,
+    }
+
+    impl Rig {
+        fn new(entries: usize, bytes: usize) -> Self {
+            let ledger = Arc::new(Ledger::default());
+            Self::with_memory(entries, bytes, Arc::clone(&ledger) as Arc<dyn TeamMemory>, ledger)
+        }
+
+        fn with_memory(
+            entries: usize,
+            bytes: usize,
+            memory: Arc<dyn TeamMemory>,
+            ledger: Arc<Ledger>,
+        ) -> Self {
+            let engine = super::super::testkit::engine();
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::new(
+                StoreConfig {
+                    dir: dir.path().to_path_buf(),
+                    ttl: Duration::from_secs(14 * 86_400),
+                    stale_grace: Duration::from_secs(48 * 3600),
+                    max_namespaces: 8,
+                    max_overlays_per_namespace: 8,
+                    max_namespace_bytes: u64::MAX,
+                    allowed_namespaces: Vec::new(),
+                    team_cache_entries: entries,
+                    team_cache_bytes: bytes,
+                },
+                "g1".into(),
+                engine.base().graph_identity(),
+                1,
+                Arc::new(TestHooks::default()),
+                memory,
+            );
+            let gi = GraphIndex::build(engine.base());
+            Self { store, engine, gi, ledger, _dir: dir }
+        }
+
+        /// Dépose une surcouche de quelques arêtes pour l'équipe `n`.
+        fn deposit(&self, n: u8) -> Credentials {
+            let c = creds(n, "t");
+            self.redeposit(&c);
+            c
+        }
+
+        fn redeposit(&self, c: &Credentials) {
+            let meta = OverlayMeta {
+                graph: self.engine.base().graph_identity(),
+                team_id: 0,
+                export_xxh3: 0,
+                export_rows: 0,
+                params_hash: 0,
+                tool_version: "t".into(),
+                build_epoch: 0,
+                types: vec!["ROAD".into(), "GRAVEL".into(), "MTB".into(), "MIXED".into()],
+            };
+            let edges: Vec<u32> = (0..40).collect();
+            let counts: Vec<u16> = edges.iter().flat_map(|_| [1u16, 1, 0, 0, 0, 0, 0, 0]).collect();
+            let ordo = encode(&meta, &edges, &counts).unwrap();
+            self.store.commit(c, &self::meta(1), &ordo).unwrap();
+        }
+
+        fn ready(&self, c: &Credentials) -> Arc<Entry> {
+            let reserve: Reserve<'_> = &|_| Ok(Box::new(()) as Box<dyn Send>);
+            self.store.ready(c, &self.engine, &self.gi, reserve).expect("équipe prête")
+        }
+    }
+
+    #[test]
+    fn resident_teams_are_capped_in_number_on_idle_entries_only_and_their_bytes_come_back_on_drop() {
+        let r = Rig::new(2, usize::MAX);
+        let (a, b, c, d) = (r.deposit(1), r.deposit(2), r.deposit(3), r.deposit(4));
+        let held = r.ready(&a);
+        let (sa, bytes) = (held.serial, held.bytes);
+        drop(r.ready(&b));
+        assert_eq!(r.store.cached_bytes(), 2 * bytes, "deux équipes résidentes de même taille");
+        // Une troisième : `a` est tenue, `b` (inactive) est la moins récente des inactives : elle part.
+        drop(r.ready(&c));
+        assert_eq!(lock(&r.store.cache).len(), 2);
+        assert_eq!(r.ledger.released().len(), 1, "une entrée tombée, ses octets rendus");
+        assert_ne!(r.ledger.released()[0].1, sa, "la tenue est restée");
+        assert_eq!(r.ledger.counted(), 2 * bytes);
+        // `a` rendue : à l'insertion suivante, elle est la plus ancienne des inactives et part, avec son numéro.
+        drop(held);
+        drop(r.ready(&d));
+        assert_eq!(lock(&r.store.cache).len(), 2);
+        assert!(r.ledger.released().iter().any(|&(n, s)| s == sa && n == bytes));
+        assert_eq!(r.ledger.counted(), 2 * bytes);
+        assert_eq!(r.store.cached_bytes(), r.ledger.counted(), "le compte est exact");
+    }
+
+    #[test]
+    fn the_byte_cap_evicts_the_least_recent_idle_team_and_never_a_held_one() {
+        let probe = Rig::new(8, usize::MAX);
+        let bytes = probe.ready(&probe.deposit(1)).bytes;
+        // Le plafond tient une équipe et demie : la seconde chasse la première, jamais la tenue.
+        let r = Rig::new(8, bytes + bytes / 2);
+        let (a, b, c) = (r.deposit(1), r.deposit(2), r.deposit(3));
+        let held = r.ready(&a);
+        drop(r.ready(&b));
+        assert_eq!(lock(&r.store.cache).len(), 2, "la tenue reste : le plafond est dépassé un moment");
+        assert!(r.ledger.released().is_empty() || r.ledger.released().iter().all(|x| x.1 != held.serial));
+        drop(r.ready(&c));
+        assert!(lock(&r.store.cache).iter().any(|(_, e)| Arc::ptr_eq(e, &held)), "la tenue est toujours là");
+        drop(held);
+        drop(r.ready(&b));
+        assert_eq!(lock(&r.store.cache).len(), 1, "une seule équipe tient sous le plafond d'octets");
+        assert_eq!(r.store.cached_bytes(), r.ledger.counted());
+    }
+
+    /// Le constat A, de bout en bout : la réserve d'espaces de travail est pleine, le budget n'a pas la place de la
+    /// construction d'une équipe **en plus** de cette réserve ; la construction réussit (la réserve est évincée), elle
+    /// ne répondait 503 pour toujours.
+    #[test]
+    fn a_team_build_succeeds_when_the_workspace_pool_is_full_and_the_budget_has_no_room_for_both() {
+        use super::super::testkit::request;
+        use super::super::windows::WindowManager;
+        // Ce que la construction réserve : relevé sur une première, sans contrainte.
+        let probe = Rig::new(4, usize::MAX);
+        let wanted = std::cell::Cell::new(0usize);
+        let reserve: Reserve<'_> = &|b| {
+            wanted.set(b);
+            Ok(Box::new(()) as Box<dyn Send>)
+        };
+        probe.store.ready(&probe.deposit(1), &probe.engine, &probe.gi, reserve).unwrap();
+        let r = wanted.get();
+        assert!(r > 1_000_000, "la construction réserve de la mémoire : {r}");
+
+        let ledger = Arc::new(Ledger::default());
+        // Le gestionnaire sert de budget aux équipes ; son budget est celui de la construction et d'une moitié de réserve.
+        let windows = Arc::new(WindowManager::new(r + 600_000));
+        let rig = Rig::with_memory(4, usize::MAX, Arc::clone(&windows) as Arc<dyn TeamMemory>, ledger);
+        let (req, now) = (request(500.0, 500.0), std::time::Instant::now());
+        let plan = rig.engine.plan(&req, 0.0);
+        let held =
+            windows.acquire(&rig.engine, &plan, None, now + Duration::from_secs(5), &mut || false).unwrap();
+        let mut spaces: Vec<ord_loops::Workspace> = (0..6).map(|_| windows.take_workspace()).collect();
+        for ws in &mut spaces {
+            ord_loops::generate_in(&rig.engine, &held.win, None, &req, ws, &mut || false).unwrap();
+        }
+        windows.release(held);
+        for ws in spaces {
+            windows.give_workspace(ws, usize::MAX, 6);
+        }
+        let pool = windows.pool_bytes();
+        assert!(pool > 600_000 / 2, "la réserve est pleine : {pool}");
+        // La construction passe par le même gestionnaire que le service.
+        let c = rig.deposit(1);
+        let reserve: Reserve<'_> = &|b| {
+            windows
+                .reserve_build(b, now + Duration::from_secs(2), &|| false)
+                .map(|g| Box::new(g) as Box<dyn Send + '_>)
+                .map_err(|_| ReadyError::Overloaded)
+        };
+        let t = std::time::Instant::now();
+        let entry = rig.store.ready(&c, &rig.engine, &rig.gi, reserve).expect("la construction réussit");
+        assert!(t.elapsed() < Duration::from_secs(1), "elle n'a pas attendu l'échéance");
+        assert_eq!(windows.pool_bytes(), 0, "la réserve a été évincée");
+        assert!(entry.bytes > 0);
+    }
+
+    #[test]
+    fn a_replaced_or_forgotten_team_gives_its_bytes_back_when_its_last_holder_lets_go() {
+        let r = Rig::new(8, usize::MAX);
+        let a = r.deposit(1);
+        let held = r.ready(&a);
+        let (bytes, serial) = (held.bytes, held.serial);
+        // Un nouveau dépôt remplace la surcouche : l'entrée sort du cache mais une génération la tient encore.
+        r.redeposit(&a);
+        assert_eq!(lock(&r.store.cache).len(), 0);
+        assert_eq!(r.ledger.counted(), bytes, "toujours comptée tant qu'elle est tenue");
+        assert!(r.ledger.released().is_empty());
+        drop(held);
+        assert_eq!(r.ledger.released(), vec![(bytes, serial)]);
+        assert_eq!(r.ledger.counted(), 0);
+        // Un fichier retiré (`forget`) : même chose, sans personne qui la tienne.
+        let again = r.ready(&a);
+        let serial2 = again.serial;
+        drop(again);
+        r.store.forget(|k| k.1 == a.team);
+        assert_eq!(r.ledger.released().last().map(|x| x.1), Some(serial2));
+        assert_eq!(r.ledger.counted(), 0);
     }
 
     #[test]
