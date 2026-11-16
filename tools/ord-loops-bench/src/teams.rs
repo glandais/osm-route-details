@@ -73,13 +73,20 @@ pub fn dump<B: AsRef<[u8]> + Sync>(
 }
 
 fn reference_compare<B: AsRef<[u8]> + Sync>(
-    _engine: &Engine<B>,
+    engine: &Engine<B>,
     _graph_index: &GraphIndex,
-    _overlay: &Overlay,
+    overlay: &Overlay,
     _cfg: &Config,
-    _letter: &str,
-    _data: &[u8],
+    letter: &str,
+    data: &[u8],
     _check: &[u8],
 ) -> Result<()> {
-    Err(anyhow!("la construction de référence n'existe pas encore"))
+    let t = std::time::Instant::now();
+    let reference = TeamData::build_reference(engine, overlay).map_err(|e| anyhow!("{letter} : {e}"))?;
+    anyhow::ensure!(
+        reference.canonical_bytes() == data,
+        "équipe {letter} : les données d'équipe diffèrent de la référence"
+    );
+    eprintln!("équipe {letter} : données identiques à la référence ({:.2} s)", t.elapsed().as_secs_f64());
+    Ok(())
 }

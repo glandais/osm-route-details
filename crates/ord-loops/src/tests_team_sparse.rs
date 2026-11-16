@@ -132,3 +132,8 @@ fn the_reference_overlays_exercise_bridging_and_strict_components() {
     }
     assert!(bridged > 100 && strict > 100 && empty < 20, "bridged {bridged} strict {strict} vides {empty}");
 }
+
+#[test]
+fn the_kept_reference_construction_matches_the_frozen_reference() {
+    assert_matches_fixture(&fixture_lines(&|e, ov| TeamData::build_reference(e, ov).unwrap()));
+}

@@ -151,6 +151,15 @@ impl TeamData {
         Self::build_zone(e, overlay, zone.as_deref())
     }
 
+    /// La construction d'avant la finition 2 (fenêtres de toute la zone, incidence de toute la zone), gardée comme
+    /// référence : mêmes octets canoniques que [`TeamData::build`], toujours.
+    #[cfg(any(test, feature = "reference"))]
+    pub fn build_reference<B: AsRef<[u8]>>(e: &Engine<B>, overlay: &Overlay) -> Result<Self, EngineError> {
+        overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
+        let zone = zone_tiles(e, overlay);
+        Self::build_reference_zone(e, overlay, Some(&zone))
+    }
+
     fn build_zone<B: AsRef<[u8]>>(
         e: &Engine<B>,
         overlay: &Overlay,
@@ -231,7 +240,7 @@ impl TeamData {
 /// Surface rugueuse (note §2.1, Java `EdgeWeights.roughUnpaved`) : seule celle-là n'est présumée d'équipe en gravel
 /// et VTT que si un parcours du bon type l'a prise. `compacted`, `fine_gravel`, `gravel`, `unpaved`, les pavés
 /// n'en sont pas. Réécrite à part dans le contrôleur, qui n'importe pas le moteur.
-fn rough_surface(a: ord_graph::attrs::Attrs) -> bool {
+pub(crate) fn rough_surface(a: ord_graph::attrs::Attrs) -> bool {
     use ord_graph::attrs::SURFACES;
     if a.tracktype() >= 4 {
         return true;
@@ -401,7 +410,7 @@ struct EdgeInfo {
     z: u8,
 }
 
-fn type_index(o: &Overlay, name: &str) -> Option<usize> {
+pub(crate) fn type_index(o: &Overlay, name: &str) -> Option<usize> {
     o.meta.types.iter().position(|t| t == name)
 }
 

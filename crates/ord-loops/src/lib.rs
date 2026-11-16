@@ -22,6 +22,8 @@ mod reverse;
 mod search;
 mod selfcheck;
 mod team;
+#[cfg(any(test, feature = "reference"))]
+mod team_reference;
 mod verify;
 mod window;
 
