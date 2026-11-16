@@ -226,3 +226,85 @@ suivantes y gardent la mémoire que l'allocateur n'a pas rendue).
   `TeamCheck` réservée ; banc en parallèle ; découverte sans mémoire d'équipe : 503 `overloaded` au lieu d'une réponse sans
   `overlay` ; attente de la construction de fond interrompue à l'arrêt.
 - **Budget par défaut** : 900 → 1 000 Mo (voir la note §18 : la réservation de D, 924 Mo, ne tient pas sous 900).
+
+## 9. Relecture de la finition : service en conteneur Docker (16 novembre 2026, soir)
+
+Commit `e66503d` (paquet 1.9.1). Image construite depuis le `Dockerfile` du dépôt (`osm-route-details:lot6`, 40,5 Mo),
+lancée par `docker run --memory=2g --memory-swap=2g`, ports liés à `127.0.0.1` seulement, les quatre fichiers France
+(`.ordg`, deux `.ordv`, `france.poly`) montés en lecture seule, un volume nommé temporaire sur
+`/var/cache/osm-route-details` (surcouches comprises), **sans altitude** (`ORD_CACHE__OFFLINE=true`, IGN désactivé :
+aucune donnée d'altitude locale), configuration par défaut du générateur (budget 1 000 Mo, `team_cache_entries` 16).
+Cache de pages des fichiers évincé avant chaque démarrage. Deux clés d'espace de noms tirées au hasard par le script
+(jamais écrites) pour simuler staging et prod : les neuf dépôts réels sous chacune, **18 équipes**. Mémoire : `anon`,
+`file`, `memory.current` et `memory.peak` du groupe de contrôle du conteneur toutes les 0,5 s, `docker stats` toutes
+les 10 s. 2 Gio = 2 147 Mo.
+
+### 9.1 Vérifications
+
+| Quoi | Résultat |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` | verts |
+| `cargo test --workspace --locked` | 744 tests, 0 échec (fixture figée et test d'équivalence inchangés) |
+| Banc région `--compare --self-check --budget-mb 1000`, `--rounds 0`, toutes les requêtes | **969 / 969, 0 différence** avec la fenêtre de toutes les tuiles ; auto-contrôle identique à la force brute ; `VmHWM` 1 010 Mo |
+| Variables `MALLOC_*` dans le conteneur | lues dans `/proc/1/environ` du service (conteneur annexe partageant son espace de processus, même utilisateur) : `MALLOC_ARENA_MAX=2`, `MALLOC_MMAP_THRESHOLD_=1048576` |
+
+### 9.2 Séance complète, 2 Gio
+
+| | Mesure |
+|---|---|
+| écoute / générateur prêt / `load_ms` | 8,7 s / 8,8 s / 8 062 ms (redémarrage : 8,4 s) |
+| 18 dépôts | tous 200 ; 703 Mo en 59 s, 38 Mo en 71 s, 30 Mo en 48 s ; `anon` après dépôts 475 Mo (451 après les neuf premiers) |
+| équipes résidentes après dépôts | 51 Mo comptés (`team_cache`) ; 2 évictions au plafond en nombre (18 > 16) |
+| premières générations (18) | 16 × 200, 2 × 422 hors couverture ; médiane 0,88 s, max 5,58 s ; **16 reconstructions** sur 18 (13 évictions au budget, 4 au nombre pendant ces 18 requêtes) |
+| réseaux, 54 en série | 37 × 200, 17 × 422 ; 0,47 / 2,64 / 4,65 s (médiane / p90 / max) |
+| villes en découverte (avec identifiants d'équipe), 60 en série | 58 × 200, **2 × 503 `overloaded` à 8,0 s avec un seul client** ; 1,69 / 4,23 / 8,00 s |
+| réseaux + villes, 114 à 4 clients, deux passages | 83 et 84 × 200, 16 et 15 × 422, **10 et 10 × 503, 5 et 5 × 504** ; 3,27 / 8,00 / 10,06 s puis 3,68 / 8,00 / 9,71 s |
+| reconstructions de données d'équipe sur la séance | 262 défauts de cache pour 111 succès ; **208 évictions au budget**, 25 au nombre ; pendant les deux passages à 4 clients : 89 reconstructions pour 228 requêtes |
+| `anon` au plus | **1 309 Mo** (séance), 905 Mo (redémarrage) ; pages de fichier au plus bas 817 Mo pendant le pic |
+| `memory.current` / `memory.peak` | au plafond (2 147 Mo) presque toute la séance : le reste est du cache de pages, rendu sous pression (`memory.events` `max` 140 158) |
+| `docker stats` (sans le cache de pages inactif) | 987 Mio au plus |
+| OOM | `oom` 0, `oom_kill` 0, `OOMKilled=false` |
+| après redémarrage du conteneur (pages froides) | 16 × 200, 2 × 422 ; premières générations 0,44 à **5,79 s** (médiane 0,87 s) ; 40 en série : 0,54 / 2,62 / 4,13 s, 0 × 503 |
+
+### 9.3 Même conteneur réduit à 1,5 Gio (2 Gio moins les 512 Mo de l'altitude)
+
+`docker update --memory 1536m` sur le même volume (18 surcouches), redémarrage pages froides, premières générations,
+40 en série, 114 à 4 clients (sans la série de villes ni les dépôts) : 0 OOM, `memory.peak` au plafond (1 611 Mo),
+`anon` au plus 1 055 Mo, pages de fichier au plus bas 603 Mo ; premières générations 0,45 à 5,89 s ; 4 clients :
+97 × 200, 17 × 422, **0 × 503, 0 × 504**, 1,89 / 3,59 / 7,21 s ; 1 éviction au budget, 14 au nombre.
+
+**Marge pour l'altitude** (calculée, l'altitude n'a pas été sollicitée faute de données locales) : 2 147 − 1 309 =
+838 Mo au pire relevé, soit 326 Mo de pages de fichier une fois les 512 Mo des deux caches pris. Le passage à 1,5 Gio
+tient, mais il n'a pas rejoué les dépôts ni la série de villes, qui font le pic de 1 309 Mo.
+
+### 9.4 Constats
+
+- **Bloquant : la plus grosse équipe ne se construit plus dès que la réserve d'espaces de travail dépasse 76 Mo**
+  (`windows.rs` `reserve_build` / `reserve_in`, `generate.rs` `give_workspace`). Sa construction réserve 924 Mo sur
+  1 000 ; les espaces de travail gardés en réserve (jusqu'à `max_concurrent` × `workspace_keep_mb` = 320 Mo) sont
+  comptés par `force_reserve`/`reserve` et ne sont rendus que quand une génération en reprend un : ni l'éviction des
+  fenêtres ni celle des équipes ne les libèrent. Reproduit avec **un seul client**, de façon déterministe : dépôt de
+  D seul, redémarrage, neuf découvertes sans équipe (réserve 78,6 Mo), puis deux générations de D (200 km gravel,
+  puis 30 km route) : **503 `overloaded` à 8,0 s les deux fois**, et toutes les suivantes tant que la réserve reste
+  au-dessus de 76 Mo. Ce sont les 2 × 503 de la série de villes (§9.2 : les deux tombent sur D). Avant ce commit, la
+  découverte rendait une réponse sans surcouche ; désormais c'est un 503, en mode équipe comme en découverte.
+- **Éviction en cascade des équipes résidentes** (`windows.rs` `reserve_in`, `store.rs` `evict_idle`) : une
+  réservation **transitoire** de construction (403 à 924 Mo) évince toutes les équipes que personne ne tient, qui ne
+  pèsent que 35 à 58 Mo ensemble ; chacune doit ensuite se reconstruire (1 à 6 s, et sa propre réservation de 400 à
+  900 Mo évince les autres). Relevé : 208 évictions au budget sur la séance, 89 reconstructions pour 228 requêtes
+  à 4 clients, d'où 10 × 503 et 5 × 504 par passage et un p90 collé à l'échéance de 8 s. Compter les équipes ne
+  rendait que leurs 35 à 58 Mo ; les évincer pour une réservation transitoire coûte bien plus qu'il ne rend.
+- **Plafond en nombre trop bas pour deux environnements** : 18 équipes (2 × 9) pour `team_cache_entries` = 16 ; en
+  accès tournant, chaque requête d'une équipe évincée la reconstruit (25 évictions au nombre sur la séance, 14 sur
+  114 requêtes à 1,5 Gio). 13 équipes aujourd'hui en production, mais le plafond doit suivre le nombre d'équipes des
+  deux environnements, d'autant qu'une équipe ne pèse que quelques Mo.
+- Mémoire : tenue sous 2 Gio sans OOM, `anon` au plus 1 309 Mo (contre 1 182 Mo au §2.2 avec 9 équipes et un budget
+  de 900 Mo) ; la marge calculée pour l'altitude (326 Mo de pages de fichier) n'a pas été éprouvée sous la charge
+  qui fait ce pic.
+
+### 9.5 Non mesuré
+
+L'altitude réelle dans le conteneur (pas de données locales) ; le service à 1,5 Gio pendant les dépôts et la série de
+villes ; un disque lent ; un relevé du binaire `8a6f8d7` dans le même conteneur avec 18 équipes (les chiffres du
+§2.2 sont à 9 équipes et sous `systemd-run`, pas directement comparables) ; l'arrêt pendant une attente de
+`warm_team` (relu, non provoqué).
