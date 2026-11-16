@@ -22,6 +22,8 @@ mod rules;
 mod tests;
 #[cfg(test)]
 mod tests_bounded;
+#[cfg(test)]
+mod tests_team_sparse;
 
 pub use bounded::{CheckPlan, GraphIndex, TeamCheck};
 pub use check::{Checker, Config, Report, Violation};

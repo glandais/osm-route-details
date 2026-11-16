@@ -17,10 +17,10 @@ use crate::team::TeamData;
 use crate::tests::{engine_zoomed, ll, overlay_of, pt, Counts};
 use crate::{Bearing8, Diagnostics, Failure, Generation, Mode, Request, RideType, Workspace};
 
-const N: usize = 48;
-const CELL: f64 = 140.0;
+pub(crate) const N: usize = 48;
+pub(crate) const CELL: f64 = 140.0;
 
-fn id(i: usize, j: usize) -> i64 {
+pub(crate) fn id(i: usize, j: usize) -> i64 {
     (1 + i * N + j) as i64
 }
 
@@ -162,7 +162,7 @@ pub(crate) fn scenario_requests_sized(seed: u64, n: usize, d_min: f64, d_span: u
         .collect()
 }
 
-fn fnv(s: &str) -> u64 {
+pub(crate) fn fnv(s: &str) -> u64 {
     s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3))
 }
 

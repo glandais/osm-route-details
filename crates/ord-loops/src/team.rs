@@ -201,6 +201,31 @@ impl TeamData {
     pub fn bytes(&self) -> usize {
         self.per.iter().map(|t| t.edges.capacity() * 8 + t.strict_len.capacity() * 16).sum()
     }
+
+    /// Forme canonique en octets (finition 2, §20.4) : tout ce que la construction décide, par type, petit-boutiste,
+    /// sans les capacités. Deux constructions égales rendent les mêmes octets ; sert de référence figée aux tests et
+    /// à l'empreinte du banc (`--dump-teams`).
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for t in &self.per {
+            out.extend((t.edges.len() as u64).to_le_bytes());
+            for &(e, fl, z) in &t.edges {
+                out.extend(e.to_le_bytes());
+                out.push(fl);
+                out.push(z);
+            }
+            out.extend((t.strict_len.len() as u64).to_le_bytes());
+            for &(g, l) in &t.strict_len {
+                out.extend(g.to_le_bytes());
+                out.extend(l.to_le_bytes());
+            }
+            out.extend(t.team_edges.to_le_bytes());
+            for f in [t.team_m, t.bridged_m, t.outside_m.0, t.outside_m.1] {
+                out.extend(f.to_bits().to_le_bytes());
+            }
+        }
+        out
+    }
 }
 
 /// Surface rugueuse (note §2.1, Java `EdgeWeights.roughUnpaved`) : seule celle-là n'est présumée d'équipe en gravel

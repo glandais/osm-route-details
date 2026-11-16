@@ -294,6 +294,20 @@ impl TeamCheck {
         &self.bridged[slot(ride)]
     }
 
+    /// Forme canonique en octets (finition 2, §20.4) : les trois ensembles d'arêtes comblées, triés, petit-boutiste.
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for set in &self.bridged {
+            let mut v: Vec<u32> = set.iter().copied().collect();
+            v.sort_unstable();
+            out.extend((v.len() as u64).to_le_bytes());
+            for e in v {
+                out.extend(e.to_le_bytes());
+            }
+        }
+        out
+    }
+
     /// Octets tenus : une table de hachage de `u32` coûte 5 octets par alvéole (valeur et octet de contrôle) et ses
     /// alvéoles sont les 8/7 de sa capacité.
     pub fn bytes(&self) -> usize {

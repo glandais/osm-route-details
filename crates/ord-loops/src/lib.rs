@@ -32,6 +32,8 @@ mod tests_index;
 #[cfg(test)]
 mod tests_reference;
 #[cfg(test)]
+mod tests_team_sparse;
+#[cfg(test)]
 mod tests_window;
 
 pub use cache::{CacheStats, WindowCache};

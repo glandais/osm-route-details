@@ -12,6 +12,7 @@ mod http;
 mod input;
 mod record;
 mod report;
+mod teams;
 mod windows;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -132,6 +133,15 @@ struct Args {
     /// Sert à comparer deux binaires, le moteur à plat d'avant le lot 6 et celui-ci.
     #[arg(long)]
     dump: Option<PathBuf>,
+    /// Construit les données d'équipe et les tables du contrôleur de chaque surcouche du dossier (`--teams` filtre),
+    /// écrit l'empreinte xxh3 de leur forme canonique (lettre, objet, empreinte, octets), puis s'arrête (finition 2
+    /// du lot 6, §20.4).
+    #[arg(long)]
+    dump_teams: Option<PathBuf>,
+    /// Avec `--dump-teams` : construit aussi chaque équipe à l'ancienne (construction de référence) et exige les
+    /// mêmes octets.
+    #[arg(long)]
+    teams_reference: bool,
 }
 
 fn fnv(s: &str) -> u64 {
@@ -299,6 +309,23 @@ fn main() -> Result<()> {
         tm[1].1,
         engine.index_bytes() as f64 / 1e6
     );
+    if let Some(path) = &a.dump_teams {
+        let cfg = Config {
+            hole_m: a.hole_m.unwrap_or(100.0),
+            connector_m: a.connector_m.unwrap_or(30.0),
+            ..Config::default()
+        };
+        return teams::dump(
+            &engine,
+            &graph_index,
+            &overlays,
+            &letters,
+            &a.teams,
+            &cfg,
+            a.teams_reference,
+            path,
+        );
+    }
     let mut self_check_line = None;
     if a.self_check {
         let t = std::time::Instant::now();

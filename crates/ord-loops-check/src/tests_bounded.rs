@@ -14,7 +14,7 @@ use crate::{Config, GraphIndex, TeamCheck};
 const LAT0: f64 = 47.2;
 const LON0: f64 = -1.56;
 const M_LAT: f64 = 111_194.926_6;
-const N: usize = 16;
+pub(crate) const N: usize = 16;
 const CELL: f64 = 140.0;
 
 fn id(i: usize, j: usize) -> i64 {
@@ -23,7 +23,7 @@ fn id(i: usize, j: usize) -> i64 {
 
 /// Grille de 16 × 16 carrefours de 140 m, construite à z16 (tuiles de ~400 m), avec **une arête expresse** de 2,9 km
 /// d'un coin à l'autre : plus large qu'une cellule.
-fn graph() -> (GraphFile<Vec<u8>>, tempfile::TempDir) {
+pub(crate) fn graph() -> (GraphFile<Vec<u8>>, tempfile::TempDir) {
     let mut s = MemSource::default();
     let m_lon = M_LAT * LAT0.to_radians().cos();
     for i in 0..N {
@@ -55,7 +55,7 @@ fn graph() -> (GraphFile<Vec<u8>>, tempfile::TempDir) {
     (g, dir)
 }
 
-fn overlay(g: &GraphFile<Vec<u8>>, seed: u64) -> Overlay {
+pub(crate) fn overlay(g: &GraphFile<Vec<u8>>, seed: u64) -> Overlay {
     let mut rng = SplitMix64(seed);
     let pos = |osm: u64| ((osm - 1) as usize / N, (osm - 1) as usize % N);
     let (mut edges, mut counts) = (Vec::new(), Vec::new());
