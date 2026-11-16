@@ -25,6 +25,10 @@ surcouche d'une équipe, génération). Sans graphe, le service démarre et sert
 répondent 503. Configuration : section `generator` (`ORD_GENERATOR__GRAPH`, `…__VIEW_ROAD`, `…__VIEW_GRAVEL`,
 `…__COVERAGE_POLY`, `…__OVERLAY_DIR`, limites : voir `config.rs`). Les surcouches sont **privées** : chiffrées
 sur le volume avec une clé dérivée du secret de chaque environnement, jamais journalisées.
+Le moteur ne recopie pas le graphe : il lit les fichiers par `mmap` et ne monte à plat que les cellules z11 d'une
+fenêtre autour de la requête, sous un budget de mémoire (lot 6, [note](docs/design/technique/ord-loops-lot6.md) :
+`ORD_GENERATOR__MEMORY_BUDGET_MB`, `…__WINDOW_MARGIN_M`, `…__WINDOW_RADIUS_STEP_M`, `…__WORKSPACE_KEEP_MB`,
+`…__INDEX_THREADS`), ce qui sert la France entière dans un conteneur de 2 Go.
 
 Image : `ghcr.io/glandais/osm-route-details`, publiée par
 [`docker.yml`](.github/workflows/docker.yml) (linux/amd64 et linux/arm64) : `develop` et `latest` à

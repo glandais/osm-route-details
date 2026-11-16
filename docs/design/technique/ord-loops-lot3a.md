@@ -215,7 +215,9 @@ un dépôt ≈ 200 Mio **[estimé]** ; plus une requête d'altitude à froid (ju
 
 Section `generator` (figment, `ORD_GENERATOR__…`) : `graph`, `view_road`, `view_gravel`, `coverage_poly` (chemins ;
 tous `None` par défaut), `overlay_dir`, `max_concurrent`, `max_queued`, `budget_ms`, `distance_m_min`, `distance_m_max`,
-`team_cache_entries`, `overlay_ttl_days`, `stale_grace_h`, `storage.{max_namespaces, max_overlays_per_namespace,
+`team_cache_entries` (16 depuis le lot 6 : une équipe ne coûte plus que quelques Mo), `memory_budget_mb`, `window_margin_m`,
+`window_radius_step_m`, `workspace_keep_mb`, `index_threads` (lot 6 : fenêtres du moteur, voir
+[`ord-loops-lot6.md`](ord-loops-lot6.md) §11), `overlay_ttl_days`, `stale_grace_h`, `storage.{max_namespaces, max_overlays_per_namespace,
 max_namespace_mb, max_total_mb, allowed_namespaces}`, `deposit.{max_concurrent, queue_wait_s, budget_s, idle_timeout_s, max_body_bytes, max_document_bytes, max_tracks,
 memo_entries, index_cache_mb}`. **Aucun secret** dans la configuration : elle reste journalisée au démarrage.
 
@@ -236,7 +238,10 @@ les problèmes (pointeurs seulement), comme aujourd'hui. Métriques, **sans éti
 `ord_generator_requests_total{outcome,reason}`, `ord_generator_duration_seconds{mode,ride_type}`,
 `ord_generator_routes_total`, `ord_generator_routes_rejected_total{violation}`, `ord_overlay_deposits_total{outcome}`,
 `ord_overlay_deposit_seconds`, `ord_overlay_cache_{hits,misses}_total`, `ord_overlays_stored`,
-`ord_overlay_purged_total{reason}`, `ord_overlay_corrupt_total`.
+`ord_overlay_purged_total{reason}`, `ord_overlay_corrupt_total` ; depuis le lot 6, sans étiquette de tuile ni de lieu :
+`ord_generator_window_requests_total{view,outcome}`, `ord_generator_window_build_seconds{view}`,
+`ord_generator_window_chains{view}`, `ord_generator_window_evictions_total{kind}`, `ord_generator_memory_bytes{kind}`,
+`ord_generator_memory_budget_bytes`, `ord_generator_budget_wait_seconds`, `ord_generator_window_escapes_total`.
 
 ## 11. Tests (synthétiques : graphe `MemSource`, vues construites en test, documents fabriqués)
 

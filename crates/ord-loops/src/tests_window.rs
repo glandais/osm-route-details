@@ -262,3 +262,69 @@ fn a_workspace_reused_after_a_bigger_window_gives_the_same_answer() {
         assert_eq!(format!("{reused:?}"), format!("{fresh:?}"));
     }
 }
+
+/// Grille de 14 × 14 carrefours de 140 m et, au coin sud-ouest, une route de campagne de 4 km (une chaîne, ses nœuds
+/// intermédiaires sont contractés) qui s'éloigne vers l'est puis ne mène nulle part.
+fn grid_with_a_long_chain() -> ord_graph::build::MemSource {
+    use crate::tests::{pt, tags};
+    let n = 14usize;
+    let mut s = ord_graph::build::MemSource::default();
+    let id = |i: usize, j: usize| (1 + i * n + j) as i64;
+    for i in 0..n {
+        for j in 0..n {
+            pt(&mut s, id(i, j), i as f64 * 140.0, j as f64 * 140.0);
+        }
+    }
+    for i in 0..n {
+        let row: Vec<i64> = (0..n).map(|j| id(i, j)).collect();
+        let col: Vec<i64> = (0..n).map(|j| id(j, i)).collect();
+        s.way(1000 + i as i64, &row, &tags("residential", &[]));
+        s.way(2000 + i as i64, &col, &tags("residential", &[]));
+    }
+    // 40 nœuds tous les 100 m, vers l'est depuis le coin sud-est de la grille.
+    let mut ids = vec![id(0, n - 1)];
+    for k in 1..=40 {
+        let nid = 10_000 + k as i64;
+        pt(&mut s, nid, 0.0, (n - 1) as f64 * 140.0 + k as f64 * 100.0);
+        ids.push(nid);
+    }
+    s.way(5000, &ids, &tags("tertiary", &[]));
+    s
+}
+
+#[test]
+fn a_chain_longer_than_the_margin_that_leaves_the_disc_is_loaded_whole_and_the_answer_is_the_same() {
+    let e = engine_zoomed(&mut grid_with_a_long_chain(), 16, scenario_params());
+    let lmax = e.longest_chain_m(0);
+    assert!(lmax > 3_500.0, "la route de campagne est une seule chaîne ({lmax} m)");
+    let full = e.full_window(0);
+    let mut compared = 0;
+    // Des départs sur la grille, près de la route de campagne, et sur elle ; D court, le disque la quitte.
+    for (north, east) in
+        [(0.0, 1700.0), (140.0, 1500.0), (10.0, 1900.0), (700.0, 900.0), (0.0, 2500.0), (60.0, 3500.0)]
+    {
+        for d in [1200.0, 2000.0] {
+            let r = Request {
+                start: crate::tests::ll(north, east),
+                end: None,
+                bearing: None,
+                distance_m: d,
+                ride_type: crate::RideType::Road,
+                mode: crate::Mode::Discovery,
+                familiarity: 0.5,
+                off_team_cost_q8: 768,
+                seed: 3,
+            };
+            let want =
+                generate_with_diagnostics_in(&e, &full, None, &r, &mut Workspace::new(), &mut || false);
+            let plan = e.plan(&r, 0.0);
+            let win = e.build_window(0, &plan.need, &mut || false).unwrap();
+            assert!(win.n_chains() <= full.n_chains());
+            let got = generate_with_diagnostics_in(&e, &win, None, &r, &mut Workspace::new(), &mut || false);
+            assert!(!matches!(got.0, Err(Failure::WindowEscape)));
+            assert_eq!(format!("{got:?}"), format!("{want:?}"), "départ ({north}, {east}), D {d}");
+            compared += 1;
+        }
+    }
+    assert_eq!(compared, 12);
+}
