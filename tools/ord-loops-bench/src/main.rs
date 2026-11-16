@@ -8,6 +8,7 @@
 //! y sont lettrées ; aucun départ, id de trace ou id d'équipe ne sort dans le résumé.
 
 mod geojson;
+mod http;
 mod input;
 mod record;
 mod report;
@@ -96,6 +97,18 @@ struct Args {
     /// Jonction courte comblée en strict, m (défaut du moteur : 30).
     #[arg(long)]
     connector_m: Option<f64>,
+    /// Valeurs du curseur du service (lot 3a), à la place de `--modes` : chacune donne le mode, la familiarité et λ
+    /// que le service appliquerait (`ord_server::generator::cursor`), en processus comme en HTTP.
+    #[arg(long, value_delimiter = ',')]
+    cursors: Vec<f64>,
+    /// Mode HTTP : adresse d'un service qui tourne (`http://127.0.0.1:28080`) ; les requêtes passent par
+    /// `POST /v1/generator/routes` au lieu du moteur en processus. Exige `--cursors` et `--keys`.
+    #[arg(long)]
+    http: Option<String>,
+    /// Fichier local (hors dépôt) `{ id d'équipe : { "key": …, "team": … } }` : la clé d'environnement et la
+    /// référence d'équipe que le backend enverrait.
+    #[arg(long)]
+    keys: Option<PathBuf>,
 }
 
 fn home() -> Result<PathBuf> {
@@ -107,6 +120,13 @@ fn expand(p: &str) -> Result<PathBuf> {
         Some(rest) => home()?.join(rest),
         None => PathBuf::from(p),
     })
+}
+
+/// Ce qui est joué pour chaque requête : un mode du lot 2, ou une valeur du curseur du service (lot 3a).
+#[derive(Clone, Copy, Debug)]
+enum Play {
+    Mode(Mode),
+    Cursor(f64),
 }
 
 fn parse_mode(s: &str) -> Result<Mode> {
@@ -191,6 +211,23 @@ fn main() -> Result<()> {
     let java_dir = expand(&a.java)?;
     let alone_dir = expand(&a.java_alone)?;
     let modes: Vec<Mode> = a.modes.iter().map(|m| parse_mode(m)).collect::<Result<_>>()?;
+    let plays: Vec<Play> = if a.cursors.is_empty() {
+        modes.iter().map(|&m| Play::Mode(m)).collect()
+    } else {
+        a.cursors.iter().map(|&c| Play::Cursor(c)).collect()
+    };
+    let client = match &a.http {
+        Some(url) => {
+            anyhow::ensure!(!a.cursors.is_empty(), "--http exige --cursors");
+            Some(http::Client::new(url)?)
+        }
+        None => None,
+    };
+    let keys = match (&a.http, &a.keys) {
+        (Some(_), Some(p)) => http::read_keys(p)?,
+        (Some(_), None) => return Err(anyhow!("--http exige --keys")),
+        (None, _) => BTreeMap::new(),
+    };
     let geo = GeoWant {
         specs: a
             .geojson
@@ -309,6 +346,10 @@ fn main() -> Result<()> {
             t.elapsed().as_secs_f64()
         );
 
+        let team_key = keys.get(id);
+        if client.is_some() && team_key.is_none() {
+            return Err(anyhow!("pas de clé pour l'équipe {letter} dans le fichier des clés"));
+        }
         let mut ws = Workspace::new();
         let mut played = 0usize;
         for (jr, p) in inside {
@@ -328,7 +369,18 @@ fn main() -> Result<()> {
             };
             played += 1;
             let scope = if poly.contains_disc(p.0, p.1, jr.km * 500.0) { "interior" } else { "edge" };
-            for &mode in &modes {
+            for play in &plays {
+                // Un mode du lot 2 (familiarité de la requête Java, λ = 3) ou une valeur du curseur du service.
+                let (mode, familiarity, q8, cursor) = match *play {
+                    Play::Mode(m) => (m, jr.familiarity, ord_loops::DEFAULT_OFF_TEAM_COST_Q8, None),
+                    Play::Cursor(c) => {
+                        let applied = ord_server::generator::cursor::apply(
+                            ord_server::generator::cursor::hundredths(c)
+                                .ok_or_else(|| anyhow!("curseur hors de [0, 1] : {c}"))?,
+                        );
+                        (applied.mode, applied.familiarity, applied.off_team_cost_q8, Some(c))
+                    }
+                };
                 let req = Request {
                     start: LatLon::new(p.0, p.1),
                     end,
@@ -336,10 +388,10 @@ fn main() -> Result<()> {
                     distance_m: jr.km * 1000.0,
                     ride_type: jr.ride,
                     mode,
-                    familiarity: jr.familiarity,
+                    familiarity,
+                    off_team_cost_q8: q8,
                     seed: u64::from(jr.i),
                 };
-                let outcome = record::run_request(&engine, &team, &req, &mut ws, a.rounds);
                 let mut rec = Rec {
                     team: letter.clone(),
                     i: jr.i,
@@ -350,7 +402,10 @@ fn main() -> Result<()> {
                     ride: ride_name(jr.ride).into(),
                     familiarity: jr.familiarity,
                     scope: scope.into(),
-                    mode: mode_name(mode).into(),
+                    mode: match cursor {
+                        Some(c) => format!("c{c}"),
+                        None => mode_name(mode).into(),
+                    },
                     outcome: String::new(),
                     n_routes: 0,
                     n_ok: 0,
@@ -378,7 +433,31 @@ fn main() -> Result<()> {
                     t2_settled: 0,
                     rejected: Default::default(),
                     off_tolerance: Vec::new(),
+                    cursor,
+                    http_status: None,
+                    dropped: None,
+                    applied: cursor.map(|_| {
+                        let l = f64::from(q8) / 256.0;
+                        format!("{} q8={q8} λ={l:.3} familiarité={familiarity}", mode_name(mode))
+                    }),
                 };
+                if let (Some(client), Some(c)) = (&client, cursor) {
+                    let ask = http::Ask {
+                        start: req.start,
+                        end: req.end,
+                        bearing: req.bearing,
+                        distance_m: req.distance_m,
+                        ride: req.ride_type,
+                        cursor: c,
+                        seed: req.seed,
+                        key: team_key,
+                    };
+                    let (answer, ms) = client.run(&ask, a.rounds)?;
+                    http::fill(&mut rec, &answer, ms, req.distance_m);
+                    recs.push(rec);
+                    continue;
+                }
+                let outcome = record::run_request(&engine, &team, &req, &mut ws, a.rounds);
                 ctx.fill(&mut rec, &req, &outcome);
                 if geo.wants(&rec) {
                     geojson::write(
@@ -423,7 +502,18 @@ fn main() -> Result<()> {
                 h.nodes, h.edges, h.tool_version, h.replication_timestamp
             ),
         ),
-        ("modes".into(), a.modes.join(", ")),
+        (
+            "modes".into(),
+            if a.cursors.is_empty() {
+                a.modes.join(", ")
+            } else {
+                format!(
+                    "curseurs {} ({})",
+                    a.cursors.iter().map(f64::to_string).collect::<Vec<_>>().join(", "),
+                    if a.http.is_some() { "HTTP" } else { "en processus" }
+                )
+            },
+        ),
         (
             "équipes jouées".into(),
             team_ids
@@ -445,12 +535,17 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&out)?;
     let json_path = out.join(format!("{}-report.json", a.label));
     std::fs::write(&json_path, serde_json::to_vec_pretty(&Report { meta: &lines, records: &recs })?)?;
+    let mode_labels: Vec<String> = if a.cursors.is_empty() {
+        a.modes.clone()
+    } else {
+        a.cursors.iter().map(|c| format!("c{c}")).collect()
+    };
     let md = report::summary(&SummaryInput {
         meta: &Meta { lines: lines.clone() },
         recs: &recs,
         java_total: &java_total,
         autocheck: &autocheck,
-        modes: &a.modes,
+        modes: &mode_labels,
         rounds: a.rounds,
     });
     let md_path = out.join(format!("{}-summary.md", a.label));

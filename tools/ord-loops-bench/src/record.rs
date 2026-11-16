@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use ord_graph::format::GraphFile;
 use ord_loops::{
-    check_route, generate_with_diagnostics, Diagnostics, Engine, Failure, Generation, Mode, NoRouteDetail,
-    Request, Route, TeamData, Workspace,
+    check_route, generate_with_diagnostics, route_geometry, Diagnostics, Engine, Failure, Generation, Mode,
+    NoRouteDetail, Request, Route, TeamData, Workspace,
 };
 use ord_loops_check::Checker;
 use serde::Serialize;
@@ -48,6 +48,9 @@ pub struct RouteRec {
     pub start_zone_m: f64,
     pub end_zone_m: f64,
     pub corridor_share: f64,
+    /// Empreinte de la géométrie arrondie au millionième de degré (celle de la polyligne du service).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geom_xxh3: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -88,6 +91,16 @@ pub struct Rec {
     pub rejected: BTreeMap<String, u32>,
     /// L / D des candidats hors tolérance (diagnostic des échecs `NO_CANDIDATE`).
     pub off_tolerance: Vec<f32>,
+    /// Valeur du curseur du service (lot 3a) quand le mode en vient.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<f64>,
+    /// Mode HTTP : statut, parcours retirés par le contrôleur du service, mode et λ appliqués selon le service.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dropped: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied: Option<String>,
 }
 
 impl Rec {
@@ -261,6 +274,10 @@ impl<B: AsRef<[u8]>> Context<'_, B> {
                         start_zone_m: rep.start_zone_m,
                         end_zone_m: rep.end_zone_m,
                         corridor_share: rep.corridor_share,
+                        geom_xxh3: Some(crate::http::geom_xxh3(crate::http::rounded(&route_geometry(
+                            self.engine.base(),
+                            r,
+                        )))),
                     });
                 }
                 rec.outcome = if g.routes.is_empty() {

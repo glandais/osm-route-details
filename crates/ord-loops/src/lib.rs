@@ -77,8 +77,14 @@ pub struct Request {
     pub mode: Mode,
     /// Familiarité demandée, de 0 (sortir des routes de l'équipe) à 1 (s'y tenir).
     pub familiarity: f32,
+    /// λ : coût d'une arête hors équipe en mode équipe d'abord, en 256es (entier : même poids en natif et en WASM).
+    /// [`DEFAULT_OFF_TEAM_COST_Q8`] (768) vaut λ = 3, le λ du lot 2 ; 256 vaut λ = 1, le coût OSM seul.
+    pub off_team_cost_q8: u32,
     pub seed: u64,
 }
+
+/// λ = 3 en 256es : la valeur du lot 2.
+pub const DEFAULT_OFF_TEAM_COST_Q8: u32 = 768;
 
 /// Un point du graphe : une arête de base et la distance depuis son extrémité `a`, le long de sa géométrie.
 #[derive(Clone, Copy, Debug, PartialEq)]

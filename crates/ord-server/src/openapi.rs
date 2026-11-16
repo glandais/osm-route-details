@@ -4,13 +4,26 @@ use utoipa::openapi::{LicenseBuilder, OpenApi as OpenApiDoc};
 use utoipa::OpenApi;
 
 use crate::app::paths::*;
+use crate::generator::routes::paths::*;
 use crate::API_VERSION;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(route_details, capabilities, attribution, health_live, health_ready),
+    paths(
+        route_details,
+        capabilities,
+        attribution,
+        health_live,
+        health_ready,
+        put_overlay,
+        get_overlay,
+        delete_overlay,
+        delete_overlays,
+        post_routes
+    ),
     tags(
         (name = "route", description = "Elevation and typology along a route"),
+        (name = "generator", description = "Route generator: team overlay (deposit, status, delete) and route generation"),
         (name = "service", description = "Capabilities and attribution"),
         (name = "health", description = "Liveness and readiness probes"),
     )

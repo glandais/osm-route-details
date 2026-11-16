@@ -9,6 +9,8 @@ use http_body_util::BodyExt;
 use ord_server::config::Config;
 use ord_server::{router, AppState};
 use serde_json::Value;
+
+pub mod generator;
 use tower::ServiceExt;
 
 pub struct Reply {

@@ -22,6 +22,7 @@ pub struct Config {
     pub cache: CacheConfig,
     pub http_client: HttpClientConfig,
     pub log: LogConfig,
+    pub generator: GeneratorConfig,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -322,6 +323,124 @@ impl Default for HttpClientConfig {
     }
 }
 
+/// Le générateur de parcours (lot 3a) : graphe, vues, polygone, surcouches d'équipe. **Aucun secret** : cette section
+/// est journalisée au démarrage. Sans `graph`, les routes `/v1/generator/*` rendent 503 et le reste du service ne change pas.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeneratorConfig {
+    /// Graphe de base `.ordg` (lot 0) ; `None` : générateur désactivé.
+    pub graph: Option<PathBuf>,
+    /// Vues `road` et `gravel` du même graphe (`.ordv`).
+    pub view_road: Option<PathBuf>,
+    pub view_gravel: Option<PathBuf>,
+    /// Polygone de couverture `.poly` (Geofabrik).
+    pub coverage_poly: Option<PathBuf>,
+    /// Dossier des surcouches chiffrées : `graph-<id>/<espace>/<équipe>.ordo.enc`.
+    pub overlay_dir: PathBuf,
+    /// Générations en calcul en même temps (CPU) et en attente au plus ; au-delà, 503 `overloaded`.
+    pub max_concurrent: usize,
+    pub max_queued: usize,
+    /// Budget d'une génération, attente comprise.
+    pub budget_ms: u64,
+    pub distance_m_min: f64,
+    pub distance_m_max: f64,
+    /// Équipes gardées en mémoire (≈ 55 Mio chacune).
+    pub team_cache_entries: usize,
+    /// Une surcouche non redéposée depuis ce nombre de jours est purgée.
+    pub overlay_ttl_days: u64,
+    /// Un dossier d'un autre graphe est purgé quand son dernier fichier a plus de ces heures.
+    pub stale_grace_h: u64,
+    /// Période de la purge, en secondes.
+    pub purge_interval_s: u64,
+    pub storage: GeneratorStorageConfig,
+    pub deposit: GeneratorDepositConfig,
+}
+
+impl Default for GeneratorConfig {
+    fn default() -> Self {
+        Self {
+            graph: None,
+            view_road: None,
+            view_gravel: None,
+            coverage_poly: None,
+            overlay_dir: PathBuf::from("/var/cache/osm-route-details/generator"),
+            max_concurrent: 2,
+            max_queued: 8,
+            budget_ms: 8_000,
+            distance_m_min: 5_000.0,
+            distance_m_max: 200_000.0,
+            team_cache_entries: 3,
+            overlay_ttl_days: 14,
+            stale_grace_h: 48,
+            purge_interval_s: 3_600,
+            storage: GeneratorStorageConfig::default(),
+            deposit: GeneratorDepositConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeneratorStorageConfig {
+    pub max_namespaces: usize,
+    pub max_overlays_per_namespace: usize,
+    /// Octets au plus **par espace** ; `max_namespaces × max_namespace_mb` ne dépasse pas `max_total_mb` (le budget du
+    /// volume), de sorte que le quota d'un espace ne dépend jamais de ce que les autres stockent.
+    pub max_namespace_mb: u64,
+    pub max_total_mb: u64,
+    /// Préfixes `ns8` (8 hexadécimaux, affichés dans les journaux au premier dépôt) autorisés à créer un espace ; vide :
+    /// n'importe quelle clé, jusqu'à `max_namespaces`. Une liste de quelques valeurs que l'opérateur maîtrise : un
+    /// inconnu sur le réseau partagé ne peut alors prendre aucune place.
+    pub allowed_namespaces: Vec<String>,
+}
+
+impl Default for GeneratorStorageConfig {
+    fn default() -> Self {
+        Self {
+            max_namespaces: 16,
+            max_overlays_per_namespace: 2_000,
+            max_namespace_mb: 64,
+            max_total_mb: 1024,
+            allowed_namespaces: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeneratorDepositConfig {
+    /// Dépôts en cours dans tout le service (l'index et le fil sont partagés).
+    pub max_concurrent: usize,
+    /// Attente d'une place de dépôt (file équitable, première arrivée première servie) avant 503 `overloaded`.
+    pub queue_wait_s: u64,
+    pub budget_s: u64,
+    /// Sans octet reçu pendant ce délai, le dépôt est abandonné.
+    pub idle_timeout_s: u64,
+    /// Corps décompressé, document d'une trace, nombre de traces.
+    pub max_body_bytes: u64,
+    pub max_document_bytes: usize,
+    pub max_tracks: u64,
+    /// Géométries mémorisées pendant un dépôt, et mémoire de l'index spatial par cellule.
+    pub memo_entries: usize,
+    pub index_cache_mb: usize,
+}
+
+impl Default for GeneratorDepositConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent: 1,
+            queue_wait_s: 120,
+            budget_s: 900,
+            idle_timeout_s: 30,
+            max_body_bytes: 2 * 1024 * 1024 * 1024,
+            max_document_bytes: 16 * 1024 * 1024,
+            max_tracks: 20_000,
+            memo_entries: 400_000,
+            index_cache_mb: 128,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
@@ -447,6 +566,43 @@ impl Config {
         if self.http_client.user_agent.trim().is_empty() {
             return invalid("http_client.user_agent", "must not be empty");
         }
+        let g = &self.generator;
+        if g.max_concurrent == 0 || g.budget_ms == 0 || g.team_cache_entries == 0 {
+            return invalid("generator", "max_concurrent, budget_ms and team_cache_entries must be positive");
+        }
+        if !(g.distance_m_min > 0.0 && g.distance_m_min <= g.distance_m_max && g.distance_m_max.is_finite()) {
+            return invalid("generator.distance_m_min", "must be positive and not above distance_m_max");
+        }
+        if g.overlay_ttl_days == 0 || g.purge_interval_s == 0 {
+            return invalid("generator.overlay_ttl_days", "ttl and purge interval must be positive");
+        }
+        let d = &g.deposit;
+        if d.max_concurrent == 0 || d.budget_s == 0 || d.idle_timeout_s == 0 || d.memo_entries == 0 {
+            return invalid("generator.deposit", "concurrency, budgets and memo_entries must be positive");
+        }
+        if d.max_document_bytes == 0 || d.max_body_bytes == 0 || d.max_tracks == 0 || d.index_cache_mb == 0 {
+            return invalid("generator.deposit", "size bounds must be positive");
+        }
+        let st = &g.storage;
+        if st.max_namespaces == 0
+            || st.max_overlays_per_namespace == 0
+            || st.max_total_mb == 0
+            || st.max_namespace_mb == 0
+        {
+            return invalid("generator.storage", "bounds must be positive");
+        }
+        if (st.max_namespaces as u64).saturating_mul(st.max_namespace_mb) > st.max_total_mb {
+            return invalid(
+                "generator.storage",
+                "max_namespaces x max_namespace_mb must fit in max_total_mb",
+            );
+        }
+        if st.allowed_namespaces.iter().any(|p| p.len() != 8 || !p.bytes().all(|b| b.is_ascii_hexdigit())) {
+            return invalid(
+                "generator.storage.allowed_namespaces",
+                "each prefix must be 8 hexadecimal characters",
+            );
+        }
         Ok(())
     }
 }
@@ -492,5 +648,21 @@ mod tests {
         config.limits.options.step_m_default = 2.0;
         let err = config.validate().expect_err("défaut hors bornes");
         assert!(err.to_string().contains("limits.options.step_m_default"), "{err}");
+    }
+
+    #[test]
+    fn generator_section_is_configured_by_environment_and_validated() {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__GRAPH", "/data/g.ordg");
+            jail.set_env("ORD_GENERATOR__DEPOSIT__MAX_TRACKS", "5");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.graph, Some(PathBuf::from("/data/g.ordg")));
+            assert_eq!(c.generator.deposit.max_tracks, 5);
+            assert_eq!(c.generator.deposit.max_document_bytes, 16 * 1024 * 1024);
+            jail.set_env("ORD_GENERATOR__MAX_CONCURRENT", "0");
+            let err = Config::load(None).expect_err("sans place de calcul");
+            assert!(err.to_string().contains("generator"), "{err}");
+            Ok(())
+        });
     }
 }

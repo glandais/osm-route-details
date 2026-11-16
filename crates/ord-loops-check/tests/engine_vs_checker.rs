@@ -110,6 +110,7 @@ fn every_route_the_engine_returns_passes_the_independent_checker() {
                     ride_type: RideType::Road,
                     mode,
                     familiarity: 0.5,
+                    off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
                     seed: seed * 10 + k as u64,
                 };
                 let Ok(g) = generate(&engine, Some(&team), &req, &mut ws, &mut || false) else { continue };

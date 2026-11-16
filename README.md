@@ -19,6 +19,13 @@ rues parcourues `edges[]` sur option (api 1.7, `tracktype` et accès en 1.8). Au
 [technique/README §3](docs/design/technique/README.md). `cargo test` vérifie tout, contrat compris,
 sans réseau ; `cargo run -p ord-server -- openapi` régénère le contrat.
 
+Générateur de parcours (api 1.9, lot 3a, [note](docs/design/technique/ord-loops-lot3a.md)) : le moteur
+`ord-loops` et son contrôleur indépendant sont servis sous `/v1/generator/*` (dépôt, état et effacement de la
+surcouche d'une équipe, génération). Sans graphe, le service démarre et sert l'altitude ; les routes
+répondent 503. Configuration : section `generator` (`ORD_GENERATOR__GRAPH`, `…__VIEW_ROAD`, `…__VIEW_GRAVEL`,
+`…__COVERAGE_POLY`, `…__OVERLAY_DIR`, limites : voir `config.rs`). Les surcouches sont **privées** : chiffrées
+sur le volume avec une clé dérivée du secret de chaque environnement, jamais journalisées.
+
 Image : `ghcr.io/glandais/osm-route-details`, publiée par
 [`docker.yml`](.github/workflows/docker.yml) (linux/amd64 et linux/arm64) : `develop` et `latest` à
 chaque push sur `develop`, `1.2.3` et `1.2` pour un tag `v1.2.3`, `sha-<commit>` dans tous les cas.

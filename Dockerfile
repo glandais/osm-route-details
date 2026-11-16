@@ -17,21 +17,34 @@ COPY crates/ord-domain/Cargo.toml crates/ord-domain/
 COPY crates/ord-pipeline/Cargo.toml crates/ord-pipeline/
 COPY crates/ord-server/Cargo.toml crates/ord-server/
 COPY crates/ord-testkit/Cargo.toml crates/ord-testkit/
+# Générateur de parcours (lot 3a) : le graphe, l'appariement des surcouches, le moteur et son contrôleur.
+COPY crates/ord-graph/Cargo.toml crates/ord-graph/
+COPY crates/ord-graph-match/Cargo.toml crates/ord-graph-match/
+COPY crates/ord-loops/Cargo.toml crates/ord-loops/
+COPY crates/ord-loops-check/Cargo.toml crates/ord-loops-check/
+# Les outils ne sont pas dans l'image, mais le workspace doit pouvoir lire leurs manifestes.
 COPY tools/ord-bench/Cargo.toml tools/ord-bench/
+COPY tools/ord-graph-build/Cargo.toml tools/ord-graph-build/
+COPY tools/ord-graph-overlay/Cargo.toml tools/ord-graph-overlay/
+COPY tools/ord-loops-bench/Cargo.toml tools/ord-loops-bench/
 RUN for d in crates/* tools/*; do mkdir -p "$d/src" && touch "$d/src/lib.rs"; done \
  && echo 'fn main() {}' > crates/ord-server/src/main.rs \
  && echo 'fn main() {}' > tools/ord-bench/src/main.rs \
  && cargo build --release --locked -p ord-server \
  && rm -rf crates/*/src tools/*/src
 
-# Sources du service seulement (ord-testkit et ord-bench restent vides : hors image, T05 §5.1).
+# Sources du service seulement (ord-testkit et les outils restent vides : hors image, T05 §5.1).
 COPY crates/ord-adapters/src crates/ord-adapters/src
 COPY crates/ord-core/src crates/ord-core/src
 COPY crates/ord-data/src crates/ord-data/src
 COPY crates/ord-domain/src crates/ord-domain/src
 COPY crates/ord-pipeline/src crates/ord-pipeline/src
+COPY crates/ord-graph/src crates/ord-graph/src
+COPY crates/ord-graph-match/src crates/ord-graph-match/src
+COPY crates/ord-loops/src crates/ord-loops/src
+COPY crates/ord-loops-check/src crates/ord-loops-check/src
 COPY crates/ord-server/src crates/ord-server/src
-RUN for d in crates/ord-testkit tools/ord-bench; do mkdir -p "$d/src" && touch "$d/src/lib.rs"; done \
+RUN for d in crates/ord-testkit tools/*; do mkdir -p "$d/src" && touch "$d/src/lib.rs"; done \
  && echo 'fn main() {}' > tools/ord-bench/src/main.rs \
  && find crates -name '*.rs' -exec touch {} + \
  && cargo build --release --locked -p ord-server \

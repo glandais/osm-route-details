@@ -10,9 +10,8 @@ use ord_graph::overlay::{write_overlay, Overlay, OverlayMeta};
 use ord_graph::util::{sample_without_replacement, Poly, SplitMix64};
 use rayon::prelude::*;
 use serde_json::{json, Value};
-use xxhash_rust::xxh3::xxh3_64;
 
-use crate::aggregate::{aggregate, TeamAcc, STRIDE};
+use crate::aggregate::{aggregate, params_hash, TeamAcc};
 use crate::checks::{verify_sample, Verification};
 use crate::export::TYPES;
 use crate::geo::decode_polyline6;
@@ -75,22 +74,6 @@ pub fn overlay_name(team: u64, graph: &Path) -> String {
     format!("{team}-{stem}.ordo")
 }
 
-/// Empreinte des paramètres d'appariement : change dès qu'une tolérance change.
-pub fn params_hash() -> u64 {
-    let s = format!(
-        "corridor={};node={};edge={};hd={};lenabs={};lenrel={};amb={};piece={}",
-        matcher::CORRIDOR_M,
-        matcher::NODE_SNAP_M,
-        matcher::EDGE_SNAP_M,
-        matcher::HAUSDORFF_MAX_M,
-        matcher::LEN_TOL_ABS_M,
-        matcher::LEN_TOL_REL,
-        matcher::AMBIGUITY_M,
-        matcher::MIN_PIECE_M
-    );
-    xxh3_64(s.as_bytes())
-}
-
 /// Pic de mémoire résidente du processus, en ko (Linux), ou `None`.
 fn vm_hwm_kb() -> Option<u64> {
     let s = std::fs::read_to_string("/proc/self/status").ok()?;
@@ -132,13 +115,7 @@ fn identity_json(g: &ord_graph::GraphIdentity) -> Value {
 
 /// Arêtes triées et comptes à plat (saturés à 65 535) d'une équipe, prêts pour l'écriture.
 pub fn overlay_arrays(acc: &TeamAcc) -> (Vec<u32>, Vec<u16>) {
-    let mut keys: Vec<u32> = acc.counts.keys().copied().collect();
-    keys.sort_unstable();
-    let mut counts = Vec::with_capacity(keys.len() * STRIDE);
-    for k in &keys {
-        counts.extend(acc.counts[k].counts.iter().map(|&c| c.min(u32::from(u16::MAX)) as u16));
-    }
-    (keys, counts)
+    ord_graph_match::agg::overlay_arrays(&acc.counts)
 }
 
 /// Re-vérifie un échantillon d'arêtes appariées de l'équipe `ti` (méthode indépendante, `checks.rs`).

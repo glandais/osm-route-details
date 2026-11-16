@@ -103,6 +103,27 @@ impl Poly {
         Self::parse(&text)
     }
 
+    /// Anneaux extérieurs, en `(lon, lat)`.
+    pub fn outer_rings(&self) -> &[Vec<(f64, f64)>] {
+        &self.outer
+    }
+
+    /// Trous, en `(lon, lat)`.
+    pub fn hole_rings(&self) -> &[Vec<(f64, f64)>] {
+        &self.holes
+    }
+
+    /// Boîte englobante `[lon_min, lat_min, lon_max, lat_max]` des anneaux extérieurs.
+    pub fn bbox(&self) -> Option<[f64; 4]> {
+        let mut it = self.outer.iter().flatten();
+        let first = it.next()?;
+        let mut b = [first.0, first.1, first.0, first.1];
+        for &(x, y) in it {
+            b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
+        }
+        Some(b)
+    }
+
     pub fn contains(&self, lon: f64, lat: f64) -> bool {
         self.outer.iter().any(|r| in_ring(r, lon, lat)) && !self.holes.iter().any(|r| in_ring(r, lon, lat))
     }

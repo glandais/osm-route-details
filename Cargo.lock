@@ -1301,7 +1301,7 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "ord-adapters"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "flate2",
  "image-webp",
@@ -1311,7 +1311,7 @@ dependencies = [
 
 [[package]]
 name = "ord-bench"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1336,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "ord-core"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "ord-domain",
  "rstar",
@@ -1347,7 +1347,7 @@ dependencies = [
 
 [[package]]
 name = "ord-data"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "ord-domain"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "ord-graph"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "memmap2 0.9.12",
  "ord-domain",
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "ord-graph-build"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1409,12 +1409,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "ord-graph-overlay"
-version = "1.8.0"
+name = "ord-graph-match"
+version = "1.9.0"
 dependencies = [
- "anyhow",
- "clap",
- "flate2",
  "ord-graph",
  "rayon",
  "rstar",
@@ -1426,8 +1423,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ord-graph-overlay"
+version = "1.9.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flate2",
+ "ord-graph",
+ "ord-graph-match",
+ "rayon",
+ "rstar",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "xxhash-rust",
+]
+
+[[package]]
 name = "ord-loops"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "ord-graph",
  "rustc-hash",
@@ -1436,21 +1451,25 @@ dependencies = [
 
 [[package]]
 name = "ord-loops-bench"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "clap",
  "ord-graph",
  "ord-loops",
  "ord-loops-check",
+ "ord-server",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
+ "xxhash-rust",
 ]
 
 [[package]]
 name = "ord-loops-check"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "ord-graph",
  "ord-loops",
@@ -1459,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "ord-pipeline"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "metrics",
@@ -1471,23 +1490,30 @@ dependencies = [
 
 [[package]]
 name = "ord-server"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "anyhow",
  "axum",
  "clap",
  "figment",
  "flate2",
+ "http-body",
  "http-body-util",
+ "memmap2 0.9.12",
  "metrics",
  "metrics-exporter-prometheus",
  "ord-adapters",
  "ord-core",
  "ord-data",
  "ord-domain",
+ "ord-graph",
+ "ord-graph-match",
+ "ord-loops",
+ "ord-loops-check",
  "ord-pipeline",
  "ord-testkit",
  "reqwest",
+ "ring",
  "serde",
  "serde_ignored",
  "serde_json",
@@ -1501,11 +1527,12 @@ dependencies = [
  "tracing-subscriber",
  "utoipa",
  "uuid",
+ "xxhash-rust",
 ]
 
 [[package]]
 name = "ord-testkit"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "axum",

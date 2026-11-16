@@ -11,7 +11,7 @@ use ord_graph::mmap::MappedGraph;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::geo::{densify, dist, dist_to_polyline, hausdorff, polyline_len, seg_project, Frame, P2};
-use crate::index::{edge_points_e7, Hit, SegIndex};
+use crate::index::{edge_points_e7, Hit, Near};
 
 /// Largeur du couloir : arêtes entièrement à cette distance ou moins de `g`.
 pub const CORRIDOR_M: f64 = 5.0;
@@ -389,7 +389,7 @@ impl Ctx<'_> {
 
 /// Apparie `g` (`(lat, lon)` en degrés, sens de parcours) à une chaîne du graphe. `trv` : mètres parcourus
 /// annoncés par l'export (`NaN` : on prend la longueur de `g`).
-pub fn match_geometry(gf: &MappedGraph, idx: &SegIndex, g_deg: &[P2], trv: f64) -> Result<Chain, Fail> {
+pub fn match_geometry(gf: &MappedGraph, idx: &dyn Near, g_deg: &[P2], trv: f64) -> Result<Chain, Fail> {
     let frame = Frame::new(g_deg[0][0], g_deg[0][1]);
     let g: Vec<P2> = g_deg.iter().map(|p| frame.xy(p[0], p[1])).collect();
     let glen = polyline_len(&g);

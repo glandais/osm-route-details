@@ -5,6 +5,7 @@ pub mod app;
 pub mod capabilities;
 pub mod config;
 pub mod dto;
+pub mod generator;
 pub mod observability;
 pub mod openapi;
 pub mod problem;
@@ -13,7 +14,7 @@ pub mod validate;
 pub mod wiring;
 
 /// Version du contrat, montée à la main quand il change de façon observable (T01 §9).
-pub const API_VERSION: &str = "1.8";
+pub const API_VERSION: &str = "1.9";
 
 pub use app::{internal_router, router, AppState};
 pub use openapi::{openapi, render_contract};

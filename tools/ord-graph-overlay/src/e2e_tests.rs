@@ -69,39 +69,44 @@ fn csv_quote(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
+/// Le document `network_edges` d'une ligne de l'export.
+fn doc_json(r: &Row) -> String {
+    let edges: Vec<Value> = r
+        .edges
+        .iter()
+        .map(|x| {
+            let g = x.raw_g.clone().unwrap_or_else(|| encode_polyline6(&x.g));
+            let mut o = json!({"g": g, "zz": {"inconnue": [1, 2]}});
+            let trv = x.trv.unwrap_or_else(|| glen(&x.g));
+            o["trv"] = json!(trv);
+            for (k, v) in [("fm", x.fm), ("tm", x.tm)] {
+                if let Some(v) = v {
+                    o[k] = json!(v);
+                }
+            }
+            for (k, v) in [("fn", x.from_node), ("tn", x.to_node)] {
+                if let Some(v) = v {
+                    o[k] = json!(v);
+                }
+            }
+            if let Some(w) = x.wk {
+                o["wk"] = json!(w);
+            }
+            if let Some(w) = x.ow {
+                o["ow"] = json!(w);
+            }
+            o
+        })
+        .collect();
+    json!({"v": 1, "api": "1.8", "edges": edges}).to_string()
+}
+
 fn write_export(path: &Path, rows: &[Row]) {
     let mut text = String::from(
         "team_id,enable_route_planner,track_id,route_id,surface_type,excluded_from_generator,distance,rev,network_edges\n",
     );
     for (i, r) in rows.iter().enumerate() {
-        let edges: Vec<Value> = r
-            .edges
-            .iter()
-            .map(|x| {
-                let g = x.raw_g.clone().unwrap_or_else(|| encode_polyline6(&x.g));
-                let mut o = json!({"g": g, "zz": {"inconnue": [1, 2]}});
-                let trv = x.trv.unwrap_or_else(|| glen(&x.g));
-                o["trv"] = json!(trv);
-                for (k, v) in [("fm", x.fm), ("tm", x.tm)] {
-                    if let Some(v) = v {
-                        o[k] = json!(v);
-                    }
-                }
-                for (k, v) in [("fn", x.from_node), ("tn", x.to_node)] {
-                    if let Some(v) = v {
-                        o[k] = json!(v);
-                    }
-                }
-                if let Some(w) = x.wk {
-                    o["wk"] = json!(w);
-                }
-                if let Some(w) = x.ow {
-                    o["ow"] = json!(w);
-                }
-                o
-            })
-            .collect();
-        let doc = json!({"v": 1, "api": "1.8", "edges": edges}).to_string();
+        let doc = doc_json(r);
         text.push_str(&format!(
             "{},t,{},{},{},{},1.0,7,{}\n",
             r.team,
@@ -446,4 +451,46 @@ fn counts_saturate_at_65535_in_the_file() {
     assert_eq!(edges, vec![2, 5]);
     assert_eq!(&counts[..8], &[0, 1, 0, 0, 0, 0, 0, 0]);
     assert_eq!(&counts[8..], &[65_535, 0, 3, 0, 0, 0, 0, 0]);
+}
+
+/// Le chemin du service (`Deposit`) donne la surcouche de l'outil : mêmes arêtes, mêmes comptes, avec l'index entier
+/// comme avec l'index par cellule, et avec une mémoïsation minuscule (les évictions ne changent aucun résultat).
+#[test]
+fn the_service_deposit_gives_the_tool_overlay() {
+    use ord_graph::util::Poly;
+    use ord_graph_match::doc::{parse_document, type_code};
+    use ord_graph_match::{CellIndex, Deposit, Near, SegIndex};
+
+    let rows = all_rows();
+    let fx = fixture(&rows);
+    run(&args(&fx, "o1", 2)).unwrap();
+    let gf = MappedGraph::open_mmap(&fx.graph).unwrap();
+    let poly = Poly::read(&fx.poly).unwrap();
+    assert!(CellIndex::fits(&gf));
+    let full = SegIndex::build(&gf);
+    let cell = CellIndex::new(&gf, 1 << 20);
+    let tiny_cell = CellIndex::new(&gf, 1);
+    let mut teams: Vec<u64> = rows.iter().map(|r| r.team).collect();
+    teams.sort_unstable();
+    teams.dedup();
+    for team in teams {
+        let tool = overlay_of(&fx, "o1", team);
+        let want_edges: Vec<u32> = tool.iter().map(|(e, _)| e).collect();
+        let want_counts: Vec<u16> = tool.iter().flat_map(|(_, c)| c.iter().copied()).collect();
+        for (name, idx, memo) in [
+            ("index entier", &full as &dyn Near, 1000usize),
+            ("index par cellule", &cell, 1000),
+            ("index par cellule évincé", &tiny_cell, 1000),
+            ("mémo minuscule", &cell, 2),
+        ] {
+            let mut dep = Deposit::new(&gf, idx, &poly, memo);
+            for r in rows.iter().filter(|r| r.team == team) {
+                dep.push_track(type_code(r.ty), r.excluded, parse_document(doc_json(r).as_bytes()));
+            }
+            let (edges, counts, stats) = dep.finish();
+            assert_eq!(edges, want_edges, "équipe {team}, {name} : arêtes");
+            assert_eq!(counts, want_counts, "équipe {team}, {name} : comptes");
+            assert_eq!(stats.tracks, rows.iter().filter(|r| r.team == team).count() as u64);
+        }
+    }
 }

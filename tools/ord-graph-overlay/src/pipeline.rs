@@ -11,9 +11,8 @@ use rustc_hash::FxHashMap;
 use xxhash_rust::xxh3::xxh3_64;
 
 use crate::export::{parse_row, Columns, CsvReader, ParsedRow};
-use crate::geo::{decode_polyline6, polyline_len, Frame};
 use crate::index::SegIndex;
-use crate::matcher::{match_geometry, Chain, Fail};
+pub use ord_graph_match::job::{match_job, Job, Outcome, Region};
 
 /// Une arête d'équipe, dépouillée de sa polyligne (renvoyée par `geom` vers une géométrie distincte).
 #[derive(Clone, Copy, Debug)]
@@ -149,32 +148,6 @@ fn hash_file(path: &Path) -> anyhow::Result<u64> {
     Ok(h.digest())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Region {
-    Inside,
-    Outside,
-    /// Une partie des sommets dans le polygone, une partie dehors.
-    Border,
-}
-
-#[derive(Debug)]
-pub enum Outcome {
-    /// Polyligne illisible ou de moins de deux points.
-    Invalid,
-    /// Non tentée : hors de la région ou à cheval sur sa limite.
-    NotTried,
-    Unmatched(Fail),
-    Matched(Chain),
-}
-
-#[derive(Debug)]
-pub struct Job {
-    pub region: Region,
-    /// Longueur de `g` en mètres (repli quand `trv` manque).
-    pub glen: f32,
-    pub outcome: Outcome,
-}
-
 /// Apparie chaque géométrie distincte, en parallèle.
 pub fn run_jobs(
     gf: &MappedGraph,
@@ -183,34 +156,7 @@ pub fn run_jobs(
     geoms: &[Box<str>],
     trv_of: &[f32],
 ) -> Vec<Job> {
-    geoms
-        .par_iter()
-        .enumerate()
-        .map(|(i, g)| {
-            let Some(pts) = decode_polyline6(g).filter(|p| p.len() >= 2) else {
-                return Job { region: Region::Inside, glen: 0.0, outcome: Outcome::Invalid };
-            };
-            let frame = Frame::new(pts[0][0], pts[0][1]);
-            let glen = polyline_len(&pts.iter().map(|p| frame.xy(p[0], p[1])).collect::<Vec<_>>());
-            let inside = pts.iter().filter(|p| poly.contains(p[1], p[0])).count();
-            let region = if inside == pts.len() {
-                Region::Inside
-            } else if inside == 0 {
-                Region::Outside
-            } else {
-                Region::Border
-            };
-            if region != Region::Inside {
-                return Job { region, glen: glen as f32, outcome: Outcome::NotTried };
-            }
-            let trv = f64::from(trv_of[i]);
-            let outcome = match match_geometry(gf, idx, &pts, trv) {
-                Ok(c) => Outcome::Matched(c),
-                Err(f) => Outcome::Unmatched(f),
-            };
-            Job { region, glen: glen as f32, outcome }
-        })
-        .collect()
+    geoms.par_iter().enumerate().map(|(i, g)| match_job(gf, idx, poly, g, trv_of[i])).collect()
 }
 
 /// `trv` annoncé pour chaque géométrie (celui de sa première apparition ; `NaN` si absent).

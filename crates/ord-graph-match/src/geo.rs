@@ -142,7 +142,6 @@ pub fn hausdorff(a: &[P2], b: &[P2], step: f64, cap: f64) -> f64 {
 }
 
 /// Encodeur de polyligne de précision 6 (tests seulement : l'outil ne fait que décoder).
-#[cfg(test)]
 pub fn encode_polyline6(points: &[P2]) -> String {
     let (mut out, mut plat, mut plon) = (String::new(), 0i64, 0i64);
     for p in points {

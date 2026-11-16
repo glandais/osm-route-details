@@ -107,6 +107,7 @@ fn request(start: LatLon, d: f64, mode: Mode) -> Request {
         ride_type: RideType::Road,
         mode,
         familiarity: 0.5,
+        off_team_cost_q8: crate::DEFAULT_OFF_TEAM_COST_Q8,
         seed: 1,
     }
 }
@@ -194,8 +195,8 @@ fn ring_rows(e: &Engine<Vec<u8>>, hole: bool) -> Vec<(u32, Counts)> {
 #[test]
 fn weights_are_monotone_in_lambda_and_strict_is_infinite_off_team() {
     let mut last = 0;
-    for lambda in [1u32, 2, 3, 5] {
-        let e = engine_with(&mut grid(5, 300.0), Params { lambda, ..Params::default() });
+    let e = engine_with(&mut grid(5, 300.0), Params::default());
+    for lambda_q8 in [256u32, 512, 768, 1280] {
         let id = |i: u64, j: u64| 1 + i * 5 + j;
         // La rue `i = 2` est roulée en entier.
         let rows: Vec<_> = (0..4).map(|j| (edge_between(&e, id(2, j), id(2, j + 1)), ROAD1)).collect();
@@ -203,17 +204,17 @@ fn weights_are_monotone_in_lambda_and_strict_is_infinite_off_team() {
         let v = e.view(RideType::Road);
         let c_team = v.edge_chain[edge_between(&e, id(2, 1), id(2, 2)) as usize];
         let c_off = v.edge_chain[edge_between(&e, id(1, 1), id(1, 2)) as usize];
-        let w = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.5);
+        let w = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.5, lambda_q8);
         let off = w.chain(c_off);
         assert!(off > last, "poids hors équipe croissant en λ : {off} après {last}");
         last = off;
         assert_eq!(w.chain(c_team), v.w_osm[0][c_team as usize], "f = 0,5 : l'équipe au prix OSM");
-        let strict = Weighter::new(&e, Some(&team), RideType::Road, Mode::Strict, 0.5);
+        let strict = Weighter::new(&e, Some(&team), RideType::Road, Mode::Strict, 0.5, lambda_q8);
         assert_eq!(strict.chain(c_off), INF, "strict : infini hors équipe");
         assert_ne!(strict.chain(c_team), INF);
         // Familiarité : plus elle monte, moins la route d'équipe coûte ; la route hors équipe, jamais.
-        let low = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.0);
-        let high = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 1.0);
+        let low = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.0, lambda_q8);
+        let high = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 1.0, lambda_q8);
         assert!(high.chain(c_team) < low.chain(c_team));
         assert_eq!(high.chain(c_off), low.chain(c_off));
     }
@@ -682,7 +683,7 @@ fn the_tree_equals_a_reference_dijkstra_with_turn_costs() {
     use std::collections::BinaryHeap;
     let e = engine_of(&mut grid(9, 300.0));
     let v = e.view(RideType::Road);
-    let w = Weighter::new(&e, None, RideType::Road, Mode::Discovery, 0.5);
+    let w = Weighter::new(&e, None, RideType::Road, Mode::Discovery, 0.5, 768);
     let ok = |c: u32| w.chain(c) != INF;
     let snap = e.snap(RideType::Road, ll(1200.0, 1200.0), &ok, 0).unwrap();
     let a: Anchor = make_anchor(&e, v, &w, snap);

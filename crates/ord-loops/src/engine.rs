@@ -31,8 +31,6 @@ pub struct Params {
     pub hole_m: f64,
     /// Jonction courte comblée en strict : chemin non roulé de cette longueur au plus entre deux nœuds d'équipe (m).
     pub connector_m: f64,
-    /// λ : coût d'une arête hors équipe en mode équipe d'abord.
-    pub lambda: u32,
     /// Rapport retour / aller initial des demi-tours.
     pub rho0: f64,
     /// Budget de recherches ciblées, en multiple des états fixés de l'arbre aller.
@@ -55,7 +53,6 @@ impl Default for Params {
             snap_m: 2000.0,
             hole_m: 100.0,
             connector_m: 30.0,
-            lambda: 3,
             rho0: 1.09,
             astar_budget: 6,
             tail_reuse_share: 0.15,

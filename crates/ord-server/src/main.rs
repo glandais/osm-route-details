@@ -63,6 +63,11 @@ fn healthcheck(config: &Config) -> anyhow::Result<()> {
 
 async fn serve(config: Config) -> anyhow::Result<()> {
     observability::init_tracing(&config.log);
+    // Le message d'une panique peut citer une valeur (une coordonnée, une clé) : on ne garde que l'endroit.
+    std::panic::set_hook(Box::new(|info| {
+        let at = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+        tracing::error!(at, "panic");
+    }));
     tracing::info!(config = %serde_json::to_string(&config)?, "configuration");
     let metrics = observability::install_metrics()?;
     let state = AppState::bootstrap(&config, ord_server::Wiring::default()).await?;

@@ -42,10 +42,15 @@ pub enum ProblemCode {
     NotFound,
     MethodNotAllowed,
     UnsupportedMediaType,
+    /// Route generator (api 1.9).
+    GenerationFailed,
+    OverlayRequired,
+    DepositInProgress,
+    InsufficientStorage,
 }
 
 impl ProblemCode {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 14] = [
         Self::InvalidInput,
         Self::RouteTooLarge,
         Self::OutOfCoverage,
@@ -56,6 +61,10 @@ impl ProblemCode {
         Self::NotFound,
         Self::MethodNotAllowed,
         Self::UnsupportedMediaType,
+        Self::GenerationFailed,
+        Self::OverlayRequired,
+        Self::DepositInProgress,
+        Self::InsufficientStorage,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -70,6 +79,10 @@ impl ProblemCode {
             Self::NotFound => "not_found",
             Self::MethodNotAllowed => "method_not_allowed",
             Self::UnsupportedMediaType => "unsupported_media_type",
+            Self::GenerationFailed => "generation_failed",
+            Self::OverlayRequired => "overlay_required",
+            Self::DepositInProgress => "deposit_in_progress",
+            Self::InsufficientStorage => "insufficient_storage",
         }
     }
 
@@ -77,7 +90,9 @@ impl ProblemCode {
         match self {
             Self::InvalidInput => StatusCode::BAD_REQUEST,
             Self::RouteTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::OutOfCoverage => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::OutOfCoverage | Self::GenerationFailed => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::OverlayRequired | Self::DepositInProgress => StatusCode::CONFLICT,
+            Self::InsufficientStorage => StatusCode::INSUFFICIENT_STORAGE,
             Self::DataUnavailable | Self::Overloaded => StatusCode::SERVICE_UNAVAILABLE,
             Self::Timeout => StatusCode::GATEWAY_TIMEOUT,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -99,6 +114,10 @@ impl ProblemCode {
             Self::NotFound => "Not found",
             Self::MethodNotAllowed => "Method not allowed",
             Self::UnsupportedMediaType => "Unsupported media type",
+            Self::GenerationFailed => "Generation failed",
+            Self::OverlayRequired => "Overlay required",
+            Self::DepositInProgress => "Deposit in progress",
+            Self::InsufficientStorage => "Insufficient storage",
         }
     }
 }
@@ -124,6 +143,10 @@ pub enum LimitKind {
     Points,
     LengthM,
     BodyBytes,
+    /// One track document of a deposit (api 1.9).
+    DocumentBytes,
+    /// Number of tracks of a deposit (api 1.9).
+    Tracks,
 }
 
 /// Failing side of a 503 `data_unavailable`.
@@ -133,6 +156,8 @@ pub enum ProblemSource {
     Typology,
     Elevation,
     Both,
+    /// The generator graph is not configured or not readable (api 1.9).
+    Graph,
 }
 
 impl From<DataSide> for ProblemSource {
@@ -156,6 +181,50 @@ pub struct ProblemDetails {
     pub limit: Option<LimitKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<ProblemSource>,
+    /// Why no route was produced (`generation_failed`, api 1.9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<GenerationReason>,
+    /// State of the team overlay (`overlay_required`, api 1.9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<OverlayProblemState>,
+    /// What the request is outside of (`out_of_coverage`, api 1.9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<CoverageSource>,
+}
+
+/// Why a generation produced no route.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationReason {
+    StartTooFar,
+    EndTooFar,
+    DistanceTooShort,
+    NetworkTooSmall,
+    EndUnreachable,
+    NoWayBack,
+    TailTooLong,
+    NoCandidate,
+    Budget,
+    /// Every route the engine found was rejected by the independent checker.
+    CheckerRejected,
+}
+
+/// State of an overlay that cannot serve a team-first or strict generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayProblemState {
+    /// Never deposited (or purged, deleted, or deposited under another key).
+    Absent,
+    /// Deposited, but built for another graph or by another matcher: deposit it again.
+    Stale,
+}
+
+/// What a request is outside of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CoverageSource {
+    /// The polygon the graph covers (`/v1/capabilities` `generator.coverage`).
+    Graph,
 }
 
 /// Problème à rendre ; `instance` est ajouté au rendu.
@@ -182,6 +251,13 @@ impl Problem {
     pub fn too_large(limit: LimitKind, detail: impl Into<String>) -> Self {
         let mut p = Self::new(ProblemCode::RouteTooLarge, detail);
         p.details = Some(ProblemDetails { limit: Some(limit), ..Default::default() });
+        p
+    }
+
+    /// Problème avec détails ; sans coordonnée ni valeur reçue.
+    pub fn with_details(code: ProblemCode, detail: impl Into<String>, details: ProblemDetails) -> Self {
+        let mut p = Self::new(code, detail);
+        p.details = Some(details);
         p
     }
 

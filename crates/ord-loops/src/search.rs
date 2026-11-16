@@ -147,7 +147,8 @@ pub(crate) struct Weighter<'a> {
     w_osm: &'a [u32],
     ct: Option<&'a [ChainTeam]>,
     tt: Option<&'a TypeTeam>,
-    lambda: u64,
+    /// λ en 256es.
+    lambda_q8: u64,
     mt: [u32; 256],
 }
 
@@ -158,6 +159,7 @@ impl<'a> Weighter<'a> {
         ride: RideType,
         mode: Mode,
         familiarity: f32,
+        off_team_cost_q8: u32,
     ) -> Self {
         let v = e.view(ride);
         let tt = match (mode, team) {
@@ -171,7 +173,7 @@ impl<'a> Weighter<'a> {
             w_osm: &v.w_osm[ride.index()],
             ct: tt.map(|t| t.chains.as_slice()),
             tt,
-            lambda: u64::from(e.params.lambda),
+            lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
         }
     }
@@ -179,6 +181,12 @@ impl<'a> Weighter<'a> {
     #[inline]
     fn mul(&self, a: u32, z: u8) -> u64 {
         (u64::from(a) * u64::from(self.mt[z as usize]) + 128) >> 8
+    }
+
+    /// Coût d'un poids hors équipe : λ × `w`, arrondi (exact pour les entiers de λ).
+    #[inline]
+    fn off(&self, w: u64) -> u64 {
+        (self.lambda_q8 * w + 128) >> 8
     }
 
     /// Poids d'une arête de vue, `INF` si elle est interdite (strict, hors réseau d'équipe).
@@ -196,9 +204,7 @@ impl<'a> Weighter<'a> {
                     INF
                 }
             }
-            _ => {
-                (self.lambda * rest + self.mul(t.a, t.z) + u64::from(t.b)).min(u64::from(u32::MAX / 2)) as u32
-            }
+            _ => (self.off(rest) + self.mul(t.a, t.z) + u64::from(t.b)).min(u64::from(u32::MAX / 2)) as u32,
         }
     }
 
@@ -214,7 +220,7 @@ impl<'a> Weighter<'a> {
         } else if self.mode == Mode::Strict {
             INF
         } else {
-            (self.lambda * u64::from(w)).min(u64::from(u32::MAX / 2)) as u32
+            self.off(u64::from(w)).min(u64::from(u32::MAX / 2)) as u32
         }
     }
 

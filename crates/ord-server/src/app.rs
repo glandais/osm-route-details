@@ -8,7 +8,7 @@ use axum::extract::{Extension, FromRef, Request, State};
 use axum::http::{header, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, MethodRouter};
+use axum::routing::{delete, get, post, put, MethodRouter};
 use axum::{Json, Router};
 use metrics_exporter_prometheus::PrometheusHandle;
 use ord_data::catalog::StaticCatalog;
@@ -28,6 +28,7 @@ use utoipa::ToSchema;
 use crate::capabilities::{AttributionDoc, Capabilities};
 use crate::config::{Config, LimitsConfig};
 use crate::dto::{to_dto, RouteDetailsRequestV1, RouteDetailsResponseV1};
+use crate::generator::{self, Generator, TestHooks};
 use crate::problem::{problem_for_status, with_request_id, Problem, ProblemBody};
 use crate::strict_json::{MaxBodyBytes, StrictJson};
 use crate::validate::validate;
@@ -52,6 +53,7 @@ struct Inner {
     capabilities: Bytes,
     attribution: Bytes,
     attribution_text: String,
+    generator: Arc<Generator>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -85,7 +87,11 @@ impl AppState {
 
     pub fn with_startup(config: &Config, wiring: Wiring, startup: Startup) -> Result<Self, StartupError> {
         let catalog = Arc::new(StaticCatalog::new(crate::wiring::configured_sources(config, &startup)));
-        let capabilities = Capabilities::build(config, &catalog);
+        // Le graphe et les vues sont lus ici (quelques secondes sur la région) : le service n'écoute pas encore.
+        // Sans graphe, ou si un fichier est inutilisable, le générateur est éteint et le reste du service sert.
+        let generator = Arc::new(Generator::load(&config.generator, Arc::new(TestHooks::default())));
+        generator.spawn_purge();
+        let capabilities = Capabilities::build(config, &catalog, generator.capabilities());
         let attribution = AttributionDoc::build(catalog.as_ref());
         let orchestrator = crate::wiring::orchestrator(config, &startup, Arc::clone(&catalog), wiring)?;
         Ok(Self {
@@ -98,8 +104,14 @@ impl AppState {
                 attribution: to_json_bytes(&attribution),
                 catalog,
                 orchestrator,
+                generator,
             }),
         })
+    }
+
+    /// Le générateur de parcours (éteint si aucun graphe n'est chargé).
+    pub fn generator(&self) -> &Arc<Generator> {
+        &self.inner.generator
     }
 }
 
@@ -118,6 +130,11 @@ pub fn public_routes() -> Vec<(&'static str, Method, MethodRouter<AppState>)> {
     vec![
         ("/v1/route-details", Method::POST, post(route_details)),
         ("/v1/capabilities", Method::GET, get(capabilities)),
+        ("/v1/generator/overlay", Method::PUT, put(generator::routes::put_overlay)),
+        ("/v1/generator/overlay", Method::GET, get(generator::routes::get_overlay)),
+        ("/v1/generator/overlay", Method::DELETE, delete(generator::routes::delete_overlay)),
+        ("/v1/generator/overlays", Method::DELETE, delete(generator::routes::delete_overlays)),
+        ("/v1/generator/routes", Method::POST, post(generator::routes::post_routes)),
         ("/v1/attribution", Method::GET, get(attribution)),
         ("/health/live", Method::GET, get(health_live)),
         ("/health/ready", Method::GET, get(health_ready)),

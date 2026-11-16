@@ -67,6 +67,7 @@ fn main() {
         ride_type: ride,
         mode,
         familiarity: 0.5,
+        off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
         seed: 1,
     };
     let mut ws = Workspace::new();

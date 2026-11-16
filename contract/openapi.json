@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.8"
+    "version": "1.9"
   },
   "paths": {
     "/health/live": {
@@ -100,6 +100,487 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generator/overlay": {
+      "get": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Status of a team overlay",
+        "description": "Always 200: `absent` covers a team never deposited, deposited under another key, deleted or purged, without telling them apart.",
+        "operationId": "getGeneratorOverlay",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret (see the deposit route).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overlay status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayStatusV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable (`data_unavailable`, `details.source = graph`)",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Deposit a team overlay",
+        "description": "Streams the team's `network_edges` documents (one NDJSON line per track: `{\"type\":\"ROAD\",\"excluded\":false,\"network_edges\":{...}}`, then the last line `{\"end\":{\"tracks\":N}}`). The service matches them to OSM edges, aggregates them and stores the overlay, encrypted with a key derived from `Ord-Namespace-Key`. The previous overlay keeps serving until the new one is complete; a failed deposit leaves it untouched. One deposit at a time per team and one in the whole service. `Content-Encoding: gzip` is accepted; the limits apply after decompression.",
+        "operationId": "putGeneratorOverlay",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret: 32 random bytes, base64url without padding (43 characters). Held by the backend of one environment only; never logged.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference, [A-Za-z0-9_-]{1,64}; never logged.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ord-Source-Digest",
+            "in": "header",
+            "description": "Opaque digest of the source data, returned by the status route.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Overlay stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositReportV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid header, unreadable line, missing end line or wrong track count (`details.errors[].pointer` = `/lines/<n>`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A deposit of this team is already running (`deposit_in_progress`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body, document or track count above the limits (`details.limit`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/x-ndjson",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable (`data_unavailable`, `details.source = graph`) or deposit capacity in use after the queue wait (`overloaded`); with `Retry-After`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Deposit budget or idle timeout exceeded (`timeout`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Storage quota reached (`insufficient_storage`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Delete a team overlay",
+        "description": "Idempotent: 204 whether or not an overlay existed (and whichever environment holds a file of this name: a key can only name its own files).",
+        "operationId": "deleteGeneratorOverlay",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret (see the deposit route).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted, or nothing to delete"
+          },
+          "400": {
+            "description": "Invalid header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A deposit of this team is running (`deposit_in_progress`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable (`data_unavailable`, `details.source = graph`)",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generator/overlays": {
+      "delete": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Delete every overlay of the environment",
+        "description": "Removes everything stored under the caller's key (key rotation, abandoned environment). Idempotent.",
+        "operationId": "deleteGeneratorOverlays",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret (see the deposit route).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted, or nothing to delete"
+          },
+          "400": {
+            "description": "Invalid header",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A deposit of this environment is running (`deposit_in_progress`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable (`data_unavailable`, `details.source = graph`)",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generator/routes": {
+      "post": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Generate routes",
+        "description": "Up to 3 routes from a start (and optionally an arrival), a bearing, a distance and a ride type. `cursor` runs from the team's roads (0, strict) to discovery (1); below 1 the team overlay must have been deposited and be `ready`. Every route is verified by an independent checker before the answer; a route that fails is dropped and counted in `dropped`. A request outside the covered area gets 422 `out_of_coverage`.",
+        "operationId": "postGeneratorRoutes",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret; required when `cursor` < 1.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference; required when `cursor` < 1.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequestV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Routes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResponseV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The overlay is required (`overlay_required`, `details.state` = `absent` or `stale`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above 64 KiB",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Out of coverage (`out_of_coverage`, `details.coverage = graph`) or no route (`generation_failed`, `details.reason`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable (`data_unavailable`, `details.source = graph`) or queue full (`overloaded`); with `Retry-After`",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Generation budget exceeded (`timeout`); never a partial route",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
                 }
               }
             }
@@ -321,6 +802,20 @@
           }
         }
       },
+      "BearingV1": {
+        "type": "string",
+        "description": "Compass bearing asked for (one of the eight principal directions).",
+        "enum": [
+          "N",
+          "NE",
+          "E",
+          "SE",
+          "S",
+          "SW",
+          "W",
+          "NW"
+        ]
+      },
       "BreakpointReasonV1": {
         "type": "string",
         "description": "Why a point was inserted (open list: clients ignore unknown values).",
@@ -413,7 +908,8 @@
           "elevation_sources",
           "elevation_rules",
           "typology_rules",
-          "profiles"
+          "profiles",
+          "generator"
         ],
         "properties": {
           "api_version": {
@@ -439,6 +935,10 @@
           },
           "enums": {
             "$ref": "#/components/schemas/EnumCatalog"
+          },
+          "generator": {
+            "$ref": "#/components/schemas/GeneratorCapabilities",
+            "description": "Route generator (api 1.9): what the graph covers, the cursor mapping and the limits. `enabled = false`\n(with a `reason`) when no graph is loaded: the `/v1/generator/*` routes then answer 503."
           },
           "limits": {
             "$ref": "#/components/schemas/Limits"
@@ -475,6 +975,85 @@
           "disabled",
           "unavailable"
         ]
+      },
+      "CoverageInfo": {
+        "type": "object",
+        "required": [
+          "bbox",
+          "polygon"
+        ],
+        "properties": {
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "`[lon_min, lat_min, lon_max, lat_max]`."
+          },
+          "polygon": {
+            "type": "object",
+            "description": "Covered polygon, as GeoJSON (`MultiPolygon`)."
+          }
+        }
+      },
+      "CoverageSource": {
+        "type": "string",
+        "description": "What a request is outside of.",
+        "enum": [
+          "graph"
+        ]
+      },
+      "CoverageV1": {
+        "type": "string",
+        "description": "Whether the disc of radius D/2 around the start (and end) lies inside the covered polygon.",
+        "enum": [
+          "inside",
+          "partial"
+        ]
+      },
+      "CursorInfo": {
+        "type": "object",
+        "description": "How the `cursor` maps to the engine.",
+        "required": [
+          "strict_at",
+          "discovery_at",
+          "lambda_max",
+          "lambda_min",
+          "familiarity",
+          "step"
+        ],
+        "properties": {
+          "discovery_at": {
+            "type": "number",
+            "format": "double",
+            "description": "Value that gives discovery (OSM with no preference for the team)."
+          },
+          "familiarity": {
+            "type": "number",
+            "format": "double",
+            "description": "Fixed familiarity (team first and discovery)."
+          },
+          "lambda_max": {
+            "type": "number",
+            "format": "double",
+            "description": "In between, team first with an off-team edge cost lambda = lambda_min + (lambda_max - lambda_min) * (1 - cursor)."
+          },
+          "lambda_min": {
+            "type": "number",
+            "format": "double"
+          },
+          "step": {
+            "type": "number",
+            "format": "double",
+            "description": "The cursor is rounded to this step."
+          },
+          "strict_at": {
+            "type": "number",
+            "format": "double",
+            "description": "Value that gives the strict mode (the team's roads only)."
+          }
+        }
       },
       "DataFeatures": {
         "type": "object",
@@ -575,6 +1154,162 @@
             ]
           }
         }
+      },
+      "DepositKm": {
+        "type": "object",
+        "required": [
+          "total",
+          "outside",
+          "matched",
+          "unmatched"
+        ],
+        "properties": {
+          "matched": {
+            "type": "number",
+            "format": "double",
+            "description": "Matched to the graph."
+          },
+          "outside": {
+            "type": "number",
+            "format": "double",
+            "description": "Outside the region the graph covers."
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "unmatched": {
+            "type": "object",
+            "description": "Not matched, by cause (`border`, `invalid`, `no_osm_edge`, `chain_not_connected`, `geometry`,\n`ambiguous_parallel`, `way_kind`, `direction_closed`)."
+          }
+        }
+      },
+      "DepositLimits": {
+        "type": "object",
+        "required": [
+          "max_body_bytes",
+          "max_document_bytes",
+          "max_tracks",
+          "budget_s",
+          "idle_timeout_s",
+          "queue_wait_s"
+        ],
+        "properties": {
+          "budget_s": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "idle_timeout_s": {
+            "type": "integer",
+            "format": "int64",
+            "description": "A deposit that receives no byte for this long is abandoned.",
+            "minimum": 0
+          },
+          "max_body_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Decompressed body.",
+            "minimum": 0
+          },
+          "max_document_bytes": {
+            "type": "integer",
+            "description": "One line (one `network_edges` document).",
+            "minimum": 0
+          },
+          "max_tracks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "queue_wait_s": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Longest wait for the deposit capacity (fair queue), then 503 `overloaded`; counted in `budget_s`.",
+            "minimum": 0
+          }
+        }
+      },
+      "DepositReportV1": {
+        "type": "object",
+        "description": "Deposit report.",
+        "required": [
+          "graph_id",
+          "deposited_at",
+          "expires_at",
+          "tracks",
+          "tracks_excluded",
+          "tracks_unreadable",
+          "edges",
+          "team_km",
+          "km",
+          "stored_bytes"
+        ],
+        "properties": {
+          "deposited_at": {
+            "type": "string"
+          },
+          "edges": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Graph edges in the overlay.",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "graph_id": {
+            "type": "string",
+            "description": "Identity of the graph the overlay was built for."
+          },
+          "km": {
+            "$ref": "#/components/schemas/DepositKm"
+          },
+          "source_digest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As received (`Ord-Source-Digest` header); absent otherwise."
+          },
+          "stored_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes of the stored file.",
+            "minimum": 0
+          },
+          "team_km": {
+            "type": "number",
+            "format": "double",
+            "description": "Kilometres counted in the overlay."
+          },
+          "tracks": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Tracks read, tracks excluded from the generator, tracks whose document was unreadable.",
+            "minimum": 0
+          },
+          "tracks_excluded": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "tracks_unreadable": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "DisabledReason": {
+        "type": "string",
+        "description": "Why the generator is off.",
+        "enum": [
+          "not_configured",
+          "graph_unreadable",
+          "view_mismatch",
+          "polygon_mismatch"
+        ]
       },
       "EdgeNodeV1": {
         "type": "object",
@@ -1201,6 +1936,317 @@
           }
         }
       },
+      "GenerateRequestV1": {
+        "type": "object",
+        "description": "Route generation request.",
+        "required": [
+          "start",
+          "distance_m",
+          "ride_type",
+          "cursor"
+        ],
+        "properties": {
+          "bearing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BearingV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cursor": {
+            "type": "number",
+            "format": "double",
+            "description": "From 0 (the team's roads only: strict) to 1 (discovery), rounded to 0.01. Below 1 the team overlay is\nrequired (headers `Ord-Namespace-Key` and `Ord-Team`); see `capabilities.generator.cursor`."
+          },
+          "distance_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Target length, within `capabilities.generator.limits.distance_m_min` and `distance_m_max`."
+          },
+          "end": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GeoPointV1",
+                "description": "Arrival; the start (a loop) when absent or null."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ride_type": {
+            "$ref": "#/components/schemas/RideTypeV1"
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Seed of the choice among equivalent routes (default 0).",
+            "minimum": 0
+          },
+          "start": {
+            "$ref": "#/components/schemas/GeoPointV1"
+          }
+        }
+      },
+      "GenerateResponseV1": {
+        "type": "object",
+        "description": "Generated routes, best first (at most 3).",
+        "required": [
+          "graph_id",
+          "mode",
+          "coverage",
+          "dropped",
+          "routes"
+        ],
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageV1"
+          },
+          "dropped": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Routes the engine produced and the independent checker refused (never returned).",
+            "minimum": 0
+          },
+          "graph_id": {
+            "type": "string"
+          },
+          "lambda": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Cost of an edge outside the team's roads (1 to 3); null in strict mode."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ModeV1"
+          },
+          "overlay": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverlayInfoV1",
+                "description": "The overlay the routes were measured against; null when none was used."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteV1"
+            }
+          }
+        }
+      },
+      "GenerationReason": {
+        "type": "string",
+        "description": "Why a generation produced no route.",
+        "enum": [
+          "start_too_far",
+          "end_too_far",
+          "distance_too_short",
+          "network_too_small",
+          "end_unreachable",
+          "no_way_back",
+          "tail_too_long",
+          "no_candidate",
+          "budget",
+          "checker_rejected"
+        ]
+      },
+      "GeneratorCapabilities": {
+        "type": "object",
+        "description": "What the service publishes about the generator (`/v1/capabilities`, api 1.9).",
+        "required": [
+          "enabled",
+          "ride_types",
+          "ascent"
+        ],
+        "properties": {
+          "ascent": {
+            "type": "boolean",
+            "description": "Do the routes carry ascent and descent (`ascent_m`, `descent_m`)? No: the engine has no elevation."
+          },
+          "coverage": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CoverageInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cursor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CursorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "The `/v1/generator/*` routes answer (otherwise 503 `data_unavailable`)."
+          },
+          "graph": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GraphInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GeneratorLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "matcher_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fingerprint of the matcher: a change makes the stored overlays `stale` (reason `matcher`)."
+          },
+          "overlay_ttl_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Days after which an overlay that was not deposited again is purged.",
+            "minimum": 0
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DisabledReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ride_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accepted ride types (`ride_type`)."
+          }
+        }
+      },
+      "GeneratorLimits": {
+        "type": "object",
+        "required": [
+          "distance_m_min",
+          "distance_m_max",
+          "budget_ms",
+          "max_concurrent",
+          "max_queued",
+          "request_body_bytes",
+          "deposit",
+          "storage"
+        ],
+        "properties": {
+          "budget_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Budget of a generation, queue wait included.",
+            "minimum": 0
+          },
+          "deposit": {
+            "$ref": "#/components/schemas/DepositLimits"
+          },
+          "distance_m_max": {
+            "type": "number",
+            "format": "double"
+          },
+          "distance_m_min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max_concurrent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "request_body_bytes": {
+            "type": "integer",
+            "description": "Body of a generation request.",
+            "minimum": 0
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageLimits"
+          }
+        }
+      },
+      "GeoPointV1": {
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "GraphInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "data_date",
+          "data_timestamp",
+          "tool_version"
+        ],
+        "properties": {
+          "data_date": {
+            "type": "string",
+            "description": "Date of the OSM data (replication timestamp): ISO 8601, UTC."
+          },
+          "data_timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The same, in Unix seconds."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identity of the graph: another identifier makes every stored overlay `stale` (reason `graph`)."
+          },
+          "tool_version": {
+            "type": "string"
+          }
+        }
+      },
       "HealthStatus": {
         "type": "object",
         "description": "Liveness status.",
@@ -1245,7 +2291,9 @@
         "enum": [
           "points",
           "length_m",
-          "body_bytes"
+          "body_bytes",
+          "document_bytes",
+          "tracks"
         ]
       },
       "Limits": {
@@ -1317,6 +2365,15 @@
             "type": "string"
           }
         }
+      },
+      "ModeV1": {
+        "type": "string",
+        "description": "Mode applied by the engine for the cursor value.",
+        "enum": [
+          "strict",
+          "team_first",
+          "discovery"
+        ]
       },
       "NumberBounds": {
         "type": "object",
@@ -1561,6 +2618,94 @@
           }
         }
       },
+      "OverlayInfoV1": {
+        "type": "object",
+        "description": "The team overlay a generation used.",
+        "required": [
+          "deposited_at"
+        ],
+        "properties": {
+          "deposited_at": {
+            "type": "string"
+          }
+        }
+      },
+      "OverlayProblemState": {
+        "type": "string",
+        "description": "State of an overlay that cannot serve a team-first or strict generation.",
+        "enum": [
+          "absent",
+          "stale"
+        ]
+      },
+      "OverlayStateV1": {
+        "type": "string",
+        "description": "State of a team overlay.",
+        "enum": [
+          "absent",
+          "ready",
+          "stale"
+        ]
+      },
+      "OverlayStatusV1": {
+        "type": "object",
+        "description": "Status of a team overlay. Deposit again when `state` is not `ready`, when `source_digest` differs from the\nbackend's, or when `expires_at` is near.",
+        "required": [
+          "state",
+          "graph_id"
+        ],
+        "properties": {
+          "deposited_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "edges": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "graph_id": {
+            "type": "string"
+          },
+          "source_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stale_reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StaleReasonV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/OverlayStateV1"
+          },
+          "team_km": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "PointOriginV1": {
         "type": "string",
         "description": "`input` for a client point, `inserted` for a point added by the service.",
@@ -1668,12 +2813,27 @@
           "internal",
           "not_found",
           "method_not_allowed",
-          "unsupported_media_type"
+          "unsupported_media_type",
+          "generation_failed",
+          "overlay_required",
+          "deposit_in_progress",
+          "insufficient_storage"
         ]
       },
       "ProblemDetails": {
         "type": "object",
         "properties": {
+          "coverage": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CoverageSource",
+                "description": "What the request is outside of (`out_of_coverage`, api 1.9)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "errors": {
             "type": [
               "array",
@@ -1693,10 +2853,32 @@
               }
             ]
           },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GenerationReason",
+                "description": "Why no route was produced (`generation_failed`, api 1.9)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source": {
             "oneOf": [
               {
                 "$ref": "#/components/schemas/ProblemSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverlayProblemState",
+                "description": "State of the team overlay (`overlay_required`, api 1.9)."
               },
               {
                 "type": "null"
@@ -1721,7 +2903,8 @@
         "enum": [
           "typology",
           "elevation",
-          "both"
+          "both",
+          "graph"
         ]
       },
       "Profile": {
@@ -1856,6 +3039,14 @@
           }
         }
       },
+      "RideTypeV1": {
+        "type": "string",
+        "enum": [
+          "road",
+          "gravel",
+          "mtb"
+        ]
+      },
       "RouteDetailsRequestV1": {
         "type": "object",
         "description": "Body of `POST /v1/route-details`: exactly one of `points` or `polyline`.",
@@ -1961,6 +3152,107 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "RouteV1": {
+        "type": "object",
+        "description": "One generated route. Distances come from the independent checker, in metres.",
+        "required": [
+          "polyline",
+          "distance_m",
+          "team_m",
+          "bridged_m",
+          "team_share",
+          "tail_m",
+          "crossings",
+          "unpaved_m",
+          "unpaved_share",
+          "presumed_surface_m",
+          "family",
+          "start_snap_m",
+          "end_snap_m"
+        ],
+        "properties": {
+          "ascent_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Always null: the engine has no elevation (`capabilities.generator.ascent` is false)."
+          },
+          "bearing_deviation_deg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Gap to the requested bearing, in degrees; null without a bearing."
+          },
+          "bridged_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "crossings": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "descent_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "distance_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "end_snap_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "family": {
+            "type": "string",
+            "description": "`turnaround` or `polygon`."
+          },
+          "polyline": {
+            "type": "string",
+            "description": "Google polyline, precision 6 (the one `/v1/route-details` takes)."
+          },
+          "presumed_surface_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "start_snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Distance from the asked start and end to the graph, in metres."
+          },
+          "tail_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length ridden twice (the way back shares the way out)."
+          },
+          "team_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length on edges the team has ridden, and on short holes bridged between them."
+          },
+          "team_share": {
+            "type": "number",
+            "format": "double",
+            "description": "(team_m + bridged_m) / distance_m."
+          },
+          "unpaved_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "unpaved_share": {
+            "type": "number",
+            "format": "double"
           }
         }
       },
@@ -2154,6 +3446,13 @@
           "coverage"
         ]
       },
+      "StaleReasonV1": {
+        "type": "string",
+        "enum": [
+          "graph",
+          "matcher"
+        ]
+      },
       "StatusV1": {
         "type": "string",
         "description": "`partial` when a source gave no data on part of the route.",
@@ -2161,6 +3460,37 @@
           "complete",
           "partial"
         ]
+      },
+      "StorageLimits": {
+        "type": "object",
+        "required": [
+          "max_namespaces",
+          "max_overlays_per_namespace",
+          "max_namespace_mb",
+          "max_total_mb"
+        ],
+        "properties": {
+          "max_namespace_mb": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes of stored overlays per environment (the quota a deposit is checked against: 507 beyond).",
+            "minimum": 0
+          },
+          "max_namespaces": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_overlays_per_namespace": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_total_mb": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Budget of the whole volume (`max_namespaces` times `max_namespace_mb` fits in it).",
+            "minimum": 0
+          }
+        }
       },
       "StructureCorrectionV1": {
         "type": "object",
@@ -2682,6 +4012,10 @@
     {
       "name": "route",
       "description": "Elevation and typology along a route"
+    },
+    {
+      "name": "generator",
+      "description": "Route generator: team overlay (deposit, status, delete) and route generation"
     },
     {
       "name": "service",

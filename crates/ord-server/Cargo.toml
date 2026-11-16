@@ -21,8 +21,15 @@ ord-core.workspace = true
 ord-data.workspace = true
 ord-domain = { workspace = true, features = ["openapi"] }
 ord-pipeline.workspace = true
+ord-graph = { workspace = true, features = ["mmap"] }
+ord-graph-match.workspace = true
+ord-loops.workspace = true
+ord-loops-check.workspace = true
 
 anyhow.workspace = true
+memmap2.workspace = true
+ring.workspace = true
+xxhash-rust.workspace = true
 axum.workspace = true
 clap.workspace = true
 figment.workspace = true
@@ -32,7 +39,7 @@ metrics-exporter-prometheus.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_ignored.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 serde_path_to_error.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -50,6 +57,7 @@ figment = { workspace = true, features = ["test"] }
 flate2.workspace = true
 http-body-util.workspace = true
 tempfile.workspace = true
+http-body = "1"
 
 [lints]
 workspace = true

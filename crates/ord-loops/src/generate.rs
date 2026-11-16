@@ -189,7 +189,7 @@ fn generate_inner<B: AsRef<[u8]>>(
     let ride = r.ride_type;
     let vi = ride.view_index();
     let v = e.view(ride);
-    let w = Weighter::new(e, team, ride, r.mode, r.familiarity);
+    let w = Weighter::new(e, team, ride, r.mode, r.familiarity, r.off_team_cost_q8);
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
     let ok = |c: u32| -> bool {

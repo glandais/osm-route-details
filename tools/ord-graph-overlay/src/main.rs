@@ -3,14 +3,14 @@
 //! voir `docs/design/technique/ord-graph-lot1.md`.
 
 use clap::{Parser, Subcommand};
+// L'appariement vit dans la bibliothèque partagée avec le service ; les chemins `crate::geo`, `crate::index` et
+// `crate::matcher` de l'outil restent valables.
+use ord_graph_match::{geo, index, matcher};
 
 mod aggregate;
 mod build_cmd;
 mod checks;
 mod export;
-mod geo;
-mod index;
-mod matcher;
 mod pipeline;
 mod report;
 

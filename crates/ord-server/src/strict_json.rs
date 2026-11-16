@@ -26,23 +26,29 @@ where
     type Rejection = Problem;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        check_content_type(req.headers().get(header::CONTENT_TYPE))?;
         let MaxBodyBytes(limit) = MaxBodyBytes::from_ref(state);
-        let bytes = axum::body::to_bytes(req.into_body(), limit).await.map_err(|err| {
-            let mut source: Option<&(dyn std::error::Error + 'static)> = err.source();
-            while let Some(e) = source {
-                if e.is::<LengthLimitError>() {
-                    return Problem::too_large(
-                        LimitKind::BodyBytes,
-                        format!("request body exceeds {limit} bytes"),
-                    );
-                }
-                source = e.source();
-            }
-            Problem::invalid_input("request body could not be read", Vec::new())
-        })?;
-        parse_strict(&bytes).map(StrictJson)
+        read_json(req, limit).await.map(StrictJson)
     }
+}
+
+/// Lit un corps JSON strict de `limit` octets au plus (après décompression) : mêmes erreurs que [`StrictJson`], avec
+/// une borne propre à la route (la génération du lot 3a : 64 Kio).
+pub async fn read_json<T: DeserializeOwned>(req: Request, limit: usize) -> Result<T, Problem> {
+    check_content_type(req.headers().get(header::CONTENT_TYPE))?;
+    let bytes = axum::body::to_bytes(req.into_body(), limit).await.map_err(|err| {
+        let mut source: Option<&(dyn std::error::Error + 'static)> = err.source();
+        while let Some(e) = source {
+            if e.is::<LengthLimitError>() {
+                return Problem::too_large(
+                    LimitKind::BodyBytes,
+                    format!("request body exceeds {limit} bytes"),
+                );
+            }
+            source = e.source();
+        }
+        Problem::invalid_input("request body could not be read", Vec::new())
+    })?;
+    parse_strict(&bytes)
 }
 
 /// `application/json`, paramètre `charset=utf-8` toléré ; sinon 415.
