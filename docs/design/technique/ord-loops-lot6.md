@@ -404,8 +404,9 @@ changer les ids, donc l'identité du graphe et toutes les surcouches.
 ## 9. Espace de travail
 
 Le `Workspace` garde un jeu de trois arbres et un `ban` par vue, dimensionnés sur la fenêtre : 118 o par chaîne en `road`
-comme en `gravel` [calculé]. C'est **plus que la fenêtre elle-même** : 152 Mo pour une boucle de 200 km en `gravel` à
-Paris, 246 Mo pour l'aller simple de 300 km au pire. Règles :
+comme en `gravel` [calculé]. **Relevé : 142 à 146 o** (les listes d'états fixés grossissent) : 188 Mo pour une boucle de
+200 km en `gravel` à Paris, 316 Mo pour l'aller simple de 300 km au pire (Lyon) [mesuré]. C'est **plus que la fenêtre
+elle-même**. Règles :
 
 - `Tree::begin` et `ban` ne réallouent plus quand la taille change d'un iota : ils gardent leurs tableaux si
   `n ≤ capacité ≤ 2 n`, et n'en lisent que le préfixe. L'estampille croît strictement, une case d'un usage précédent
@@ -575,7 +576,8 @@ Chaque étape finit par `cargo fmt`, `cargo clippy --workspace --all-targets --l
   les pages sont propres et récupérées au fil de l'eau, mais un disque lent allonge le démarrage. Repli si les relevés le
   demandent : persister index et longueurs dans un fichier dérivé, à côté des surcouches, vérifié par l'empreinte des
   vues (pas un changement de format des fichiers existants).
-- **Fragmentation de `malloc`** : glibc ne rend au système que les blocs alloués par `mmap` (au-delà d'un seuil dynamique
+- **Fragmentation de `malloc`** (relevé : `ord-loops-lot6-mesures.md` §2.4, **confirmé et chiffré** : 400 à 600 Mo d'anonyme de
+  plus sans `MALLOC_MMAP_THRESHOLD_=1048576`, `memory.peak` 1 741 Mo contre 1 076 Mo) : glibc ne rend au système que les blocs alloués par `mmap` (au-delà d'un seuil dynamique
   plafonné à 32 Mo) ; des fenêtres évincées peuvent laisser un RSS au-dessus du budget compté. Parade :
   `MALLOC_ARENA_MAX=2` et `MALLOC_MMAP_THRESHOLD_=1048576` dans l'environnement du conteneur, et un test d'éviction en
   boucle qui compare `RssAnon` au budget.
@@ -650,3 +652,6 @@ Le code a suivi la note ; ce qui a changé, et pourquoi :
     1 000 arêtes comme repli.
 11. **Banc** : `--engine window|flat`, `--compare`, `--self-check`, `--dump`, `--budget-mb`, `--radius-step-m` ; la
     section « Fenêtres » est faite de lignes d'en-tête du résumé (pas d'un tableau), avec `RssAnon` échantillonné par phase.
+12. **Espace de travail réservé à 150 o par chaîne** (§9, relevé sur la France : 142 à 146 o). L'estimation de la mémoire de
+    construction d'une équipe est de 210 o par chaîne de la zone (6).
+13. **Le polygone de Geofabrik ne passe pas le contrôle d'étendue sur la France** : voir les relevés §4.
