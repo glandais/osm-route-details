@@ -28,7 +28,11 @@ sur le volume avec une clé dérivée du secret de chaque environnement, jamais 
 Le moteur ne recopie pas le graphe : il lit les fichiers par `mmap` et ne monte à plat que les cellules z11 d'une
 fenêtre autour de la requête, sous un budget de mémoire (lot 6, [note](docs/design/technique/ord-loops-lot6.md) :
 `ORD_GENERATOR__MEMORY_BUDGET_MB`, `…__WINDOW_MARGIN_M`, `…__WINDOW_RADIUS_STEP_M`, `…__WORKSPACE_KEEP_MB`,
-`…__INDEX_THREADS`), ce qui sert la France entière dans un conteneur de 2 Go.
+`…__INDEX_THREADS`), ce qui sert la France entière dans un conteneur de 2 Go. Le budget (1 000 Mo par défaut) est
+**unique** : fenêtres, agrégats d'équipe, espaces de travail, mémoire transitoire des constructions d'équipe, et les
+équipes résidentes elles-mêmes (`…__TEAM_CACHE_ENTRIES` en plafonne le nombre) ; quand la place manque, les fenêtres
+puis les équipes que personne ne tient partent, la moins récemment utilisée d'abord (une équipe évincée se reconstruit
+à la demande), et une demande qui n'a pas de place avant son échéance reçoit 503 `overloaded`, découverte comprise.
 
 Image : `ghcr.io/glandais/osm-route-details`, publiée par
 [`docker.yml`](.github/workflows/docker.yml) (linux/amd64 et linux/arm64) : `develop` et `latest` à

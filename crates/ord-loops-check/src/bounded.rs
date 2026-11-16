@@ -177,6 +177,22 @@ pub(crate) fn degrees_of<B: AsRef<[u8]>>(
     deg
 }
 
+/// Octets transitoires par arête des cellules de la zone : la liste d'incidence `(nœud, arête)` (deux entrées de 8 o
+/// par arête admise, capacité de croissance du vecteur comprise), un seul des trois types à la fois. Réglé sur les
+/// équipes A, C et D de la France, tables seules : pic anonyme mesuré 63, 99 et 139 Mo contre 82, 120 et 175 Mo estimés.
+const BUILD_BYTES_PER_CELL_EDGE: usize = 16;
+/// Octets transitoires par arête de la surcouche : ensemble des arêtes d'équipe, degrés des nœuds, parcours bornés.
+const BUILD_BYTES_PER_OVERLAY_EDGE: usize = 24;
+
+/// Ce qu'il faut construire pour les tables du contrôleur d'une équipe : les cellules de sa zone, et la mémoire
+/// transitoire de la construction.
+#[derive(Clone, Debug)]
+pub struct CheckPlan {
+    cells: Vec<usize>,
+    /// Octets transitoires estimés de la construction.
+    pub estimated_bytes: usize,
+}
+
 /// Les arêtes comblées par la règle des trous, par type : une fois par équipe, sur la zone de l'équipe.
 #[derive(Debug, Default)]
 pub struct TeamCheck {
@@ -205,7 +221,17 @@ impl TeamCheck {
         cfg: &Config,
         whole: bool,
     ) -> Self {
-        let types = TypeIndex::of(overlay);
+        let plan = Self::plan_on(g, overlay, whole);
+        Self::build_planned(g, gi, overlay, cfg, &plan)
+    }
+
+    /// Les cellules de la zone de l'équipe et la mémoire transitoire de la construction : l'appelant la réserve avant
+    /// de construire (budget unique du service, lot 6 §10.1), comme pour `TeamData::plan_build`.
+    pub fn plan<B: AsRef<[u8]>>(g: &GraphFile<B>, overlay: &Overlay) -> CheckPlan {
+        Self::plan_on(g, overlay, false)
+    }
+
+    fn plan_on<B: AsRef<[u8]>>(g: &GraphFile<B>, overlay: &Overlay, whole: bool) -> CheckPlan {
         let zoom = g.header().zoom;
         let cells: Vec<usize> = if whole {
             (0..g.n_cells()).collect()
@@ -242,9 +268,24 @@ impl TeamCheck {
             tiles.dedup();
             cells_around(g, tiles)
         };
+        let edges: usize = cells.iter().map(|&ci| g.cell_info(ci).n_edges as usize).sum();
+        let estimated_bytes =
+            edges * BUILD_BYTES_PER_CELL_EDGE + overlay.len() * BUILD_BYTES_PER_OVERLAY_EDGE;
+        CheckPlan { cells, estimated_bytes }
+    }
+
+    /// Construit sur les cellules d'un [`CheckPlan`].
+    pub fn build_planned<B: AsRef<[u8]>>(
+        g: &GraphFile<B>,
+        gi: &GraphIndex,
+        overlay: &Overlay,
+        cfg: &Config,
+        plan: &CheckPlan,
+    ) -> Self {
+        let types = TypeIndex::of(overlay);
         let mut out = Self::default();
         for ride in [RideType::Road, RideType::Gravel, RideType::Mtb] {
-            out.bridged[slot(ride)] = bridged_edges(g, gi, overlay, &types, cfg, ride, &cells);
+            out.bridged[slot(ride)] = bridged_edges(g, gi, overlay, &types, cfg, ride, &plan.cells);
         }
         out
     }
@@ -253,9 +294,11 @@ impl TeamCheck {
         &self.bridged[slot(ride)]
     }
 
-    /// Octets estimés.
+    /// Octets tenus : une table de hachage de `u32` coûte 5 octets par alvéole (valeur et octet de contrôle) et ses
+    /// alvéoles sont les 8/7 de sa capacité.
     pub fn bytes(&self) -> usize {
-        self.bridged.iter().map(|s| s.capacity() * 8).sum()
+        std::mem::size_of::<Self>()
+            + self.bridged.iter().map(|s| s.capacity() * 8 / 7 * 5 + 16).sum::<usize>()
     }
 }
 

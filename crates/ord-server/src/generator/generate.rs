@@ -342,8 +342,8 @@ impl Ready {
                     })
             }) {
                 Ok(e) => Some(e),
-                // Sans équipe, le mode découverte génère quand même : seule la mémoire d'équipe manque.
-                Err(ReadyError::Overloaded | ReadyError::Stopped) if !need_team => None,
+                // Même en découverte : sans la mémoire de l'équipe, la réponse dirait `overlay: null` et `team_m: 0`
+                // alors qu'une surcouche existe, et dépendrait de la charge du service. Mieux vaut 503 (`Retry-After`).
                 Err(ReadyError::Overloaded) => return Err(overloaded()),
                 Err(ReadyError::Stopped) => {
                     return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded"))

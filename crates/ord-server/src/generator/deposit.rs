@@ -373,9 +373,14 @@ impl Ready {
         let r = Arc::clone(self);
         drop(handle.spawn_blocking(move || {
             let deadline = Instant::now() + WARM_BUDGET;
+            // L'arrêt du service coupe l'attente de place (au plus 50 ms de latence, le pas de réveil du budget).
+            let stopping = || r.stopping.load(std::sync::atomic::Ordering::Relaxed);
+            if stopping() {
+                return;
+            }
             let reserve = |bytes: usize| -> Result<Box<dyn Send + '_>, ReadyError> {
                 r.windows
-                    .reserve_build(bytes, deadline, &|| false)
+                    .reserve_build(bytes, deadline, &stopping)
                     .map(|g| Box::new(g) as Box<dyn Send + '_>)
                     .map_err(|_| ReadyError::Overloaded)
             };

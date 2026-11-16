@@ -16,6 +16,8 @@ use ord_graph::format::GraphIdentity;
 use ord_graph::overlay::Overlay;
 use ord_loops::{Engine, TeamData};
 use ord_loops_check::{Config as CheckConfig, GraphIndex, TeamCheck};
+
+use super::windows::TeamEvictor;
 use serde::{Deserialize, Serialize};
 
 use super::crypto::Credentials;
@@ -130,6 +132,16 @@ pub enum ReadyError {
 /// coupé par l'appelant) ; la garde rendue libère la réservation à sa chute.
 pub type Reserve<'a> = &'a dyn Fn(usize) -> Result<Box<dyn Send + 'a>, ReadyError>;
 
+/// Le budget de mémoire qui compte les équipes résidentes (lot 6, finition) : le stockage lui dit ce qui entre et ce
+/// qui sort ; c'est lui qui, par [`TeamEvictor`], demande d'évincer quand la place manque. Les appels ne se font
+/// **jamais** sous le verrou du cache d'équipes.
+pub trait TeamMemory: Send + Sync {
+    /// Une équipe est devenue résidente : ses octets comptent, sans pouvoir être refusés.
+    fn hold_team(&self, bytes: usize);
+    /// Des octets d'équipes ne sont plus résidents.
+    fn release_team(&self, bytes: usize);
+}
+
 /// Une équipe prête : surcouche et données du moteur.
 pub struct Entry {
     id: FileId,
@@ -140,6 +152,8 @@ pub struct Entry {
     pub team: TeamData,
     /// Arêtes comblées du contrôleur indépendant, calculées une fois sur la zone de l'équipe (lot 6, §8.1).
     pub check: TeamCheck,
+    /// Octets tenus : surcouche décodée, données du moteur et tables du contrôleur (capacités réelles).
+    pub bytes: usize,
 }
 
 static NEXT_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -180,12 +194,28 @@ pub struct Store {
     cache: Mutex<Vec<(CacheKey, Arc<Entry>)>>,
     /// Une construction de `TeamData` à la fois par équipe : les autres attendent et réutilisent l'entrée.
     builds: Mutex<std::collections::HashMap<CacheKey, Arc<Mutex<()>>>>,
+    /// Le budget qui compte les entrées du cache.
+    memory: Arc<dyn TeamMemory>,
 }
 
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Store").field("graph_id", &self.graph_id).finish_non_exhaustive()
     }
+}
+
+impl TeamEvictor for Store {
+    fn evict_idle(&self) -> Option<(usize, u64)> {
+        let mut cache = lock(&self.cache);
+        let i = lru_idle(&cache)?;
+        let e = cache.remove(i).1;
+        Some((e.bytes, e.serial))
+    }
+}
+
+/// La moins récemment utilisée des entrées (la liste va de la plus ancienne à la plus récente) que personne ne tient.
+fn lru_idle<K, V>(cache: &[(K, Arc<V>)]) -> Option<usize> {
+    cache.iter().position(|(_, e)| Arc::strong_count(e) == 1)
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -216,6 +246,7 @@ impl Store {
         identity: GraphIdentity,
         matcher_hash: u64,
         hooks: Arc<TestHooks>,
+        memory: Arc<dyn TeamMemory>,
     ) -> Arc<Self> {
         Arc::new(Self {
             cfg,
@@ -226,7 +257,28 @@ impl Store {
             locks: Mutex::new(HashSet::new()),
             cache: Mutex::new(Vec::new()),
             builds: Mutex::new(std::collections::HashMap::new()),
+            memory,
         })
+    }
+
+    /// Retire du cache les entrées dont la clé satisfait `pred` et rend leurs octets au budget.
+    fn forget(&self, pred: impl Fn(&CacheKey) -> bool) {
+        let mut freed = 0;
+        lock(&self.cache).retain(|(k, e)| {
+            let gone = pred(k);
+            if gone {
+                freed += e.bytes;
+            }
+            !gone
+        });
+        if freed > 0 {
+            self.memory.release_team(freed);
+        }
+    }
+
+    /// Octets des équipes en cache (tests et jauge).
+    pub fn cached_bytes(&self) -> usize {
+        lock(&self.cache).iter().map(|(_, e)| e.bytes).sum()
     }
 
     pub fn graph_id(&self) -> &str {
@@ -291,7 +343,7 @@ impl Store {
             Some((meta, overlay)) => Some((id, meta, overlay)),
             None => {
                 let _ = std::fs::remove_file(&path);
-                lock(&self.cache).retain(|(k, _)| !(k.0 == c.ns && k.1 == c.team));
+                self.forget(|k| k.0 == c.ns && k.1 == c.team);
                 metrics::counter!("ord_overlay_corrupt_total").increment(1);
                 tracing::warn!(ns8 = c.ns8(), "overlay file unreadable: removed");
                 None
@@ -392,7 +444,7 @@ impl Store {
         }
         metrics::counter!("ord_overlay_cache_misses_total").increment(1);
         let Some((id, meta, overlay)) = self.read_current(c) else {
-            lock(&self.cache).retain(|(k, _)| *k != key);
+            self.forget(|k| *k == key);
             return Err(ReadyError::State(match self.stale_elsewhere(c) {
                 Some(_) => State::Stale(StaleReason::Graph),
                 None => State::Absent,
@@ -404,25 +456,47 @@ impl Store {
         self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
         let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
         let plan = TeamData::plan_build(engine, &overlay).map_err(|_| stale())?;
-        // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe) : sa place est réservée
-        // dans le budget du générateur, ou la demande attend, puis 503.
-        let _guard = reserve(plan.estimated_bytes)?;
+        let check_plan = TeamCheck::plan(engine.base(), &overlay);
+        // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe, incidence du contrôleur) :
+        // celle des **deux** constructions, qui tournent en parallèle, est réservée dans le budget du générateur, ou
+        // la demande attend, puis 503.
+        let guard = reserve(plan.estimated_bytes + check_plan.estimated_bytes)?;
         // Les deux constructions ne dépendent que de la surcouche : en parallèle, le temps est celui de la plus longue
         // (pages froides, une grosse équipe passait 8 s en série).
         let (team, check) = std::thread::scope(|sc| {
-            let check = sc.spawn(|| TeamCheck::build(engine.base(), gi, &overlay, &CheckConfig::default()));
+            let check = sc.spawn(|| {
+                TeamCheck::build_planned(engine.base(), gi, &overlay, &CheckConfig::default(), &check_plan)
+            });
             let team = TeamData::build_planned(engine, &overlay, &plan);
             (team, check.join())
         });
         let team = team.map_err(|_| stale())?;
         let check = check.unwrap_or_else(|e| std::panic::resume_unwind(e));
+        // La mémoire transitoire est rendue avant de compter ce qui reste : sinon l'entrée neuve serait comptée avec sa
+        // propre construction et chasserait des équipes pour rien.
+        drop(guard);
         let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
-        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check });
-        let mut cache = lock(&self.cache);
-        cache.retain(|(k, _)| *k != key);
-        cache.push((key, Arc::clone(&entry)));
-        while cache.len() > self.cfg.team_cache_entries {
-            cache.remove(0);
+        let bytes = std::mem::size_of::<Entry>() + overlay.bytes() + team.bytes() + check.bytes();
+        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check, bytes });
+        // Comptée d'abord (le budget évince ce que personne ne tient pour lui faire de la place), cachée ensuite : elle
+        // ne peut pas s'évincer elle-même.
+        self.memory.hold_team(bytes);
+        let mut freed = 0;
+        {
+            let mut cache = lock(&self.cache);
+            if let Some(i) = cache.iter().position(|(k, _)| *k == key) {
+                freed += cache.remove(i).1.bytes;
+            }
+            cache.push((key, Arc::clone(&entry)));
+            // Plafond en nombre : la plus ancienne part, tenue ou non (sa mémoire revient quand la génération qui la
+            // tient finit).
+            while cache.len() > self.cfg.team_cache_entries {
+                freed += cache.remove(0).1.bytes;
+                metrics::counter!("ord_generator_team_evictions_total", "reason" => "count").increment(1);
+            }
+        }
+        if freed > 0 {
+            self.memory.release_team(freed);
         }
         Ok(entry)
     }
@@ -469,7 +543,7 @@ impl Store {
         {
             tracing::warn!(ns8 = c.ns8(), "overlay directory fsync failed after rename");
         }
-        lock(&self.cache).retain(|(k, _)| !(k.0 == c.ns && k.1 == c.team));
+        self.forget(|k| k.0 == c.ns && k.1 == c.team);
         self.update_gauge();
         Ok(sealed.len() as u64)
     }
@@ -531,7 +605,7 @@ impl Store {
         for d in self.graph_dirs() {
             let _ = std::fs::remove_file(d.join(&c.ns).join(format!("{}.{FILE_EXT}", c.team)));
         }
-        lock(&self.cache).retain(|(k, _)| !(k.0 == c.ns && k.1 == c.team));
+        self.forget(|k| k.0 == c.ns && k.1 == c.team);
         self.update_gauge();
     }
 
@@ -540,7 +614,7 @@ impl Store {
         for d in self.graph_dirs() {
             let _ = std::fs::remove_dir_all(d.join(&c.ns));
         }
-        lock(&self.cache).retain(|(k, _)| k.0 != c.ns);
+        self.forget(|k| k.0 == c.ns);
         self.update_gauge();
     }
 
@@ -717,7 +791,29 @@ mod tests {
             identity(),
             matcher,
             Arc::new(TestHooks::default()),
+            Arc::new(NoMemory),
         )
+    }
+
+    struct NoMemory;
+
+    impl TeamMemory for NoMemory {
+        fn hold_team(&self, _: usize) {}
+        fn release_team(&self, _: usize) {}
+    }
+
+    #[test]
+    fn the_least_recent_entry_nobody_holds_is_the_one_to_evict() {
+        let held = Arc::new(2u8);
+        // De la plus ancienne à la plus récente : `a` est tenue par une génération (deux références).
+        let cache = vec![("a", Arc::clone(&held)), ("b", Arc::new(3u8)), ("c", Arc::new(4u8))];
+        assert_eq!(lru_idle(&cache), Some(1), "la plus ancienne est tenue : la suivante part");
+        drop(held);
+        assert_eq!(lru_idle(&cache), Some(0), "libérée, elle redevient la première à partir");
+        let cache = vec![("a", Arc::new(1u8)), ("b", Arc::new(3u8))];
+        let all_held: Vec<_> = cache.iter().map(|(_, v)| Arc::clone(v)).collect();
+        assert_eq!(lru_idle(&cache), None, "tout est tenu : rien à évincer");
+        drop(all_held);
     }
 
     fn ordo() -> Vec<u8> {

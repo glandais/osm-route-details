@@ -304,6 +304,15 @@ impl Overlay {
         }
     }
 
+    /// Octets tenus en mémoire (capacités réelles des tableaux, et les noms de types) : ce que la surcouche déchiffrée
+    /// coûte une fois décodée, sans le texte clair qui l'a produite.
+    pub fn bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.edges.capacity() * 4
+            + self.counts.capacity() * 2
+            + self.meta.types.iter().map(|t| t.capacity() + std::mem::size_of::<String>()).sum::<usize>()
+    }
+
     /// Nombre d'arêtes de base à compte non nul.
     pub fn len(&self) -> usize {
         self.edges.len()

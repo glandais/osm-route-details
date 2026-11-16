@@ -194,3 +194,35 @@ Repris des passages précédents, sans les avoir rejoués :
 - Le polygone `france.poly` de Geofabrik, qui éteignait le générateur au premier passage, est accepté par la nouvelle
   règle (débord toléré jusqu'à 20 % de la boîte des nœuds) : vérifié au démarrage du service. La règle reste à
   confirmer par le responsable.
+
+## 8. Finition (16 novembre 2026)
+
+Traitement des cinq constats du §4 ; conception : [`ord-loops-lot6.md`](ord-loops-lot6.md) §18. Banc `release`, mêmes
+fichiers France et mêmes neuf surcouches que ci-dessus, `--modes discovery --rounds 0 --limit 1 --budget-mb 1000`, une
+équipe par processus pour les pics (le pic anonyme échantillonné ne redescend pas dans un même processus : les équipes
+suivantes y gardent la mémoire que l'allocateur n'a pas rendue).
+
+| Équipe | construction (données et contrôleur en parallèle) | pic anonyme au-dessus de l'ouverture | estimation réservée (données + contrôleur) | tables du contrôleur seules, pic mesuré / estimé |
+|---|---|---|---|---|
+| A | 1,8 s | 359 Mo | 403 Mo (320 + 82) | 63 / 82 Mo |
+| C | 1,9 s | 490 Mo | 587 Mo (467 + 120) | 99 / 120 Mo |
+| D | 3,2 s | 748 Mo | 924 Mo (749 + 175) | 139 / 175 Mo |
+
+- **L'estimation de `TeamCheck`** : un premier réglage à 32 o par arête des cellules et 48 o par arête de surcouche
+  rendait 2,5 fois le pic mesuré (D : 1 099 Mo réservés, au-dessus d'un budget de 900) ; ramené à 16 et 24 o, il couvre
+  les trois équipes mesurées avec 20 à 30 % de marge. Le pic de la construction **parallèle** (D : 748 Mo) est proche du
+  pic de `TeamData` seul (704 Mo, §6) : les deux pics ne coïncident pas, la somme des estimations (924 Mo) reste
+  prudente.
+- **Octets résidents** (surcouche déchiffrée + `TeamData` + `TeamCheck`), en Mo : A 15,8 (3,1 + 12,6 + 0,1), B 2,7,
+  C 5,4, D 8,2, E 1,9, F à I 0,1 à 0,2 chacune ; **35 Mo pour les neuf**. Les 200 Mo d'anonyme de plus relevés au §4 entre
+  cinq équipes sans construction (210 Mo) et neuf équipes construites (407 Mo) ne sont donc **pas** les entrées d'équipe :
+  c'est de la mémoire de construction que l'allocateur garde (tables de hachage et petits blocs sous le seuil de 1 Mio, que
+  `MALLOC_MMAP_THRESHOLD_` laisse dans les arènes). Compter les équipes dans le budget et les évincer ne rend que 35 Mo ;
+  la rétention de l'allocateur reste hors du budget (à surveiller par `RssAnon`, pas par le budget).
+- **Pas de relevé** : le service par HTTP avec plus de neuf équipes (13 aujourd'hui avec staging et prod), l'éviction
+  d'équipes sous charge réelle, l'altitude dans le même conteneur. L'éviction est couverte par des tests unitaires
+  (`windows.rs`, `store.rs`), pas par un relevé.
+- **Constats du §4**, tous traités : entrées d'équipe comptées et évincées (budget unique, LRU) ; mémoire transitoire de
+  `TeamCheck` réservée ; banc en parallèle ; découverte sans mémoire d'équipe : 503 `overloaded` au lieu d'une réponse sans
+  `overlay` ; attente de la construction de fond interrompue à l'arrêt.
+- **Budget par défaut** : 900 → 1 000 Mo (voir la note §18 : la réservation de D, 924 Mo, ne tient pas sous 900).

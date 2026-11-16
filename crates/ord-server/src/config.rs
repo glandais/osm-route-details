@@ -344,11 +344,14 @@ pub struct GeneratorConfig {
     pub budget_ms: u64,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
-    /// Équipes gardées en mémoire. Depuis le lot 6, une équipe ne coûte que quelques Mo (arêtes d'équipe et
-    /// composantes strictes) ; ses agrégats par fenêtre sont sous `memory_budget_mb`.
+    /// Équipes gardées en mémoire au plus (plafond en nombre). Leurs octets (surcouche, données, tables du contrôleur)
+    /// comptent dans `memory_budget_mb`, comme leurs agrégats par fenêtre : quand la place manque, la moins récemment
+    /// utilisée que personne ne tient est évincée et se reconstruit à la demande.
     pub team_cache_entries: usize,
-    /// Budget de mémoire du générateur (Mo) : fenêtres, agrégats d'équipe par fenêtre, espaces de travail. Le moteur
-    /// seul tient en quelques Mo ; ce budget borne ce qui varie avec les requêtes (lot 6, §10.1).
+    /// Budget de mémoire du générateur (Mo) : fenêtres, agrégats d'équipe par fenêtre, espaces de travail, mémoire
+    /// transitoire des constructions d'équipe **et équipes résidentes**. Le moteur seul tient en quelques Mo ; ce budget
+    /// borne ce qui varie avec les requêtes (lot 6, §10.1). 1 000 : la plus grosse équipe de la France réserve 924 Mo
+    /// pour se construire (note, finition).
     pub memory_budget_mb: usize,
     /// Marge d'arrondi (m) ajoutée aux zones d'une fenêtre.
     pub window_margin_m: f64,
@@ -382,7 +385,7 @@ impl Default for GeneratorConfig {
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
             team_cache_entries: 16,
-            memory_budget_mb: 900,
+            memory_budget_mb: 1000,
             window_margin_m: 1_000.0,
             window_radius_step_m: 10_000.0,
             workspace_keep_mb: 160,
@@ -703,7 +706,7 @@ mod tests {
             let c = Config::load(None).map_err(|e| e.to_string())?;
             assert_eq!(
                 (c.generator.memory_budget_mb, c.generator.workspace_keep_mb, c.generator.team_cache_entries),
-                (900, 160, 16)
+                (1000, 160, 16)
             );
             jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
             jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "5000");

@@ -286,7 +286,8 @@ fn main() -> Result<()> {
     let sampler = AnonSampler::start();
     let load_anon_mb = sampler.take_max_mb();
     let mut team_build_anon: Vec<(String, f64, f64)> = Vec::new();
-    let mut check_build_anon: Vec<(String, f64, f64)> = Vec::new();
+    // Par équipe : octets tenus une fois construite (surcouche, données du moteur, tables du contrôleur), en Mo.
+    let mut resident_mb: Vec<(String, f64, f64, f64)> = Vec::new();
     let mut plan_estimates: Vec<(String, f64)> = Vec::new();
     let graph_index = GraphIndex::build(engine.base());
     let tm = engine.index_timings_ms();
@@ -384,22 +385,47 @@ fn main() -> Result<()> {
             .ok_or_else(|| anyhow!("pas de surcouche pour l'équipe {letter}"))?;
         let overlay =
             Overlay::read(&overlay_path).map_err(|e| anyhow!("surcouche de l'équipe {letter} : {e}"))?;
+        let check_cfg = Config {
+            hairpin_single_node: a.hairpin_single_node,
+            hole_m: a.hole_m.unwrap_or(100.0),
+            connector_m: a.connector_m.unwrap_or(30.0),
+            ..Config::default()
+        };
         let t = std::time::Instant::now();
         let _ = sampler.take_max_mb();
+        let anon_before = memory_mb().2;
         let plan = TeamData::plan_build(&engine, &overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
-        // Comme le service : la construction (données d'équipe puis tables du contrôleur) tient sa mémoire transitoire
-        // dans le budget des fenêtres.
-        wins.reserve_team_build(plan.estimated_bytes)?;
-        let team = TeamData::build_planned(&engine, &overlay, &plan)
-            .map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        let check_plan = TeamCheck::plan(engine.base(), &overlay);
+        // Comme le service : les données d'équipe et les tables du contrôleur se construisent **en parallèle** et
+        // tiennent, ensemble, leur mémoire transitoire dans le budget des fenêtres (lot 6, finition).
+        let estimated = plan.estimated_bytes + check_plan.estimated_bytes;
+        wins.reserve_team_build(estimated)?;
+        let (team, team_check) = std::thread::scope(|sc| {
+            let check = sc.spawn(|| {
+                TeamCheck::build_planned(engine.base(), &graph_index, &overlay, &check_cfg, &check_plan)
+            });
+            let team = TeamData::build_planned(&engine, &overlay, &plan);
+            (team, check.join().expect("tables du contrôleur"))
+        });
+        let team = team.map_err(|e| anyhow!("équipe {letter} : {e}"))?;
         let peak = sampler.take_max_mb();
         eprintln!(
-            "équipe {letter} : construction {:.1} s, pic anonyme {peak:.0} Mo, estimation {:.0} Mo",
+            "équipe {letter} : construction {:.1} s, pic anonyme {peak:.0} Mo (+{:.0} Mo), estimation {:.0} Mo ({:.0} + {:.0})",
             t.elapsed().as_secs_f64(),
-            plan.estimated_bytes as f64 / 1e6
+            peak - anon_before,
+            estimated as f64 / 1e6,
+            plan.estimated_bytes as f64 / 1e6,
+            check_plan.estimated_bytes as f64 / 1e6
         );
         team_build_anon.push((letter.clone(), t.elapsed().as_secs_f64(), peak));
-        plan_estimates.push((letter.clone(), plan.estimated_bytes as f64 / 1e6));
+        plan_estimates.push((letter.clone(), estimated as f64 / 1e6));
+        resident_mb.push((
+            letter.clone(),
+            overlay.bytes() as f64 / 1e6,
+            team.bytes() as f64 / 1e6,
+            team_check.bytes() as f64 / 1e6,
+        ));
+        wins.release_team_build(estimated);
         for r in [ord_loops::RideType::Road, ord_loops::RideType::Gravel] {
             let s = team.stats(r);
             eprintln!(
@@ -407,18 +433,6 @@ fn main() -> Result<()> {
                 s.team_km, s.bridged_km, s.outside_typed_km, s.outside_any_km
             );
         }
-        let check_cfg = Config {
-            hairpin_single_node: a.hairpin_single_node,
-            hole_m: a.hole_m.unwrap_or(100.0),
-            connector_m: a.connector_m.unwrap_or(30.0),
-            ..Config::default()
-        };
-        // Les tables bornées du contrôleur, comme le service les garde par équipe (lot 6, §8).
-        let _ = sampler.take_max_mb();
-        let tc_start = std::time::Instant::now();
-        let team_check = TeamCheck::build(engine.base(), &graph_index, &overlay, &check_cfg);
-        check_build_anon.push((letter.clone(), tc_start.elapsed().as_secs_f64(), sampler.take_max_mb()));
-        wins.release_team_build(plan.estimated_bytes);
         let checker =
             Checker::with_tables(engine.base(), Some(&overlay), check_cfg, &graph_index, Some(&team_check));
         let ctx = Context { engine: &engine, team: &team, checker: &checker };
@@ -652,7 +666,7 @@ fn main() -> Result<()> {
     lines.push((
         "mémoire anonyme (RssAnon, échantillonnée)".into(),
         format!(
-            "ouverture {load_anon_mb:.0} Mo ; pic au total {:.0} Mo ; construction d'équipe (s, pic Mo) : {} ; estimations réservées au budget (Mo) : {} ; tables du contrôleur : {}",
+            "ouverture {load_anon_mb:.0} Mo ; pic au total {:.0} Mo ; construction d'équipe, données et contrôleur en parallèle (s, pic Mo) : {} ; estimations réservées au budget (Mo) : {} ; octets résidents par équipe (surcouche + données + contrôleur, Mo) : {} ; total {:.0} Mo",
             sampler.max_mb(),
             team_build_anon
                 .iter()
@@ -660,11 +674,12 @@ fn main() -> Result<()> {
                 .collect::<Vec<_>>()
                 .join(", "),
             plan_estimates.iter().map(|(l, m)| format!("{l} {m:.0}")).collect::<Vec<_>>().join(", "),
-            check_build_anon
+            resident_mb
                 .iter()
-                .map(|(l, s, m)| format!("{l} {s:.1} s {m:.0}"))
+                .map(|(l, o, t, c)| format!("{l} {o:.1} + {t:.1} + {c:.1}"))
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join(", "),
+            resident_mb.iter().map(|(_, o, t, c)| o + t + c).sum::<f64>()
         ),
     ));
     lines.push((

@@ -134,3 +134,21 @@ fn the_bridged_edges_of_the_zone_are_those_of_the_whole_graph() {
     }
     assert!(bridged_total > 20, "le scénario doit combler des trous : {bridged_total}");
 }
+
+#[test]
+fn a_planned_build_gives_the_same_tables_and_declares_its_transient_and_resident_bytes() {
+    let (g, _d) = graph();
+    let gi = GraphIndex::build(&g);
+    let ov = overlay(&g, 1);
+    let cfg = Config { hole_m: 300.0, connector_m: 150.0, ..Config::default() };
+    let plan = TeamCheck::plan(&g, &ov);
+    assert!(plan.estimated_bytes > 0, "la construction tient de la mémoire transitoire");
+    let (planned, direct) =
+        (TeamCheck::build_planned(&g, &gi, &ov, &cfg, &plan), TeamCheck::build(&g, &gi, &ov, &cfg));
+    for ride in [RideType::Road, RideType::Gravel, RideType::Mtb] {
+        assert_eq!(planned.bridged(ride), direct.bridged(ride));
+    }
+    // Les octets tenus comptent les tables, et la surcouche décodée a les siens.
+    assert!(planned.bytes() >= std::mem::size_of::<TeamCheck>());
+    assert!(ov.bytes() > ov.len() * 4);
+}

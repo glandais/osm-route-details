@@ -23,7 +23,7 @@ mod tests;
 #[cfg(test)]
 mod tests_bounded;
 
-pub use bounded::{GraphIndex, TeamCheck};
+pub use bounded::{CheckPlan, GraphIndex, TeamCheck};
 pub use check::{Checker, Config, Report, Violation};
 pub use geo::{haversine_m, LatLon};
 pub use rules::{admitted, team_edge, Admission, TypeIndex};

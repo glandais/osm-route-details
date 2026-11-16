@@ -8,7 +8,7 @@
 //! Rien de privé n'est journalisé : ni coordonnée, ni clé d'environnement, ni référence d'équipe, ni nom de fichier ;
 //! seule l'étiquette `ns8` (8 premiers caractères du nom d'espace, non secrets) relie les lignes d'un environnement.
 
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -187,12 +187,14 @@ pub struct Ready {
     /// Arêtes plus larges qu'une cellule, pour le contrôleur indépendant (une fois, au démarrage).
     pub(crate) graph_index: ord_loops_check::GraphIndex,
     /// Fenêtres du moteur sous un budget de mémoire (lot 6).
-    pub(crate) windows: windows::WindowManager,
+    pub(crate) windows: Arc<windows::WindowManager>,
     gen_slots: Arc<Semaphore>,
     gen_waiting: AtomicUsize,
     deposit_slots: Arc<Semaphore>,
     workspaces: Mutex<Vec<Workspace>>,
     hooks: Arc<TestHooks>,
+    /// Le service s'arrête : les attentes de fond (construction des données d'une équipe après un dépôt) s'interrompent.
+    stopping: AtomicBool,
     graph_id: String,
     capabilities: GeneratorCapabilities,
 }
@@ -412,6 +414,8 @@ impl Generator {
         let graph_index = ord_loops_check::GraphIndex::build(engine.base());
         let gid = graph_id(&identity);
         let matcher_hash = ord_graph_match::agg::params_hash();
+        // Le budget de mémoire compte les équipes résidentes que le stockage lui déclare, et lui demande de les évincer.
+        let windows = Arc::new(windows::WindowManager::new(cfg.memory_budget_mb * 1_000_000));
         let store = store::Store::new(
             store::StoreConfig {
                 dir: cfg.overlay_dir.clone(),
@@ -427,7 +431,9 @@ impl Generator {
             identity,
             matcher_hash,
             Arc::clone(&hooks),
+            Arc::clone(&windows) as Arc<dyn store::TeamMemory>,
         );
+        windows.set_evictor(Arc::downgrade(&store) as std::sync::Weak<dyn windows::TeamEvictor>);
         let _ = std::fs::create_dir_all(&cfg.overlay_dir);
         // Au démarrage, tous les temporaires d'écritures interrompues partent.
         store.purge(std::time::SystemTime::now(), true);
@@ -497,12 +503,13 @@ impl Generator {
                 store,
                 cell_index_ok,
                 graph_index,
-                windows: windows::WindowManager::new(cfg.memory_budget_mb * 1_000_000),
+                windows,
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),
                 gen_waiting: AtomicUsize::new(0),
                 deposit_slots: Arc::new(Semaphore::new(cfg.deposit.max_concurrent)),
                 workspaces: Mutex::new(Vec::new()),
                 hooks,
+                stopping: AtomicBool::new(false),
                 graph_id: gid,
                 capabilities,
             })),
@@ -549,6 +556,14 @@ impl Generator {
                     .await;
             }
         });
+    }
+
+    /// Le service s'arrête : les constructions de fond qui attendent de la place dans le budget s'interrompent (une
+    /// construction déjà commencée finit, elle ne dure que quelques secondes). Les requêtes en vol ont leur échéance.
+    pub fn begin_shutdown(&self) {
+        if let Some(r) = self.ready() {
+            r.stopping.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 
     /// Hôte des crochets de test.

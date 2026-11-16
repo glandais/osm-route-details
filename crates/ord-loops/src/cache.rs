@@ -42,6 +42,9 @@ impl Entry {
 pub struct WindowCache {
     budget: usize,
     reserved: usize,
+    /// Octets tenus par l'appelant hors du cache et comptés au même budget (les données d'équipe résidentes du
+    /// service) ; ils ne s'évincent pas ici, l'appelant les rend.
+    external: usize,
     tick: u64,
     entries: Vec<Entry>,
     stats: CacheStats,
@@ -49,7 +52,14 @@ pub struct WindowCache {
 
 impl WindowCache {
     pub fn new(budget_bytes: usize) -> Self {
-        Self { budget: budget_bytes, reserved: 0, tick: 0, entries: Vec::new(), stats: CacheStats::default() }
+        Self {
+            budget: budget_bytes,
+            reserved: 0,
+            external: 0,
+            tick: 0,
+            entries: Vec::new(),
+            stats: CacheStats::default(),
+        }
     }
 
     pub fn budget(&self) -> usize {
@@ -68,9 +78,9 @@ impl WindowCache {
         self.entries.is_empty()
     }
 
-    /// Octets comptés : fenêtres, agrégats d'équipe, réservations.
+    /// Octets comptés : fenêtres, agrégats d'équipe, réservations, octets externes.
     pub fn total(&self) -> usize {
-        self.reserved + self.entries.iter().map(Entry::bytes).sum::<usize>()
+        self.reserved + self.external + self.entries.iter().map(Entry::bytes).sum::<usize>()
     }
 
     /// Octets des seules fenêtres et agrégats en cache.
@@ -100,6 +110,21 @@ impl WindowCache {
     /// réserve) : ils comptent dans le budget sans pouvoir être refusés.
     pub fn force_reserve(&mut self, bytes: usize) {
         self.reserved += bytes;
+    }
+
+    /// Compte `bytes` tenus hors du cache (sans condition : ils existent déjà). Rendus par [`WindowCache::release_external`].
+    pub fn hold_external(&mut self, bytes: usize) {
+        self.external += bytes;
+    }
+
+    /// Rend des octets externes.
+    pub fn release_external(&mut self, bytes: usize) {
+        self.external = self.external.saturating_sub(bytes);
+    }
+
+    /// Octets externes comptés.
+    pub fn external(&self) -> usize {
+        self.external
     }
 
     /// Rend une réservation (`bytes` = ce qui avait été réservé).

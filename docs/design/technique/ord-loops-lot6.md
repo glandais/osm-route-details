@@ -418,8 +418,9 @@ elle-même**. Règles :
 
 ### 10.1 Budget
 
-Un seul compte, `memory_budget_mb` (900 Mo par défaut), pour tout ce que le générateur alloue au-delà du fixe :
-fenêtres, `WindowTeam`, espaces de travail, et constructions transitoires de `TeamData`. Chaque objet déclare ses octets
+Un seul compte, `memory_budget_mb` (1 000 Mo par défaut depuis la finition, §18 ; 900 avant), pour tout ce que le
+générateur alloue au-delà du fixe : fenêtres, `WindowTeam`, espaces de travail, constructions transitoires de `TeamData`
+et `TeamCheck`, et **équipes résidentes** (§18). Chaque objet déclare ses octets
 **après** construction (somme des capacités de ses `Vec`, exacte) ; avant de construire, on **réserve** une estimation
 (chaînes des tuiles, lues dans l'index des cellules et l'index des étrangères, fois le coût par chaîne du §4.2), corrigée
 à la fin.
@@ -451,12 +452,12 @@ fichier, récupérables.
 
 | Clé | Défaut | Rôle |
 |---|---|---|
-| `MEMORY_BUDGET_MB` | 900 | budget du §10.1 |
+| `MEMORY_BUDGET_MB` | 900 → **1 000** | budget du §10.1 ; la plus grosse équipe de la France en réserve 924 pour se construire (§18) |
 | `WINDOW_MARGIN_M` | 1 000 | marge d'arrondi autour des zones (§5.1) |
 | `WINDOW_RADIUS_STEP_M` | 10 000 | pas d'arrondi du rayon de classe (§5.5) |
 | `WORKSPACE_KEEP_MB` | 160 | au-delà, un espace de travail rendu est libéré (§9) |
 | `INDEX_THREADS` | 2 | fils du calcul des index au démarrage (§4.1) |
-| `TEAM_CACHE_ENTRIES` | 3 → **16** | une équipe en cache ne coûte plus que quelques Mo ; ses fenêtres sont sous le budget |
+| `TEAM_CACHE_ENTRIES` | 3 → **16** | plafond **en nombre** ; les octets des équipes (de 0,2 à 16 Mo chacune sur la France) sont sous le budget, qui en évince la moins récente quand la place manque (§18) |
 
 `distance_m_max` doit rester sous `max_distance_m` du moteur (400 km) : sinon le service démarre, générateur éteint,
 `reason = not_configured` et un `warn`. Rien de nouveau dans `/v1/capabilities` (contrat inchangé).
@@ -468,7 +469,8 @@ Compteurs et histogrammes, sans étiquette de lieu :
 - `ord_generator_window_requests_total{view, outcome = hit|built|wait}` ;
 - `ord_generator_window_build_seconds{view}`, `ord_generator_window_chains{view}` (taille des fenêtres construites) ;
 - `ord_generator_window_evictions_total{kind = window|window_team|workspace}` ;
-- `ord_generator_memory_bytes{kind = window|window_team|workspace|team_build}` et `ord_generator_memory_budget_bytes` ;
+- `ord_generator_memory_bytes{kind = window|window_team|workspace|team_build|team_cache}` et `ord_generator_memory_budget_bytes` ;
+- `ord_generator_team_evictions_total{reason = budget|count}` (équipes évincées : par le budget, par le plafond en nombre) ;
 - `ord_generator_budget_wait_seconds`, et l'issue 503 déjà comptée par `ord_generator_requests_total` ;
 - `ord_generator_window_escapes_total` (doit rester à 0) ;
 - au démarrage, `generator ready` porte en plus `index_ms` et `scc_ms`.
@@ -594,7 +596,7 @@ Chaque étape finit par `cargo fmt`, `cargo clippy --workspace --all-targets --l
 
 ## 17. Décisions qui reviennent au propriétaire
 
-1. **Le budget du générateur** (`memory_budget_mb`, 900 Mo proposés) dans le conteneur de 2 Go partagé avec l'altitude :
+1. **Le budget du générateur** (`memory_budget_mb`, 900 Mo proposés, 1 000 depuis la finition) dans le conteneur de 2 Go partagé avec l'altitude :
    c'est un partage entre deux usages du même conteneur.
 2. **La borne de distance** : le contrat dit 200 km ; la cible du plan parle d'un aller simple de 300 km. Le moteur est
    conçu jusqu'à 400 km (`max_distance_m`) ; relever `distance_m_max` du service est une décision de produit, hors de ce
@@ -655,3 +657,47 @@ Le code a suivi la note ; ce qui a changé, et pourquoi :
 12. **Espace de travail réservé à 150 o par chaîne** (§9, relevé sur la France : 142 à 146 o). L'estimation de la mémoire de
     construction d'une équipe est de 210 o par chaîne de la zone (6).
 13. **Le polygone de Geofabrik ne passe pas le contrôle d'étendue sur la France** : voir les relevés §4.
+
+## 18. Finition (16 novembre 2026)
+
+Constats non bloquants de la seconde relecture (relevés : [`ord-loops-lot6-mesures.md`](ord-loops-lot6-mesures.md) §4 et
+§8), version du paquet 1.9.1 (api inchangée, 1.9).
+
+1. **Les équipes résidentes entrent dans le budget unique.** Le magasin (`store.rs`) déclare à `WindowManager` ce qui
+   entre (`TeamMemory::hold_team`) et ce qui sort (`release_team`) ; l'entrée d'une équipe vaut `size_of::<Entry>()` +
+   `Overlay::bytes()` (capacités des tableaux de la surcouche **déchiffrée**, sans le texte clair) + `TeamData::bytes()`
+   + `TeamCheck::bytes()` (alvéoles réelles des tables de hachage : 5 o par alvéole, les 8/7 de la capacité). Quand la
+   place manque (réservation d'une fenêtre, d'un espace de travail, d'une construction d'équipe, ou entrée neuve qui
+   dépasse), `WindowManager` évince **d'abord les fenêtres** que personne ne tient, **puis les équipes** que personne ne
+   tient (`TeamEvictor::evict_idle`, la moins récemment utilisée d'abord, ses agrégats par fenêtre avec elle). Une
+   équipe tenue par une génération n'est jamais évincée (sa mémoire ne reviendrait pas) ; une équipe évincée se
+   reconstruit à la demande comme après un redémarrage. `team_cache_entries` reste un plafond en nombre (la plus ancienne
+   part, tenue ou non : sa mémoire revient quand la génération qui la tient finit). Une entrée neuve est comptée **après**
+   la libération de sa mémoire transitoire, sinon elle chasserait des équipes avec sa propre construction. Verrous :
+   `Inner` du gestionnaire puis cache du magasin, jamais l'inverse (le magasin n'appelle le gestionnaire que cache
+   relâché). Pourquoi fenêtres d'abord : une fenêtre se reconstruit en moins d'une seconde (0,75 s au plus), une équipe en
+   0,1 à 5 s et à chaque fois sur le disque.
+2. **`TeamCheck` réserve sa mémoire transitoire.** `TeamCheck::plan` (comme `TeamData::plan_build`) donne les cellules de
+   la zone et l'estimation : 16 o par arête des cellules (liste d'incidence) + 24 o par arête de la surcouche ; le magasin
+   réserve la **somme** des deux estimations, les deux constructions tournant en parallèle.
+3. **Le banc construit comme le service** (en parallèle, avec la réservation de la somme) et rapporte les octets résidents
+   par équipe.
+4. **Découverte sans mémoire d'équipe : 503.** Quand la réservation de la construction d'équipe échoue à l'échéance,
+   toute génération avec une clé d'équipe répond 503 `overloaded` (avec `Retry-After`), découverte comprise ; le délai de
+   génération coupé reste 504. Avant, la découverte rendait `overlay: null` et `team_m: 0` alors qu'une surcouche existe
+   et la réponse dépendait de la charge. Le contrat ne change pas (503 `overloaded` y figure pour la génération). Une
+   surcouche absente ou périmée garde son comportement : découverte sans équipe, `overlay: null`.
+5. **Arrêt.** `Generator::begin_shutdown` (appelé par `main` au signal d'arrêt) lève un drapeau que la construction de
+   fond d'un dépôt (`warm_team`) lit toutes les 50 ms dans son attente de place, et avant de commencer : l'attente
+   s'interrompt. Une construction déjà commencée finit (quelques secondes au plus, mesurées) ; les requêtes en vol ont
+   leur échéance.
+
+**Budget par défaut : 900 → 1 000 Mo.** La réservation d'une construction qui dépasse le budget est refusée tout de suite
+(503). Avec la mémoire de `TeamCheck`, la plus grosse équipe de la France (D) réserve 924 Mo (749 + 175) : sous 900 elle
+serait refusée à chaque fois, une régression de comportement ; 1 000 Mo lui laisse 76 Mo de fenêtres pendant ses 3 s de
+construction (avant : 151 Mo sur 900 ; le gain réel de comptage est que la réservation couvre désormais tout). Les
+équipes résidentes elles-mêmes sont petites (35 Mo pour les neuf de la France, 16 Mo pour la plus grosse, A) : elles ne
+justifient pas de relever le budget. Pic de séance attendu : le relevé de la seconde relecture (1 115 Mo anonymes avec
+900) monte au plus de la même marge, +100 Mo, soit environ 1,8 Go estimés avec l'altitude : **à remesurer** dans le
+conteneur avec l'altitude réelle avant d'ouvrir plus d'équipes ; `ORD_GENERATOR__MEMORY_BUDGET_MB` permet de redescendre
+(pas en dessous de la plus grosse équipe attendue + sa marge de fenêtres).

@@ -83,6 +83,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let internal_task =
         tokio::spawn(async move { axum::serve(internal, internal_router(Some(metrics))).await });
     // Arrêt : plus d'admission, requêtes en vol attendues au plus `shutdown_grace_s` (T01 §10).
+    let generator = std::sync::Arc::clone(state.generator());
     let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
     let mut graceful_rx = stop_rx.clone();
     let server = axum::serve(public, router(state)).with_graceful_shutdown(async move {
@@ -91,6 +92,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let grace = std::time::Duration::from_secs(config.server.shutdown_grace_s);
     tokio::spawn(async move {
         shutdown_signal().await;
+        generator.begin_shutdown();
         let _ = stop_tx.send(true);
     });
     tokio::select! {
