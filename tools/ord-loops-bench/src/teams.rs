@@ -51,8 +51,9 @@ pub fn dump<B: AsRef<[u8]> + Sync>(
         let data_s = t.elapsed().as_secs_f64();
         let data_peak = sampler.take_max_mb();
         let t = std::time::Instant::now();
-        let check_plan = TeamCheck::plan(engine.base(), &overlay);
-        let check = TeamCheck::build_planned(engine.base(), graph_index, &overlay, cfg, &check_plan);
+        let check_plan = TeamCheck::plan(engine.base(), &overlay, cfg);
+        let check = TeamCheck::build_planned(engine.base(), graph_index, &overlay, cfg, &check_plan)
+            .map_err(|e| anyhow!("équipe {letter} : {e}"))?;
         let check_s = t.elapsed().as_secs_f64();
         let check_peak = sampler.take_max_mb();
         eprintln!(
@@ -74,12 +75,12 @@ pub fn dump<B: AsRef<[u8]> + Sync>(
 
 fn reference_compare<B: AsRef<[u8]> + Sync>(
     engine: &Engine<B>,
-    _graph_index: &GraphIndex,
+    graph_index: &GraphIndex,
     overlay: &Overlay,
-    _cfg: &Config,
+    cfg: &Config,
     letter: &str,
     data: &[u8],
-    _check: &[u8],
+    check: &[u8],
 ) -> Result<()> {
     let t = std::time::Instant::now();
     let reference = TeamData::build_reference(engine, overlay).map_err(|e| anyhow!("{letter} : {e}"))?;
@@ -88,5 +89,15 @@ fn reference_compare<B: AsRef<[u8]> + Sync>(
         "équipe {letter} : les données d'équipe diffèrent de la référence"
     );
     eprintln!("équipe {letter} : données identiques à la référence ({:.2} s)", t.elapsed().as_secs_f64());
+    let t = std::time::Instant::now();
+    let reference = TeamCheck::build_reference(engine.base(), graph_index, overlay, cfg);
+    anyhow::ensure!(
+        reference.canonical_bytes() == check,
+        "équipe {letter} : les tables du contrôleur diffèrent de la référence"
+    );
+    eprintln!(
+        "équipe {letter} : tables du contrôleur identiques à la référence ({:.2} s)",
+        t.elapsed().as_secs_f64()
+    );
     Ok(())
 }

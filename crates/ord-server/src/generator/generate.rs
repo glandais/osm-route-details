@@ -348,6 +348,7 @@ impl Ready {
                 Err(ReadyError::Stopped) => {
                     return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded"))
                 }
+                Err(ReadyError::Failed) => return Err(Problem::internal()),
                 Err(ReadyError::State(state)) if need_team => {
                     return Err(overlay_required(match state {
                         State::Stale(StaleReason::Graph | StaleReason::Matcher) => OverlayProblemState::Stale,

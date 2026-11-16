@@ -9,7 +9,7 @@ use ord_graph::overlay::{encode, Overlay, OverlayMeta};
 use ord_graph::util::SplitMix64;
 
 use crate::tests_bounded::{graph, N};
-use crate::{Config, GraphIndex, TeamCheck};
+use crate::{Config, GraphIndex, TeamCheck, TeamCheckEscape};
 
 pub(crate) const OVERLAYS: usize = 200;
 
@@ -109,4 +109,53 @@ fn the_reference_overlays_bridge_edges() {
         .map(|n| n.saturating_sub(24) / 4)
         .sum();
     assert!(total > 200, "le scénario doit combler des trous : {total}");
+}
+
+#[test]
+fn the_kept_reference_construction_matches_the_frozen_reference() {
+    assert_matches_fixture(&fixture_lines(&|g, gi, ov| TeamCheck::build_reference(g, gi, ov, &cfg())));
+}
+
+#[test]
+fn the_sparse_tables_are_the_reference_and_the_whole_graph_byte_for_byte() {
+    let (g, _d) = graph();
+    let gi = GraphIndex::build(&g);
+    for i in 0..OVERLAYS as u64 {
+        let ov = overlay_var(&g, i);
+        let sparse = TeamCheck::build(&g, &gi, &ov, &cfg());
+        assert!(!sparse.zone_retried(), "{i} : reprise inattendue");
+        let want = sparse.canonical_bytes();
+        assert!(
+            TeamCheck::build_reference(&g, &gi, &ov, &cfg()).canonical_bytes() == want,
+            "{i} : creuse ≠ référence"
+        );
+        assert!(
+            TeamCheck::build_on(&g, &gi, &ov, &cfg(), true).canonical_bytes() == want,
+            "{i} : creuse ≠ graphe entier"
+        );
+    }
+}
+
+#[test]
+fn a_forced_escape_is_retried_at_one_kilometre_and_gives_the_same_bytes_or_raises() {
+    let (g, _d) = graph();
+    let gi = GraphIndex::build(&g);
+    let (mut escaped, mut quiet) = (0, 0);
+    for i in 0..OVERLAYS as u64 {
+        let ov = overlay_var(&g, i);
+        let want = TeamCheck::build_reference(&g, &gi, &ov, &cfg()).canonical_bytes();
+        match TeamCheck::build_forced(&g, &gi, &ov, &cfg(), 1.0, false) {
+            Err(TeamCheckEscape) => {
+                escaped += 1;
+                let again = TeamCheck::build_forced(&g, &gi, &ov, &cfg(), 1.0, true).unwrap();
+                assert!(again.zone_retried(), "{i}");
+                assert!(again.canonical_bytes() == want, "{i} : la reprise change le résultat");
+            }
+            Ok(t) => {
+                quiet += 1;
+                assert!(t.canonical_bytes() == want, "{i} : résultat creux faux sans échappement");
+            }
+        }
+    }
+    assert!(escaped > 20, "le garde-fou n'a presque jamais été levé : {escaped} ({quiet} sans)");
 }

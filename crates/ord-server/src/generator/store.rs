@@ -126,6 +126,8 @@ pub enum ReadyError {
     State(State),
     Overloaded,
     Stopped,
+    /// La construction a quitté le voisinage de l'équipe, même élargi (jamais un résultat faux : 500).
+    Failed,
 }
 
 /// Réserve la mémoire transitoire d'une construction d'équipe (`Overloaded` : pas de place à l'échéance ; `Stopped` :
@@ -455,8 +457,9 @@ impl Store {
         }
         self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
         let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
+        let check_cfg = CheckConfig::default();
         let plan = TeamData::plan_build(engine, &overlay).map_err(|_| stale())?;
-        let check_plan = TeamCheck::plan(engine.base(), &overlay);
+        let check_plan = TeamCheck::plan(engine.base(), &overlay, &check_cfg);
         // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe, incidence du contrôleur) :
         // celle des **deux** constructions, qui tournent en parallèle, est réservée dans le budget du générateur, ou
         // la demande attend, puis 503.
@@ -464,14 +467,25 @@ impl Store {
         // Les deux constructions ne dépendent que de la surcouche : en parallèle, le temps est celui de la plus longue
         // (pages froides, une grosse équipe passait 8 s en série).
         let (team, check) = std::thread::scope(|sc| {
-            let check = sc.spawn(|| {
-                TeamCheck::build_planned(engine.base(), gi, &overlay, &CheckConfig::default(), &check_plan)
-            });
+            let check =
+                sc.spawn(|| TeamCheck::build_planned(engine.base(), gi, &overlay, &check_cfg, &check_plan));
             let team = TeamData::build_planned(engine, &overlay, &plan);
             (team, check.join())
         });
-        let team = team.map_err(|_| stale())?;
         let check = check.unwrap_or_else(|e| std::panic::resume_unwind(e));
+        let (team, check) = match (team, check) {
+            (Ok(t), Ok(c)) => (t, c),
+            (Err(ord_loops::EngineError::TeamZoneEscape), _) | (_, Err(_)) => {
+                metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
+                tracing::warn!("team build left the neighbourhood of the team network even widened");
+                return Err(ReadyError::Failed);
+            }
+            (Err(_), _) => return Err(stale()),
+        };
+        if team.zone_retried() || check.zone_retried() {
+            metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
+            tracing::warn!("team build retried with wider hot cells");
+        }
         // La mémoire transitoire est rendue avant de compter ce qui reste : sinon l'entrée neuve serait comptée avec sa
         // propre construction et chasserait des équipes pour rien.
         drop(guard);

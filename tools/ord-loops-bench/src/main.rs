@@ -422,7 +422,7 @@ fn main() -> Result<()> {
         let _ = sampler.take_max_mb();
         let anon_before = memory_mb().2;
         let plan = TeamData::plan_build(&engine, &overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
-        let check_plan = TeamCheck::plan(engine.base(), &overlay);
+        let check_plan = TeamCheck::plan(engine.base(), &overlay, &check_cfg);
         // Comme le service : les données d'équipe et les tables du contrôleur se construisent **en parallèle** et
         // tiennent, ensemble, leur mémoire transitoire dans le budget des fenêtres (lot 6, finition).
         let estimated = plan.estimated_bytes + check_plan.estimated_bytes;
@@ -430,11 +430,13 @@ fn main() -> Result<()> {
         let (team, team_check) = std::thread::scope(|sc| {
             let check = sc.spawn(|| {
                 TeamCheck::build_planned(engine.base(), &graph_index, &overlay, &check_cfg, &check_plan)
+                    .map_err(|e| anyhow!("équipe {letter} : {e}"))
             });
             let team = TeamData::build_planned(&engine, &overlay, &plan);
             (team, check.join().expect("tables du contrôleur"))
         });
         let team = team.map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        let team_check = team_check?;
         let peak = sampler.take_max_mb();
         eprintln!(
             "équipe {letter} : construction {:.1} s, pic anonyme {peak:.0} Mo (+{:.0} Mo), estimation {:.0} Mo ({:.0} + {:.0})",

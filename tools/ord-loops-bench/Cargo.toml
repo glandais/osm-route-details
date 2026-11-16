@@ -10,7 +10,7 @@ license.workspace = true
 [dependencies]
 ord-graph = { workspace = true, features = ["mmap"] }
 ord-loops = { path = "../../crates/ord-loops", features = ["reference"] }
-ord-loops-check = { path = "../../crates/ord-loops-check" }
+ord-loops-check = { path = "../../crates/ord-loops-check", features = ["reference"] }
 # La correspondance du curseur du service (lot 3a), pour jouer en processus exactement ce que le service applique.
 ord-server = { path = "../../crates/ord-server" }
 
