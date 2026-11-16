@@ -1,7 +1,8 @@
 # Générateur de parcours — lot 6 : la France entière dans 2 Go, moteur fenêtré, conception
 
 > Statut : **codé** (branche `feat/ord-loops-window`) ; les relevés sont dans [`ord-loops-lot6-mesures.md`](ord-loops-lot6-mesures.md).
-> Les écarts entre cette note et le code sont listés au §19 ; les passages concernés sont corrigés ci-dessous. Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
+> Les écarts entre cette note et le code sont listés au §19 ; les passages concernés sont corrigés ci-dessous.
+> La finition 2 (budget sans éviction en cascade, construction d'équipe creuse) est conçue au §20, pas encore codée. Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
 > (service) et leurs relevés ; graphe et vues France construits le 16 novembre 2026 (extrait Geofabrik du 15/11).
 > **[mesuré]** : commande lancée pour cette note (binaires `release` de `develop`, ou sonde jetable hors dépôt du §18) ;
 > **[calculé]** : compte des tableaux du code à partir des comptes mesurés du graphe ; **[estimé]** : à relever au codage.
@@ -701,3 +702,313 @@ justifient pas de relever le budget. Pic de séance attendu : le relevé de la s
 900) monte au plus de la même marge, +100 Mo, soit environ 1,8 Go estimés avec l'altitude : **à remesurer** dans le
 conteneur avec l'altitude réelle avant d'ouvrir plus d'équipes ; `ORD_GENERATOR__MEMORY_BUDGET_MB` permet de redescendre
 (pas en dessous de la plus grosse équipe attendue + sa marge de fenêtres).
+
+## 20. Finition 2 : budget sans éviction en cascade, construction d'équipe creuse (conception, 16 novembre 2026)
+
+Numérotée 20 parce que le §19 porte déjà les écarts entre la note et le code. Traite les quatre constats de la relecture
+en conteneur ([`ord-loops-lot6-mesures.md`](ord-loops-lot6-mesures.md) §9.4) ; les relevés bruts restent hors dépôt.
+Rien de ce qui suit ne change le contrat (api 1.9), les formats, ni **un seul** drapeau, comblement ou composante
+d'équipe : seule change la manière de les calculer, et de compter la mémoire.
+
+### 20.0 Les constats repris
+
+| | Constat | Cause | Décision |
+|---|---|---|---|
+| A | D ne se construit plus dès que la réserve d'espaces de travail dépasse 76 Mo : 503 pour toujours | la réserve (jusqu'à `max_concurrent` × `workspace_keep_mb` = 320 Mo) est comptée mais ne s'évince jamais ; D réserve 924 Mo sur 1 000 | la réserve est évincée **en premier** (§20.5) ; et D ne réserve plus que ~60 Mo (§20.2) |
+| B | une réservation transitoire de 403 à 924 Mo évince toutes les équipes inactives (35 à 58 Mo), qui se reconstruisent et s'évincent entre elles : 208 évictions, 10 × 503 et 5 × 504 par passage à 4 clients | `reserve_in` appelle `TeamEvictor::evict_idle` pour toute réservation | plus aucune réservation n'évince une équipe : les équipes ont leurs propres plafonds (§20.6) |
+| C | `team_cache_entries` = 16 pour 18 équipes ; le plafond en nombre évince une entrée tenue ; `forget`, le remplacement et l'éviction au nombre n'appellent pas `drop_team` | plafond pensé pour un environnement ; libération des octets dispersée | plafonds 64 entrées et 96 Mo, entrées inactives seulement ; libération **à la chute** de l'entrée (§20.6) |
+| D | la construction d'une équipe tient des centaines de Mo pour un résultat de quelques Mo | fenêtres de toute la zone, incidence de toute la zone, Tarjan sur tous les nœuds de la zone | construction **creuse**, autour du seul réseau de l'équipe, résultats identiques octet pour octet (§20.1 à §20.4) |
+
+### 20.1 Où part la mémoire transitoire [mesuré]
+
+Sonde jetable hors dépôt (binaire `release` qui ouvre le moteur France et construit une équipe, `RssAnon` échantillonné
+toutes les 5 ms, `MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=1048576`), avec des `eprintln!` de tailles ajoutés au code le
+temps de la mesure puis retirés. Équipe D, la plus grosse :
+
+| Bloc (`team.rs`, `bounded.rs`) | `road` | `gravel` |
+|---|---|---|
+| zone | 771 tuiles (la note du §7.1 en prévoyait 300 au plus) | idem |
+| fenêtre de la zone (`build_window_opts`, sans poids) | 2 236 342 chaînes, 1 792 841 nœuds : **141 Mo** | 3 526 026 chaînes, 2 734 231 nœuds : **219 Mo** |
+| `ZoneView` (arêtes vivantes + incidence `Inc` de 16 o, deux entrées par arête) | 3 431 581 arêtes : **123 Mo** | 4 543 244 arêtes : **163 Mo** |
+| Tarjan strict par type (`index`, `low`, `comp`, `on_stack`, longueurs en `u64` par nœud, un booléen par chaîne) | ~40 Mo | ~61 Mo |
+| les deux fenêtres et les deux `ZoneView` vivent **ensemble** (`build_zone`) | | **646 Mo** |
+| `TeamCheck` : incidence `(nœud, arête)` des 1 522 cellules autour de la zone, un type à la fois | 12 164 344 entrées : 134 Mo | 16 288 080 entrées : 134 Mo |
+
+Pic anonyme : `TeamData` seul **+680 Mo** en 3,75 s, `TeamCheck` seul **+129 Mo** en 2,23 s (pages chaudes) ; à la fin,
+**+0 Mo** : une construction seule rend tout à l'allocateur et au système (les ~200 Mo retenus du §9 viennent de
+constructions entrelacées avec le reste du service, §20.8).
+
+Ce que la construction lit vraiment, pour D : 90 747 arêtes d'équipe par type, 591 (`road`) et 729 (`gravel`) départs
+de la règle des trous, 52 025 et 63 929 chaînes strictes ; le résultat tient en **6 Mo**. Tout le reste est un
+échafaudage sur des millions de chaînes que la règle des trous ne regarde jamais : un Dijkstra des trous ne va pas à
+plus de 100 m d'un nœud d'équipe, une jonction pas à plus de 30 m.
+
+Taille du voisinage utile, mesurée en comptant, dans l'incidence de la zone, les entrées dont le nœud tombe dans une
+« case chaude » (§20.2), D :
+
+| Cases | boîte autour de chaque bout d'arête de la surcouche | cases chaudes | entrées d'incidence chaudes `road` / `gravel` (sur 6 863 162 / 9 086 488) | incidence chaude du contrôleur `road` / `gravel` (sur 12 164 344 / 16 288 080) |
+|---|---|---|---|---|
+| 0,01° | case et ses 8 voisines (~± 1 km) | 37 812 | 2 228 187 / 2 835 377 | — |
+| 0,002° | ± 250 m | 220 509 | **953 844 / 1 124 326** | **953 844 / 1 124 326** |
+| 0,001° | ± 250 m | 740 931 | 874 266 / 1 021 379 | — |
+| 0,002° | ± 150 m | 145 425 | 778 185 / 899 685 | — |
+
+Retenu : cases de 0,002°, boîte de ± 250 m. Les cases de 0,001° ne gagnent que 9 % d'incidence pour 3,4 fois plus de
+cases. Les comptes du moteur et du contrôleur sont **égaux** : les arêtes vivantes d'une vue et les arêtes admises du
+contrôleur sont les mêmes sur ce voisinage, chacun les trouvant par son propre chemin.
+
+### 20.2 Décision D : construction creuse autour du réseau d'équipe
+
+**Cases chaudes.** `H` = les cases de 0,002° (clé `(⌊lat/0,002°⌋, ⌊lon/0,002°⌋)` en E7) que touche la boîte de
+± `hot_m` autour de **chaque bout** de chaque arête de la surcouche dont un compte est non nul, avec
+`hot_m = max(hole_m, connector_m) + 150 m` (250 m par défaut). Un nœud de base `x` est **chaud** si la case de sa
+position est dans `H` **et** si sa tuile est une tuile de la zone (§7.1, inchangée). `H` est un `FxHashSet<u64>` :
+229 376 alvéoles, ~2 Mo pour D [mesuré].
+
+**`TeamData`, par vue (une vue à la fois ; `road` sert `Road`, `gravel` sert `Gravel` et `Mtb`)** :
+
+1. **Lecture en flux** des chaînes de la zone, tuile par tuile, comme `build_window_opts` les choisit (possédées par la
+   cellule de la tuile, plus les étrangères de l'index du §4.1), **sans fenêtre** : pour chaque lien, `ends(e)` et la
+   position de ses deux bouts (`node_pos`, lecture du fichier). On garde `e` si l'un de ses bouts est chaud (liste
+   `hot_alive`), et l'id global de la chaîne si **tous** ses liens ont leurs deux bouts chauds (liste `strict_cand`,
+   4 o par chaîne). Une chaîne étrangère vue depuis deux tuiles est lue deux fois : les deux listes sont triées et
+   dédoublonnées à la fin.
+2. **Incidence chaude** : exactement la boucle de `ZoneView::new` sur `hot_alive`, en ne poussant que les entrées
+   `Inc { node, … }` dont `node` est chaud ; tri par `(node, edge)`.
+3. **Drapeaux** : `build_type` inchangé, sauf deux lectures : `alive(e)` = `e ∈ hot_alive` (dichotomie), et `inc_of(x)`
+   lit l'incidence chaude **après** avoir vérifié que `x` est chaud (garde-fou ci-dessous).
+4. **Composantes strictes** : relecture des seules chaînes de `strict_cand` ; une chaîne est stricte si tous ses liens
+   sont drapeautés (même test que `build_type`). Graphe creux : nœuds = bouts (ids globaux de vue) des chaînes strictes,
+   triés ; arcs = chaînes strictes dans l'ordre croissant des ids, sens ouverts comme `out()` ; `strong_components`,
+   `strong_lengths` et `chain_strong_len` d'aujourd'hui sur ce graphe ; `strict_len` trié par id global.
+
+**`TeamCheck`** (code propre au contrôleur, sans rien emprunter au moteur, comme aujourd'hui) : son propre `H`, même
+définition, réécrite dans `bounded.rs` ; **un seul** balayage des cellules de `cells_around(zone)` pour les trois types
+(l'admission est calculée trois fois par arête, trois listes) ; une entrée `(nœud, arête)` n'est gardée que si le nœud
+est chaud ; les arêtes plus larges qu'une cellule (`GraphIndex`) aussi, filtrées de même ; tri et dédoublonnage comme
+`incidence_of`. `adm_deg` et `walk` inchangés, `walk` vérifiant que le nœud qu'il développe est chaud.
+
+**Garde-fou et reprise.** Le Dijkstra des trous ou des jonctions (moteur comme contrôleur) qui **développe** un nœud
+non chaud lève un échappement au lieu de lire une incidence incomplète. La construction est alors refaite **une** fois
+avec `hot_m` = 1 000 m (la boîte de la zone, `ZONE_BOX_M`) ; un second échappement rend `EngineError::TeamZoneEscape`
+(moteur) ou une erreur du contrôleur, que le service traite en 500 `internal`, avec un `warn` sans coordonnée et le
+compteur `ord_generator_team_build_escapes_total` (doit rester à 0, comme `window_escapes`). Aujourd'hui, un nœud hors
+de la zone serait lu avec une incidence partielle **en silence** : le garde-fou rend la construction plus sûre qu'avant.
+
+**Mémoire attendue, D** [calculé sur les comptes mesurés du §20.1] : `TeamData`, vue `gravel` : incidence chaude
+1 124 326 × 16 o = 18 Mo, `hot_alive` 592 405 × 4 o = 2,4 Mo (avant dédoublonnage, ~+10 %), `H` 2 Mo, `strict_cand`
+≤ 4 Mo, tables de hachage `info` et `tdeg` (~90 000 entrées) 3 Mo, graphe strict ~2 Mo : **~30 Mo**, la vue `road`
+moins, les deux l'une après l'autre. `TeamCheck` : trois listes en même temps, (953 844 + 2 × 1 124 326) × 8 o =
+26 Mo, plus `H` et les tables d'équipe : **~30 Mo**. Les deux en parallèle : **~60 Mo**, contre 748 Mo de pic et 924 Mo
+réservés. Temps [estimé] : le filtre chaud mesuré sur l'incidence de la zone coûte 0,6 à 0,8 s par vue ; sans fenêtre
+ni CSR à bâtir, D devrait passer sous 2,5 s (`TeamData`) et ~1 s (`TeamCheck`, un balayage au lieu de trois), contre
+3,75 et 2,23 s.
+
+**Estimation réservée.** `TeamData::plan_build` et `TeamCheck::plan` calculent `H` (quelques dizaines de ms, gardé dans
+le plan pour la construction) et réservent `|H|` × une constante par case chaude, réglée sur les neuf équipes de la France
+au pic mesuré **+25 %** (ordre de grandeur attendu : ~130 o par case pour `TeamData`, ~130 pour `TeamCheck`). Les constantes
+`BUILD_BYTES_PER_CHAIN`, `BUILD_BYTES_PER_CELL_EDGE` et `BUILD_BYTES_PER_OVERLAY_EDGE` disparaissent.
+
+**Pourquoi pas des paquets de tuiles voisines** (la parade du §16) : un paquet doit relire un anneau de tuiles autour
+de lui (la règle des trous franchit les bords), soit 1,5 à 2,3 fois la lecture d'aujourd'hui selon la taille du paquet,
+et sa mémoire reste proportionnelle à la **surface** du paquet (une tuile z11 fait ~150 km²). Les cases chaudes
+découpent à 0,002° (~200 m) : la mémoire suit la **longueur** du réseau d'équipe, et la lecture n'augmente pas. Une
+équipe qui roulerait dans toute la France reste bornée par son propre réseau (seul le temps de lecture croît avec la
+zone, ~3 à 4 s pour toute la France [estimé]).
+
+**Pas de sérialisation des constructions ni de `malloc_trim`** : avec ~60 Mo par construction, deux constructions
+simultanées tiennent sans file dédiée ; pour l'allocateur, voir §20.8.
+
+### 20.3 Preuve d'identité
+
+On compare la construction creuse à celle d'aujourd'hui (zone fenêtrée, `ZoneView`, Tarjan sur la fenêtre), elle-même
+égale au moteur à plat (§7.1, tests existants).
+
+1. **Toute lecture de l'incidence se fait en un nœud chaud.** `build_type` lit `inc_of(x)` en trois endroits : pour un
+   départ des trous (`tdeg == 1`), pour un nœud d'équipe (test des jonctions) et pour un nœud développé par un Dijkstra.
+   Les deux premiers sont des bouts d'arêtes d'équipe, donc d'arêtes de la surcouche à compte non nul : leur case est
+   dans `H` par construction (la boîte contient le point lui-même) et leur tuile est dans la zone (la zone contient les
+   tuiles des points de ces arêtes). Le troisième est vérifié par le garde-fou ; s'il échoue, il n'y a pas de résultat
+   creux, seulement une reprise ou une erreur.
+2. **En un nœud chaud, l'incidence creuse est celle de la zone.** `ZoneView.inc` = les `Inc { node: x, edge: e, … }`
+   pour `e` lien d'une chaîne de la zone et `x` bout de `e`. Si `x` est chaud, sa tuile est dans la zone, donc toute
+   chaîne qui passe par `x` touche cette tuile et appartient aux chaînes de la zone (§5.2, point 1) : la lecture en flux
+   les voit toutes, `e` entre dans `hot_alive` (un bout chaud), et l'entrée de `x` est poussée. Réciproquement, rien
+   d'autre n'est poussé. Même tri `(node, edge)` : `inc_of(x)` rend **la même tranche, dans le même ordre**, y compris
+   pour une arête `a == b` (deux entrées identiques, comme `ZoneView` ; le test du §14 point 3 dit qu'il n'y en a pas).
+3. **`alive(e)` est le même pour toute arête de la surcouche lue.** `build_type` ne demande `alive` que pour une arête
+   de la surcouche à compte non nul ; ses bouts sont chauds (point 1) ; si elle est un lien d'une chaîne de la zone, elle
+   est dans `hot_alive` ; sinon elle n'est dans aucune chaîne et n'y est pas.
+4. **Donc les drapeaux sont identiques.** Avec les mêmes réponses de `alive` et `inc_of`, `build_type` exécute la même
+   suite d'instructions : `info`, `max_n`, `z`, `outside_m` (sommes entières sur l'ordre de la surcouche, inchangé),
+   `tdeg`, `starts` (triés), les Dijkstra (tas `(distance, id global)`, départage inchangé) et `to_bridge`. `edges`,
+   trié par arête, et les statistiques (sommes entières puis une division) sont égaux bit pour bit.
+5. **Les chaînes strictes sont les mêmes.** Une chaîne stricte n'a que des liens d'équipe (bouts chauds, point 1) ou
+   comblés ; un lien comblé est une arête du chemin que `walk_back` remonte, du nœud d'équipe dépilé jusqu'au départ :
+   chacun de ses nœuds est soit ce nœud d'équipe (chaud, point 1), soit un nœud **développé** (son prédécesseur dans
+   `dist` l'a été pour l'atteindre ; chaud, garde-fou). Une chaîne stricte a donc tous ses bouts de liens chauds et figure dans
+   `strict_cand` ; le test « tous les liens drapeautés » sur `strict_cand` rend exactement les chaînes strictes de la
+   fenêtre de la zone (qui les contient toutes, §7.1).
+6. **Les composantes strictes sont les mêmes.** Le Tarjan d'aujourd'hui court sur tous les nœuds de la fenêtre, mais ne
+   suit que les arcs des chaînes strictes : un nœud sans chaîne stricte est une composante à lui seul et ne compte dans
+   aucune longueur. Les composantes fortement connexes sont une propriété du graphe, pas de l'ordre de parcours : le
+   graphe creux (mêmes arcs, mêmes sens) a la même partition des bouts de chaînes strictes. `strong_lengths` somme des
+   `u64` (indépendant de l'ordre), `chain_strong_len` compare deux composantes : `strict_len` est égal, trié par id global
+   comme aujourd'hui (l'ordre des ids locaux de la fenêtre est celui des ids globaux).
+7. **`TeamCheck`** : mêmes points 1 et 2 sur sa propre incidence (cellules de la zone et voisines, plus les arêtes
+   larges : une arête admise d'un nœud chaud est possédée par sa cellule ou une voisine, ou est large) ; même liste
+   triée et dédoublonnée restreinte aux nœuds chauds ; `adm_deg` n'est lu qu'aux nœuds d'équipe, `edges_at` qu'aux nœuds
+   développés : `bridged` est égal, ensemble pour ensemble.
+
+### 20.4 Les tests qui la gardent
+
+- **Forme canonique** (étape 0) : `TeamData::canonical_bytes()` (par type : `edges` en `(u32, u8, u8)` petit-boutiste,
+  `strict_len` en `(u32, u64)`, `team_edges`, puis `team_m`, `bridged_m`, `outside_m` par `f64::to_bits`) et
+  `TeamCheck::canonical_bytes()` (les trois ensembles `bridged`, triés). Les capacités n'en font pas partie.
+- **Référence gardée** : l'actuelle construction (fenêtres de la zone, `ZoneView`, Tarjan sur la fenêtre ; et, pour le
+  contrôleur, `incidence_of` complète) est **déplacée telle quelle** dans `team_reference.rs` et `TeamCheck::build_reference`,
+  compilés sous `cfg(test)` et sous une fonctionnalité `reference` que seul le banc active. Ce n'est pas le module
+  `legacy` écarté au §19 (point 1) : une centaine de lignes par crate, et aucune génération dupliquée.
+- **Test synthétique commité** (`crates/ord-loops/src/tests_team_sparse.rs`, et son pendant dans `ord-loops-check`) :
+  sur les grilles de 48 × 48 carrefours de `window_reference` à z11 et z16 et sur une grille irrégulière (longueurs tirées,
+  sens uniques, arêtes de longueur nulle, un bout de surcouche à 240 m d'un nœud hors réseau), 200 surcouches tirées
+  d'une graine fixe (équipes d'une rue, de deux zones disjointes, trous à cheval sur une frontière de tuile et sur une
+  frontière de case chaude, jonctions de 30 m, composante stricte qui sort de toute fenêtre de requête, chaussées à sens
+  unique roulées dans un seul sens) : `canonical_bytes` creux = référence = moteur à plat (`build_on(whole)`), pour
+  `TeamData` et `TeamCheck`. Plus : `hot_m` forcé à 1 m provoque l'échappement, la reprise à 1 000 m rend les mêmes
+  octets ; avec la reprise désactivée, l'erreur est levée (jamais un résultat faux). Plus : empreintes des 200 formes
+  canoniques comparées à une **fixture commitée** écrite à l'étape 0 avec le code d'avant
+  (`crates/ord-loops/tests/fixtures/team_reference.txt`).
+- **Fixtures existantes inchangées** : `window_reference.txt` (le mode strict lit `strict_len`, le mode équipe les
+  drapeaux) et les 744 tests.
+- **France, en local (données privées, hors dépôt)** : le banc gagne `--dump-teams <fichier>` (lettre, type, empreinte
+  xxh3 de la forme canonique, octets) dès l'étape 0, avant tout changement ; on relève les neuf équipes de la France et
+  les neuf de la région **avec le code d'avant**, puis avec le nouveau : empreintes égales, ligne à ligne. Et
+  `--self-check` construit chaque équipe des deux façons dans le même processus et compare les octets. Banc région
+  `--compare` : 969 requêtes, 0 différence ; rapports du contrôleur identiques à ceux de `e66503d`.
+
+### 20.5 Décision A : la réserve d'espaces de travail s'évince d'abord
+
+- La réserve passe **dans** `WindowManager` (`Inner.pool: Vec<Workspace>`, sous le même verrou que le cache) :
+  `take_workspace` et `give_workspace` deviennent des méthodes du gestionnaire ; `Ready.workspaces` disparaît. Plus de
+  `force_reserve` : la réserve est un poste à part, `pool_bytes`, compté dans `total()`.
+- Toute place manquante (fenêtre, agrégats, espace de travail d'une génération, construction d'équipe) se libère dans cet
+  ordre : **1. la réserve d'espaces de travail** (tout, du plus gros au plus petit : se réallouer coûte quelques ms),
+  **2. les fenêtres inactives** avec leurs agrégats (la moins récemment servie d'abord : 70 à 750 ms à reconstruire),
+  **3. rien d'autre** : on attend qu'une génération rende sa part, jusqu'à l'échéance, puis 503.
+- `give_workspace` garde un espace (≤ `workspace_keep_mb`, au plus `max_concurrent` en réserve) seulement si le budget a
+  la place **sans rien évincer** : la réserve ne chasse jamais une fenêtre.
+- Jauge `ord_generator_memory_bytes{kind=workspace}` : la réserve, comme aujourd'hui ; les espaces évincés sous pression
+  comptent dans `ord_generator_window_evictions_total{kind=workspace}`.
+
+Test (`windows.rs`) : budget `B`, réserve de `P` octets, réservation de construction `R` avec `R + P > B ≥ R` : accordée
+tout de suite, réserve vidée ; c'est la reproduction déterministe du constat A (neuf découvertes, puis la construction de
+D), en synthétique.
+
+### 20.6 Décisions B et C : les équipes résidentes ont leurs propres plafonds
+
+- **Aucune réservation n'évince une équipe.** `TeamEvictor`, `evict_team` et `settle` sur les équipes disparaissent de
+  `windows.rs` ; le gestionnaire n'appelle plus jamais le magasin (la contrainte d'ordre des verrous du §18 tombe).
+- **Les équipes restent comptées** dans le budget unique (`external`), mais bornées par le magasin lui-même :
+  `team_cache_entries` (16 → **64**) et un plafond en octets propre, `team_cache_mb` (nouveau, **96 Mo**). Après chaque
+  insertion, tant qu'un plafond est dépassé, le magasin retire la **moins récemment utilisée des entrées inactives**
+  (`Arc::strong_count == 1`) ; une entrée tenue n'est **jamais** retirée, le dépassement reste alors temporaire (au plus
+  `max_concurrent` + les constructions de fond en cours) et se résorbe à l'insertion suivante. Compteur
+  `ord_generator_team_evictions_total{reason = count|bytes}` (`budget` disparaît).
+- **Les octets d'une équipe sont rendus à la chute de son entrée**, quelle que soit sa sortie (remplacement par un
+  nouveau dépôt, `forget` d'un fichier illisible ou absent, plafonds, purge) : `Entry` porte un ticket
+  (`TeamTicket { bytes, serial, memory: Arc<dyn TeamMemory> }`) dont le `Drop` appelle `release_team(bytes, serial)`, qui
+  rend les octets **et** appelle `WindowCache::drop_team(serial)`. Une entrée remplacée mais encore tenue par une
+  génération reste comptée jusqu'à la fin de celle-ci : le compte est exact. Le magasin sort les `Arc` retirés de son
+  verrou avant de les lâcher (le ticket prend le verrou du gestionnaire).
+- `hold_team` compte la nouvelle entrée et fait de la place en évinçant réserve puis fenêtres (§20.5) ; s'il ne peut
+  pas, le total dépasse le budget un moment (l'entrée existe déjà) et les réservations suivantes attendent.
+- Dimensionnement : 18 équipes (deux environnements de 9) pèsent 51 Mo [mesuré, §9.2] ; la plus grosse, A, 16 Mo ;
+  13 équipes en production aujourd'hui. 64 entrées et 96 Mo laissent deux environnements doubler sans éviction ; au-delà,
+  l'éviction se fait par les plafonds, jamais par une construction transitoire.
+
+Tests (`store.rs`) : plafond en nombre et en octets, LRU des seules inactives ; une entrée tenue survit aux deux plafonds
+puis part à l'insertion suivante une fois rendue ; remplacement, `forget` et éviction rendent les octets et retirent les
+agrégats de toutes les fenêtres (compte à 0, `WindowCache::team` vide) ; une construction transitoire qui manque de
+place attend puis 503 **sans** toucher aux équipes.
+
+### 20.7 Ce qui s'évince, par qui, dans quel ordre
+
+| Poste | Compté | S'évince | Par |
+|---|---|---|---|
+| réserve d'espaces de travail | oui | en premier, en entier | toute réservation qui manque de place |
+| fenêtres et agrégats inactifs | oui | en second, la moins récemment servie d'abord | toute réservation qui manque de place |
+| fenêtre, agrégats, espace de travail **tenus** par une génération | oui | jamais : rendus à la fin de la génération | — |
+| construction d'équipe en cours (réservation, ~60 Mo au plus) | oui | jamais : rendue à la fin | — |
+| équipes résidentes inactives | oui, ≤ `team_cache_mb` (+ entrées tenues) | la moins récemment utilisée | les seuls plafonds du magasin (nombre, octets) |
+| équipes tenues | oui | jamais | — |
+
+### 20.8 Mémoire retenue par l'allocateur
+
+Une construction seule rend tout (§20.1, +0 Mo à la fin) ; les ~200 Mo retenus du §9 viennent des **grands volumes
+transitoires** (fenêtres de zone, `ZoneView`, incidences du contrôleur : 0,4 à 0,9 Go par construction) entrelacés avec
+de petits blocs durables, que glibc ne peut pas rendre au milieu du tas. La construction creuse divise ce volume par plus
+de dix ; c'est la parade retenue. `malloc_trim` n'est **pas** retenu : le dépôt interdit `unsafe` (`unsafe_code =
+"forbid"` dans le `Cargo.toml` de l'espace de travail) et l'appel ne se fait qu'en FFI ; le permettre (une petite caisse
+qui n'hérite pas de cette règle, ou la caisse `libc`) est une décision du propriétaire (§17). Si le relevé de l'étape 6
+montre encore plus de 100 Mo d'anonyme au-dessus du compté, le premier essai sera sans code :
+`MALLOC_MMAP_THRESHOLD_=262144` dans l'image.
+
+### 20.9 Budget par défaut et pic attendu
+
+| Clé | Avant | Après | Pourquoi |
+|---|---|---|---|
+| `MEMORY_BUDGET_MB` | 1 000 | **800** | plus aucune construction ne réserve plus de ~60 Mo ; le plus gros poste redevient la génération |
+| `TEAM_CACHE_ENTRIES` | 16 | **64** | deux environnements, de la marge (§20.6) |
+| `TEAM_CACHE_MB` | — | **96** | plafond propre des équipes, dans le budget ; refusé au démarrage s'il n'est pas sous `MEMORY_BUDGET_MB` / 2 |
+| `WORKSPACE_KEEP_MB` | 160 | 160 | inchangé : la réserve ne bloque plus rien |
+
+Le plancher du budget : équipes (96) + deux générations simultanées au pire du contrat dans deux régions denses
+différentes (boucle de 200 km en `gravel` autour de Paris : 1,29 M de chaînes × (84 o de fenêtre + 24 o d'agrégats + 150 o
+d'espace de travail) = 333 Mo, deux fois 666) + une construction d'équipe (~40 à 60 Mo) ≈ **800 Mo**. Sous ce
+plancher, ce cas extrême attend que l'une des deux générations finisse (le 503 de charge accepté au §17, point 4).
+
+**Pic attendu** [estimé, à relever à l'étape 6] : le cache de fenêtres se remplit jusqu'au budget, donc le compté du
+générateur plafonne à 800 Mo (contre 1 000 et des réservations de construction jusqu'à 924) ; anonyme du générateur
+~850 Mo avec la rétention ; anonyme du conteneur ~1,05 à 1,1 Go au pire de la séance du §9.2 (contre 1 309 Mo), soit
+~1,6 Go avec les 512 Mo de l'altitude et ~0,5 Go de pages de fichier. À 4 clients : plus aucune reconstruction d'équipe
+après la première de chacune (aucune éviction par une réservation), plus aucun 503 de budget hors du cas extrême
+ci-dessus, et aucun 504 dû à une reconstruction en cascade.
+
+### 20.10 Étapes de code, dans l'ordre
+
+Chaque étape : `cargo fmt`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace
+--locked` verts, un commit. Aucune dépendance nouvelle.
+
+0. **Référence d'équipe figée** : `canonical_bytes()` des deux types, `--dump-teams` du banc, fixture synthétique
+   `team_reference.txt` (200 surcouches, empreintes) écrite avec le code d'aujourd'hui ; relevés locaux France et région
+   (neuf équipes chacun) avec ce même binaire, gardés hors dépôt. *Vérif. : la fixture se relit ; aucun code de
+   construction touché.*
+1. **Références déplacées** : construction actuelle de `TeamData` dans `team_reference.rs`, `TeamCheck::build_reference`,
+   fonctionnalité `reference`. *Vérif. : référence = fixture.*
+2. **`TeamData` creux** (§20.2) : cases chaudes, lecture en flux, incidence chaude, garde-fou et reprise, graphe strict
+   creux, estimation par case chaude. *Vérif. : test synthétique creux = référence = à plat ; échappement forcé ;
+   `window_reference.txt` inchangée ; banc France `--self-check` et `--dump-teams` : neuf équipes identiques à l'étape 0 ;
+   pic et temps par équipe (une par processus) consignés.*
+3. **`TeamCheck` creux**, un seul balayage pour les trois types. *Vérif. : idem côté contrôleur ; banc région
+   `--compare` 969 / 0 et rapports du contrôleur identiques à `e66503d`.*
+4. **Réserve d'espaces de travail dans le gestionnaire**, évincée d'abord (§20.5). *Vérif. : test du constat A ; tests
+   existants de `windows.rs` adaptés.*
+5. **Équipes hors des réservations** : retrait de `TeamEvictor`, plafonds du magasin, ticket à la chute, configuration
+   (`team_cache_entries` 64, `team_cache_mb` 96, budget 800), métriques, note du lot 3a et `README`. *Vérif. : tests du
+   §20.6 ; tests d'API inchangés ; contrat OpenAPI identique octet pour octet.*
+6. **Relevés** dans `ord-loops-lot6-mesures.md` §10, image `osm-route-details:lot6` reconstruite : la reproduction du
+   constat A (dépôt de D seul, redémarrage, neuf découvertes, deux générations de D : 200 attendus) ; la séance du §9.2
+   (18 dépôts, premières générations, 54 réseaux et 60 villes en série, 114 requêtes à 4 clients deux fois) à 2 Gio puis à
+   1,5 Gio, dépôts et série de villes compris cette fois. Critères : 0 × 503 et 0 × 504 en série et à 4 clients,
+   reconstructions d'équipe = nombre d'équipes, 0 éviction d'équipe, `anon` du conteneur sous 1,15 Go, 0 OOM ; banc région
+   `--compare` 969 / 0.
+
+### 20.11 Ce qui reste ouvert
+
+- L'altitude réelle dans le conteneur n'est toujours pas éprouvée (pas de données locales).
+- Les constantes d'estimation par case chaude ne sont réglées que sur neuf équipes ; une équipe très urbaine (cases
+  denses) peut dépasser l'estimation de quelques Mo : la correction après construction (comptage des capacités réelles)
+  reste la règle.
+- `malloc_trim` et le seuil `mmap` (§20.8), et le budget de 800 Mo dans un conteneur partagé (§17, point 1) restent des
+  décisions du propriétaire.
