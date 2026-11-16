@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use ord_loops::{CacheStats, Engine, TeamData, Window, WindowCache, WindowPlan, WindowTeam};
 
-/// Octets d'espace de travail par chaîne de fenêtre (trois arbres, `ban` : 118 o, §9) : la réservation d'une génération.
-pub const WORKSPACE_BYTES_PER_CHAIN: usize = 118;
+/// Octets d'espace de travail par chaîne de fenêtre : la réservation d'une génération. La note du lot 6 comptait 118 o
+/// (§9) ; la sonde `window_probe` relève 142 à 146 o (les listes `settled` et `reached` grossissent), d'où 150.
+pub const WORKSPACE_BYTES_PER_CHAIN: usize = 150;
 
 /// Pourquoi une fenêtre n'est pas rendue.
 #[derive(Debug, PartialEq, Eq)]
