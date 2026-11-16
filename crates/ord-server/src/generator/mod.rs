@@ -9,13 +9,13 @@
 //! seule l'étiquette `ns8` (8 premiers caractères du nom d'espace, non secrets) relie les lignes d'un environnement.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use ord_graph::format::GraphIdentity;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::util::Poly;
-use ord_loops::{Engine, Params, Workspace};
+use ord_loops::{Engine, Params};
 use serde::Serialize;
 use tokio::sync::Semaphore;
 use utoipa::ToSchema;
@@ -191,7 +191,6 @@ pub struct Ready {
     gen_slots: Arc<Semaphore>,
     gen_waiting: AtomicUsize,
     deposit_slots: Arc<Semaphore>,
-    workspaces: Mutex<Vec<Workspace>>,
     hooks: Arc<TestHooks>,
     /// Le service s'arrête : les attentes de fond (construction des données d'une équipe après un dépôt) s'interrompent.
     stopping: AtomicBool,
@@ -507,7 +506,6 @@ impl Generator {
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),
                 gen_waiting: AtomicUsize::new(0),
                 deposit_slots: Arc::new(Semaphore::new(cfg.deposit.max_concurrent)),
-                workspaces: Mutex::new(Vec::new()),
                 hooks,
                 stopping: AtomicBool::new(false),
                 graph_id: gid,

@@ -146,26 +146,13 @@ fn r1(x: f64) -> f64 {
 
 impl Ready {
     fn take_workspace(&self) -> Workspace {
-        let mut pool = self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let ws = pool.pop().unwrap_or_default();
-        let total: usize = pool.iter().map(Workspace::bytes).sum();
-        drop(pool);
-        self.windows.pool_sub(ws.bytes(), total);
-        ws
+        self.windows.take_workspace()
     }
 
-    /// Rend un espace de travail à la réserve ; un trop gros est libéré (§9), et ceux gardés comptent dans le budget.
-    fn give_workspace(&self, mut ws: Workspace) {
-        ws.shrink_to(self.cfg.workspace_keep_mb * 1_000_000);
-        let mut pool = self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let bytes = ws.bytes();
-        let total: usize = pool.iter().map(Workspace::bytes).sum::<usize>() + bytes;
-        // Gardé seulement si le budget a la place : la réserve ne le dépasse jamais.
-        if pool.len() < self.cfg.max_concurrent && self.windows.pool_add(bytes, total) {
-            pool.push(ws);
-        } else {
-            metrics::counter!("ord_generator_window_evictions_total", "kind" => "workspace").increment(1);
-        }
+    /// Rend un espace de travail à la réserve du gestionnaire : un trop gros est libéré (§9), ceux gardés comptent dans
+    /// le budget et s'évincent en premier.
+    fn give_workspace(&self, ws: Workspace) {
+        self.windows.give_workspace(ws, self.cfg.workspace_keep_mb * 1_000_000, self.cfg.max_concurrent);
     }
 
     /// Le moteur dans une fenêtre du cache : une fois, puis, si la recherche touche le bord de la fenêtre (le

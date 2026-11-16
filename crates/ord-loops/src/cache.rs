@@ -96,6 +96,11 @@ impl WindowCache {
         )
     }
 
+    /// Vrai si `bytes` de plus tiennent dans le budget, **sans rien évincer**.
+    pub fn fits(&self, bytes: usize) -> bool {
+        self.total().saturating_add(bytes) <= self.budget
+    }
+
     /// Réserve `bytes` pour l'appelant (espace de travail pris, construction en cours) : vrai si le budget le
     /// permet, après éviction des fenêtres que personne ne tient. Rien n'est réservé sinon.
     pub fn reserve(&mut self, bytes: usize) -> bool {

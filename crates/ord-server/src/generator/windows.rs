@@ -11,7 +11,7 @@
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
-use ord_loops::{CacheStats, Engine, TeamData, Window, WindowCache, WindowPlan, WindowTeam};
+use ord_loops::{CacheStats, Engine, TeamData, Window, WindowCache, WindowPlan, WindowTeam, Workspace};
 
 /// Octets d'espace de travail par chaîne de fenêtre : la réservation d'une génération. La note du lot 6 comptait 118 o
 /// (§9) ; la sonde `window_probe` relève 142 à 146 o (les listes `settled` et `reached` grossissent), d'où 150.
@@ -40,6 +40,15 @@ struct Inner {
     /// Constructions en cours : (vue, tuiles de la classe).
     building: Vec<(usize, Vec<u32>)>,
     published: CacheStats,
+    /// Réserve d'espaces de travail (§9) : leurs octets comptent dans le budget (réservés) et s'évincent **en
+    /// premier**, avant toute fenêtre (finition 2, §20.5).
+    pool: Vec<Workspace>,
+}
+
+impl Inner {
+    fn pool_bytes(&self) -> usize {
+        self.pool.iter().map(Workspace::bytes).sum()
+    }
 }
 
 /// Ce qu'une génération tient : la fenêtre, les agrégats de l'équipe, et la réservation de son espace de travail.
@@ -101,6 +110,7 @@ impl WindowManager {
                 cache: WindowCache::new(budget_bytes),
                 building: Vec::new(),
                 published: CacheStats::default(),
+                pool: Vec::new(),
             }),
             cv: Condvar::new(),
             built: std::sync::atomic::AtomicU64::new(0),
@@ -126,10 +136,23 @@ impl WindowManager {
         true
     }
 
-    /// Réserve `bytes` : les fenêtres que personne ne tient partent d'abord, puis les équipes résidentes que personne
-    /// ne tient, de la moins récemment utilisée à la plus récente.
+    /// Libère la réserve d'espaces de travail, du plus gros au plus petit : se réallouer coûte quelques ms.
+    fn evict_pool(g: &mut Inner) {
+        g.pool.sort_by_key(|w| std::cmp::Reverse(w.bytes()));
+        let n = g.pool.len() as u64;
+        let bytes = g.pool_bytes();
+        g.pool.clear();
+        g.cache.release(bytes);
+        metrics::counter!("ord_generator_window_evictions_total", "kind" => "workspace").increment(n);
+    }
+
+    /// Réserve `bytes`, en libérant dans cet ordre : **1. la réserve d'espaces de travail** (en entier), **2. les
+    /// fenêtres que personne ne tient** (la moins récemment servie d'abord) ; rien d'autre n'est évincé (§20.5).
     fn reserve_in(&self, g: &mut Inner, bytes: usize) -> bool {
         loop {
+            if !g.cache.fits(bytes) && !g.pool.is_empty() {
+                Self::evict_pool(g);
+            }
             if g.cache.reserve(bytes) {
                 return true;
             }
@@ -165,14 +188,12 @@ impl WindowManager {
         lock(&self.inner).cache.total()
     }
 
-    fn publish(&self, g: &mut Inner, workspace_pool: Option<usize>) {
+    fn publish(&self, g: &mut Inner) {
         let (w, t) = g.cache.split_bytes();
         metrics::gauge!("ord_generator_memory_bytes", "kind" => "team_cache").set(g.cache.external() as f64);
         metrics::gauge!("ord_generator_memory_bytes", "kind" => "window").set(w as f64);
         metrics::gauge!("ord_generator_memory_bytes", "kind" => "window_team").set(t as f64);
-        if let Some(p) = workspace_pool {
-            metrics::gauge!("ord_generator_memory_bytes", "kind" => "workspace").set(p as f64);
-        }
+        metrics::gauge!("ord_generator_memory_bytes", "kind" => "workspace").set(g.pool_bytes() as f64);
         let s = g.cache.stats();
         let d = |a: u64, b: u64| a.saturating_sub(b);
         metrics::counter!("ord_generator_window_evictions_total", "kind" => "window")
@@ -252,7 +273,7 @@ impl WindowManager {
             g = g2;
             break w;
         };
-        self.publish(&mut g, None);
+        self.publish(&mut g);
         drop(g);
         metrics::counter!("ord_generator_window_requests_total", "view" => view, "outcome" => outcome)
             .increment(1);
@@ -281,7 +302,7 @@ impl WindowManager {
                         } else {
                             Arc::new(wt)
                         };
-                        self.publish(&mut g, None);
+                        self.publish(&mut g);
                         drop(g);
                         self.cv.notify_all();
                         r
@@ -336,14 +357,14 @@ impl WindowManager {
         let mut g = lock(&self.inner);
         g.cache.hold_external(bytes);
         self.settle(&mut g);
-        self.publish(&mut g, None);
+        self.publish(&mut g);
     }
 
     /// Rend les octets d'une équipe qui n'est plus résidente (remplacée, supprimée, plafond de nombre).
     pub fn release_team(&self, bytes: usize) {
         let mut g = lock(&self.inner);
         g.cache.release_external(bytes);
-        self.publish(&mut g, None);
+        self.publish(&mut g);
         drop(g);
         self.cv.notify_all();
     }
@@ -354,27 +375,50 @@ impl WindowManager {
         g.cache.release(held.reserved);
         drop(held.win);
         drop(held.wt);
-        self.publish(&mut g, None);
+        self.publish(&mut g);
         drop(g);
         self.cv.notify_all();
     }
 
-    /// Un espace de travail entre en réserve (`bytes` octets) : il compte dans le budget, qui peut le refuser
-    /// (faux : l'appelant le libère).
-    pub fn pool_add(&self, bytes: usize, pool_total: usize) -> bool {
+    /// Un espace de travail de la réserve (un neuf si elle est vide) ; ses octets sortent du compte.
+    pub fn take_workspace(&self) -> Workspace {
         let mut g = lock(&self.inner);
-        let kept = g.cache.reserve(bytes);
-        self.publish(&mut g, Some(if kept { pool_total } else { pool_total - bytes }));
-        kept
-    }
-
-    /// Des espaces de travail sortent de la réserve.
-    pub fn pool_sub(&self, bytes: usize, pool_total: usize) {
-        let mut g = lock(&self.inner);
-        g.cache.release(bytes);
-        self.publish(&mut g, Some(pool_total));
+        let Some(ws) = g.pool.pop() else { return Workspace::default() };
+        g.cache.release(ws.bytes());
+        self.publish(&mut g);
         drop(g);
         self.cv.notify_all();
+        ws
+    }
+
+    /// Rend un espace de travail à la réserve ; un trop gros (plus de `keep_bytes`) est libéré (§9). Il n'est gardé
+    /// que si le budget a la place **sans rien évincer**, et au plus `max_pool` à la fois : la réserve ne chasse
+    /// jamais une fenêtre (§20.5).
+    pub fn give_workspace(&self, mut ws: Workspace, keep_bytes: usize, max_pool: usize) {
+        ws.shrink_to(keep_bytes);
+        let bytes = ws.bytes();
+        let mut g = lock(&self.inner);
+        if bytes == 0 {
+            // Rien à réutiliser (libéré par `shrink_to`, ou jamais servi) : pas de place prise dans la réserve.
+        } else if g.pool.len() < max_pool && g.cache.fits(bytes) {
+            g.cache.force_reserve(bytes);
+            g.pool.push(ws);
+        } else {
+            metrics::counter!("ord_generator_window_evictions_total", "kind" => "workspace").increment(1);
+        }
+        self.publish(&mut g);
+    }
+
+    /// Octets de la réserve d'espaces de travail.
+    #[cfg(test)]
+    pub fn pool_bytes(&self) -> usize {
+        lock(&self.inner).pool_bytes()
+    }
+
+    /// Fenêtres en cache.
+    #[cfg(test)]
+    pub fn cached_windows(&self) -> usize {
+        lock(&self.inner).cache.len()
     }
 }
 
@@ -533,6 +577,91 @@ mod tests {
         let g = m.reserve_build(900, soon(1_000), &|| false).unwrap();
         assert!(matches!(m.reserve_build(400, soon(5_000), &|| true), Err(AcquireError::Stopped)));
         drop(g);
+    }
+
+    /// Des générations qui laissent `n` espaces de travail non vides en réserve et leur fenêtre en cache.
+    fn warm(m: &WindowManager, e: &Engine<Vec<u8>>, plan: &WindowPlan, r: &Request, n: usize) {
+        let held = m.acquire(e, plan, None, soon(5_000), &mut || false).unwrap();
+        let mut spaces: Vec<Workspace> = (0..n).map(|_| m.take_workspace()).collect();
+        for ws in &mut spaces {
+            ord_loops::generate_in(e, &held.win, None, r, ws, &mut || false).unwrap();
+        }
+        m.release(held);
+        for ws in spaces {
+            m.give_workspace(ws, usize::MAX, n);
+        }
+    }
+
+    /// Le constat A, en synthétique : la réserve d'espaces de travail est comptée mais ne se rendait jamais sous
+    /// pression ; une construction de `R` octets avec `R + P > B >= R + (fenêtres)` attendait pour toujours.
+    #[test]
+    fn a_full_workspace_pool_is_evicted_first_so_a_big_team_build_is_granted_at_once() {
+        let e = engine();
+        let (a, ra) = (e.plan(&request(500.0, 500.0), 0.0), request(500.0, 500.0));
+        let probe = WindowManager::new(usize::MAX / 4);
+        warm(&probe, &e, &a, &ra, 6);
+        let (pool, windows) = (probe.pool_bytes(), probe.counted() - probe.pool_bytes());
+        assert!(pool > 0 && windows > 0, "{pool} {windows}");
+
+        let slack = 1_000;
+        let budget = windows + pool + slack;
+        // R + P > B (la réserve gêne), R + fenêtres <= B (les fenêtres ne gênent pas).
+        let r = slack + pool / 2;
+        assert!(r + pool > budget && r + windows <= budget);
+        let m = WindowManager::new(budget);
+        warm(&m, &e, &a, &ra, 6);
+        assert_eq!(m.pool_bytes(), pool);
+        let t = Instant::now();
+        let g = m.reserve_build(r, soon(5_000), &|| false).expect("accordée tout de suite");
+        assert!(t.elapsed() < Duration::from_millis(100), "elle a attendu {:?}", t.elapsed());
+        assert_eq!(m.pool_bytes(), 0, "la réserve est vidée");
+        assert_eq!(m.cached_windows(), 1, "la fenêtre est restée : la réserve part avant les fenêtres");
+        assert_eq!(m.counted(), windows + r);
+        drop(g);
+
+        // Plus gros : la réserve puis la fenêtre inactive partent, rien d'autre ne gêne.
+        let m = WindowManager::new(budget);
+        warm(&m, &e, &a, &ra, 6);
+        let g = m.reserve_build(budget - 10, soon(5_000), &|| false).expect("accordée tout de suite");
+        assert_eq!((m.pool_bytes(), m.cached_windows()), (0, 0));
+        drop(g);
+    }
+
+    #[test]
+    fn the_pool_keeps_a_workspace_only_when_the_budget_has_room_without_evicting_anything() {
+        let e = engine();
+        let (a, ra) = (e.plan(&request(500.0, 500.0), 0.0), request(500.0, 500.0));
+        // Le budget exact d'une génération en cours : fenêtre et réservation de son espace de travail.
+        let probe = WindowManager::new(usize::MAX / 4);
+        let h = probe.acquire(&e, &a, None, soon(5_000), &mut || false).unwrap();
+        let one = probe.counted();
+        probe.release(h);
+        let m = WindowManager::new(one);
+        let held = m.acquire(&e, &a, None, soon(5_000), &mut || false).unwrap();
+        let mut ws = m.take_workspace();
+        ord_loops::generate_in(&e, &held.win, None, &ra, &mut ws, &mut || false).unwrap();
+        m.give_workspace(ws, usize::MAX, 4);
+        assert_eq!(m.pool_bytes(), 0, "sans place, l'espace est libéré");
+        m.release(held);
+        assert_eq!(m.cached_windows(), 1, "et la fenêtre n'a pas été évincée pour lui");
+        // Trop gros pour la réserve (§9) : libéré aussi.
+        let m = WindowManager::new(usize::MAX / 4);
+        let held = m.acquire(&e, &a, None, soon(5_000), &mut || false).unwrap();
+        let mut ws = m.take_workspace();
+        ord_loops::generate_in(&e, &held.win, None, &ra, &mut ws, &mut || false).unwrap();
+        m.give_workspace(ws, 1, 4);
+        assert_eq!(m.pool_bytes(), 0);
+        // Au plus `max_pool` en réserve.
+        let (mut ws1, mut ws2) = (Workspace::default(), Workspace::default());
+        ord_loops::generate_in(&e, &held.win, None, &ra, &mut ws1, &mut || false).unwrap();
+        ord_loops::generate_in(&e, &held.win, None, &ra, &mut ws2, &mut || false).unwrap();
+        m.release(held);
+        let sizes = (ws1.bytes(), ws2.bytes());
+        m.give_workspace(ws1, usize::MAX, 1);
+        let one = m.pool_bytes();
+        assert!(one > 0, "{sizes:?}");
+        m.give_workspace(ws2, usize::MAX, 1);
+        assert_eq!(m.pool_bytes(), one, "une seule en réserve");
     }
 
     /// Des équipes résidentes : `(octets, numéro)`, de la plus ancienne à la plus récente ; une seule tenue n'est pas
