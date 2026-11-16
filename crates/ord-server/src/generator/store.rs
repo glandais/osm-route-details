@@ -117,6 +117,17 @@ fn file_id(md: &std::fs::Metadata) -> FileId {
     FileId { ino, mtime_ns, len: md.len() }
 }
 
+/// Pourquoi une équipe n'est pas rendue : pas prête, ou plus de place dans le budget de mémoire pour la construire.
+#[derive(Debug)]
+pub enum ReadyError {
+    State(State),
+    Busy,
+}
+
+/// Réserve la mémoire transitoire d'une construction d'équipe (`None` : pas de place à l'échéance) ; la garde
+/// rendue libère la réservation à sa chute.
+pub type Reserve<'a> = &'a dyn Fn(usize) -> Option<Box<dyn Send + 'a>>;
+
 /// Une équipe prête : surcouche et données du moteur.
 pub struct Entry {
     id: FileId,
@@ -323,7 +334,13 @@ impl Store {
 
     /// L'équipe prête pour une génération : depuis le cache si le fichier n'a pas changé, sinon relue puis `TeamData`
     /// construit. `Err(State)` quand elle n'est pas prête (absente ou périmée).
-    pub fn ready(&self, c: &Credentials, engine: &GenEngine, gi: &GraphIndex) -> Result<Arc<Entry>, State> {
+    pub fn ready(
+        &self,
+        c: &Credentials,
+        engine: &GenEngine,
+        gi: &GraphIndex,
+        reserve: Reserve<'_>,
+    ) -> Result<Arc<Entry>, ReadyError> {
         let key = (c.ns.clone(), c.team.clone());
         if let Some(entry) = self.cached(&key, &self.file_path(c)) {
             metrics::counter!("ord_overlay_cache_hits_total").increment(1);
@@ -332,7 +349,7 @@ impl Store {
         // Une seule construction par équipe : une seconde demande attend la première et relit le cache.
         let build_lock = Arc::clone(lock(&self.builds).entry(key.clone()).or_default());
         let _building = lock(&build_lock);
-        let result = self.ready_build(c, engine, gi, &key);
+        let result = self.ready_build(c, engine, gi, reserve, &key);
         drop(_building);
         let mut builds = lock(&self.builds);
         // Plus personne n'attend (le verrou n'est tenu que par nous et `builds`) : l'entrée de la table s'efface.
@@ -362,8 +379,9 @@ impl Store {
         c: &Credentials,
         engine: &GenEngine,
         gi: &GraphIndex,
+        reserve: Reserve<'_>,
         key: &CacheKey,
-    ) -> Result<Arc<Entry>, State> {
+    ) -> Result<Arc<Entry>, ReadyError> {
         let key = key.clone();
         if let Some(entry) = self.cached(&key, &self.file_path(c)) {
             // Construite pendant que nous attendions.
@@ -373,16 +391,21 @@ impl Store {
         metrics::counter!("ord_overlay_cache_misses_total").increment(1);
         let Some((id, meta, overlay)) = self.read_current(c) else {
             lock(&self.cache).retain(|(k, _)| *k != key);
-            return Err(match self.stale_elsewhere(c) {
+            return Err(ReadyError::State(match self.stale_elsewhere(c) {
                 Some(_) => State::Stale(StaleReason::Graph),
                 None => State::Absent,
-            });
+            }));
         };
         if meta.matcher_hash != self.matcher_hash_hex() {
-            return Err(State::Stale(StaleReason::Matcher));
+            return Err(ReadyError::State(State::Stale(StaleReason::Matcher)));
         }
         self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
-        let team = TeamData::build(engine, &overlay).map_err(|_| State::Stale(StaleReason::Graph))?;
+        let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
+        let plan = TeamData::plan_build(engine, &overlay).map_err(|_| stale())?;
+        // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe) : sa place est réservée
+        // dans le budget du générateur, ou la demande attend, puis 503.
+        let _guard = reserve(plan.estimated_bytes).ok_or(ReadyError::Busy)?;
+        let team = TeamData::build_planned(engine, &overlay, &plan).map_err(|_| stale())?;
         let check = TeamCheck::build(engine.base(), gi, &overlay, &CheckConfig::default());
         let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
         let entry = Arc::new(Entry { id, serial, meta, overlay, team, check });

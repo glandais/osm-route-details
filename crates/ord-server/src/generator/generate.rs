@@ -18,7 +18,7 @@ use ord_loops_check::{Checker, Config};
 use super::crypto::Credentials;
 use super::cursor::Applied;
 use super::routes::{CoverageV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1};
-use super::store::{Entry, StaleReason, State};
+use super::store::{Entry, ReadyError, StaleReason, State};
 use super::windows::AcquireError;
 use super::Ready;
 use crate::problem::{
@@ -333,15 +333,21 @@ impl Ready {
     ) -> Result<Computed, Problem> {
         let need_team = input.applied.mode != Mode::Discovery;
         let entry: Option<Arc<Entry>> = match creds {
-            Some(c) => match self.store.ready(c, &self.engine, &self.graph_index) {
+            Some(c) => match self.store.ready(c, &self.engine, &self.graph_index, &|bytes| {
+                self.windows
+                    .reserve_build(bytes, deadline, &|| cancel.load(Ordering::Relaxed))
+                    .ok()
+                    .map(|g| Box::new(g) as Box<dyn Send + '_>)
+            }) {
                 Ok(e) => Some(e),
-                Err(state) if need_team => {
+                Err(ReadyError::Busy) => return Err(overloaded()),
+                Err(ReadyError::State(state)) if need_team => {
                     return Err(overlay_required(match state {
                         State::Stale(StaleReason::Graph | StaleReason::Matcher) => OverlayProblemState::Stale,
                         State::Absent | State::Ready => OverlayProblemState::Absent,
                     }));
                 }
-                Err(_) => None,
+                Err(ReadyError::State(_)) => None,
             },
             None if need_team => return Err(overlay_required(OverlayProblemState::Absent)),
             None => None,

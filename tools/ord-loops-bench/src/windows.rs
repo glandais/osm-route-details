@@ -165,3 +165,58 @@ pub fn quantiles(mut v: Vec<f64>) -> Option<(f64, f64, f64)> {
     let at = |q: f64| v[(((v.len() - 1) as f64) * q).round() as usize];
     Some((at(0.5), at(0.9), at(1.0)))
 }
+
+/// Échantillonne `RssAnon` du processus toutes les 25 ms : le pic de mémoire **anonyme** (le tas), que `VmHWM` mêle
+/// aux pages de fichier (récupérables) ; relevé aussi par phase (`mark`).
+pub struct AnonSampler {
+    max_kb: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+fn rss_anon_kb() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("RssAnon:"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse().ok())
+        })
+        .unwrap_or(0)
+}
+
+impl AnonSampler {
+    pub fn start() -> Self {
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        let max_kb = std::sync::Arc::new(AtomicU64::new(0));
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let (m, st) = (std::sync::Arc::clone(&max_kb), std::sync::Arc::clone(&stop));
+        let handle = std::thread::spawn(move || {
+            while !st.load(Ordering::Relaxed) {
+                m.fetch_max(rss_anon_kb(), Ordering::Relaxed);
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        });
+        Self { max_kb, stop, handle: Some(handle) }
+    }
+
+    /// Pic observé depuis le départ (ou depuis la dernière remise à zéro), en Mo.
+    pub fn max_mb(&self) -> f64 {
+        self.max_kb.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1000.0
+    }
+
+    /// Remet le pic à la valeur courante et rend l'ancien (relevé par phase), en Mo.
+    pub fn take_max_mb(&self) -> f64 {
+        let old = self.max_kb.swap(rss_anon_kb(), std::sync::atomic::Ordering::Relaxed);
+        old as f64 / 1000.0
+    }
+}
+
+impl Drop for AnonSampler {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
+}

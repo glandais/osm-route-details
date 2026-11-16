@@ -43,7 +43,7 @@ pub use generate::{
 pub use geo::LatLon;
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
-pub use team::{TeamCtx, TeamData, TeamStats, WindowTeam};
+pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
 pub use verify::{check_route, check_route_in, Check, Violation};
 pub use window::{tiles_cover, tiles_union, Window, WindowPlan};
 

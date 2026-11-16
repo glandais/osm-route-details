@@ -224,6 +224,12 @@ impl<B: AsRef<[u8]>> Engine<B> {
     /// par chaîne mesuré à la construction (§4.2 : 66 à 69 o, plus les grilles d'accroche et 12 o par chaîne et par
     /// type pour l'équipe). Sert à réserver la place avant de construire.
     pub fn estimate_window_bytes(&self, vi: usize, tiles: &[u32]) -> usize {
+        self.window_chain_count(vi, tiles) * WINDOW_BYTES_PER_CHAIN
+    }
+
+    /// Nombre de chaînes de la fenêtre de `tiles` (celles que possèdent les cellules, plus les étrangères : un
+    /// majorant, une chaîne étrangère à deux tuiles étant comptée deux fois).
+    pub fn window_chain_count(&self, vi: usize, tiles: &[u32]) -> usize {
         let view = &self.views_files[vi];
         let mut chains = 0usize;
         for &key in tiles {
@@ -233,7 +239,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
             }
             chains += self.idx[vi].foreign_of(key).len();
         }
-        chains * WINDOW_BYTES_PER_CHAIN
+        chains
     }
 
     /// Fenêtre de toutes les tuiles de la vue `vi` : le moteur à plat (référence des tests et du banc).

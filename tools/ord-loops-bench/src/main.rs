@@ -23,13 +23,13 @@ use ord_graph::format::GraphFile;
 use ord_graph::overlay::Overlay;
 use ord_graph::util::Poly;
 use ord_loops::{Engine, LatLon, Mode, Params, Request, TeamData, Workspace};
-use ord_loops_check::{Checker, Config};
+use ord_loops_check::{Checker, Config, GraphIndex, TeamCheck};
 use serde::Serialize;
 
 use crate::input::{bearing_name, read_java_requests, read_letters, read_starts, ride_name, JavaRequest};
 use crate::record::{mode_name, Context, Inputs, JavaSide, Rec};
 use crate::report::{Autocheck, Meta, SummaryInput};
-use crate::windows::{memory_mb, quantiles, Kind, Windows};
+use crate::windows::{memory_mb, quantiles, AnonSampler, Kind, Windows};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -283,6 +283,12 @@ fn main() -> Result<()> {
     let engine = Engine::new(open(&graph_path)?, open(&road_path)?, open(&gravel_path)?, params)
         .map_err(|e| anyhow!("moteur : {e}"))?;
     let load_s = t0.elapsed().as_secs_f64();
+    let sampler = AnonSampler::start();
+    let load_anon_mb = sampler.take_max_mb();
+    let mut team_build_anon: Vec<(String, f64, f64)> = Vec::new();
+    let mut check_build_anon: Vec<(String, f64, f64)> = Vec::new();
+    let mut plan_estimates: Vec<(String, f64)> = Vec::new();
+    let graph_index = GraphIndex::build(engine.base());
     let tm = engine.index_timings_ms();
     eprintln!(
         "moteur chargé en {load_s:.1} s (index : road {} + {} ms, gravel {} + {} ms ; {:.1} Mo)",
@@ -379,7 +385,18 @@ fn main() -> Result<()> {
         let overlay =
             Overlay::read(&overlay_path).map_err(|e| anyhow!("surcouche de l'équipe {letter} : {e}"))?;
         let t = std::time::Instant::now();
-        let team = TeamData::build(&engine, &overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        let _ = sampler.take_max_mb();
+        let plan = TeamData::plan_build(&engine, &overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        let team = TeamData::build_planned(&engine, &overlay, &plan)
+            .map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        let peak = sampler.take_max_mb();
+        eprintln!(
+            "équipe {letter} : construction {:.1} s, pic anonyme {peak:.0} Mo, estimation {:.0} Mo",
+            t.elapsed().as_secs_f64(),
+            plan.estimated_bytes as f64 / 1e6
+        );
+        team_build_anon.push((letter.clone(), t.elapsed().as_secs_f64(), peak));
+        plan_estimates.push((letter.clone(), plan.estimated_bytes as f64 / 1e6));
         for r in [ord_loops::RideType::Road, ord_loops::RideType::Gravel] {
             let s = team.stats(r);
             eprintln!(
@@ -387,16 +404,19 @@ fn main() -> Result<()> {
                 s.team_km, s.bridged_km, s.outside_typed_km, s.outside_any_km
             );
         }
-        let checker = Checker::new(
-            engine.base(),
-            Some(&overlay),
-            Config {
-                hairpin_single_node: a.hairpin_single_node,
-                hole_m: a.hole_m.unwrap_or(100.0),
-                connector_m: a.connector_m.unwrap_or(30.0),
-                ..Config::default()
-            },
-        );
+        let check_cfg = Config {
+            hairpin_single_node: a.hairpin_single_node,
+            hole_m: a.hole_m.unwrap_or(100.0),
+            connector_m: a.connector_m.unwrap_or(30.0),
+            ..Config::default()
+        };
+        // Les tables bornées du contrôleur, comme le service les garde par équipe (lot 6, §8).
+        let _ = sampler.take_max_mb();
+        let tc_start = std::time::Instant::now();
+        let team_check = TeamCheck::build(engine.base(), &graph_index, &overlay, &check_cfg);
+        check_build_anon.push((letter.clone(), tc_start.elapsed().as_secs_f64(), sampler.take_max_mb()));
+        let checker =
+            Checker::with_tables(engine.base(), Some(&overlay), check_cfg, &graph_index, Some(&team_check));
         let ctx = Context { engine: &engine, team: &team, checker: &checker };
         eprintln!(
             "équipe {letter} : {} requêtes dans le périmètre, données en {:.2} s",
@@ -623,6 +643,24 @@ fn main() -> Result<()> {
             tm[1].0,
             tm[1].1,
             engine.index_bytes() as f64 / 1e6
+        ),
+    ));
+    lines.push((
+        "mémoire anonyme (RssAnon, échantillonnée)".into(),
+        format!(
+            "ouverture {load_anon_mb:.0} Mo ; pic au total {:.0} Mo ; construction d'équipe (s, pic Mo) : {} ; estimations réservées au budget (Mo) : {} ; tables du contrôleur : {}",
+            sampler.max_mb(),
+            team_build_anon
+                .iter()
+                .map(|(l, s, m)| format!("{l} {s:.1} s {m:.0}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            plan_estimates.iter().map(|(l, m)| format!("{l} {m:.0}")).collect::<Vec<_>>().join(", "),
+            check_build_anon
+                .iter()
+                .map(|(l, s, m)| format!("{l} {s:.1} s {m:.0}"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
     ));
     lines.push((

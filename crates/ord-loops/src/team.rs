@@ -99,11 +99,45 @@ pub struct TeamCtx<'a> {
     pub win: &'a WindowTeam,
 }
 
+/// Ce qu'il faut construire pour une équipe : sa zone, et ce que la construction tiendra en mémoire le temps
+/// qu'elle dure (§7.1 : fenêtres de la zone, incidence des arêtes de base vivantes, composantes strictes).
+#[derive(Clone, Debug)]
+pub struct BuildPlan {
+    zone: Vec<u32>,
+    /// Octets transitoires estimés de la construction.
+    pub estimated_bytes: usize,
+}
+
+/// Octets transitoires par chaîne de la zone (la plus grande des deux vues) : fenêtre sans poids (≈ 61 o), arêtes
+/// vivantes et incidence (≈ 47 o), composantes strictes (≈ 20 o), tables de hachage de la règle des trous. Réglé sur
+/// les neuf équipes de la France (`ord-loops-lot6-mesures.md` §5) : le pic anonyme mesuré, moins les 32 Mo du banc,
+/// reste sous l'estimation pour chacune.
+const BUILD_BYTES_PER_CHAIN: usize = 210;
+
 impl TeamData {
     /// Construit les attributs d'équipe pour les trois types sur la zone de l'équipe ; refuse une surcouche d'un
     /// autre graphe.
     pub fn build<B: AsRef<[u8]>>(e: &Engine<B>, overlay: &Overlay) -> Result<Self, EngineError> {
-        Self::build_on(e, overlay, false)
+        let plan = Self::plan_build(e, overlay)?;
+        Self::build_planned(e, overlay, &plan)
+    }
+
+    /// La zone de l'équipe et la mémoire transitoire de sa construction : l'appelant la réserve avant de construire
+    /// (budget unique du service, §10.1).
+    pub fn plan_build<B: AsRef<[u8]>>(e: &Engine<B>, overlay: &Overlay) -> Result<BuildPlan, EngineError> {
+        overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
+        let zone = zone_tiles(e, overlay);
+        let chains: usize = (0..2).map(|vi| e.window_chain_count(vi, &zone)).max().unwrap_or(0);
+        Ok(BuildPlan { estimated_bytes: chains * BUILD_BYTES_PER_CHAIN, zone })
+    }
+
+    /// Construit sur la zone d'un [`BuildPlan`].
+    pub fn build_planned<B: AsRef<[u8]>>(
+        e: &Engine<B>,
+        overlay: &Overlay,
+        plan: &BuildPlan,
+    ) -> Result<Self, EngineError> {
+        Self::build_zone(e, overlay, Some(&plan.zone))
     }
 
     /// Comme [`TeamData::build`], sur toutes les tuiles du graphe (`whole`) : le moteur à plat, référence des tests.
@@ -114,9 +148,17 @@ impl TeamData {
     ) -> Result<Self, EngineError> {
         overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
         let zone = (!whole).then(|| zone_tiles(e, overlay));
+        Self::build_zone(e, overlay, zone.as_deref())
+    }
+
+    fn build_zone<B: AsRef<[u8]>>(
+        e: &Engine<B>,
+        overlay: &Overlay,
+        zone: Option<&[u32]>,
+    ) -> Result<Self, EngineError> {
         let mut views: Vec<(Window, ZoneView)> = Vec::new();
         for vi in 0..2 {
-            let win = match &zone {
+            let win = match zone {
                 Some(z) => e.build_window_opts(vi, z, false, &mut || false).expect("jamais coupée"),
                 None => e.full_window(vi),
             };

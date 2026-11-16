@@ -39,6 +39,20 @@ pub struct Held {
     reserved: usize,
 }
 
+/// Place réservée à une construction d'équipe ; rendue à la chute.
+pub struct BuildGuard<'a> {
+    mgr: &'a WindowManager,
+    bytes: usize,
+}
+
+impl Drop for BuildGuard<'_> {
+    fn drop(&mut self) {
+        metrics::gauge!("ord_generator_memory_bytes", "kind" => "team_build").decrement(self.bytes as f64);
+        lock(&self.mgr.inner).cache.release(self.bytes);
+        self.mgr.cv.notify_all();
+    }
+}
+
 pub struct WindowManager {
     inner: Mutex<Inner>,
     cv: Condvar,
@@ -218,6 +232,31 @@ impl WindowManager {
         Ok(Held { win, wt, reserved })
     }
 
+    /// Réserve `bytes` pour une construction transitoire (les données d'une équipe : fenêtres de sa zone, incidence,
+    /// composantes) : attend la place jusqu'à `deadline`, `Overloaded` sinon. Rendue à la chute de la garde.
+    pub fn reserve_build(
+        &self,
+        bytes: usize,
+        deadline: Instant,
+        stop: &dyn Fn() -> bool,
+    ) -> Result<BuildGuard<'_>, AcquireError> {
+        let started = Instant::now();
+        let mut g = lock(&self.inner);
+        if bytes > g.cache.budget() {
+            return Err(AcquireError::Overloaded);
+        }
+        let mut waited = false;
+        while !g.cache.reserve(bytes) {
+            waited = true;
+            g = self.wait(g, deadline, &mut || stop(), true)?;
+        }
+        if waited {
+            metrics::histogram!("ord_generator_budget_wait_seconds").record(started.elapsed().as_secs_f64());
+        }
+        metrics::gauge!("ord_generator_memory_bytes", "kind" => "team_build").increment(bytes as f64);
+        Ok(BuildGuard { mgr: self, bytes })
+    }
+
     /// Rend la réservation d'une génération (les fenêtres et agrégats restent au cache).
     pub fn release(&self, held: Held) {
         let mut g = lock(&self.inner);
@@ -379,5 +418,27 @@ mod tests {
         assert_eq!(m.built(), 0);
         assert_eq!(m.counted(), 0, "rien n'est resté réservé");
         assert!(m.acquire(&e, &plan, None, soon(5_000), &mut || false).is_ok());
+    }
+
+    #[test]
+    fn a_team_build_reserves_its_transient_memory_in_the_same_budget() {
+        let m = WindowManager::new(1_000);
+        // Plus que tout le budget : jamais, 503 tout de suite.
+        let t = Instant::now();
+        assert!(matches!(m.reserve_build(2_000, soon(5_000), &|| false), Err(AcquireError::Overloaded)));
+        assert!(t.elapsed() < Duration::from_millis(200));
+        let g = m.reserve_build(800, soon(1_000), &|| false).unwrap();
+        assert_eq!(m.counted(), 800);
+        // Pas la place pour une seconde : attente jusqu'à l'échéance, puis 503.
+        assert!(matches!(m.reserve_build(400, soon(150), &|| false), Err(AcquireError::Overloaded)));
+        drop(g);
+        assert_eq!(m.counted(), 0);
+        let again = m.reserve_build(400, soon(1_000), &|| false).unwrap();
+        assert_eq!(m.counted(), 400);
+        drop(again);
+        // Le client part : arrêt, pas 503.
+        let g = m.reserve_build(900, soon(1_000), &|| false).unwrap();
+        assert!(matches!(m.reserve_build(400, soon(5_000), &|| true), Err(AcquireError::Stopped)));
+        drop(g);
     }
 }
