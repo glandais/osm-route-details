@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 
 use ord_graph_match::geo::encode_polyline6;
 use ord_loops::{
-    generate, route_geometry, Bearing8, Failure, Family, LatLon, Mode, NoRouteDetail, Request, RideType,
-    Route, Workspace,
+    generate_in, route_geometry, Bearing8, Failure, Family, Generation, LatLon, Mode, NoRouteDetail, Request,
+    RideType, Route, TeamCtx, Workspace,
 };
 use ord_loops_check::{Checker, Config};
 
@@ -19,6 +19,7 @@ use super::crypto::Credentials;
 use super::cursor::Applied;
 use super::routes::{CoverageV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1};
 use super::store::{Entry, StaleReason, State};
+use super::windows::AcquireError;
 use super::Ready;
 use crate::problem::{
     CoverageSource, GenerationReason, OverlayProblemState, Problem, ProblemCode, ProblemDetails,
@@ -112,6 +113,13 @@ fn reason_of(f: Failure) -> Result<GenerationReason, Problem> {
     })
 }
 
+/// 503 `overloaded` : trop de générations, ou plus de place dans le budget de mémoire.
+pub(crate) fn overloaded() -> Problem {
+    let mut p = Problem::new(ProblemCode::Overloaded, "too many route generations in progress");
+    p.retry_after = Some(Duration::from_secs(2));
+    p
+}
+
 /// 409 : le même corps, au `instance` près, pour une équipe inconnue, une autre clé ou une surcouche jamais déposée.
 pub(crate) fn overlay_required(state: OverlayProblemState) -> Problem {
     Problem::with_details(
@@ -138,14 +146,67 @@ fn r1(x: f64) -> f64 {
 
 impl Ready {
     fn take_workspace(&self) -> Workspace {
-        self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pop().unwrap_or_default()
+        let mut pool = self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let ws = pool.pop().unwrap_or_default();
+        let total: usize = pool.iter().map(Workspace::bytes).sum();
+        drop(pool);
+        self.windows.pool_sub(ws.bytes(), total);
+        ws
     }
 
-    fn give_workspace(&self, ws: Workspace) {
+    /// Rend un espace de travail à la réserve ; un trop gros est libéré (§9), et ceux gardés comptent dans le budget.
+    fn give_workspace(&self, mut ws: Workspace) {
+        ws.shrink_to(self.cfg.workspace_keep_mb * 1_000_000);
         let mut pool = self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if pool.len() < self.cfg.max_concurrent {
+            let bytes = ws.bytes();
             pool.push(ws);
+            let total: usize = pool.iter().map(Workspace::bytes).sum();
+            drop(pool);
+            self.windows.pool_add(bytes, total);
+        } else {
+            metrics::counter!("ord_generator_window_evictions_total", "kind" => "workspace").increment(1);
         }
+    }
+
+    /// Le moteur dans une fenêtre du cache : une fois, puis, si la recherche touche le bord de la fenêtre (le
+    /// garde-fou du §5.2, jamais attendu), une fois de plus dans une fenêtre élargie de la plus longue chaîne et de
+    /// 10 km ; un second échappement rend une erreur interne sans coordonnée.
+    fn generate_windowed(
+        &self,
+        req: &Request,
+        entry: Option<&Entry>,
+        deadline: Instant,
+        stop: &mut dyn FnMut() -> bool,
+    ) -> Result<Generation, Problem> {
+        let vi = req.ride_type.view_index();
+        let mut extra_m = 0.0;
+        for attempt in 0..2 {
+            let plan = self.engine.plan_with(req, self.cfg.window_radius_step_m, extra_m);
+            let team = entry.map(|e| (e.serial, &e.team));
+            let held = match self.windows.acquire(&self.engine, &plan, team, deadline, stop) {
+                Ok(h) => h,
+                Err(AcquireError::Stopped) => {
+                    return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded"));
+                }
+                Err(AcquireError::Overloaded) => return Err(overloaded()),
+            };
+            let mut ws = self.take_workspace();
+            let ctx = entry.zip(held.wt.as_deref()).map(|(e, wt)| TeamCtx { data: &e.team, win: wt });
+            let result = generate_in(&self.engine, &held.win, ctx, req, &mut ws, stop);
+            self.give_workspace(ws);
+            self.windows.release(held);
+            match result {
+                Err(Failure::WindowEscape) => {
+                    metrics::counter!("ord_generator_window_escapes_total").increment(1);
+                    tracing::warn!(attempt, "generator window escape");
+                    extra_m = self.engine.longest_chain_m(vi) + 10_000.0;
+                }
+                Ok(g) => return Ok(g),
+                Err(f) => return Err(reason_of(f).map_or_else(|p| p, failed)),
+            }
+        }
+        Err(Problem::internal())
     }
 
     pub(crate) fn in_coverage(&self, p: LatLon) -> bool {
@@ -154,11 +215,6 @@ impl Ready {
 
     /// Une place de calcul, dans le budget ; 503 `overloaded` si la file est pleine, 504 si le budget s'écoule.
     pub(crate) async fn slot(&self, deadline: Instant) -> Result<tokio::sync::OwnedSemaphorePermit, Problem> {
-        let overloaded = || {
-            let mut p = Problem::new(ProblemCode::Overloaded, "too many route generations in progress");
-            p.retry_after = Some(Duration::from_secs(2));
-            p
-        };
         if let Ok(p) = Arc::clone(&self.gen_slots).try_acquire_owned() {
             return Ok(p);
         }
@@ -277,7 +333,7 @@ impl Ready {
     ) -> Result<Computed, Problem> {
         let need_team = input.applied.mode != Mode::Discovery;
         let entry: Option<Arc<Entry>> = match creds {
-            Some(c) => match self.store.ready(c, &self.engine) {
+            Some(c) => match self.store.ready(c, &self.engine, &self.graph_index) {
                 Ok(e) => Some(e),
                 Err(state) if need_team => {
                     return Err(overlay_required(match state {
@@ -304,16 +360,16 @@ impl Ready {
             off_team_cost_q8: input.applied.off_team_cost_q8,
             seed: input.seed,
         };
-        let mut ws = self.take_workspace();
         let mut stop = || cancel.load(Ordering::Relaxed) || Instant::now() >= deadline;
-        let result = generate(&self.engine, entry.as_ref().map(|e| &e.team), &req, &mut ws, &mut stop);
-        self.give_workspace(ws);
-        let generation = match result {
-            Ok(g) => g,
-            Err(f) => return Err(reason_of(f).map_or_else(|p| p, failed)),
-        };
+        let generation = self.generate_windowed(&req, entry.as_deref(), deadline, &mut stop)?;
 
-        let checker = Checker::new(self.engine.base(), entry.as_ref().map(|e| &e.overlay), Config::default());
+        let checker = Checker::with_tables(
+            self.engine.base(),
+            entry.as_ref().map(|e| &e.overlay),
+            Config::default(),
+            &self.graph_index,
+            entry.as_ref().map(|e| &e.check),
+        );
         let (mut routes, mut dropped) = (Vec::new(), 0u32);
         let snaps = (generation.diagnostics.start_snap_m, generation.diagnostics.end_snap_m);
         for mut route in generation.routes {

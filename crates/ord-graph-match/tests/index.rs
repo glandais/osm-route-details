@@ -103,9 +103,30 @@ fn cell_index_is_bounded_by_its_cap_and_rebuilds_what_it_evicted() {
 }
 
 #[test]
-fn an_edge_wider_than_a_cell_is_refused_by_the_cell_index() {
+fn an_edge_wider_than_a_cell_goes_to_the_exception_list_and_the_index_stays_exact() {
     let dir = tempfile::tempdir().unwrap();
     // Arêtes de 20 km : plus larges qu'une cellule (≈ 13 km à cette latitude).
-    let gf = graph(dir.path(), 3, 20_000.0);
+    let gf = graph(dir.path(), 5, 20_000.0);
     assert!(!CellIndex::fits(&gf));
+    let wide = CellIndex::exceptions(&gf);
+    assert!(!wide.is_empty() && wide.windows(2).all(|w| w[0] < w[1]));
+    let full = SegIndex::build(&gf);
+    let cell = CellIndex::new(&gf, 64 << 20);
+    assert_eq!(cell.exception_count(), wide.len());
+    let m_lon = M_LAT * LAT0.to_radians().cos();
+    let (mut compared, mut non_empty) = (0usize, 0usize);
+    for i in -2..=26 {
+        for j in -2..=26 {
+            let (lat, lon) = (LAT0 + f64::from(i) * 4_000.0 / M_LAT, LON0 + f64::from(j) * 4_000.0 / m_lon);
+            for radius in [8.0, 600.0, 5_000.0] {
+                let (mut a, mut b) = (Vec::new(), Vec::new());
+                full.near(lat, lon, radius, &mut a);
+                cell.near(lat, lon, radius, &mut b);
+                non_empty += usize::from(!a.is_empty());
+                assert_eq!(sorted(a), sorted(b), "point ({i}, {j}), rayon {radius}");
+                compared += 1;
+            }
+        }
+    }
+    assert!(compared > 2_000 && non_empty > 300, "{compared} comparaisons, {non_empty} non vides");
 }

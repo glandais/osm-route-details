@@ -12,6 +12,7 @@ mod http;
 mod input;
 mod record;
 mod report;
+mod windows;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -26,8 +27,9 @@ use ord_loops_check::{Checker, Config};
 use serde::Serialize;
 
 use crate::input::{bearing_name, read_java_requests, read_letters, read_starts, ride_name, JavaRequest};
-use crate::record::{mode_name, Context, JavaSide, Rec};
+use crate::record::{mode_name, Context, Inputs, JavaSide, Rec};
 use crate::report::{Autocheck, Meta, SummaryInput};
+use crate::windows::{memory_mb, quantiles, Kind, Windows};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -109,6 +111,31 @@ struct Args {
     /// référence d'équipe que le backend enverrait.
     #[arg(long)]
     keys: Option<PathBuf>,
+    /// Moteur joué : `window` (le moteur fenêtré du lot 6, cache de fenêtres sous budget) ou `flat` (une fenêtre de
+    /// toutes les tuiles par vue : le moteur à plat d'avant, la référence).
+    #[arg(long, default_value = "window")]
+    engine: String,
+    /// Rejoue aussi chaque requête sur le moteur à plat et exige les mêmes résultats, exactement (étapes, mesures,
+    /// diagnostics) ; la moindre différence fait échouer le banc.
+    #[arg(long)]
+    compare: bool,
+    /// Budget de mémoire du cache de fenêtres, en Mo (moteur fenêtré).
+    #[arg(long, default_value_t = 900)]
+    budget_mb: usize,
+    /// Pas d'arrondi du rayon de classe des fenêtres, m.
+    #[arg(long, default_value_t = 10_000.0)]
+    radius_step_m: f64,
+    /// Compare les index globaux et la règle du degré admis à la force brute avant de jouer.
+    #[arg(long)]
+    self_check: bool,
+    /// Écrit, par requête jouée, l'empreinte de la sortie complète du moteur (une ligne : lettre, i, mode, empreinte).
+    /// Sert à comparer deux binaires, le moteur à plat d'avant le lot 6 et celui-ci.
+    #[arg(long)]
+    dump: Option<PathBuf>,
+}
+
+fn fnv(s: &str) -> u64 {
+    s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3))
 }
 
 fn home() -> Result<PathBuf> {
@@ -255,7 +282,38 @@ fn main() -> Result<()> {
     }
     let engine = Engine::new(open(&graph_path)?, open(&road_path)?, open(&gravel_path)?, params)
         .map_err(|e| anyhow!("moteur : {e}"))?;
-    eprintln!("moteur chargé en {:.1} s", t0.elapsed().as_secs_f64());
+    let load_s = t0.elapsed().as_secs_f64();
+    let tm = engine.index_timings_ms();
+    eprintln!(
+        "moteur chargé en {load_s:.1} s (index : road {} + {} ms, gravel {} + {} ms ; {:.1} Mo)",
+        tm[0].0,
+        tm[0].1,
+        tm[1].0,
+        tm[1].1,
+        engine.index_bytes() as f64 / 1e6
+    );
+    let mut self_check_line = None;
+    if a.self_check {
+        let t = std::time::Instant::now();
+        let c = engine.self_check().map_err(|e| anyhow!("auto-contrôle des index : {e}"))?;
+        let line = format!(
+            "{} + {} chaînes étrangères, {} + {} chaînes sous le plafond, {} + {} nœuds de base, {} arêtes, {:.1} s : identiques à la force brute",
+            c.foreign[0], c.foreign[1], c.components[0], c.components[1], c.degrees[0], c.degrees[1], c.base_edges, t.elapsed().as_secs_f64()
+        );
+        eprintln!("auto-contrôle : {line}");
+        self_check_line = Some(line);
+    }
+    let kind = match a.engine.as_str() {
+        "window" => Kind::Window,
+        "flat" => Kind::Flat,
+        other => return Err(anyhow!("moteur inconnu : {other} (window, flat)")),
+    };
+    let mut wins = Windows::new(&engine, kind, a.budget_mb * 1_000_000, a.radius_step_m);
+    let mut flat_wins = Windows::new(&engine, Kind::Flat, usize::MAX / 2, a.radius_step_m);
+    let mut dump: Vec<String> = Vec::new();
+    let mut mismatches: Vec<String> = Vec::new();
+    let mut compared = 0usize;
+    let mut window_ms_by_request: Vec<f64> = Vec::new();
 
     // équipes : un `requests-<id>.jsonl` du banc Java par équipe
     let mut team_ids: Vec<(String, String)> = Vec::new();
@@ -274,10 +332,11 @@ fn main() -> Result<()> {
     let mut recs: Vec<Rec> = Vec::new();
     let mut java_total: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     let mut autocheck: Vec<Autocheck> = Vec::new();
-    for (letter, id) in &team_ids {
+    for (team_n, (letter, id)) in team_ids.iter().enumerate() {
         if !a.teams.is_empty() && !a.teams.contains(letter) {
             continue;
         }
+        let team_key = team_n as u64;
         let Some(pts) = starts.get(id) else { continue };
         let reqs = read_java_requests(&java_dir.join(format!("requests-{id}.jsonl")))?;
         let alone: BTreeMap<u32, String> =
@@ -345,8 +404,8 @@ fn main() -> Result<()> {
             t.elapsed().as_secs_f64()
         );
 
-        let team_key = keys.get(id);
-        if client.is_some() && team_key.is_none() {
+        let api_key = keys.get(id);
+        if client.is_some() && api_key.is_none() {
             return Err(anyhow!("pas de clé pour l'équipe {letter} dans le fichier des clés"));
         }
         let mut ws = Workspace::new();
@@ -435,6 +494,7 @@ fn main() -> Result<()> {
                     cursor,
                     http_status: None,
                     dropped: None,
+                    window_build_ms: None,
                     applied: cursor.map(|_| {
                         let l = f64::from(q8) / 256.0;
                         format!("{} q8={q8} λ={l:.3} familiarité={familiarity}", mode_name(mode))
@@ -449,15 +509,37 @@ fn main() -> Result<()> {
                         ride: req.ride_type,
                         cursor: c,
                         seed: req.seed,
-                        key: team_key,
+                        key: api_key,
                     };
                     let (answer, ms) = client.run(&ask, a.rounds)?;
                     http::fill(&mut rec, &answer, ms, req.distance_m);
                     recs.push(rec);
                     continue;
                 }
-                let outcome = record::run_request(&engine, &team, &req, &mut ws, a.rounds);
-                ctx.fill(&mut rec, &req, &outcome);
+                let acq = wins.acquire(team_key, &team, &req)?;
+                if acq.built {
+                    rec.window_build_ms = Some(acq.build_ms);
+                    window_ms_by_request.push(acq.build_ms);
+                }
+                let inp = Inputs { win: &acq.win, team: &team, wt: &acq.wt };
+                let outcome = record::run_request(&engine, inp, &req, &mut ws, a.rounds);
+                if matches!(outcome.result, Err(ord_loops::Failure::WindowEscape)) {
+                    wins.escapes += 1;
+                }
+                let sig = format!("{:?}", (&outcome.result, &outcome.diag));
+                if a.dump.is_some() {
+                    dump.push(format!("{letter} {} {} {:016x}", jr.i, rec.mode, fnv(&sig)));
+                }
+                if a.compare {
+                    let facq = flat_wins.acquire(team_key, &team, &req)?;
+                    let finp = Inputs { win: &facq.win, team: &team, wt: &facq.wt };
+                    let flat = record::run_request(&engine, finp, &req, &mut ws, 0);
+                    compared += 1;
+                    if sig != format!("{:?}", (&flat.result, &flat.diag)) {
+                        mismatches.push(format!("équipe {letter} requête {} mode {}", jr.i, rec.mode));
+                    }
+                }
+                ctx.fill(&mut rec, &req, &outcome, &acq.win);
                 if geo.wants(&rec) {
                     geojson::write(
                         &geo_dir,
@@ -471,6 +553,8 @@ fn main() -> Result<()> {
                 recs.push(rec);
             }
         }
+        wins.forget_team(team_key);
+        flat_wins.forget_team(team_key);
     }
 
     let load1 = load_avg();
@@ -525,6 +609,56 @@ fn main() -> Result<()> {
         ("requêtes × modes enregistrées".into(), recs.len().to_string()),
         ("durée du banc".into(), format!("{:.0} s", t0.elapsed().as_secs_f64())),
     ];
+    let (hwm, rss, anon, file) = memory_mb();
+    lines.push((
+        "moteur".into(),
+        format!("{} (budget {} Mo, pas de rayon {} m)", a.engine, a.budget_mb, a.radius_step_m),
+    ));
+    lines.push((
+        "chargement".into(),
+        format!(
+            "{load_s:.1} s, index road {} + {} ms, gravel {} + {} ms, {:.1} Mo",
+            tm[0].0,
+            tm[0].1,
+            tm[1].0,
+            tm[1].1,
+            engine.index_bytes() as f64 / 1e6
+        ),
+    ));
+    lines.push((
+        "mémoire du processus".into(),
+        format!("VmHWM {hwm:.0} Mo, VmRSS {rss:.0} Mo (RssAnon {anon:.0} Mo, RssFile {file:.0} Mo) à la fin"),
+    ));
+    let cs = wins.cache_stats();
+    let q = |v: Vec<f64>| {
+        quantiles(v).map_or_else(|| "-".into(), |(m, p, x)| format!("{m:.0} / {p:.0} / {x:.0} ms"))
+    };
+    lines.push((
+        "fenêtres".into(),
+        format!(
+            "{} construites, {} servies du cache, {} évincées ; construction à froid (médiane / p90 / max) {} ; agrégats d'équipe {} ; mémoire comptée au plus {:.0} Mo ; {} échappements",
+            wins.built.len(),
+            cs.hits,
+            cs.evicted_windows,
+            q(wins.built.iter().map(|b| b.0).collect()),
+            q(wins.team_builds_ms.clone()),
+            wins.peak_counted as f64 / 1e6,
+            wins.escapes
+        ),
+    ));
+    if let Some((_, _, c)) = quantiles(wins.built.iter().map(|b| b.1 as f64).collect()) {
+        let med = quantiles(wins.built.iter().map(|b| b.1 as f64).collect()).map_or(0.0, |q| q.0);
+        lines.push(("taille des fenêtres".into(), format!("{med:.0} chaînes en médiane, {c:.0} au plus")));
+    }
+    if let Some(l) = &self_check_line {
+        lines.push(("auto-contrôle".into(), l.clone()));
+    }
+    if a.compare {
+        lines.push((
+            "comparaison au moteur à plat".into(),
+            format!("{compared} requêtes comparées, {} différences", mismatches.len()),
+        ));
+    }
     if let Some(l) = a.limit {
         lines.push(("limite".into(), format!("{l} requêtes par équipe (banc partiel)")));
     }
@@ -550,5 +684,18 @@ fn main() -> Result<()> {
     let md_path = out.join(format!("{}-summary.md", a.label));
     std::fs::write(&md_path, md)?;
     eprintln!("rapport : {}\nrésumé : {}", json_path.display(), md_path.display());
+    if let Some(p) = &a.dump {
+        std::fs::write(p, dump.join("\n") + "\n")?;
+        eprintln!("empreintes : {}", p.display());
+    }
+    if wins.escapes > 0 {
+        return Err(anyhow!("{} échappements de fenêtre (garde-fou levé)", wins.escapes));
+    }
+    if !mismatches.is_empty() {
+        for m in mismatches.iter().take(20) {
+            eprintln!("DIFFÉRENCE : {m}");
+        }
+        return Err(anyhow!("{} requêtes dont le résultat diffère du moteur à plat", mismatches.len()));
+    }
     Ok(())
 }

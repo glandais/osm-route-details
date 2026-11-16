@@ -15,6 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ord_graph::format::GraphIdentity;
 use ord_graph::overlay::Overlay;
 use ord_loops::{Engine, TeamData};
+use ord_loops_check::{Config as CheckConfig, GraphIndex, TeamCheck};
 use serde::{Deserialize, Serialize};
 
 use super::crypto::Credentials;
@@ -119,10 +120,16 @@ fn file_id(md: &std::fs::Metadata) -> FileId {
 /// Une équipe prête : surcouche et données du moteur.
 pub struct Entry {
     id: FileId,
+    /// Numéro unique de cette construction : la clé de ses agrégats dans les fenêtres en cache.
+    pub serial: u64,
     pub meta: FileMeta,
     pub overlay: Overlay,
     pub team: TeamData,
+    /// Arêtes comblées du contrôleur indépendant, calculées une fois sur la zone de l'équipe (lot 6, §8.1).
+    pub check: TeamCheck,
 }
+
+static NEXT_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl std::fmt::Debug for Entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -316,7 +323,7 @@ impl Store {
 
     /// L'équipe prête pour une génération : depuis le cache si le fichier n'a pas changé, sinon relue puis `TeamData`
     /// construit. `Err(State)` quand elle n'est pas prête (absente ou périmée).
-    pub fn ready(&self, c: &Credentials, engine: &GenEngine) -> Result<Arc<Entry>, State> {
+    pub fn ready(&self, c: &Credentials, engine: &GenEngine, gi: &GraphIndex) -> Result<Arc<Entry>, State> {
         let key = (c.ns.clone(), c.team.clone());
         if let Some(entry) = self.cached(&key, &self.file_path(c)) {
             metrics::counter!("ord_overlay_cache_hits_total").increment(1);
@@ -325,7 +332,7 @@ impl Store {
         // Une seule construction par équipe : une seconde demande attend la première et relit le cache.
         let build_lock = Arc::clone(lock(&self.builds).entry(key.clone()).or_default());
         let _building = lock(&build_lock);
-        let result = self.ready_build(c, engine, &key);
+        let result = self.ready_build(c, engine, gi, &key);
         drop(_building);
         let mut builds = lock(&self.builds);
         // Plus personne n'attend (le verrou n'est tenu que par nous et `builds`) : l'entrée de la table s'efface.
@@ -350,7 +357,13 @@ impl Store {
         Some(entry)
     }
 
-    fn ready_build(&self, c: &Credentials, engine: &GenEngine, key: &CacheKey) -> Result<Arc<Entry>, State> {
+    fn ready_build(
+        &self,
+        c: &Credentials,
+        engine: &GenEngine,
+        gi: &GraphIndex,
+        key: &CacheKey,
+    ) -> Result<Arc<Entry>, State> {
         let key = key.clone();
         if let Some(entry) = self.cached(&key, &self.file_path(c)) {
             // Construite pendant que nous attendions.
@@ -370,7 +383,9 @@ impl Store {
         }
         self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
         let team = TeamData::build(engine, &overlay).map_err(|_| State::Stale(StaleReason::Graph))?;
-        let entry = Arc::new(Entry { id, meta, overlay, team });
+        let check = TeamCheck::build(engine.base(), gi, &overlay, &CheckConfig::default());
+        let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
+        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check });
         let mut cache = lock(&self.cache);
         cache.retain(|(k, _)| *k != key);
         cache.push((key, Arc::clone(&entry)));

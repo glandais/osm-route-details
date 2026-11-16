@@ -1,8 +1,7 @@
 //! Le contrôle lui-même (note lot 2 §6, points 1 à 8). Les noms des violations sont ceux de `RouteGuarantees.java`
 //! quand ils existent, en gardant le vocabulaire de la note (`NOT_ON_GRAPH`, `NOT_ADMITTED`, `OFF_TEAM`).
 
-use std::cmp::Reverse;
-use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::OnceLock;
 
 use ord_graph::attrs::Attrs;
@@ -10,6 +9,7 @@ use ord_graph::format::GraphFile;
 use ord_graph::overlay::Overlay;
 use ord_loops::{Mode, Request, RideType, Route};
 
+use crate::bounded::{degrees_of, GraphIndex, TeamCheck};
 use crate::geo::{
     across_m, along, clip, cumulative_m, dist, has_connector_run, haversine_m, path_heading, point_at,
     poly_len, turn_angle_deg, LatLon, Proj, RunRule,
@@ -199,20 +199,11 @@ pub struct Checker<'a, B> {
     overlay: Option<&'a Overlay>,
     cfg: Config,
     types: TypeIndex,
-    adm_deg: [OnceLock<Vec<u8>>; 2],
-    team_deg: [OnceLock<Vec<u8>>; 3],
-    /// Arêtes admises incidentes à chaque nœud (CSR : décalages, arêtes), par admission.
-    incidence: [OnceLock<(Vec<u32>, Vec<u32>)>; 2],
-    /// Arêtes comblées (note §2.3), recalculées depuis la surcouche, par type.
-    bridged: [OnceLock<HashSet<u32>>; 3],
-}
-
-fn ride_slot(r: RideType) -> usize {
-    match r {
-        RideType::Road => 0,
-        RideType::Gravel => 1,
-        RideType::Mtb => 2,
-    }
+    /// Tables bornées (lot 6, §8) : celles qu'on a reçues toutes prêtes, sinon construites au premier besoin.
+    shared_index: Option<&'a GraphIndex>,
+    own_index: OnceLock<GraphIndex>,
+    shared_team: Option<&'a TeamCheck>,
+    own_team: OnceLock<TeamCheck>,
 }
 
 impl<B> std::fmt::Debug for Checker<'_, B> {
@@ -233,11 +224,40 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             overlay,
             cfg,
             types,
-            adm_deg: [OnceLock::new(), OnceLock::new()],
-            team_deg: [OnceLock::new(), OnceLock::new(), OnceLock::new()],
-            incidence: [OnceLock::new(), OnceLock::new()],
-            bridged: [OnceLock::new(), OnceLock::new(), OnceLock::new()],
+            shared_index: None,
+            own_index: OnceLock::new(),
+            shared_team: None,
+            own_team: OnceLock::new(),
         }
+    }
+
+    /// Comme [`Checker::new`], avec des tables déjà construites : l'index des arêtes larges du graphe et les arêtes
+    /// comblées de l'équipe, que le service garde d'une génération à l'autre (rien n'est reconstruit par requête).
+    pub fn with_tables(
+        graph: &'a GraphFile<B>,
+        overlay: Option<&'a Overlay>,
+        cfg: Config,
+        index: &'a GraphIndex,
+        team: Option<&'a TeamCheck>,
+    ) -> Self {
+        let mut c = Self::new(graph, overlay, cfg);
+        c.shared_index = Some(index);
+        c.shared_team = team;
+        c
+    }
+
+    fn index(&self) -> &GraphIndex {
+        self.shared_index.unwrap_or_else(|| self.own_index.get_or_init(|| GraphIndex::build(self.g)))
+    }
+
+    /// Arêtes comblées d'un type : celles de l'équipe, sinon aucune (sans surcouche, rien n'est roulé).
+    fn bridged_edges(&self, ride: RideType) -> &HashSet<u32> {
+        static NONE: std::sync::OnceLock<HashSet<u32>> = std::sync::OnceLock::new();
+        let Some(o) = self.overlay else { return NONE.get_or_init(HashSet::new) };
+        let tc = self.shared_team.unwrap_or_else(|| {
+            self.own_team.get_or_init(|| TeamCheck::build(self.g, self.index(), o, &self.cfg))
+        });
+        tc.bridged(ride)
     }
 
     pub fn config(&self) -> &Config {
@@ -261,151 +281,6 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             pts,
             cum,
         }
-    }
-
-    /// Degré admis de chaque nœud : arêtes admises incidentes, sens ignorés (une boucle compte deux fois).
-    fn admitted_degrees(&self, adm: Admission) -> &Vec<u8> {
-        self.adm_deg[adm.index()].get_or_init(|| {
-            let mut deg = vec![0u8; self.g.header().nodes as usize];
-            for ci in 0..self.g.n_cells() {
-                let info = *self.g.cell_info(ci);
-                let view = self.g.cell(ci);
-                for k in 0..info.n_edges {
-                    if admitted(adm, view.owned(k as usize).attrs) {
-                        let (a, b) = self.g.edge_ends(info.first_edge + k);
-                        deg[a as usize] = deg[a as usize].saturating_add(1);
-                        deg[b as usize] = deg[b as usize].saturating_add(1);
-                    }
-                }
-            }
-            deg
-        })
-    }
-
-    /// Degré d'équipe de chaque nœud pour un type : arêtes d'équipe incidentes.
-    fn team_degrees(&self, ride: RideType) -> &Vec<u8> {
-        self.team_deg[ride_slot(ride)].get_or_init(|| {
-            let mut deg = vec![0u8; self.g.header().nodes as usize];
-            if let Some(o) = self.overlay {
-                for (e, counts) in o.iter() {
-                    if team_edge(ride, self.g.edge(e).attrs, Some(counts), &self.types) {
-                        let (a, b) = self.g.edge_ends(e);
-                        deg[a as usize] = deg[a as usize].saturating_add(1);
-                        deg[b as usize] = deg[b as usize].saturating_add(1);
-                    }
-                }
-            }
-            deg
-        })
-    }
-
-    /// Arêtes admises autour de chaque nœud, sens ignorés (une boucle compte une fois).
-    fn incidence(&self, adm: Admission) -> &(Vec<u32>, Vec<u32>) {
-        self.incidence[adm.index()].get_or_init(|| {
-            let n_nodes = self.g.header().nodes as usize;
-            let mut off = vec![0u32; n_nodes + 1];
-            let mut list: Vec<(u32, u32)> = Vec::new();
-            for ci in 0..self.g.n_cells() {
-                let info = *self.g.cell_info(ci);
-                let view = self.g.cell(ci);
-                for k in 0..info.n_edges {
-                    if admitted(adm, view.owned(k as usize).attrs) {
-                        let e = info.first_edge + k;
-                        let (a, b) = self.g.edge_ends(e);
-                        list.push((a, e));
-                        if a != b {
-                            list.push((b, e));
-                        }
-                    }
-                }
-            }
-            list.sort_unstable();
-            for &(n, _) in &list {
-                off[n as usize + 1] += 1;
-            }
-            for i in 0..n_nodes {
-                off[i + 1] += off[i];
-            }
-            (off, list.into_iter().map(|x| x.1).collect())
-        })
-    }
-
-    /// Les arêtes comblées en strict, recalculées d'après la surcouche et la règle d'admission, sans rien du moteur
-    /// (note §2.3) : (1) le plus court chemin non roulé de `hole_m` au plus, d'un cul-de-sac fictif (un seul bout
-    /// d'arête d'équipe, au moins deux arêtes admises) au plus proche nœud d'équipe ; (2) tout chemin non roulé de
-    /// `connector_m` au plus entre deux nœuds d'équipe. Un parcours ne passe que par ces arêtes hors équipe.
-    fn bridged_edges(&self, ride: RideType) -> &HashSet<u32> {
-        self.bridged[ride_slot(ride)].get_or_init(|| {
-            let mut out = HashSet::new();
-            let Some(o) = self.overlay else { return out };
-            let adm = Admission::of(ride);
-            let (off, inc) = self.incidence(adm);
-            let tdeg = self.team_degrees(ride);
-            let adm_deg = self.admitted_degrees(adm);
-            let mut team = vec![false; self.g.header().edges as usize];
-            for (e, counts) in o.iter() {
-                if team_edge(ride, self.g.edge(e).attrs, Some(counts), &self.types) {
-                    team[e as usize] = true;
-                }
-            }
-            let edges_at = |n: u32| &inc[off[n as usize] as usize..off[n as usize + 1] as usize];
-            let len_dm = |e: u32| self.g.edge(e).len_dm;
-            // Dijkstra borné sur les arêtes non roulées ; `all` : tous les nœuds d'équipe atteints, sinon le premier.
-            let walk = |s: u32, limit_dm: u32, all: bool, out: &mut HashSet<u32>| {
-                let mut dist: HashMap<u32, (u32, u32)> = HashMap::new();
-                let mut heap = BinaryHeap::new();
-                dist.insert(s, (0, u32::MAX));
-                heap.push(Reverse((0u32, s)));
-                while let Some(Reverse((d, x))) = heap.pop() {
-                    if dist[&x].0 < d {
-                        continue;
-                    }
-                    if x != s && tdeg[x as usize] >= 1 {
-                        let mut cur = x;
-                        while cur != s {
-                            let (_, pe) = dist[&cur];
-                            out.insert(pe);
-                            let (a, b) = self.g.edge_ends(pe);
-                            cur = if a == cur { b } else { a };
-                        }
-                        if all {
-                            continue;
-                        }
-                        break;
-                    }
-                    for &be in edges_at(x) {
-                        if team[be as usize] {
-                            continue;
-                        }
-                        let nd = d + len_dm(be);
-                        if nd > limit_dm {
-                            continue;
-                        }
-                        let (a, b) = self.g.edge_ends(be);
-                        let y = if a == x { b } else { a };
-                        if dist.get(&y).is_none_or(|&(od, _)| nd < od) {
-                            dist.insert(y, (nd, be));
-                            heap.push(Reverse((nd, y)));
-                        }
-                    }
-                }
-            };
-            let hole_dm = (self.cfg.hole_m * 10.0) as u32;
-            let conn_dm = (self.cfg.connector_m * 10.0) as u32;
-            for n in 0..self.g.header().nodes as u32 {
-                if tdeg[n as usize] == 1 && adm_deg[n as usize] >= 2 {
-                    walk(n, hole_dm, false, &mut out);
-                }
-            }
-            for n in 0..self.g.header().nodes as u32 {
-                if tdeg[n as usize] >= 1
-                    && edges_at(n).iter().any(|&e| !team[e as usize] && len_dm(e) <= conn_dm)
-                {
-                    walk(n, conn_dm, true, &mut out);
-                }
-            }
-            out
-        })
     }
 
     fn is_team(&self, ride: RideType, e: u32, attrs: Attrs) -> bool {
@@ -535,8 +410,10 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             pieces.iter().map(|p| self.is_team(req.ride_type, p.edge, infos[&p.edge].attrs)).collect();
         rep.team_m = pieces.iter().zip(&team).filter(|(_, t)| **t).map(|(p, _)| p.len).sum();
         rep.off_team_m = total - rep.team_m;
-        let adm_deg = self.admitted_degrees(adm);
-        let node_deg = |node: u32| adm_deg[node as usize];
+        // Degré admis des seuls nœuds du parcours (lot 6, §8.1).
+        let route_nodes: Vec<u32> = pieces.iter().map(|p| p.to).collect();
+        let route_deg = degrees_of(self.g, self.index(), adm, &route_nodes);
+        let node_deg = |node: u32| route_deg[&node];
         // nœud entre les morceaux j-1 et j (1 <= j <= n-1)
         let node_at = |j: usize| pieces[j - 1].to;
         if req.mode == Mode::Strict {

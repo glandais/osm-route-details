@@ -15,6 +15,9 @@ use crate::engine::{rides_of_view, Engine, Snap, ViewData};
 use crate::geo::{haversine_m, point_segment, LatLon, Local, M_PER_DEG};
 use crate::{Request, RideType};
 
+/// Octets par chaîne d'une fenêtre : tableaux (≈ 69), grilles d'accroche et marge.
+const WINDOW_BYTES_PER_CHAIN: usize = 84;
+
 const CELL_E7: i32 = 100_000;
 
 fn cell_key(lat: i32, lon: i32) -> u32 {
@@ -141,6 +144,11 @@ fn tiles_of_disc(zoom: u8, origin: (i32, i32), center: (i32, i32), radius_m: f64
 }
 
 impl<B: AsRef<[u8]>> Engine<B> {
+    /// Plus longue chaîne de la vue `vi`, en mètres.
+    pub fn longest_chain_m(&self, vi: usize) -> f64 {
+        f64::from(self.idx[vi].lmax_dm) / 10.0
+    }
+
     /// Indice de la vue qui sert un type.
     fn vi_of(ride: RideType) -> usize {
         ride.view_index()
@@ -154,11 +162,17 @@ impl<B: AsRef<[u8]>> Engine<B> {
     /// Les tuiles dont la requête a besoin, et la classe de fenêtre qui les contient (§5.1 et §5.5).
     /// `radius_step_m` : pas d'arrondi du rayon de classe (0 : pas de classe, `class == need`).
     pub fn plan(&self, r: &Request, radius_step_m: f64) -> WindowPlan {
+        self.plan_with(r, radius_step_m, 0.0)
+    }
+
+    /// Comme [`Engine::plan`], avec `extra_m` mètres de marge de plus autour des deux zones : la fenêtre élargie qu'on
+    /// bâtit après un échappement (§5.2).
+    pub fn plan_with(&self, r: &Request, radius_step_m: f64, extra_m: f64) -> WindowPlan {
         let vi = Self::vi_of(r.ride_type);
         let zoom = self.zoom();
         let s7 = r.start.to_e7();
         let e7 = r.end.unwrap_or(r.start).to_e7();
-        let margin = self.params.window_margin_m;
+        let margin = self.params.window_margin_m + extra_m;
         // Zone 1 : le disque de recherche (boucle : autour du départ ; aller simple : autour du milieu).
         let mid = (
             ((i64::from(s7.0) + i64::from(e7.0)) / 2) as i32,
@@ -203,6 +217,23 @@ impl<B: AsRef<[u8]>> Engine<B> {
             need.clone()
         };
         WindowPlan { view: vi, need, class }
+    }
+
+    /// Estimation (octets) de ce que tiendra la fenêtre de `tiles` de la vue `vi`, avec les agrégats d'une équipe :
+    /// le nombre de chaînes (celles que possèdent les cellules, plus les étrangères : un majorant) fois le coût
+    /// par chaîne mesuré à la construction (§4.2 : 66 à 69 o, plus les grilles d'accroche et 12 o par chaîne et par
+    /// type pour l'équipe). Sert à réserver la place avant de construire.
+    pub fn estimate_window_bytes(&self, vi: usize, tiles: &[u32]) -> usize {
+        let view = &self.views_files[vi];
+        let mut chains = 0usize;
+        for &key in tiles {
+            let (x, y) = tile_of_key(key);
+            if let Some(ci) = view.find_cell(x, y) {
+                chains += view.cell_info(ci).n_edges as usize;
+            }
+            chains += self.idx[vi].foreign_of(key).len();
+        }
+        chains * WINDOW_BYTES_PER_CHAIN
     }
 
     /// Fenêtre de toutes les tuiles de la vue `vi` : le moteur à plat (référence des tests et du banc).

@@ -108,3 +108,16 @@ fn the_sparse_component_lengths_agree_with_the_flat_ones_below_the_cap() {
     }
     assert!(below > 0 && above > 0, "le cap doit couper la distribution ({below}/{above})");
 }
+
+#[test]
+fn the_self_check_passes_on_the_synthetic_graphs() {
+    let mut seen = crate::SelfCheck::default();
+    for e in engines() {
+        let c = e.self_check().expect("auto-contrôle");
+        seen.foreign[0] += c.foreign[0];
+        seen.components[0] += c.components[0];
+        seen.degrees[1] += c.degrees[1];
+        seen.base_edges += c.base_edges;
+    }
+    assert!(seen.foreign[0] > 0 && seen.components[0] > 0 && seen.degrees[1] > 0 && seen.base_edges > 1000);
+}

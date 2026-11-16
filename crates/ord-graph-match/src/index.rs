@@ -221,16 +221,27 @@ impl Lru {
     }
 }
 
+/// Une arête plus large qu'une cellule : ses points, relus une fois, et la cellule qui la possède.
+#[derive(Debug)]
+struct WideEdge {
+    edge: u32,
+    owner: (u32, u32),
+    pts: Vec<(i32, i32)>,
+}
+
 /// Index par cellule construit à la demande, borné par `cap_bytes` (éviction de la cellule la moins récente).
 ///
 /// Une cellule est construite depuis ses 9 voisines du graphe en gardant les segments dont la boîte la touche.
-/// Correct tant qu'**aucune arête n'est plus large qu'une cellule** (le segment d'une arête possédée par `C`
-/// ne touche alors que `C` et ses voisines) : [`CellIndex::fits`] vérifie cette borne.
+/// Un segment d'une arête possédée par `C` ne touche que `C` et ses voisines **tant que l'arête n'est pas plus large
+/// qu'une cellule**. Les arêtes plus larges (une seule sur la France, 83,6 km, un `footway`) forment une **liste
+/// d'exceptions** relue à l'ouverture ([`CellIndex::exceptions`]) et ajoutée à chaque cellule que touchent leurs
+/// segments : l'index reste exact, sans retomber sur l'index entier (lot 6, §8.2).
 #[derive(Debug)]
 pub struct CellIndex<'g> {
     gf: &'g MappedGraph,
     zoom: u8,
     cap_bytes: usize,
+    wide: Vec<WideEdge>,
     lru: std::sync::Mutex<Lru>,
     built: std::sync::atomic::AtomicU64,
 }
@@ -243,36 +254,75 @@ fn segment_tiles(p: (i32, i32), q: (i32, i32), zoom: u8) -> ((u32, u32), (u32, u
 }
 
 impl<'g> CellIndex<'g> {
-    /// Vrai si **aucune arête n'est plus large qu'une cellule** : chacun de ses segments ne touche que sa cellule
-    /// propriétaire et ses 8 voisines. Parcourt tout le graphe (une fois au chargement) ; sinon, l'index par cellule
-    /// serait incomplet et l'appelant construit l'index entier ([`SegIndex`]).
-    pub fn fits(gf: &MappedGraph) -> bool {
+    /// Plus petite dimension (m) d'une tuile du graphe : sa hauteur, ou sa largeur à sa latitude la plus haute.
+    fn min_tile_m(gf: &MappedGraph) -> f64 {
         let zoom = gf.header().zoom;
+        let mut min = f64::INFINITY;
+        for ci in 0..gf.n_cells() {
+            let (x, y) = gf.cell_xy(ci);
+            let (lat_hi, lon_lo) = tile_origin_deg(x, y, zoom);
+            let (lat_lo, lon_hi) = tile_origin_deg(x + 1, y + 1, zoom);
+            let height = (lat_hi - lat_lo) * M_PER_DEG;
+            let width = (lon_hi - lon_lo) * M_PER_DEG * lat_hi.abs().max(lat_lo.abs()).to_radians().cos();
+            min = min.min(height.min(width));
+        }
+        min
+    }
+
+    /// Les arêtes **plus larges qu'une cellule** : celles dont un segment touche une tuile hors de la cellule
+    /// propriétaire et de ses 8 voisines. Une arête plus courte que la moitié de la plus petite tuile ne peut pas en
+    /// être : on ne relit la géométrie que des arêtes plus longues (un balayage des enregistrements, ~0,3 s sur la
+    /// France au lieu de 16 s pour décoder tout le graphe).
+    pub fn exceptions(gf: &MappedGraph) -> Vec<u32> {
+        Self::wide_edges(gf).into_iter().map(|w| w.edge).collect()
+    }
+
+    fn wide_edges(gf: &MappedGraph) -> Vec<WideEdge> {
+        let zoom = gf.header().zoom;
+        let thr_dm = (Self::min_tile_m(gf) * 0.5 * 10.0).min(f64::from(u32::MAX)) as u32;
+        let mut out = Vec::new();
         for ci in 0..gf.n_cells() {
             let info = gf.cell_info(ci);
             let (cx, cy) = gf.cell_xy(ci);
+            let cv = gf.cell(ci);
             for k in 0..info.n_edges {
-                let pts = edge_points_e7(gf, info.first_edge + k);
-                for w in pts.windows(2) {
+                if cv.owned(k as usize).len_dm <= thr_dm {
+                    continue;
+                }
+                let edge = info.first_edge + k;
+                let pts = edge_points_e7(gf, edge);
+                let wide = pts.windows(2).any(|w| {
                     let ((x0, y0), (x1, y1)) = segment_tiles(w[0], w[1], zoom);
-                    if x0 + 1 < cx || y0 + 1 < cy || x1 > cx + 1 || y1 > cy + 1 {
-                        return false;
-                    }
+                    x0 + 1 < cx || y0 + 1 < cy || x1 > cx + 1 || y1 > cy + 1
+                });
+                if wide {
+                    out.push(WideEdge { edge, owner: (cx, cy), pts });
                 }
             }
         }
-        true
+        out
     }
 
-    /// Index vide. L'appelant a vérifié [`CellIndex::fits`] pour ce graphe.
+    /// Vrai si **aucune arête n'est plus large qu'une cellule**.
+    pub fn fits(gf: &MappedGraph) -> bool {
+        Self::exceptions(gf).is_empty()
+    }
+
+    /// Index vide. Relit la liste des arêtes plus larges qu'une cellule (§8.2 du lot 6).
     pub fn new(gf: &'g MappedGraph, cap_bytes: usize) -> Self {
         Self {
             gf,
             zoom: gf.header().zoom,
             cap_bytes,
+            wide: Self::wide_edges(gf),
             lru: std::sync::Mutex::new(Lru::default()),
             built: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    /// Nombre d'arêtes plus larges qu'une cellule.
+    pub fn exception_count(&self) -> usize {
+        self.wide.len()
     }
 
     /// Arbres construits depuis l'ouverture (une cellule évincée puis redemandée compte deux fois).
@@ -303,6 +353,20 @@ impl<'g> CellIndex<'g> {
                             segs.push(GeomWithData::new(Line::new(p, q), edge));
                         }
                     }
+                }
+            }
+        }
+        // Les arêtes plus larges qu'une cellule, sauf celles déjà lues : possédées par la cellule ou une voisine.
+        for w in &self.wide {
+            if w.owner.0.abs_diff(x) <= 1 && w.owner.1.abs_diff(y) <= 1 {
+                continue;
+            }
+            for q in w.pts.windows(2) {
+                let ((x0, y0), (x1, y1)) = segment_tiles(q[0], q[1], self.zoom);
+                if (x0..=x1).contains(&x) && (y0..=y1).contains(&y) {
+                    let p0 = frame.xy(f64::from(q[0].0) * 1e-7, f64::from(q[0].1) * 1e-7);
+                    let p1 = frame.xy(f64::from(q[1].0) * 1e-7, f64::from(q[1].1) * 1e-7);
+                    segs.push(GeomWithData::new(Line::new(p0, p1), w.edge));
                 }
             }
         }

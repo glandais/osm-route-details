@@ -12,6 +12,7 @@
 //! Lot 6 : la recherche ne lit pas le graphe entier mais une [`Window`], les cellules d'une zone relues à plat
 //! (`docs/design/technique/ord-loops-lot6.md`).
 
+mod cache;
 mod cost;
 mod engine;
 mod generate;
@@ -19,6 +20,7 @@ mod geo;
 mod index;
 mod reverse;
 mod search;
+mod selfcheck;
 mod team;
 mod verify;
 mod window;
@@ -32,6 +34,7 @@ mod tests_reference;
 #[cfg(test)]
 mod tests_window;
 
+pub use cache::{CacheStats, WindowCache};
 pub use cost::{multiplier_table, RideType};
 pub use engine::{Engine, EngineError, Params};
 pub use generate::{
@@ -39,6 +42,7 @@ pub use generate::{
 };
 pub use geo::LatLon;
 pub use search::Workspace;
+pub use selfcheck::SelfCheck;
 pub use team::{TeamCtx, TeamData, TeamStats, WindowTeam};
 pub use verify::{check_route, check_route_in, Check, Violation};
 pub use window::{tiles_cover, tiles_union, Window, WindowPlan};

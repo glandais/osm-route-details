@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use ord_graph::format::GraphFile;
 use ord_loops::{
-    check_route, generate_with_diagnostics, route_geometry, Diagnostics, Engine, Failure, Generation, Mode,
-    NoRouteDetail, Request, Route, TeamData, Workspace,
+    check_route_in, generate_with_diagnostics_in, route_geometry, Diagnostics, Engine, Failure, Generation,
+    Mode, NoRouteDetail, Request, Route, TeamCtx, TeamData, Window, WindowTeam, Workspace,
 };
 use ord_loops_check::Checker;
 use serde::Serialize;
@@ -101,6 +101,10 @@ pub struct Rec {
     pub dropped: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applied: Option<String>,
+    /// Moteur fenêtré : durée (ms) de la construction à froid de la fenêtre qui a servi cette requête, si elle a
+    /// été construite pour elle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_build_ms: Option<f64>,
 }
 
 impl Rec {
@@ -144,11 +148,12 @@ pub fn failure_code(f: &Failure) -> String {
 /// champs : seule l'API publique du moteur sert, et seulement pour compter les désaccords).
 fn internal_violations<B: AsRef<[u8]>>(
     e: &Engine<B>,
+    win: &Window,
     team: &TeamData,
     req: &Request,
     r: &Route,
 ) -> Vec<String> {
-    let c = check_route(e, Some(team), req, r);
+    let c = check_route_in(e, win, Some(team), req, r);
     let s = format!("{:?}", c.violations);
     s.trim_matches(|c| c == '[' || c == ']')
         .split(',')
@@ -166,15 +171,25 @@ pub struct Outcome {
     pub ms: f64,
 }
 
+/// Ce que la génération lit pour une requête : la fenêtre et les données d'équipe (globales et de la fenêtre).
+#[derive(Clone, Copy)]
+pub struct Inputs<'a> {
+    pub win: &'a Window,
+    pub team: &'a TeamData,
+    pub wt: &'a WindowTeam,
+}
+
 fn one_call<B: AsRef<[u8]>>(
     e: &Engine<B>,
-    team: &TeamData,
+    inp: Inputs<'_>,
     req: &Request,
     ws: &mut Workspace,
 ) -> (Result<Generation, Failure>, Diagnostics, Option<String>, f64) {
     let t = Instant::now();
-    let r =
-        catch_unwind(AssertUnwindSafe(|| generate_with_diagnostics(e, Some(team), req, ws, &mut || false)));
+    let r = catch_unwind(AssertUnwindSafe(|| {
+        let ctx = TeamCtx { data: inp.team, win: inp.wt };
+        generate_with_diagnostics_in(e, inp.win, Some(ctx), req, ws, &mut || false)
+    }));
     let ms = t.elapsed().as_secs_f64() * 1000.0;
     match r {
         Ok((res, diag)) => (res, diag, None, ms),
@@ -192,16 +207,16 @@ fn one_call<B: AsRef<[u8]>>(
 /// Un tour froid (son résultat est celui du rapport), puis `rounds` tours chauds dont on garde la médiane.
 pub fn run_request<B: AsRef<[u8]>>(
     e: &Engine<B>,
-    team: &TeamData,
+    inp: Inputs<'_>,
     req: &Request,
     ws: &mut Workspace,
     rounds: usize,
 ) -> Outcome {
-    let (result, diag, panicked, cold_ms) = one_call(e, team, req, ws);
+    let (result, diag, panicked, cold_ms) = one_call(e, inp, req, ws);
     let mut warm: Vec<f64> = Vec::new();
     if panicked.is_none() {
         for _ in 0..rounds {
-            warm.push(one_call(e, team, req, ws).3);
+            warm.push(one_call(e, inp, req, ws).3);
         }
     }
     warm.sort_by(f64::total_cmp);
@@ -221,7 +236,7 @@ impl<B: AsRef<[u8]>> Context<'_, B> {
     }
 
     /// Contrôle chaque parcours rendu et remplit ce qui concerne le moteur dans `rec`.
-    pub fn fill(&self, rec: &mut Rec, req: &Request, out: &Outcome) {
+    pub fn fill(&self, rec: &mut Rec, req: &Request, out: &Outcome, win: &Window) {
         rec.ms = out.ms;
         rec.cold_ms = out.cold_ms;
         if let Some(p) = &out.panicked {
@@ -248,7 +263,7 @@ impl<B: AsRef<[u8]>> Context<'_, B> {
                 rec.n_routes = g.routes.len();
                 for r in &g.routes {
                     let rep = self.checker.check(req, r);
-                    let internal = internal_violations(self.engine, self.team, req, r);
+                    let internal = internal_violations(self.engine, win, self.team, req, r);
                     let codes: Vec<String> = rep.violations.iter().map(|v| v.code().to_string()).collect();
                     if codes.is_empty() {
                         rec.n_ok += 1;

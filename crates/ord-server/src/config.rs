@@ -344,8 +344,20 @@ pub struct GeneratorConfig {
     pub budget_ms: u64,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
-    /// Équipes gardées en mémoire (≈ 55 Mio chacune).
+    /// Équipes gardées en mémoire. Depuis le lot 6, une équipe ne coûte que quelques Mo (arêtes d'équipe et
+    /// composantes strictes) ; ses agrégats par fenêtre sont sous `memory_budget_mb`.
     pub team_cache_entries: usize,
+    /// Budget de mémoire du générateur (Mo) : fenêtres, agrégats d'équipe par fenêtre, espaces de travail. Le moteur
+    /// seul tient en quelques Mo ; ce budget borne ce qui varie avec les requêtes (lot 6, §10.1).
+    pub memory_budget_mb: usize,
+    /// Marge d'arrondi (m) ajoutée aux zones d'une fenêtre.
+    pub window_margin_m: f64,
+    /// Pas d'arrondi (m) du rayon de classe d'une fenêtre : plus il est grand, plus une fenêtre sert de requêtes.
+    pub window_radius_step_m: f64,
+    /// Un espace de travail rendu à la réserve qui tient plus que cela (Mo) est libéré.
+    pub workspace_keep_mb: usize,
+    /// Fils du calcul des index globaux à l'ouverture (une vue par fil au plus).
+    pub index_threads: usize,
     /// Une surcouche non redéposée depuis ce nombre de jours est purgée.
     pub overlay_ttl_days: u64,
     /// Un dossier d'un autre graphe est purgé quand son dernier fichier a plus de ces heures.
@@ -369,7 +381,12 @@ impl Default for GeneratorConfig {
             budget_ms: 8_000,
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
-            team_cache_entries: 3,
+            team_cache_entries: 16,
+            memory_budget_mb: 900,
+            window_margin_m: 1_000.0,
+            window_radius_step_m: 10_000.0,
+            workspace_keep_mb: 160,
+            index_threads: 2,
             overlay_ttl_days: 14,
             stale_grace_h: 48,
             purge_interval_s: 3_600,

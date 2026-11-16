@@ -29,6 +29,7 @@ mod deposit;
 mod generate;
 pub mod routes;
 pub mod store;
+pub(crate) mod windows;
 
 pub use store::{GenEngine, TestHooks};
 
@@ -177,8 +178,13 @@ pub struct Ready {
     pub(crate) engine: GenEngine,
     poly: Poly,
     store: Arc<store::Store>,
-    /// L'index par cellule couvre ce graphe (aucune arête plus large qu'une cellule) ; sinon index entier.
+    /// L'index par cellule couvre ce graphe : peu d'arêtes plus larges qu'une cellule (liste d'exceptions) ; sinon
+    /// index entier.
     cell_index_ok: bool,
+    /// Arêtes plus larges qu'une cellule, pour le contrôleur indépendant (une fois, au démarrage).
+    pub(crate) graph_index: ord_loops_check::GraphIndex,
+    /// Fenêtres du moteur sous un budget de mémoire (lot 6).
+    pub(crate) windows: windows::WindowManager,
     gen_slots: Arc<Semaphore>,
     gen_waiting: AtomicUsize,
     deposit_slots: Arc<Semaphore>,
@@ -193,6 +199,9 @@ impl std::fmt::Debug for Ready {
         f.debug_struct("Ready").field("graph_id", &self.graph_id).finish_non_exhaustive()
     }
 }
+
+/// Au-delà de ce nombre d'arêtes plus larges qu'une cellule, l'index des dépôts retombe sur l'index entier.
+const MAX_WIDE_EDGES: usize = 1_000;
 
 /// Identité d'un graphe pour le stockage : xxh3 des champs de `GraphIdentity::same_ids` (un graphe reconstruit à
 /// l'identique garde ses surcouches ; un autre les rend `stale`).
@@ -333,7 +342,21 @@ impl Generator {
         };
         let identity = base.graph_identity();
         let tool_version = base.header().tool_version.clone();
-        let engine = match Engine::new(base, road, gravel, Params::default()) {
+        let params = Params {
+            window_margin_m: cfg.window_margin_m,
+            index_threads: cfg.index_threads,
+            ..Params::default()
+        };
+        if cfg.distance_m_max > params.max_distance_m {
+            // Au-delà, l'index creux des composantes ne répond plus exactement (lot 6, §6) : mieux vaut éteindre.
+            tracing::warn!(
+                distance_m_max = cfg.distance_m_max,
+                engine_max_m = params.max_distance_m,
+                "generator distance_m_max exceeds the engine bound"
+            );
+            return disabled(DisabledReason::NotConfigured);
+        }
+        let engine = match Engine::new(base, road, gravel, params) {
             Ok(e) => e,
             Err(ord_loops::EngineError::ViewMismatch | ord_loops::EngineError::OverlayMismatch) => {
                 tracing::warn!("generator view does not belong to the configured graph");
@@ -365,10 +388,17 @@ impl Generator {
             return disabled(DisabledReason::PolygonMismatch);
         }
         tracing::info!(nodes_inside = inside, "generator coverage polygon checked");
-        let cell_index_ok = ord_graph_match::CellIndex::fits(engine.base());
+        // Arêtes plus larges qu'une cellule : listées (une sur la France), l'index par cellule les ajoute. Au-delà d'un
+        // plafond, repli sur l'index entier.
+        let wide_edges = ord_graph_match::CellIndex::exceptions(engine.base()).len();
+        let cell_index_ok = wide_edges <= MAX_WIDE_EDGES;
         if !cell_index_ok {
-            tracing::warn!("an edge is wider than a cell: deposits build the whole spatial index");
+            tracing::warn!(
+                wide_edges,
+                "too many edges wider than a cell: deposits build the whole spatial index"
+            );
         }
+        let graph_index = ord_loops_check::GraphIndex::build(engine.base());
         let gid = graph_id(&identity);
         let matcher_hash = ord_graph_match::agg::params_hash();
         let store = store::Store::new(
@@ -440,6 +470,11 @@ impl Generator {
             nodes = identity.nodes,
             edges = identity.edges,
             cell_index = cell_index_ok,
+            wide_edges,
+            index_ms = engine.index_timings_ms().iter().map(|t| t.0).max().unwrap_or(0),
+            scc_ms = engine.index_timings_ms().iter().map(|t| t.1).max().unwrap_or(0),
+            index_mb = engine.index_bytes() / 1_000_000,
+            memory_budget_mb = cfg.memory_budget_mb,
             load_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             "generator ready"
         );
@@ -450,6 +485,8 @@ impl Generator {
                 poly,
                 store,
                 cell_index_ok,
+                graph_index,
+                windows: windows::WindowManager::new(cfg.memory_budget_mb * 1_000_000),
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),
                 gen_waiting: AtomicUsize::new(0),
                 deposit_slots: Arc::new(Semaphore::new(cfg.deposit.max_concurrent)),
