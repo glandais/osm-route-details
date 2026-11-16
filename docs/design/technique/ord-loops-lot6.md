@@ -1,6 +1,7 @@
 # Générateur de parcours — lot 6 : la France entière dans 2 Go, moteur fenêtré, conception
 
-> Statut : **conception**, rien n'est codé. Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
+> Statut : **codé** (branche `feat/ord-loops-window`) ; les relevés sont dans [`ord-loops-lot6-mesures.md`](ord-loops-lot6-mesures.md).
+> Les écarts entre cette note et le code sont listés au §19 ; les passages concernés sont corrigés ci-dessous. Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
 > (service) et leurs relevés ; graphe et vues France construits le 16 novembre 2026 (extrait Geofabrik du 15/11).
 > **[mesuré]** : commande lancée pour cette note (binaires `release` de `develop`, ou sonde jetable hors dépôt du §18) ;
 > **[calculé]** : compte des tableaux du code à partir des comptes mesurés du graphe ; **[estimé]** : à relever au codage.
@@ -159,8 +160,8 @@ elles restent globales.
 
 ### 4.1 `Graph` : le global, au démarrage
 
-`Graph::open(base, road, gravel, params)` fait les contrôles d'aujourd'hui (`Engine::new` : vues non élaguées, du bon
-genre, de ce graphe) puis, **par vue**, sans recopier la vue :
+`Engine::new(base, road, gravel, params)` (le nom est resté `Engine`, pas `Graph`) fait les contrôles d'aujourd'hui
+(vues non élaguées, du bon genre, de ce graphe, du zoom de la base) puis, **par vue**, sans recopier la vue :
 
 - **Index des chaînes étrangères** : pour chaque tuile z11, les chaînes qui la **touchent** sans lui appartenir. Une
   chaîne appartient à la cellule de son bout `a` (le plus petit id de nœud de vue : `write_inner` range les arêtes par
@@ -173,12 +174,11 @@ genre, de ce graphe) puis, **par vue**, sans recopier la vue :
 - **Longueurs de composantes fortement connexes**, creuses (§6) : 2,9 Mo les deux [calculé].
 - **Plus longue chaîne** `Lmax` (26,5 km `road`, 15,3 km `gravel`) : elle borne l'accroche (§5.1).
 
-Le tout est **parallélisable** : une vue par fil, et le balayage de l'index par paquets de cellules. Temps à un fil
-[mesuré] : 2,8 s (`road`) et 4,6 s (`gravel`) ; avec deux fils (une vue chacun), ~4,6 s ; en coupant l'index par paquets,
-~3 s [estimé]. Mémoire transitoire du Tarjan : 13 o par nœud et deux piles d'au plus 8 o par nœud, < 0,4 Go pour les
-deux vues à la fois [calculé], rendue avant la première fenêtre. `ord-loops` reste sans fil : `Graph` expose des
-fonctions pures par vue (`ViewIndex::build(&view)`), et c'est le service (ou le banc) qui lance les fils
-(`std::thread::scope`, aucune dépendance nouvelle).
+Le tout est **parallélisé** : une vue par fil (`std::thread::scope`, aucune dépendance nouvelle), le balayage de
+l'index pouvant aussi se couper par paquets de cellules (`Params::index_threads`, 2 par défaut : un fil par vue).
+**Écart à la conception** : c'est `Engine::new` qui lance les fils, et non le service ; `ord-loops` n'est donc plus « sans
+fil » à l'ouverture (la génération, elle, n'en lance aucun). Temps relevés : voir les mesures. Le Tarjan travaille sur
+un **tampon unique** de successeurs (pas de `Vec` par nœud) : 13 o par nœud, une pile d'appels de 16 o par niveau.
 
 ### 4.2 `Window` : une vue à plat, renumérotée
 
@@ -499,8 +499,8 @@ une grille de 60 × 60 nœuds à sens uniques, attributs et trous tirés d'une g
 ~400 m) pour qu'une requête de quelques kilomètres ait une vraie fenêtre partielle ; paramètres de fenêtre réduits
 (marge 20 m, pas 500 m).
 
-1. **Équivalence** : moteur à plat d'aujourd'hui (gardé en module `legacy`, `#[cfg(test)]` et fonction `flat-reference`
-   du banc), fenêtre de toutes les tuiles, fenêtre `N(req)`, fenêtre de classe : mêmes `Result<Generation, Failure>`
+1. **Équivalence** : sortie figée du moteur à plat d'avant le lot (fixture commitée ; pas de module `legacy`, §19),
+   fenêtre de toutes les tuiles, fenêtre `N(req)`, fenêtre de classe : mêmes `Result<Generation, Failure>`
    (étapes, positions, mesures, `Diagnostics` champ par champ), sur 500 requêtes tirées (boucles et allers simples, trois
    modes, trois types, avec et sans cap, D de 1 à 15 km) et sur les tests existants.
 2. **Surensemble** : la même requête sur dix fenêtres tirées entre `N(req)` et tout : mêmes résultats ; zéro échappement.
@@ -553,7 +553,7 @@ Chaque étape finit par `cargo fmt`, `cargo clippy --workspace --all-targets --l
    *Vérif. : fixture de l'étape 0 et banc région identiques.*
 4. **`Window`** : construction, grille par tuile, bit de complétude et garde-fou, `N(req)`, point d'entrée
    `generate(&Graph, &Window, …)` ; le moteur à plat d'aujourd'hui passe en `legacy` (tests et fonction du banc).
-   *Vérif. : points 1, 2, 5, 6 du §14 en Discovery.*
+   *Vérif. : points 1, 2, 5, 6 du §14.* (Faite avec les étapes 3 et 5, §19.)
 5. **`TeamData` sur la zone, `WindowTeam`**. *Vérif. : points 1, 2 et 4 du §14 dans les trois modes.*
 6. **Espace de travail** : préfixe, octets comptés. *Vérif. : point 6.*
 7. **Banc** : `--engine flat|window`, `--compare`, cache LRU sous budget, section « Fenêtres » du rapport (tailles,
@@ -564,8 +564,7 @@ Chaque étape finit par `cargo fmt`, `cargo clippy --workspace --all-targets --l
    l'entrée d'équipe, configuration, métriques. *Vérif. : point 7 ; tests d'API existants inchangés ; contrat OpenAPI
    identique octet pour octet.*
 10. **Relevés France** : points 10 à 12 du §14, consignés dans `ord-loops-lot6-mesures.md`.
-11. **Ménage** : `legacy` retiré une fois les relevés acceptés (la fixture de l'étape 0 et les tests de surensemble
-    gardent la garantie) ; note du lot 3a (configuration) et `README` mis à jour.
+11. **Ménage** : pas de `legacy` à retirer (§19) ; note du lot 3a (configuration) et `README` mis à jour.
 
 ## 16. Risques
 
@@ -610,3 +609,44 @@ cellules et comptage des fenêtres autour de quatre centres-villes, puis un bala
 base. Commandes : `probe <vue>.ordv` et `fits <base>.ordg`, sous `/usr/bin/time`, sur les fichiers de
 `~/.cache/osm-route-details/graph/lot6/`. Le RSS de la sonde (0,78 et 1,30 Go) est surtout fait des pages des vues
 qu'elle lit ; seuls les temps et les comptes sont repris ici.
+
+## 19. Écarts entre cette note et le code (corrigés dans le texte quand le texte était faux)
+
+Le code a suivi la note ; ce qui a changé, et pourquoi :
+
+1. **Pas de module `legacy`** (§14 point 1, §15 étapes 4 et 11). Garder l'ancien moteur à plat à côté du nouveau aurait
+   dupliqué `search.rs`, `generate.rs`, `verify.rs` et `team.rs` (3 500 lignes) pour un seul usage, la comparaison. La
+   référence est autre : (a) une **fixture commitée**, écrite avec le moteur à plat **avant** d'y toucher
+   (`crates/ord-loops/tests/fixtures/window_reference.txt`, 140 requêtes sur un graphe synthétique de 48 × 48 carrefours
+   à z11 et z16, empreinte de la sortie complète : étapes, positions, mesures, diagnostics) ; (b) la fenêtre de toutes les
+   tuiles (`Engine::full_window`), qui **est** le moteur à plat (§5.4), comparée à la fenêtre fenêtrée dans le même
+   processus (`--compare` du banc) ; (c) le binaire d'avant le lot (tag `v1.9.0`, plus une option `--dump` de huit
+   lignes appliquée hors dépôt) dont les empreintes par requête sont comparées à celles de ce binaire (`--dump`).
+2. **`Graph` s'appelle `Engine`** (§2, §4.1) : le type public existait, ses appelants (service, banc, contrôleur, tests)
+   l'importent ; il ne porte plus que les index globaux. Les fils des index sont lancés par `Engine::new`.
+3. **Étapes 3, 4 et 5 en un seul commit** (§15) : retirer `BaseData` (étape 3) sans fenêtre ne laissait pas de moteur qui
+   tourne, et `TeamData` (étape 5) lisait `edge_chain` et `binc` des vues à plat ; les trois ne se séparent pas en
+   commits qui compilent.
+4. **Garde-fou** (§5.2) : il se lève en renvoyant `Failure::WindowEscape` ; le service refait la génération une fois
+   dans une fenêtre élargie de la plus longue chaîne et de 10 km (`Engine::plan_with`).
+5. **`Failure::TooLong`** (§6) : la distance demandée dépasse `Params::max_distance_m` (400 km) ; le service ne l'émet
+   jamais (il refuse de démarrer si `distance_m_max` la dépasse).
+6. **Le budget compte aussi la construction des données d'équipe** (§10.1, `team_build`) : `TeamData::plan_build` estime
+   sa mémoire transitoire (210 o par chaîne de la zone, relevé sur les neuf équipes de la France) et le magasin la
+   réserve avant de construire. La note l'annonçait ; le premier code l'avait oublié.
+7. **Ce qui n'est pas compté ni borné** : les agrégats d'équipe d'une fenêtre sont construits **hors du verrou** du cache
+   (deux générations simultanées de la même équipe dans la même fenêtre neuve peuvent les calculer deux fois, la
+   seconde copie étant jetée) ; la mémoire d'une génération est réservée à 118 o par chaîne de fenêtre **après** son
+   acquisition ; la gauge `ord_generator_memory_bytes{kind=workspace}` ne porte que la réserve (pas les espaces en
+   cours d'usage).
+8. **Zone d'une grande équipe construite d'un bloc** (§16, risque « zone d'une très grande équipe ») : la construction
+   par paquets de tuiles n'est **pas** faite. La plus grande équipe de la France (D) demande 704 Mo transitoires et 3,1 s
+   (mesuré) ; une équipe qui roulerait dans toute la France dépasserait le budget et recevrait 503.
+9. **Contrôleur** (§8) : les types s'appellent `GraphIndex` (arêtes plus larges qu'une cellule, une fois par graphe) et
+   `TeamCheck` (arêtes comblées, une fois par équipe, dans l'entrée du cache d'équipes) ; `Checker::with_tables` les
+   reçoit, `Checker::new` les construit au premier besoin (tests, outils).
+10. **`CellIndex`** (§8.2) : `CellIndex::exceptions` relit les arêtes de plus de la moitié de la plus petite tuile ;
+    `CellIndex::new` les relit à chaque création (~0,3 s sur la France par dépôt), le service n'a plus que le plafond de
+    1 000 arêtes comme repli.
+11. **Banc** : `--engine window|flat`, `--compare`, `--self-check`, `--dump`, `--budget-mb`, `--radius-step-m` ; la
+    section « Fenêtres » est faite de lignes d'en-tête du résumé (pas d'un tableau), avec `RssAnon` échantillonné par phase.

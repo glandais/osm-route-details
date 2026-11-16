@@ -590,6 +590,20 @@ impl Config {
         if !(g.distance_m_min > 0.0 && g.distance_m_min <= g.distance_m_max && g.distance_m_max.is_finite()) {
             return invalid("generator.distance_m_min", "must be positive and not above distance_m_max");
         }
+        if g.memory_budget_mb == 0 || g.index_threads == 0 {
+            return invalid(
+                "generator.memory_budget_mb",
+                "memory_budget_mb and index_threads must be positive",
+            );
+        }
+        if !(g.window_margin_m >= 0.0 && g.window_margin_m.is_finite())
+            || !(g.window_radius_step_m > 0.0 && g.window_radius_step_m.is_finite())
+        {
+            return invalid(
+                "generator.window_margin_m",
+                "margin must be non-negative and the radius step positive",
+            );
+        }
         if g.overlay_ttl_days == 0 || g.purge_interval_s == 0 {
             return invalid("generator.overlay_ttl_days", "ttl and purge interval must be positive");
         }
@@ -679,6 +693,27 @@ mod tests {
             jail.set_env("ORD_GENERATOR__MAX_CONCURRENT", "0");
             let err = Config::load(None).expect_err("sans place de calcul");
             assert!(err.to_string().contains("generator"), "{err}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_window_budget_keys_come_from_the_environment_and_are_validated() {
+        figment::Jail::expect_with(|jail| {
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(
+                (c.generator.memory_budget_mb, c.generator.workspace_keep_mb, c.generator.team_cache_entries),
+                (900, 160, 16)
+            );
+            jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
+            jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "5000");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!((c.generator.memory_budget_mb, c.generator.window_radius_step_m), (600, 5000.0));
+            jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "0");
+            assert!(Config::load(None).is_err(), "budget nul");
+            jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
+            jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "0");
+            assert!(Config::load(None).is_err(), "pas nul");
             Ok(())
         });
     }
