@@ -747,7 +747,9 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
     pub fn view_headings(&self) -> Option<Vec<[u16; 2]>> {
         let b = self.optional_section(KIND_VIEW_HEADING)?;
         Some(
-            b.chunks_exact(4)
+            b.as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| [u16::from_le_bytes([c[0], c[1]]), u16::from_le_bytes([c[2], c[3]])])
                 .collect(),
         )
