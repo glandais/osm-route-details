@@ -15,6 +15,7 @@ use ord_graph::view::{heading_to_u16, polyline_heading, BaseEdges, ViewKind};
 
 use crate::cost::{self, RideType};
 use crate::geo::{haversine_m, point_segment, polyline_m, LatLon, Local, M_PER_DEG};
+use crate::index::ViewIndex;
 
 /// Constantes Java reprises telles quelles (note §6) et réglages du moteur.
 #[derive(Clone, Debug)]
@@ -41,6 +42,13 @@ pub struct Params {
     pub min_component_share: f64,
     /// Points de demi-tour essayés au plus par secteur de 30° (le ρ du candidat corrige la cible à chaque essai).
     pub tries_per_sector: usize,
+    /// Plus grande distance D acceptée (m) : au-delà, la composante minimale d'accroche (`0,9 D`) ne se lit plus dans
+    /// l'index creux des composantes et le moteur refuse la demande (lot 6, §6).
+    pub max_distance_m: f64,
+    /// Marge d'arrondi (m) ajoutée aux zones d'une fenêtre (lot 6, §5.3).
+    pub window_margin_m: f64,
+    /// Fils du calcul des index à l'ouverture (une vue par fil, au plus).
+    pub index_threads: usize,
 }
 
 impl Default for Params {
@@ -58,6 +66,9 @@ impl Default for Params {
             tail_reuse_share: 0.15,
             min_component_share: 0.9,
             tries_per_sector: 6,
+            max_distance_m: 400_000.0,
+            window_margin_m: 1_000.0,
+            index_threads: 2,
         }
     }
 }
@@ -219,10 +230,13 @@ impl ViewData {
     }
 }
 
-/// Composantes fortement connexes (Tarjan itératif) d'un graphe de `n` nœuds dont `succ(x, out)` remplit les
-/// successeurs ; rend l'indice de composante de chaque nœud. Sens respectés, virages ignorés : une accroche dans une
-/// poche orientée (rue à sens unique roulée une fois, qui ne mène nulle part) n'est pas dans la grande composante,
-/// alors qu'elle y est sens ignorés (campagne du lot 2, `ord-loops-lot2-mesures.md`).
+/// Composantes fortement connexes (Tarjan itératif) d'un graphe de `n` nœuds dont `succ(x, buf)` **ajoute** les
+/// successeurs de `x` à `buf` ; rend l'indice de composante de chaque nœud. Sens respectés, virages ignorés : une
+/// accroche dans une poche orientée (rue à sens unique roulée une fois, qui ne mène nulle part) n'est pas dans la
+/// grande composante, alors qu'elle y est sens ignorés (campagne du lot 2, `ord-loops-lot2-mesures.md`).
+///
+/// Les successeurs des nœuds de la pile d'appels vivent bout à bout dans **un seul** tampon : pas d'allocation par
+/// nœud (lot 6, sur 10 M de nœuds).
 pub(crate) fn strong_components(n: usize, succ: &dyn Fn(u32, &mut Vec<u32>)) -> Vec<u32> {
     const UNSEEN: u32 = u32::MAX;
     let mut index = vec![UNSEEN; n];
@@ -230,41 +244,44 @@ pub(crate) fn strong_components(n: usize, succ: &dyn Fn(u32, &mut Vec<u32>)) -> 
     let mut on_stack = vec![false; n];
     let mut comp = vec![UNSEEN; n];
     let mut stack: Vec<u32> = Vec::new();
-    // pile d'appels : (nœud, successeurs, position dans les successeurs)
-    let mut call: Vec<(u32, Vec<u32>, usize)> = Vec::new();
+    // pile d'appels : (nœud, début de ses successeurs dans `buf`, position courante)
+    let mut call: Vec<(u32, usize, usize)> = Vec::new();
+    let mut buf: Vec<u32> = Vec::new();
     let (mut next_index, mut next_comp) = (0u32, 0u32);
     for root in 0..n as u32 {
         if index[root as usize] != UNSEEN {
             continue;
         }
-        let mut s = Vec::new();
-        succ(root, &mut s);
+        buf.clear();
+        succ(root, &mut buf);
         index[root as usize] = next_index;
         low[root as usize] = next_index;
         next_index += 1;
         stack.push(root);
         on_stack[root as usize] = true;
-        call.push((root, s, 0));
+        call.push((root, 0, 0));
         while let Some(top) = call.last_mut() {
             let x = top.0;
-            if top.2 < top.1.len() {
-                let y = top.1[top.2];
+            if top.2 < buf.len() {
+                let y = buf[top.2];
                 top.2 += 1;
                 if index[y as usize] == UNSEEN {
-                    let mut s = Vec::new();
-                    succ(y, &mut s);
+                    let start = buf.len();
+                    succ(y, &mut buf);
                     index[y as usize] = next_index;
                     low[y as usize] = next_index;
                     next_index += 1;
                     stack.push(y);
                     on_stack[y as usize] = true;
-                    call.push((y, s, 0));
+                    call.push((y, start, start));
                 } else if on_stack[y as usize] {
                     low[x as usize] = low[x as usize].min(index[y as usize]);
                 }
                 continue;
             }
+            let (_, start, _) = *top;
             call.pop();
+            buf.truncate(start);
             if let Some(parent) = call.last() {
                 let p = parent.0 as usize;
                 low[p] = low[p].min(low[x as usize]);
@@ -503,10 +520,12 @@ pub struct Engine<B> {
     pub(crate) views_files: [GraphFile<B>; 2],
     pub(crate) bd: BaseData,
     pub(crate) views: [ViewData; 2],
+    #[allow(dead_code)] // lu par la fenêtre, à l'étape suivante du lot 6
+    pub(crate) idx: [ViewIndex; 2],
     pub(crate) params: Params,
 }
 
-impl<B: AsRef<[u8]>> Engine<B> {
+impl<B: AsRef<[u8]> + Sync> Engine<B> {
     /// Relit le graphe de base et ses deux vues non élaguées : `road` (corrigée, lot 2) et `gravel`.
     pub fn new(
         base: GraphFile<B>,
@@ -520,9 +539,22 @@ impl<B: AsRef<[u8]>> Engine<B> {
         let bd = BaseData::load(&base);
         let r = load_view(&base, &bd, &road, ViewKind::Road, &[RideType::Road])?;
         let g = load_view(&base, &bd, &gravel, ViewKind::Gravel, &[RideType::Gravel, RideType::Mtb])?;
-        Ok(Self { base, views_files: [road, gravel], bd, views: [r, g], params })
+        // Index globaux : une vue par fil quand `index_threads` le permet.
+        let per_view = (params.index_threads / 2).max(1);
+        let idx = if params.index_threads >= 2 {
+            std::thread::scope(|s| {
+                let h = s.spawn(|| ViewIndex::build(&road, &params, per_view));
+                let g = ViewIndex::build(&gravel, &params, per_view);
+                [h.join().expect("fil d'index"), g]
+            })
+        } else {
+            [ViewIndex::build(&road, &params, 1), ViewIndex::build(&gravel, &params, 1)]
+        };
+        Ok(Self { base, views_files: [road, gravel], bd, views: [r, g], idx, params })
     }
+}
 
+impl<B: AsRef<[u8]>> Engine<B> {
     /// Construit tout de suite les index paresseux (accroche) des deux vues : à appeler une fois après `new` pour que
     /// la première génération ne paie pas leur construction (~0,3 s par vue sur la région).
     pub fn warm(&self) {

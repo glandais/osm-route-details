@@ -12,6 +12,7 @@ mod cost;
 mod engine;
 mod generate;
 mod geo;
+mod index;
 mod reverse;
 mod search;
 mod team;
@@ -19,6 +20,8 @@ mod verify;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_index;
 #[cfg(test)]
 mod tests_reference;
 
