@@ -573,6 +573,41 @@ fn a_u_turn_made_of_a_connector_between_two_junctions_is_refused() {
     assert!(rep.has(Violation::SharpTurn), "{:?}", rep.violations);
 }
 
+/// Le même demi-tour en trois morceaux que [`hairpin`], avec des branches de `leg` mètres : le parcours part
+/// à `leg` mètres du premier carrefour et s'arrête à `leg` mètres du second.
+fn block_turn_check(leg: f64, cfg: Config) -> crate::Report {
+    let conn = 70.0;
+    let mut s = MemSource::default();
+    node(&mut s, 1, -leg, 0.0);
+    node(&mut s, 11, 0.0, 0.0);
+    node(&mut s, 12, 0.0, conn);
+    node(&mut s, 2, -leg, conn);
+    node(&mut s, 21, 0.0, -100.0);
+    node(&mut s, 22, 0.0, conn + 100.0);
+    s.way(1, &[1, 11], RES);
+    s.way(2, &[11, 12], RES);
+    s.way(3, &[12, 2], RES);
+    s.way(4, &[11, 21], RES);
+    s.way(5, &[12, 22], RES);
+    let fx = Fx::new(s);
+    let r = fx.route(&[1, 11, 12, 2], 0.0, 1.0);
+    Checker::new(&fx.g, None, cfg).check(&req_at(ll(-leg, 0.0), 2.0 * leg + conn, Mode::Discovery), &r)
+}
+
+#[test]
+fn a_turn_round_the_block_within_200_m_of_an_end_is_not_a_u_turn() {
+    // Java `CLUSTER_FREE_ENDS_M` : en quittant son départ, faire le tour d'un pâté de maisons n'est pas un retour.
+    // Branches de 100 m : le second carrefour est à 170 m du départ, la grappe est à un bout.
+    let near = block_turn_check(100.0, Config::default());
+    assert!(!near.has(Violation::SharpTurn), "{:?}", near.violations);
+    // Branches de 300 m : la grappe est au milieu du parcours, elle reste refusée.
+    let far = block_turn_check(300.0, Config::default());
+    assert!(far.has(Violation::SharpTurn), "{:?}", far.violations);
+    // Sans la levée, la grappe proche du départ est refusée comme avant.
+    let strict = block_turn_check(100.0, Config { cluster_free_ends_m: 0.0, ..Config::default() });
+    assert!(strict.has(Violation::SharpTurn), "{:?}", strict.violations);
+}
+
 #[test]
 fn a_hairpin_of_one_way_is_allowed_and_a_connector_of_another_way_is_not() {
     // La note (§6) n'exempte pas l'apex d'un nœud seul : par défaut il est refusé.

@@ -72,6 +72,8 @@ pub struct Config {
     pub head_near_m: f64,
     pub head_far_m: f64,
     pub cluster_m: f64,
+    /// Bouts du parcours où la règle des grappes ne s'applique pas (Java `CLUSTER_FREE_ENDS_M`).
+    pub cluster_free_ends_m: f64,
     pub tail_share: f64,
     pub max_crossings: u32,
     pub tolerance: f64,
@@ -106,6 +108,7 @@ impl Default for Config {
             head_near_m: 30.0,
             head_far_m: 50.0,
             cluster_m: 100.0,
+            cluster_free_ends_m: 200.0,
             tail_share: 0.15,
             max_crossings: 2,
             tolerance: 0.10,
@@ -577,6 +580,13 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             }
         }
         // grappes de nœuds à moins de 100 m le long du parcours
+        // Mètres parcourus avant chaque nœud, pour lever la règle aux deux bouts du parcours : une grappe dont le
+        // second nœud est à 200 m au plus du départ, ou le premier à 200 m au plus de l'arrivée, ne compte pas.
+        let total_m: f64 = pieces.iter().map(|p| p.len).sum();
+        let mut before = vec![0.0; n + 1];
+        for k in 0..n {
+            before[k + 1] = before[k] + pieces[k].len;
+        }
         for a in 1..n {
             if node_deg(node_at(a)) < 3 || u_turn[a - 1] {
                 continue;
@@ -588,6 +598,11 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
                     break;
                 }
                 if node_deg(node_at(b)) < 3 {
+                    continue;
+                }
+                if before[b] <= self.cfg.cluster_free_ends_m
+                    || total_m - before[a] <= self.cfg.cluster_free_ends_m
+                {
                     continue;
                 }
                 let h_in = self.heading(&pieces, a, true, &mut head);

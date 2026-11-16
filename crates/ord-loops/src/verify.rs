@@ -75,6 +75,10 @@ pub struct Check {
 }
 
 const CLUSTER_M: f64 = 100.0;
+/// La règle des grappes est levée quand la grappe tient dans les 200 premiers ou les 200 derniers mètres du
+/// parcours : en quittant son départ, faire le tour d'un pâté de maisons n'est pas un retour (Java,
+/// `RouteGuarantees.CLUSTER_FREE_ENDS_M`, relevé en production le 15 novembre 2026).
+const CLUSTER_FREE_ENDS_M: f64 = 200.0;
 const HEAD_NEAR_M: f64 = 30.0;
 const HEAD_FAR_M: f64 = 50.0;
 const CONNECTOR_MIN_M: f64 = 15.0;
@@ -400,7 +404,8 @@ pub fn check_route<B: AsRef<[u8]>>(
         }
         let mut j = i + 1;
         while j + 1 < n && cum[j + 1] - cum[i + 1] <= CLUSTER_M {
-            if admitted_degree(v, pieces[j].to) >= 3 {
+            let at_an_end = cum[j + 1] <= CLUSTER_FREE_ENDS_M || cum[n] - cum[i + 1] <= CLUSTER_FREE_ENDS_M;
+            if !at_an_end && admitted_degree(v, pieces[j].to) >= 3 {
                 let hin = route_heading(&pieces, i, false, &loc);
                 let hout = route_heading(&pieces, j + 1, true, &loc);
                 if turn_angle_deg(hin, hout) >= e.params.max_turn_deg
