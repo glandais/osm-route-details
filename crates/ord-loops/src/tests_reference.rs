@@ -166,9 +166,64 @@ pub(crate) fn fnv(s: &str) -> u64 {
     s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3))
 }
 
+/// Réécrit chaque nombre à virgule de `s` au millième. Les longueurs passent par `sin` et `cos`, dont le dernier
+/// bit dépend de la libm et du processeur : sans cet arrondi, l'empreinte change d'une machine à l'autre (CI).
+pub(crate) fn rounded_floats(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() {
+            let n = s[i..].chars().next().map_or(1, char::len_utf8);
+            out.push_str(&s[i..i + n]);
+            i += n;
+            continue;
+        }
+        let mut j = i;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        let mut k = j;
+        if k + 1 < b.len() && b[k] == b'.' && b[k + 1].is_ascii_digit() {
+            k += 1;
+            while k < b.len() && b[k].is_ascii_digit() {
+                k += 1;
+            }
+            if k < b.len() && b[k] == b'e' {
+                let mut m = k + 1;
+                if m < b.len() && b[m] == b'-' {
+                    m += 1;
+                }
+                if m < b.len() && b[m].is_ascii_digit() {
+                    while m < b.len() && b[m].is_ascii_digit() {
+                        m += 1;
+                    }
+                    k = m;
+                }
+            }
+        }
+        if k > j {
+            let v: f64 = s[i..k].parse().expect("nombre à virgule");
+            let _ = write!(out, "{v:.3}");
+        } else {
+            out.push_str(&s[i..j]);
+        }
+        i = k.max(j);
+    }
+    out
+}
+
+#[test]
+fn rounded_floats_keeps_integers_and_rounds_the_rest() {
+    assert_eq!(
+        rounded_floats("a 12 b 1.23456 c -0.0004 d 1.5e-7 é 3.0"),
+        "a 12 b 1.235 c -0.000 d 0.000 é 3.000"
+    );
+}
+
 /// Une ligne de fixture : empreinte de la sortie complète et résumé.
 pub(crate) fn snapshot(i: usize, res: &(Result<Generation, Failure>, Diagnostics)) -> String {
-    let full = format!("{res:?}");
+    let full = rounded_floats(&format!("{res:?}"));
     let sum = match &res.0 {
         Ok(g) => {
             let steps: Vec<usize> = g.routes.iter().map(|r| r.steps.len()).collect();

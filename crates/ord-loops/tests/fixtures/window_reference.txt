@@ -1,140 +1,140 @@
-z11 0 bd70d48560e08967 ok routes=3 steps=[24, 24, 23]
-z11 1 836f7bf517a4c637 err NoRoute(EndUnreachable)
-z11 2 0594bb64baaf5152 err NoRoute(NoCandidate)
-z11 3 61adadca0f6ece2a err StartTooFar
-z11 4 96b514c66bfedb79 ok routes=3 steps=[30, 30, 30]
-z11 5 1d31f8ae68fef0ad err NoRoute(NoCandidate)
-z11 6 61adadca0f6ece2a err StartTooFar
-z11 7 61adadca0f6ece2a err StartTooFar
-z11 8 416462d17e117004 ok routes=1 steps=[17]
-z11 9 906787964795668a err NoRoute(NoCandidate)
-z11 10 934a71132628187f err NoRoute(EndUnreachable)
-z11 11 cb8da8f6e5ff94cc ok routes=3 steps=[40, 42, 40]
-z11 12 62a35069f0257603 err NoRoute(NoCandidate)
-z11 13 722f9f40b52282da err NetworkTooSmall
-z11 14 09404cbb4e747c4c ok routes=3 steps=[20, 20, 20]
-z11 15 4e09af72cc13d80f err NoRoute(EndUnreachable)
-z11 16 b703f3592847bb18 err NetworkTooSmall
-z11 17 2dc9602d3787f3da err NoRoute(NoCandidate)
-z11 18 5037b11febfdb62a ok routes=1 steps=[14]
-z11 19 375947c3a57460dd err NoRoute(EndUnreachable)
-z11 20 8ff369e9dc3029b1 ok routes=2 steps=[22, 21]
-z11 21 549f9408684c1880 err NetworkTooSmall
-z11 22 5c2c49eb8817a180 ok routes=1 steps=[9]
-z11 23 73e2d18409637257 ok routes=3 steps=[33, 32, 34]
-z11 24 5f4d29718916482b ok routes=3 steps=[32, 33, 34]
-z11 25 e3ca6ea0814387c4 ok routes=1 steps=[32]
-z11 26 1feba534b7f62e70 ok routes=3 steps=[42, 40, 42]
-z11 27 7333cee85bdc42c6 err NoRoute(NoCandidate)
-z11 28 ab4a39ce5c4bf7be ok routes=2 steps=[17, 16]
-z11 29 705351585a8294e4 ok routes=2 steps=[32, 32]
-z11 30 f3a85aac0adc9b54 ok routes=1 steps=[45]
-z11 31 5b0055d27868dab2 err NetworkTooSmall
-z11 32 864628716e7e8c65 ok routes=3 steps=[43, 40, 42]
-z11 33 68b7ad667f044445 err NoRoute(EndUnreachable)
-z11 34 d0a870947123a721 ok routes=2 steps=[12, 14]
-z11 35 474091b129b5c970 ok routes=3 steps=[22, 21, 21]
-z11 36 427171f97180d226 ok routes=3 steps=[31, 31, 28]
-z11 37 a99c4d64a98faa27 err NoRoute(EndUnreachable)
-z11 38 89905556f6feb619 err NoRoute(EndUnreachable)
-z11 39 b28a20f4ba58dad6 ok routes=3 steps=[25, 25, 23]
-z11 40 94c998d72db313de ok routes=3 steps=[21, 21, 23]
-z11 41 a5676197fcac8754 err NoRoute(EndUnreachable)
-z11 42 e41276fc44c8ad1a ok routes=2 steps=[29, 28]
-z11 43 8b2da11d67a138df ok routes=3 steps=[15, 15, 14]
-z11 44 08578b0f3f918283 ok routes=3 steps=[16, 16, 15]
-z11 45 5fd2ddedd835cf89 ok routes=1 steps=[19]
-z11 46 7e79f8a031e19dba ok routes=3 steps=[31, 33, 31]
-z11 47 debeeeb62ffd2a4c ok routes=1 steps=[36]
-z11 48 d3f5ae13195b33bd ok routes=3 steps=[23, 24, 22]
-z11 49 338c4968b33bbe62 ok routes=3 steps=[35, 37, 33]
-z11 50 ab5c9a2ed8cb5fad ok routes=3 steps=[38, 37, 39]
-z11 51 b38f71d7c630abb4 ok routes=3 steps=[41, 41, 40]
-z11 52 6959a93970a2cd2f ok routes=3 steps=[18, 16, 16]
-z11 53 61adadca0f6ece2a err StartTooFar
-z11 54 29f19de25e02ee8e ok routes=3 steps=[30, 30, 30]
-z11 55 5be677ff550bbeeb err NoRoute(EndUnreachable)
-z11 56 61adadca0f6ece2a err StartTooFar
-z11 57 6c8b6d56dc491bbe ok routes=3 steps=[24, 24, 24]
-z11 58 82a8c9605f310415 err NoRoute(EndUnreachable)
-z11 59 70de9bdcd8d0f36a ok routes=3 steps=[43, 42, 42]
-z11 60 53b299fd321e0e7d ok routes=1 steps=[33]
-z11 61 bf66932be37b3168 ok routes=3 steps=[41, 43, 42]
-z11 62 198a3dd3f6cccec2 err NetworkTooSmall
-z11 63 61adadca0f6ece2a err StartTooFar
-z11 64 b7754d258de25668 ok routes=2 steps=[17, 17]
-z11 65 09160e5ccb3af58e ok routes=1 steps=[34]
-z11 66 a144efc9032cf73c err NoRoute(EndUnreachable)
-z11 67 07a06b3ac08120ad ok routes=2 steps=[22, 20]
-z11 68 b8476d7306cf47a3 ok routes=3 steps=[27, 27, 25]
-z11 69 e4c240272490026e err NoRoute(NoCandidate)
-z16 0 edea05c6c2340b39 ok routes=3 steps=[24, 24, 23]
-z16 1 ae0241676bc4f9d8 err NoRoute(EndUnreachable)
-z16 2 8e210db76776b6f0 err NoRoute(NoCandidate)
-z16 3 61adadca0f6ece2a err StartTooFar
-z16 4 fdeedfe2e927eea5 ok routes=3 steps=[30, 30, 28]
-z16 5 eb51d547be3a4822 ok routes=1 steps=[9]
-z16 6 61adadca0f6ece2a err StartTooFar
-z16 7 61adadca0f6ece2a err StartTooFar
-z16 8 6cbb4cfd95aa3b1a ok routes=1 steps=[17]
-z16 9 f3a2706ac53c198d err NoRoute(NoCandidate)
-z16 10 934a71132628187f err NoRoute(EndUnreachable)
-z16 11 625dee6440ab9667 ok routes=3 steps=[40, 42, 40]
-z16 12 79fb20b3e35989cc err NoRoute(NoCandidate)
-z16 13 01b4fdae3d93acfa err NetworkTooSmall
-z16 14 e461f5dab4aac930 ok routes=3 steps=[20, 21, 20]
-z16 15 4e09af72cc13d80f err NoRoute(EndUnreachable)
-z16 16 2296abd90dd5dec8 err NetworkTooSmall
-z16 17 ef34d8b69625db9c err NoRoute(NoCandidate)
-z16 18 716ca67953346692 ok routes=1 steps=[14]
-z16 19 375947c3a57460dd err NoRoute(EndUnreachable)
-z16 20 945d28935532bc85 ok routes=2 steps=[22, 21]
-z16 21 7907a956251a7c82 err NetworkTooSmall
-z16 22 60c6f1ac99140eca ok routes=1 steps=[9]
-z16 23 9eeebc965ce15538 ok routes=3 steps=[32, 31, 33]
-z16 24 a64fd63a04e4c5d3 ok routes=3 steps=[32, 33, 34]
-z16 25 bb7ef3e7a0b6dc58 ok routes=3 steps=[30, 28, 32]
-z16 26 5dcef2b342e488c4 ok routes=3 steps=[40, 40, 42]
-z16 27 71961d9fa944df61 err NoRoute(NoCandidate)
-z16 28 b905e10a6b4ebd70 ok routes=2 steps=[17, 16]
-z16 29 d218510b000745d8 ok routes=2 steps=[32, 32]
-z16 30 523cd65ea5627286 ok routes=1 steps=[45]
-z16 31 b56abec5eb5162b8 err NetworkTooSmall
-z16 32 eb0fa8ff02d779e2 ok routes=3 steps=[43, 43, 42]
-z16 33 179e934e776f7cc6 err NoRoute(EndUnreachable)
-z16 34 85e6a70b1328c787 ok routes=2 steps=[12, 14]
-z16 35 79a8190158abcd28 ok routes=3 steps=[22, 21, 21]
-z16 36 e2bdeeceba769a24 ok routes=3 steps=[29, 29, 30]
-z16 37 a99c4d64a98faa27 err NoRoute(EndUnreachable)
-z16 38 89905556f6feb619 err NoRoute(EndUnreachable)
-z16 39 e84896f37c7b3dee ok routes=3 steps=[23, 23, 23]
-z16 40 79d9742adf0f5e02 ok routes=2 steps=[20, 22]
-z16 41 a5676197fcac8754 err NoRoute(EndUnreachable)
-z16 42 2616d83e27b1e7f2 ok routes=3 steps=[29, 30, 32]
-z16 43 2543c3b53f06e373 ok routes=3 steps=[15, 15, 16]
-z16 44 abbd256c87d5ab0b ok routes=3 steps=[16, 15, 15]
-z16 45 d1b6b3a8769ca5f6 err NoRoute(EndUnreachable)
-z16 46 94384bcf307626a2 ok routes=3 steps=[33, 35, 35]
-z16 47 159dc37a57be1add ok routes=1 steps=[36]
-z16 48 f836e78fcd398302 ok routes=3 steps=[23, 24, 22]
-z16 49 6ad6dcf6f6c74b93 ok routes=3 steps=[35, 37, 33]
-z16 50 49687ff4f8342af7 ok routes=3 steps=[38, 37, 38]
-z16 51 c283fabf622e6e46 ok routes=3 steps=[41, 41, 40]
-z16 52 3c86559a4d9a3cba ok routes=3 steps=[18, 16, 16]
-z16 53 61adadca0f6ece2a err StartTooFar
-z16 54 6f9f7c5c0ca2745f ok routes=3 steps=[30, 30, 32]
-z16 55 5be677ff550bbeeb err NoRoute(EndUnreachable)
-z16 56 61adadca0f6ece2a err StartTooFar
-z16 57 3908de55755e9df2 ok routes=3 steps=[25, 25, 26]
-z16 58 82a8c9605f310415 err NoRoute(EndUnreachable)
-z16 59 2150aff74c11bded ok routes=3 steps=[43, 43, 43]
-z16 60 ecd5fa2f7f5b5e6a ok routes=1 steps=[33]
-z16 61 268196780e0e9b02 ok routes=3 steps=[41, 43, 42]
-z16 62 87638198836acf12 err NetworkTooSmall
-z16 63 61adadca0f6ece2a err StartTooFar
-z16 64 7f8f542e3d76e385 ok routes=3 steps=[17, 17, 17]
-z16 65 dfdc37ab2677e95e ok routes=1 steps=[34]
-z16 66 e1c1bdcfd22718ec err NoRoute(EndUnreachable)
-z16 67 3e51e08c98c0d976 ok routes=2 steps=[22, 20]
-z16 68 01503a339b07bdde ok routes=3 steps=[27, 27, 25]
-z16 69 fbd9cc09860e4fb8 err NoRoute(NoCandidate)
+z11 0 35edacdc40e3f849 ok routes=3 steps=[24, 24, 23]
+z11 1 836def99c43df71b err NoRoute(EndUnreachable)
+z11 2 5ecf303b3c97eba0 err NoRoute(NoCandidate)
+z11 3 006d58ec455bdcc2 err StartTooFar
+z11 4 506da0682a535804 ok routes=3 steps=[30, 30, 30]
+z11 5 c682ecf3f988789b err NoRoute(NoCandidate)
+z11 6 006d58ec455bdcc2 err StartTooFar
+z11 7 006d58ec455bdcc2 err StartTooFar
+z11 8 621bff2544464500 ok routes=1 steps=[17]
+z11 9 ce8c5bd4444a2c00 err NoRoute(NoCandidate)
+z11 10 ccd6af518ced3b0f err NoRoute(EndUnreachable)
+z11 11 0910326a8bece039 ok routes=3 steps=[40, 42, 40]
+z11 12 06d6e1c3fd71f6bb err NoRoute(NoCandidate)
+z11 13 57c5de0638434442 err NetworkTooSmall
+z11 14 f5741a589b77570e ok routes=3 steps=[20, 20, 20]
+z11 15 da4325f956999f57 err NoRoute(EndUnreachable)
+z11 16 7f0eac02eff982c0 err NetworkTooSmall
+z11 17 86f1a25c24fd5bc4 err NoRoute(NoCandidate)
+z11 18 93af5b7d1678de86 ok routes=1 steps=[14]
+z11 19 b23d0c9ab55d8aae err NoRoute(EndUnreachable)
+z11 20 3cff73927d2c51cd ok routes=2 steps=[22, 21]
+z11 21 e6cb666c11832c80 err NetworkTooSmall
+z11 22 620dec260184fee0 ok routes=1 steps=[9]
+z11 23 ab1c68843b3a00d4 ok routes=3 steps=[33, 32, 34]
+z11 24 075891f6078b595d ok routes=3 steps=[32, 33, 34]
+z11 25 9dbd6ef7002be46d ok routes=1 steps=[32]
+z11 26 fcb9babebc87e5b6 ok routes=3 steps=[42, 40, 42]
+z11 27 bca9b5fa02a82fd0 err NoRoute(NoCandidate)
+z11 28 b85f13c94507ef31 ok routes=2 steps=[17, 16]
+z11 29 c6a829e17fe5e5b3 ok routes=2 steps=[32, 32]
+z11 30 09ad07e5ab22fc28 ok routes=1 steps=[45]
+z11 31 e0875b36998e222a err NetworkTooSmall
+z11 32 e16f374475fbd253 ok routes=3 steps=[43, 40, 42]
+z11 33 8aa8589fc2bda444 err NoRoute(EndUnreachable)
+z11 34 fcb3761e2eba00ed ok routes=2 steps=[12, 14]
+z11 35 4de0ad35f95c0ba7 ok routes=3 steps=[22, 21, 21]
+z11 36 f96a63fbd211f06c ok routes=3 steps=[31, 31, 28]
+z11 37 7736ff4481bc9ecd err NoRoute(EndUnreachable)
+z11 38 9864c2150d5f93be err NoRoute(EndUnreachable)
+z11 39 faa1aa51e32781f4 ok routes=3 steps=[25, 25, 23]
+z11 40 6e8939593d8b7834 ok routes=3 steps=[21, 21, 23]
+z11 41 23d763cc099c1273 err NoRoute(EndUnreachable)
+z11 42 179e2cad47096f5e ok routes=2 steps=[29, 28]
+z11 43 315884a74c2f07a7 ok routes=3 steps=[15, 15, 14]
+z11 44 6c338ab6d95dfac8 ok routes=3 steps=[16, 16, 15]
+z11 45 ed80a556e1259758 ok routes=1 steps=[19]
+z11 46 7e1a2c564cc3eeec ok routes=3 steps=[31, 33, 31]
+z11 47 b2f00fb91a56dee8 ok routes=1 steps=[36]
+z11 48 5556093f5e72c452 ok routes=3 steps=[23, 24, 22]
+z11 49 8ba26dc078f67292 ok routes=3 steps=[35, 37, 33]
+z11 50 601aeaa38001fe9f ok routes=3 steps=[38, 37, 39]
+z11 51 17fcfb4ffbfcefd7 ok routes=3 steps=[41, 41, 40]
+z11 52 796b5fad27e4fafa ok routes=3 steps=[18, 16, 16]
+z11 53 006d58ec455bdcc2 err StartTooFar
+z11 54 4529ddaee1d0dd8d ok routes=3 steps=[30, 30, 30]
+z11 55 301978bc8eec8312 err NoRoute(EndUnreachable)
+z11 56 006d58ec455bdcc2 err StartTooFar
+z11 57 6859e184f72b515d ok routes=3 steps=[24, 24, 24]
+z11 58 1be2604a9acf8a9b err NoRoute(EndUnreachable)
+z11 59 29a0dd23b2ab35b8 ok routes=3 steps=[43, 42, 42]
+z11 60 31c655cd988059e1 ok routes=1 steps=[33]
+z11 61 1509ceaf02ab7748 ok routes=3 steps=[41, 43, 42]
+z11 62 e81417d43f555da8 err NetworkTooSmall
+z11 63 006d58ec455bdcc2 err StartTooFar
+z11 64 48d03eb8e7ca9281 ok routes=2 steps=[17, 17]
+z11 65 d2c4a2c3aa590e54 ok routes=1 steps=[34]
+z11 66 fe1565562655548c err NoRoute(EndUnreachable)
+z11 67 de4f075e2edf678d ok routes=2 steps=[22, 20]
+z11 68 70511eb26888e4cf ok routes=3 steps=[27, 27, 25]
+z11 69 fd7130eb54eb7170 err NoRoute(NoCandidate)
+z16 0 475a93aa1a10d73c ok routes=3 steps=[24, 24, 23]
+z16 1 6899bca1414acc6f err NoRoute(EndUnreachable)
+z16 2 022ae43e8ed81718 err NoRoute(NoCandidate)
+z16 3 006d58ec455bdcc2 err StartTooFar
+z16 4 18557fbc92d78700 ok routes=3 steps=[30, 30, 28]
+z16 5 d43740fafc7ad210 ok routes=1 steps=[9]
+z16 6 006d58ec455bdcc2 err StartTooFar
+z16 7 006d58ec455bdcc2 err StartTooFar
+z16 8 16db8cedf73394fe ok routes=1 steps=[17]
+z16 9 5a8ba8110ec5addf err NoRoute(NoCandidate)
+z16 10 ccd6af518ced3b0f err NoRoute(EndUnreachable)
+z16 11 8c7c92c19e098d9a ok routes=3 steps=[40, 42, 40]
+z16 12 4a5ddac1cea12220 err NoRoute(NoCandidate)
+z16 13 7b04c3ffc6bc7cba err NetworkTooSmall
+z16 14 c349365d97bae00d ok routes=3 steps=[20, 21, 20]
+z16 15 da4325f956999f57 err NoRoute(EndUnreachable)
+z16 16 c2d754c51ba43962 err NetworkTooSmall
+z16 17 23ce1ff9b0c0166c err NoRoute(NoCandidate)
+z16 18 8f1f00c1969465a6 ok routes=1 steps=[14]
+z16 19 b23d0c9ab55d8aae err NoRoute(EndUnreachable)
+z16 20 6f3488b6c945942c ok routes=2 steps=[22, 21]
+z16 21 a14a16ce4fabd26a err NetworkTooSmall
+z16 22 863ade017c0fffb2 ok routes=1 steps=[9]
+z16 23 a99431457c96fcba ok routes=3 steps=[32, 31, 33]
+z16 24 0d4f116d97993a0e ok routes=3 steps=[32, 33, 34]
+z16 25 816960de1ed72791 ok routes=3 steps=[30, 28, 32]
+z16 26 7d137e3fecd9e293 ok routes=3 steps=[40, 40, 42]
+z16 27 e3b938ceb4b51afb err NoRoute(NoCandidate)
+z16 28 c5adfa172c10ea5f ok routes=2 steps=[17, 16]
+z16 29 0d798e79fa09838b ok routes=2 steps=[32, 32]
+z16 30 97612e40d545223a ok routes=1 steps=[45]
+z16 31 3d5d9947ae96ea10 err NetworkTooSmall
+z16 32 67b7a0970804bb55 ok routes=3 steps=[43, 43, 42]
+z16 33 05143a516de808d0 err NoRoute(EndUnreachable)
+z16 34 32324b9aa21398b7 ok routes=2 steps=[12, 14]
+z16 35 b16aca56454c171f ok routes=3 steps=[22, 21, 21]
+z16 36 82d16b3d52fee9dc ok routes=3 steps=[29, 29, 30]
+z16 37 7736ff4481bc9ecd err NoRoute(EndUnreachable)
+z16 38 9864c2150d5f93be err NoRoute(EndUnreachable)
+z16 39 9c264f02d3ae3c50 ok routes=3 steps=[23, 23, 23]
+z16 40 c3f6129a6d3b53c6 ok routes=2 steps=[20, 22]
+z16 41 23d763cc099c1273 err NoRoute(EndUnreachable)
+z16 42 82ad424fe4360764 ok routes=3 steps=[29, 30, 32]
+z16 43 bc90869c53c64689 ok routes=3 steps=[15, 15, 16]
+z16 44 64aa5798c2e1ab88 ok routes=3 steps=[16, 15, 15]
+z16 45 4eb61dca1b58e1e4 err NoRoute(EndUnreachable)
+z16 46 7335f91fcea41e32 ok routes=3 steps=[33, 35, 35]
+z16 47 7f311000680ebeac ok routes=1 steps=[36]
+z16 48 f608d82472fec1ce ok routes=3 steps=[23, 24, 22]
+z16 49 eeec31c69d42d1bc ok routes=3 steps=[35, 37, 33]
+z16 50 03b507533876e9a4 ok routes=3 steps=[38, 37, 38]
+z16 51 90d8c331aefd8897 ok routes=3 steps=[41, 41, 40]
+z16 52 1b764451de71c7f9 ok routes=3 steps=[18, 16, 16]
+z16 53 006d58ec455bdcc2 err StartTooFar
+z16 54 052daaf49a779d95 ok routes=3 steps=[30, 30, 32]
+z16 55 301978bc8eec8312 err NoRoute(EndUnreachable)
+z16 56 006d58ec455bdcc2 err StartTooFar
+z16 57 b0f2b8a41357d1ff ok routes=3 steps=[25, 25, 26]
+z16 58 1be2604a9acf8a9b err NoRoute(EndUnreachable)
+z16 59 81de46db17f21643 ok routes=3 steps=[43, 43, 43]
+z16 60 d0a304bda295ea38 ok routes=1 steps=[33]
+z16 61 eb53628771c3faf2 ok routes=3 steps=[41, 43, 42]
+z16 62 9682cf81ce1e3e04 err NetworkTooSmall
+z16 63 006d58ec455bdcc2 err StartTooFar
+z16 64 5c60df932f708fde ok routes=3 steps=[17, 17, 17]
+z16 65 031f325cf2206348 ok routes=1 steps=[34]
+z16 66 fc268f7a3352bef7 err NoRoute(EndUnreachable)
+z16 67 d703a1c652f1cf00 ok routes=2 steps=[22, 20]
+z16 68 a43ae3aa9628f216 ok routes=3 steps=[27, 27, 25]
+z16 69 f4c950952348f0da err NoRoute(NoCandidate)
