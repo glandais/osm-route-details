@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 
 use ord_graph::grid::{tile_key, tile_of_e7};
 
-use crate::engine::{Engine, Params};
+use ord_graph::view::BaseEdges;
+
+use crate::engine::{chain_strong_len, strong_components, strong_lengths, Engine, Params};
 use crate::index::tiles_of_polyline;
 use crate::tests::engine_zoomed;
 use crate::tests_reference::scenario_graph;
@@ -64,24 +66,44 @@ fn every_node_sits_in_the_tile_of_its_cell() {
     }
 }
 
+/// Longueur de la composante fortement connexe de chaque chaîne, calculée **à plat** depuis les extrémités et les sens
+/// ouverts (sans lire le CSR des cellules) : la référence du moteur d'avant le lot 6.
+fn flat_comp_lengths(view: &ord_graph::format::GraphFile<Vec<u8>>) -> Vec<u64> {
+    let be = BaseEdges::load(view);
+    let n = view.header().nodes as usize;
+    let mut out: Vec<Vec<u32>> = vec![Vec::new(); n];
+    for (c, &(a, b)) in be.ends.iter().enumerate() {
+        if be.attrs[c].fwd_ok() {
+            out[a as usize].push(b);
+        }
+        if be.attrs[c].bwd_ok() {
+            out[b as usize].push(a);
+        }
+    }
+    let comp = strong_components(n, &|x, s| s.extend(out[x as usize].iter().copied()));
+    let lens = strong_lengths(&comp, &be.ends, &be.len_dm, &|_| true);
+    be.ends.iter().map(|&e| chain_strong_len(&comp, &lens, e)).collect()
+}
+
 #[test]
 fn the_sparse_component_lengths_agree_with_the_flat_ones_below_the_cap() {
     let mut below = 0;
     let mut above = 0;
     for e in engines() {
         for vi in 0..2 {
-            let (idx, v) = (&e.idx[vi], &e.views[vi]);
-            for c in 0..v.n_chains as u32 {
-                let flat = v.comp_len_of_chain(c);
-                if flat < idx.cap_dm {
+            let idx = &e.idx[vi];
+            let flat = flat_comp_lengths(&e.views_files[vi]);
+            for (c, &l) in flat.iter().enumerate() {
+                if l < idx.cap_dm {
                     below += 1;
-                    assert_eq!(idx.comp_len_dm(c), flat, "chaîne {c}");
+                    assert_eq!(idx.comp_len_dm(c as u32), l, "chaîne {c}");
                 } else {
                     above += 1;
-                    assert_eq!(idx.comp_len_dm(c), idx.cap_dm, "chaîne {c}");
+                    assert_eq!(idx.comp_len_dm(c as u32), idx.cap_dm, "chaîne {c}");
                 }
             }
-            assert_eq!(idx.lmax_dm, *v.len_dm.iter().max().unwrap());
+            let lmax = BaseEdges::load(&e.views_files[vi]).len_dm.into_iter().max().unwrap();
+            assert_eq!(idx.lmax_dm, lmax);
         }
     }
     assert!(below > 0 && above > 0, "le cap doit couper la distribution ({below}/{above})");

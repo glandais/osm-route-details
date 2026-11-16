@@ -8,9 +8,9 @@ use std::collections::BinaryHeap;
 use ord_graph::format::DIR_BIT;
 
 use crate::cost::{self, RideType};
-use crate::engine::{BaseData, Engine, Snap, ViewData};
+use crate::engine::{Engine, Snap, ViewData};
 use crate::geo::{heading_deg, polyline_m, Local};
-use crate::team::{ChainTeam, TeamData, TypeTeam, BRIDGED, TEAM};
+use crate::team::{ChainTeam, TeamCtx, TypeTeam, BRIDGED, TEAM};
 use crate::verify::slice;
 use crate::Mode;
 use ord_graph::view::{heading_to_u16, polyline_heading};
@@ -47,8 +47,12 @@ pub(crate) struct Tree {
 }
 
 impl Tree {
+    /// Prépare l'arbre pour `n_fields` états et `n_nodes` nœuds. Les tableaux d'un usage plus grand sont gardés tant
+    /// qu'ils ne dépassent pas le double (lot 6, §9) : l'estampille croît strictement, une case d'un usage précédent
+    /// n'est jamais lue comme fixée, et seul le préfixe sert.
     pub fn begin(&mut self, n_fields: usize, n_nodes: usize) {
-        if self.slots.len() != n_fields {
+        let fits = |have: usize, need: usize| have >= need && have <= need.saturating_mul(2).max(64);
+        if !fits(self.slots.len(), n_fields) || !fits(self.nstamp.len(), n_nodes) {
             self.slots = vec![Slot::default(); n_fields];
             self.nstamp = vec![0; n_nodes];
             self.nbest = vec![NONE; n_nodes];
@@ -57,6 +61,16 @@ impl Tree {
         self.cur += 1;
         self.reached.clear();
         self.settled.clear();
+    }
+
+    /// Octets tenus (capacités réelles).
+    pub fn bytes(&self) -> usize {
+        self.slots.capacity() * std::mem::size_of::<Slot>()
+            + (self.nstamp.capacity()
+                + self.nbest.capacity()
+                + self.reached.capacity()
+                + self.settled.capacity())
+                * 4
     }
 
     #[inline]
@@ -122,6 +136,18 @@ impl Workspace {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Octets tenus par les trois arbres et le `ban` de chaque vue (capacités réelles).
+    pub fn bytes(&self) -> usize {
+        self.views.iter().map(|v| v.t1.bytes() + v.t2.bytes() + v.ta.bytes() + v.ban.capacity() * 4).sum()
+    }
+
+    /// Libère les tableaux si l'espace de travail tient plus de `keep_bytes` (§9) : le prochain usage les réalloue.
+    pub fn shrink_to(&mut self, keep_bytes: usize) {
+        if self.bytes() > keep_bytes {
+            *self = Self::default();
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -153,26 +179,25 @@ pub(crate) struct Weighter<'a> {
 }
 
 impl<'a> Weighter<'a> {
-    pub fn new<B: AsRef<[u8]>>(
-        e: &'a Engine<B>,
-        team: Option<&'a TeamData>,
+    pub fn new(
+        v: &'a ViewData,
+        team: Option<TeamCtx<'a>>,
         ride: RideType,
         mode: Mode,
         familiarity: f32,
         off_team_cost_q8: u32,
     ) -> Self {
-        let v = e.view(ride);
         let tt = match (mode, team) {
             (Mode::Discovery, _) | (_, None) => None,
-            (_, Some(t)) => Some(t.of(ride)),
+            (_, Some(t)) => Some((t.data.of(ride), t.win.chains_of(ride))),
         };
         let fam = (familiarity.clamp(0.0, 1.0) * 1000.0).round() as u32;
         Self {
             ride,
             mode,
             w_osm: &v.w_osm[ride.index()],
-            ct: tt.map(|t| t.chains.as_slice()),
-            tt,
+            ct: tt.map(|t| t.1),
+            tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
         }
@@ -209,8 +234,9 @@ impl<'a> Weighter<'a> {
     }
 
     /// Poids d'une arête de base (pour les morceaux partiels du départ et de l'arrivée).
-    pub fn edge(&self, bd: &BaseData, e: u32) -> u32 {
-        let w = cost::edge_weight(self.ride, bd.attrs[e as usize], bd.len_dm[e as usize]);
+    pub fn edge<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
+        let (attrs, len) = eng.attrs_len(e);
+        let w = cost::edge_weight(self.ride, attrs, len);
         let Some(tt) = self.tt else { return w };
         let (f, z) = tt.flags(e);
         if f & TEAM != 0 {
@@ -369,8 +395,8 @@ pub(crate) fn make_anchor<B: AsRef<[u8]>>(
     let (mut b_inf, mut a_inf) = (false, false);
     for (li, &l) in links.iter().enumerate() {
         let ed = l & !DIR_BIT;
-        let ew = w.edge(&e.bd, ed);
-        let len = u64::from(e.bd.len_dm[ed as usize]);
+        let ew = w.edge(e, ed);
+        let len = u64::from(e.len_dm(ed));
         let (fb_i, fa_i) = if li < snap.link {
             (1.0, 0.0)
         } else if li > snap.link {
@@ -484,6 +510,8 @@ pub(crate) struct Ctx<'a> {
     pub s: &'a Anchor,
     pub e: &'a Anchor,
     pub forb: &'a Forbidden,
+    /// Levé quand la recherche touche un nœud incomplet de la fenêtre : le résultat est jeté (lot 6, §5.2).
+    pub esc: &'a std::cell::Cell<bool>,
 }
 
 pub(crate) const POLL: u32 = 2048;
@@ -516,6 +544,10 @@ pub(crate) fn tree_forward(
             return Err(Stopped);
         }
         let node = v.tgt(f);
+        if !v.complete[node as usize] {
+            cx.esc.set(true);
+            return Err(Stopped);
+        }
         t.note_node(node, f);
         let (pred, m) = (t.pred(f), t.meters(f));
         for &fo in v.out(node) {
@@ -567,6 +599,10 @@ pub(crate) fn tree_backward(
             return Err(Stopped);
         }
         let node = v.src(f);
+        if !v.complete[node as usize] {
+            cx.esc.set(true);
+            return Err(Stopped);
+        }
         t.note_node(node, f);
         let m = t.meters(f);
         for &fg in v.inn(node) {
@@ -643,6 +679,10 @@ pub(crate) fn astar(
                   store: u32,
                   g: u32,
                   m: u32| {
+        if !v.complete[node as usize] {
+            cx.esc.set(true);
+            return;
+        }
         for &fo in v.out(node) {
             let c = fo >> 1;
             let bits = ban.bits(c);
@@ -692,6 +732,9 @@ pub(crate) fn astar(
     // Le premier pas part du nœud du demi-tour, avec le virage depuis le dernier état de l'aller.
     let first_over = (last_pred == NONE).then(|| cx.s.out_head[(last & 1) as usize]);
     expand(ta, &mut heap, from_node, last, last_pred, first_over, NONE, 0, 0);
+    if cx.esc.get() {
+        return Err(Stopped);
+    }
     let mut polls = 0u32;
     while let Some(Reverse((key, g, f))) = heap.pop() {
         if key > cap {
@@ -723,6 +766,9 @@ pub(crate) fn astar(
         let node = v.tgt(f);
         let (pred, m) = (ta.pred(f), ta.meters(f));
         expand(ta, &mut heap, node, f, pred, None, f, g, m);
+        if cx.esc.get() {
+            return Err(Stopped);
+        }
     }
     Ok(None)
 }

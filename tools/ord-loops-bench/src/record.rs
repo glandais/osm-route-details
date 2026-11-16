@@ -125,6 +125,8 @@ pub fn failure_code(f: &Failure) -> String {
         Failure::NetworkTooSmall => "NETWORK_TOO_SMALL".into(),
         Failure::NoTeamData => "NO_TEAM_DATA".into(),
         Failure::Stopped => "STOPPED".into(),
+        Failure::WindowEscape => "WINDOW_ESCAPE".into(),
+        Failure::TooLong => "TOO_LONG".into(),
         Failure::NoRoute(d) => format!(
             "NO_ROUTE:{}",
             match d {

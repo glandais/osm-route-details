@@ -10,7 +10,7 @@ use crate::cost::RideType;
 use crate::engine::{Engine, Params};
 use crate::generate::generate;
 use crate::search::{in_head_ext, turn_cost, Weighter, Workspace, INF, NONE};
-use crate::team::TeamData;
+use crate::team::{TeamCtx, TeamData, WindowTeam};
 use crate::verify::{check_route, Violation};
 use crate::{Failure, LatLon, Mode, Request, Route};
 
@@ -69,6 +69,13 @@ pub(crate) fn engine_zoomed(src: &mut MemSource, zoom: u8, params: Params) -> En
 
 pub(crate) fn engine_of(src: &mut MemSource) -> Engine<Vec<u8>> {
     engine_with(src, Params::default())
+}
+
+/// Chaîne de la vue (fenêtre de toutes les tuiles : ids locaux = ids globaux) qui porte l'arête de base.
+pub(crate) fn chain_of_edge(v: &crate::engine::ViewData, edge: u32) -> u32 {
+    (0..v.n_chains as u32)
+        .find(|&c| v.links(c).iter().any(|l| l & !ord_graph::format::DIR_BIT == edge))
+        .expect("arête vivante")
 }
 
 /// Arête de base entre deux nœuds OSM.
@@ -210,20 +217,23 @@ fn weights_are_monotone_in_lambda_and_strict_is_infinite_off_team() {
         // La rue `i = 2` est roulée en entier.
         let rows: Vec<_> = (0..4).map(|j| (edge_between(&e, id(2, j), id(2, j + 1)), ROAD1)).collect();
         let team = TeamData::build(&e, &overlay_of(&e, &rows)).unwrap();
-        let v = e.view(RideType::Road);
-        let c_team = v.edge_chain[edge_between(&e, id(2, 1), id(2, 2)) as usize];
-        let c_off = v.edge_chain[edge_between(&e, id(1, 1), id(1, 2)) as usize];
-        let w = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.5, lambda_q8);
+        let win = e.full_window(0);
+        let v = &win.v;
+        let c_team = chain_of_edge(v, edge_between(&e, id(2, 1), id(2, 2)));
+        let c_off = chain_of_edge(v, edge_between(&e, id(1, 1), id(1, 2)));
+        let wt = WindowTeam::build(&e, &win, &team);
+        let tc = TeamCtx { data: &team, win: &wt };
+        let w = Weighter::new(v, Some(tc), RideType::Road, Mode::TeamFirst, 0.5, lambda_q8);
         let off = w.chain(c_off);
         assert!(off > last, "poids hors équipe croissant en λ : {off} après {last}");
         last = off;
         assert_eq!(w.chain(c_team), v.w_osm[0][c_team as usize], "f = 0,5 : l'équipe au prix OSM");
-        let strict = Weighter::new(&e, Some(&team), RideType::Road, Mode::Strict, 0.5, lambda_q8);
+        let strict = Weighter::new(v, Some(tc), RideType::Road, Mode::Strict, 0.5, lambda_q8);
         assert_eq!(strict.chain(c_off), INF, "strict : infini hors équipe");
         assert_ne!(strict.chain(c_team), INF);
         // Familiarité : plus elle monte, moins la route d'équipe coûte ; la route hors équipe, jamais.
-        let low = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 0.0, lambda_q8);
-        let high = Weighter::new(&e, Some(&team), RideType::Road, Mode::TeamFirst, 1.0, lambda_q8);
+        let low = Weighter::new(v, Some(tc), RideType::Road, Mode::TeamFirst, 0.0, lambda_q8);
+        let high = Weighter::new(v, Some(tc), RideType::Road, Mode::TeamFirst, 1.0, lambda_q8);
         assert!(high.chain(c_team) < low.chain(c_team));
         assert_eq!(high.chain(c_off), low.chain(c_off));
     }
@@ -352,7 +362,8 @@ fn y_junction(turn: f64, short_c: Option<f64>) -> MemSource {
 /// État orienté de l'arête de vue qui joint les nœuds OSM `from` → `to` (par positions).
 fn field(e: &Engine<Vec<u8>>, from: u64, to: u64) -> u32 {
     let g = e.base();
-    let v = e.view(RideType::Road);
+    let win = e.full_window(0);
+    let v = &win.v;
     let node = |osm: u64| (0..g.header().nodes as u32).find(|&n| g.osm_node_id(n) == osm).unwrap();
     let (nf, nt) = (node(from), node(to));
     let vn = |n: u32| v.pos.iter().position(|&p| p == g.node_pos(n)).unwrap() as u32;
@@ -373,7 +384,8 @@ fn field(e: &Engine<Vec<u8>>, from: u64, to: u64) -> u32 {
 fn a_turn_of_149_degrees_is_allowed_and_150_is_refused_at_a_junction() {
     for (turn, allowed) in [(120.0, true), (149.0, true), (151.0, false), (170.0, false)] {
         let e = engine_of(&mut y_junction(turn, None));
-        let v = e.view(RideType::Road);
+        let win = e.full_window(0);
+        let v = &win.v;
         let (fa, fc) = (field(&e, 1, 2), field(&e, 2, 4));
         let forb = Default::default();
         assert_eq!(turn_cost(v, &forb, fa, NONE, fc, None, None).is_some(), allowed, "virage de {turn}°");
@@ -382,7 +394,8 @@ fn a_turn_of_149_degrees_is_allowed_and_150_is_refused_at_a_junction() {
     }
     // Tout droit : gratuit.
     let e = engine_of(&mut y_junction(150.0, None));
-    let v = e.view(RideType::Road);
+    let win = e.full_window(0);
+    let v = &win.v;
     assert_eq!(
         turn_cost(v, &Default::default(), field(&e, 1, 2), NONE, field(&e, 2, 3), None, None),
         Some(0)
@@ -405,7 +418,8 @@ fn the_heading_of_a_20_m_chain_is_extended_through_its_predecessor() {
     s.way(13, &[2, 5], &tags("residential", &[]));
     s.way(14, &[3, 6], &tags("residential", &[]));
     let e = engine_of(&mut s);
-    let v = e.view(RideType::Road);
+    let win = e.full_window(0);
+    let v = &win.v;
     let (fa, fshort) = (field(&e, 1, 2), field(&e, 2, 3));
     let alone = in_head_ext(v, fshort, NONE);
     let ext = in_head_ext(v, fshort, fa);
@@ -428,9 +442,9 @@ fn a_loop_on_a_grid_has_up_to_three_valid_routes_that_overlap_less_than_half() {
             let ea: std::collections::BTreeSet<u32> = a.steps.iter().map(|s| s.base_edge).collect();
             let eb: std::collections::BTreeSet<u32> = b.steps.iter().map(|s| s.base_edge).collect();
             let len = |s: &std::collections::BTreeSet<u32>| {
-                s.iter().map(|&x| u64::from(e.bd.len_dm[x as usize])).sum::<u64>()
+                s.iter().map(|&x| u64::from(e.base().edge(x).len_dm)).sum::<u64>()
             };
-            let common: u64 = ea.intersection(&eb).map(|&x| u64::from(e.bd.len_dm[x as usize])).sum();
+            let common: u64 = ea.intersection(&eb).map(|&x| u64::from(e.base().edge(x).len_dm)).sum();
             assert!((common as f64) < 0.5 * len(&ea).min(len(&eb)) as f64);
         }
     }
@@ -691,15 +705,17 @@ fn the_tree_equals_a_reference_dijkstra_with_turn_costs() {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     let e = engine_of(&mut grid(9, 300.0));
-    let v = e.view(RideType::Road);
-    let w = Weighter::new(&e, None, RideType::Road, Mode::Discovery, 0.5, 768);
+    let win = e.full_window(0);
+    let v = &win.v;
+    let w = Weighter::new(v, None, RideType::Road, Mode::Discovery, 0.5, 768);
     let ok = |c: u32| w.chain(c) != INF;
-    let snap = e.snap(RideType::Road, ll(1200.0, 1200.0), &ok, 0).unwrap();
+    let snap = e.snap(&win, ll(1200.0, 1200.0), &ok, 0).unwrap().unwrap();
     let a: Anchor = make_anchor(&e, v, &w, snap);
     let s7 = ll(1200.0, 1200.0).to_e7();
     let disc = Disc::new(s7, s7, 1.0e6, true);
     let forb = Default::default();
-    let cx = Ctx { v, w: &w, disc: &disc, s: &a, e: &a, forb: &forb };
+    let esc = std::cell::Cell::new(false);
+    let cx = Ctx { v, w: &w, disc: &disc, s: &a, e: &a, forb: &forb, esc: &esc };
     let mut t = Tree::default();
     tree_forward(&cx, &mut t, &mut || false).unwrap();
     // Référence : même graphe de lignes, mêmes coûts, Dijkstra par tas.

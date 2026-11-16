@@ -8,9 +8,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::cost::presumed_surface;
-use crate::engine::{Engine, ViewData};
+use crate::engine::Engine;
 use crate::geo::{haversine_m, heading_deg, turn_angle_deg, Local};
 use crate::team::{TeamData, BRIDGED, TEAM};
+use crate::window::Window;
 use crate::{Mode, Request, Route};
 
 /// Codes de violation, ceux du §6.
@@ -171,11 +172,11 @@ fn build_pieces<B: AsRef<[u8]>>(e: &Engine<B>, route: &Route) -> Vec<Piece> {
     for (i, st) in route.steps.iter().enumerate() {
         let (pts, lo, hi, whole) = trim_piece(route, i, e.edge_polyline(st.base_edge));
         let len = if whole {
-            f64::from(e.bd.len_dm[st.base_edge as usize]) / 10.0
+            f64::from(e.len_dm(st.base_edge)) / 10.0
         } else {
             pts.windows(2).map(|w| haversine_m(w[0], w[1])).sum()
         };
-        let (a, b) = e.bd.ends[st.base_edge as usize];
+        let (a, b) = e.ends(st.base_edge);
         let to = if st.reverse { a } else { b };
         pieces.push(Piece { edge: st.base_edge, rev: st.reverse, pts, len, lo, hi, to });
     }
@@ -276,14 +277,33 @@ fn has_connector_run(raw: &[(f64, f64)], hin: f64, hout: f64) -> bool {
     false
 }
 
-/// Degré admis d'un nœud de base : arêtes vivantes dans la vue du type.
-fn admitted_degree(v: &ViewData, node: u32) -> usize {
-    v.base_inc(node).len()
+/// Degré admis d'un nœud de base : arêtes vivantes dans la vue du type. Toute arête vivante est le lien d'une chaîne
+/// (vue non élaguée) et la contraction ne fond un nœud que s'il a **exactement** deux arêtes : le degré est celui du
+/// nœud de vue, ou 2 pour un nœud intérieur à une chaîne (lot 6, §4.5). Les nœuds d'un parcours rendu par la recherche
+/// sont complets dans la fenêtre ; un nœud de vue absent de la fenêtre compte 0 (le parcours n'y passe pas).
+fn admitted_degree<B: AsRef<[u8]>>(e: &Engine<B>, win: &Window, node: u32) -> usize {
+    match e.views_files[win.vi].view_node_of_base(node) {
+        None => 2,
+        Some(g) => win.v.ngid.binary_search(&g).map_or(0, |l| usize::from(win.v.deg[l])),
+    }
 }
 
-/// Contrôle un parcours contre les garanties du §6.
+/// Contrôle un parcours contre les garanties du §6, dans la fenêtre des tuiles nécessaires à la requête (§5.1).
 pub fn check_route<B: AsRef<[u8]>>(
     e: &Engine<B>,
+    team: Option<&TeamData>,
+    req: &Request,
+    route: &Route,
+) -> Check {
+    let plan = e.plan(req, 0.0);
+    let win = e.build_window(plan.view, &plan.need, &mut || false).expect("jamais coupée");
+    check_route_in(e, &win, team, req, route)
+}
+
+/// Comme [`check_route`], dans une fenêtre déjà construite.
+pub fn check_route_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
     team: Option<&TeamData>,
     req: &Request,
     route: &Route,
@@ -295,26 +315,26 @@ pub fn check_route<B: AsRef<[u8]>>(
         out.violations.push(Violation::Empty);
         return out;
     }
-    if route.steps.iter().any(|s| s.base_edge as usize >= e.bd.ends.len()) {
+    if route.steps.iter().any(|s| s.base_edge >= e.n_edges()) {
         out.violations.push(Violation::NotOnGraph);
         return out;
     }
-    let v = e.view(req.ride_type);
+    let kind = e.kind_of(req.ride_type.view_index());
     let d_target = req.distance_m;
     // 1. Structure.
     for (i, st) in route.steps.iter().enumerate() {
-        let a = e.bd.attrs[st.base_edge as usize];
-        let (ea, eb) = e.bd.ends[st.base_edge as usize];
+        let a = e.attrs(st.base_edge);
+        let (ea, eb) = e.ends(st.base_edge);
         let to = if st.reverse { ea } else { eb };
         if !(if st.reverse { a.bwd_ok() } else { a.fwd_ok() }) {
             viol.insert(Violation::OneWay);
         }
-        if !v.kind.keep(a) {
+        if !kind.keep(a) {
             viol.insert(Violation::NotAdmitted);
         }
         if i + 1 < n {
             let nx = route.steps[i + 1];
-            let (na, nb) = e.bd.ends[nx.base_edge as usize];
+            let (na, nb) = e.ends(nx.base_edge);
             let from = if nx.reverse { nb } else { na };
             if to != from {
                 viol.insert(Violation::Discontinuous);
@@ -348,7 +368,7 @@ pub fn check_route<B: AsRef<[u8]>>(
     // Mesures et équipe.
     let tt = team.map(|t| t.of(req.ride_type));
     for p in &pieces {
-        let a = e.bd.attrs[p.edge as usize];
+        let a = e.attrs(p.edge);
         if a.is_unpaved() {
             out.unpaved_m += p.len;
         }
@@ -379,7 +399,7 @@ pub fn check_route<B: AsRef<[u8]>>(
         let node = a.to;
         if a.edge == b.edge && a.rev != b.rev {
             viol.insert(Violation::UTurn);
-        } else if admitted_degree(v, node) >= 3 {
+        } else if admitted_degree(e, win, node) >= 3 {
             let hin = route_heading(&pieces, i, false, &loc);
             let hout = route_heading(&pieces, i + 1, true, &loc);
             if turn_angle_deg(hin, hout) >= e.params.max_turn_deg {
@@ -387,7 +407,7 @@ pub fn check_route<B: AsRef<[u8]>>(
                 out.sharp_at.push(i);
             }
         }
-        if admitted_degree(v, node) < 2 {
+        if admitted_degree(e, win, node) < 2 {
             viol.insert(Violation::DeadEnd);
         }
     }
@@ -397,7 +417,7 @@ pub fn check_route<B: AsRef<[u8]>>(
         cum[i + 1] = cum[i] + len[i];
     }
     for i in 0..n.saturating_sub(2) {
-        if admitted_degree(v, pieces[i].to) < 3
+        if admitted_degree(e, win, pieces[i].to) < 3
             || (pieces[i].edge == pieces[i + 1].edge && pieces[i].rev != pieces[i + 1].rev)
         {
             continue;
@@ -405,7 +425,7 @@ pub fn check_route<B: AsRef<[u8]>>(
         let mut j = i + 1;
         while j + 1 < n && cum[j + 1] - cum[i + 1] <= CLUSTER_M {
             let at_an_end = cum[j + 1] <= CLUSTER_FREE_ENDS_M || cum[n] - cum[i + 1] <= CLUSTER_FREE_ENDS_M;
-            if !at_an_end && admitted_degree(v, pieces[j].to) >= 3 {
+            if !at_an_end && admitted_degree(e, win, pieces[j].to) >= 3 {
                 let hin = route_heading(&pieces, i, false, &loc);
                 let hout = route_heading(&pieces, j + 1, true, &loc);
                 if turn_angle_deg(hin, hout) >= e.params.max_turn_deg
@@ -542,12 +562,12 @@ fn hairpin<B: AsRef<[u8]>>(
     hout: f64,
     loc: &Local,
 ) -> bool {
-    let way = e.bd.way[pieces[i].edge as usize];
-    if (i..=j + 1).any(|k| e.bd.way[pieces[k].edge as usize] != way) {
+    let way = e.way(pieces[i].edge);
+    if (i..=j + 1).any(|k| e.way(pieces[k].edge) != way) {
         return false;
     }
-    let first = loc.xy(e.bd.pos[pieces[i].to as usize]);
-    let last = loc.xy(e.bd.pos[pieces[j].to as usize]);
+    let first = loc.xy(e.pos(pieces[i].to));
+    let last = loc.xy(e.pos(pieces[j].to));
     let (dx, dy) = (last.0 - first.0, last.1 - first.1);
     if across_m(dx, dy, hin) >= CROSSING_MIN_M || across_m(dx, dy, hout) >= CROSSING_MIN_M {
         return false;

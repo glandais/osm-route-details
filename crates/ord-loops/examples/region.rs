@@ -29,7 +29,6 @@ fn main() {
     let engine = Engine::new(open(&a[1]), open(&a[2]), open(&a[3]), Params::default()).expect("moteur");
     eprintln!("moteur chargé en {:.2} s", t.elapsed().as_secs_f64());
     let t = Instant::now();
-    engine.warm();
     eprintln!("index d'accroche en {:.2} s", t.elapsed().as_secs_f64());
     let ride = match a.get(7).map(String::as_str) {
         Some("gravel") => RideType::Gravel,

@@ -5,8 +5,12 @@
 //! comblés), **équipe d'abord** (la route de l'équipe, des arêtes OSM pour raccorder) ou **découverte** (OSM sans
 //! préférence) — et une surcouche d'équipe : au plus trois parcours, suites d'arêtes **de base** orientées.
 //!
-//! Aucune E/S, aucun fil, aucune horloge, aucun `unsafe` : `Engine` et `TeamData` sont immuables et partageables,
-//! un [`Workspace`] par fil, et l'appelant fournit un `stop` pour couper la recherche.
+//! Aucune E/S (le graphe est lu par les `GraphFile` fournis), aucun `unsafe` ; l'ouverture de l'[`Engine`] lance
+//! des fils pour ses index, la génération n'en lance pas. `Engine`, `TeamData` et [`Window`] sont immuables et
+//! partageables, un [`Workspace`] par fil, et l'appelant fournit un `stop` pour couper la recherche.
+//!
+//! Lot 6 : la recherche ne lit pas le graphe entier mais une [`Window`], les cellules d'une zone relues à plat
+//! (`docs/design/technique/ord-loops-lot6.md`).
 
 mod cost;
 mod engine;
@@ -17,6 +21,7 @@ mod reverse;
 mod search;
 mod team;
 mod verify;
+mod window;
 
 #[cfg(test)]
 mod tests;
@@ -24,14 +29,19 @@ mod tests;
 mod tests_index;
 #[cfg(test)]
 mod tests_reference;
+#[cfg(test)]
+mod tests_window;
 
 pub use cost::{multiplier_table, RideType};
 pub use engine::{Engine, EngineError, Params};
-pub use generate::{generate, generate_with_diagnostics, route_geometry};
+pub use generate::{
+    generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, route_geometry,
+};
 pub use geo::LatLon;
 pub use search::Workspace;
-pub use team::{TeamData, TeamStats};
-pub use verify::{check_route, Check, Violation};
+pub use team::{TeamCtx, TeamData, TeamStats, WindowTeam};
+pub use verify::{check_route, check_route_in, Check, Violation};
+pub use window::{tiles_cover, tiles_union, Window, WindowPlan};
 
 /// Les huit caps possibles d'une requête.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,4 +193,9 @@ pub enum Failure {
     NoTeamData,
     /// Coupé par l'appelant : jamais de résultat partiel.
     Stopped,
+    /// La recherche a touché le bord de la fenêtre (garde-fou du §5.2, jamais attendu avec les tuiles nécessaires) :
+    /// le résultat est jeté, l'appelant refait la génération dans une fenêtre plus grande.
+    WindowEscape,
+    /// La distance dépasse `Params::max_distance_m` : l'index creux des composantes ne répondrait plus exactement.
+    TooLong,
 }

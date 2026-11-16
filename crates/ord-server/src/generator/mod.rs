@@ -365,7 +365,6 @@ impl Generator {
             return disabled(DisabledReason::PolygonMismatch);
         }
         tracing::info!(nodes_inside = inside, "generator coverage polygon checked");
-        engine.warm();
         let cell_index_ok = ord_graph_match::CellIndex::fits(engine.base());
         if !cell_index_ok {
             tracing::warn!("an edge is wider than a cell: deposits build the whole spatial index");

@@ -34,6 +34,10 @@ pub(crate) fn astar_back(
                   store: u32,
                   g: u32,
                   m: u32| {
+        if !v.complete[node as usize] {
+            cx.esc.set(true);
+            return;
+        }
         for &fg in v.inn(node) {
             let c = fg >> 1;
             let bits = ban.bits(c);
@@ -76,6 +80,9 @@ pub(crate) fn astar_back(
         }
     };
     expand(ta, &mut heap, turn_node, ret0, NONE, 0, 0);
+    if cx.esc.get() {
+        return Err(Stopped);
+    }
     let mut polls = 0u32;
     while let Some(Reverse((key, g, f))) = heap.pop() {
         if key > cap {
@@ -107,6 +114,9 @@ pub(crate) fn astar_back(
         let node = v.src(f);
         let m = ta.meters(f);
         expand(ta, &mut heap, node, f, f, g, m);
+        if cx.esc.get() {
+            return Err(Stopped);
+        }
     }
     Ok(None)
 }

@@ -255,7 +255,6 @@ fn main() -> Result<()> {
     }
     let engine = Engine::new(open(&graph_path)?, open(&road_path)?, open(&gravel_path)?, params)
         .map_err(|e| anyhow!("moteur : {e}"))?;
-    engine.warm();
     eprintln!("moteur chargé en {:.1} s", t0.elapsed().as_secs_f64());
 
     // équipes : un `requests-<id>.jsonl` du banc Java par équipe

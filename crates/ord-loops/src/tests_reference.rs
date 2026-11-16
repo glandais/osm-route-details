@@ -27,6 +27,16 @@ fn id(i: usize, j: usize) -> i64 {
 /// Grille de 48 × 48 carrefours dont chaque segment est une way : 7 % de segments absents (nœuds de degré 2 et 3,
 /// donc des chaînes), 8 % à sens unique, classes et surfaces variées.
 pub(crate) fn scenario_graph(seed: u64) -> MemSource {
+    build_scenario(seed, 70)
+}
+
+/// Même grille sans segment absent ni voie hors route : des chaînes d'un segment, donc une zone d'accroche étroite
+/// et des fenêtres vraiment partielles.
+pub(crate) fn scenario_graph_dense(seed: u64) -> MemSource {
+    build_scenario(seed, 0)
+}
+
+fn build_scenario(seed: u64, missing_per_mille: usize) -> MemSource {
     let mut rng = SplitMix64(seed);
     let mut s = MemSource::default();
     for i in 0..N {
@@ -38,11 +48,11 @@ pub(crate) fn scenario_graph(seed: u64) -> MemSource {
     let mut seg = |s: &mut MemSource, a: i64, b: i64| {
         way += 1;
         let r = rng.below(1000);
-        if r < 70 {
+        if r < missing_per_mille {
             return;
         }
         let (x, y) = if rng.below(2) == 0 { (a, b) } else { (b, a) };
-        let class = rng.below(100);
+        let class = if missing_per_mille == 0 { rng.below(70) } else { rng.below(100) };
         let mut t: Vec<(&str, &str)> = match class {
             0..=54 => vec![("highway", "residential")],
             55..=69 => vec![("highway", "tertiary")],
@@ -111,6 +121,11 @@ pub(crate) fn scenario_rows(e: &Engine<Vec<u8>>, seed: u64) -> Vec<(u32, Counts)
 /// Requêtes tirées : boucles et allers simples, trois modes, trois types, avec et sans cap, D de 1 à 6 km, départs
 /// jusqu'à 400 m hors du réseau.
 pub(crate) fn scenario_requests(seed: u64, n: usize) -> Vec<Request> {
+    scenario_requests_sized(seed, n, 1000.0, 5000)
+}
+
+/// Comme [`scenario_requests`], avec D de `d_min` à `d_min + d_span` mètres.
+pub(crate) fn scenario_requests_sized(seed: u64, n: usize, d_min: f64, d_span: usize) -> Vec<Request> {
     let mut rng = SplitMix64(seed);
     let extent = (N - 1) as f64 * CELL;
     let point = |rng: &mut SplitMix64| {
@@ -136,7 +151,7 @@ pub(crate) fn scenario_requests(seed: u64, n: usize) -> Vec<Request> {
                 start,
                 end,
                 bearing: (is_loop && rng.below(3) == 0).then(|| bearings[rng.below(8)]),
-                distance_m: 1000.0 + rng.below(5000) as f64,
+                distance_m: d_min + rng.below(d_span) as f64,
                 ride_type: RideType::ALL[rng.below(3)],
                 mode: [Mode::Strict, Mode::TeamFirst, Mode::Discovery][rng.below(3)],
                 familiarity: rng.below(11) as f32 / 10.0,
@@ -165,6 +180,11 @@ pub(crate) fn snapshot(i: usize, res: &(Result<Generation, Failure>, Diagnostics
 }
 
 /// Les trois zooms de la référence : z11 (une tuile), z16 (grille de tuiles de ~400 m).
+/// Paramètres de fenêtre réduits (marge 20 m) : une requête de quelques kilomètres a une vraie fenêtre partielle.
+pub(crate) fn scenario_params() -> Params {
+    Params { window_margin_m: 20.0, ..Params::default() }
+}
+
 pub(crate) const ZOOMS: [u8; 2] = [11, 16];
 pub(crate) const REQUESTS: usize = 70;
 
@@ -179,7 +199,7 @@ pub(crate) type Runner<'a> = &'a dyn Fn(
 pub(crate) fn reference_lines(runner: Runner<'_>) -> Vec<String> {
     let mut out = Vec::new();
     for zoom in ZOOMS {
-        let e = engine_zoomed(&mut scenario_graph(7), zoom, Params::default());
+        let e = engine_zoomed(&mut scenario_graph(7), zoom, scenario_params());
         let team = TeamData::build(&e, &overlay_of(&e, &scenario_rows(&e, 11))).unwrap();
         let mut ws = Workspace::new();
         for (i, r) in scenario_requests(13, REQUESTS).iter().enumerate() {

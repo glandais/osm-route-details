@@ -4,6 +4,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use std::cell::Cell;
+
 use ord_graph::format::GraphFile;
 use ord_graph::util::SplitMix64;
 use rustc_hash::FxHashSet;
@@ -15,8 +17,9 @@ use crate::search::{
     astar, make_anchor, tree_backward, tree_forward, Anchor, Ban, Ctx, Disc, Forbidden, Tree, ViewWs,
     Weighter, Workspace, BAN, INF, NONE, TAIL,
 };
-use crate::team::TeamData;
-use crate::verify::{check_route, trim_piece, Violation};
+use crate::team::{TeamCtx, TeamData, WindowTeam};
+use crate::verify::{check_route_in, trim_piece, Violation};
+use crate::window::Window;
 use crate::{Diagnostics, Failure, Family, Generation, Mode, NoRouteDetail, Position, Request, Route, Step};
 
 const SECTORS: usize = 12;
@@ -110,17 +113,17 @@ fn overlap_share<B: AsRef<[u8]>>(e: &Engine<B>, a: &Route, b: &Route) -> f64 {
     let mut seen = BTreeSet::new();
     for s in &b.steps {
         if sa.contains(&s.base_edge) && seen.insert(s.base_edge) {
-            common += u64::from(e.bd.len_dm[s.base_edge as usize]);
+            common += u64::from(e.len_dm(s.base_edge));
         }
     }
-    let la: u64 = sa.iter().map(|&x| u64::from(e.bd.len_dm[x as usize])).sum();
+    let la: u64 = sa.iter().map(|&x| u64::from(e.len_dm(x))).sum();
     let lb: u64 = b
         .steps
         .iter()
         .map(|s| s.base_edge)
         .collect::<BTreeSet<_>>()
         .iter()
-        .map(|&x| u64::from(e.bd.len_dm[x as usize]))
+        .map(|&x| u64::from(e.len_dm(x)))
         .sum();
     common as f64 / la.min(lb).max(1) as f64
 }
@@ -131,8 +134,8 @@ fn bearing_deviation<B: AsRef<[u8]>>(e: &Engine<B>, r: &Request, route: &Route) 
     let loc = Local::new(s);
     let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
     for st in &route.steps {
-        let (a, bb) = e.bd.ends[st.base_edge as usize];
-        let p = loc.xy(e.bd.pos[(if st.reverse { a } else { bb }) as usize]);
+        let (a, bb) = e.ends(st.base_edge);
+        let p = loc.xy(e.pos(if st.reverse { a } else { bb }));
         sx += p.0;
         sy += p.1;
         n += 1.0;
@@ -143,7 +146,9 @@ fn bearing_deviation<B: AsRef<[u8]>>(e: &Engine<B>, r: &Request, route: &Route) 
     Some(turn_angle_deg(b.degrees(), heading_deg(sx / n, sy / n)))
 }
 
-/// Génère jusqu'à trois parcours.
+/// Génère jusqu'à trois parcours. Construit la fenêtre des tuiles nécessaires à la requête (§5.1) et les agrégats de
+/// l'équipe dans cette fenêtre : pratique pour les tests et les outils ; le service garde ses fenêtres en cache et
+/// appelle [`generate_in`].
 pub fn generate<B: AsRef<[u8]>>(
     e: &Engine<B>,
     team: Option<&TeamData>,
@@ -163,8 +168,38 @@ pub fn generate_with_diagnostics<B: AsRef<[u8]>>(
     ws: &mut Workspace,
     stop: &mut dyn FnMut() -> bool,
 ) -> (Result<Generation, Failure>, Diagnostics) {
+    let plan = e.plan(r, 0.0);
+    let Some(win) = e.build_window(plan.view, &plan.need, stop) else {
+        return (Err(Failure::Stopped), Diagnostics::default());
+    };
+    let wt = team.map(|t| WindowTeam::build(e, &win, t));
+    let ctx = team.zip(wt.as_ref()).map(|(data, win)| TeamCtx { data, win });
+    generate_with_diagnostics_in(e, &win, ctx, r, ws, stop)
+}
+
+/// Génère jusqu'à trois parcours dans une fenêtre qui contient les tuiles nécessaires à la requête.
+pub fn generate_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+) -> Result<Generation, Failure> {
+    generate_with_diagnostics_in(e, win, team, r, ws, stop).0
+}
+
+/// Comme [`generate_in`], avec les diagnostics.
+pub fn generate_with_diagnostics_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+) -> (Result<Generation, Failure>, Diagnostics) {
     let mut diag = Diagnostics::default();
-    let res = generate_inner(e, team, r, ws, stop, &mut diag);
+    let res = generate_inner(e, win, team, r, ws, stop, &mut diag);
     match res {
         Ok(mut g) => {
             g.diagnostics = diag.clone();
@@ -176,7 +211,8 @@ pub fn generate_with_diagnostics<B: AsRef<[u8]>>(
 
 fn generate_inner<B: AsRef<[u8]>>(
     e: &Engine<B>,
-    team: Option<&TeamData>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
     r: &Request,
     ws: &mut Workspace,
     stop: &mut dyn FnMut() -> bool,
@@ -186,21 +222,30 @@ fn generate_inner<B: AsRef<[u8]>>(
         return Err(Failure::NoTeamData);
     }
     let d = r.distance_m;
+    if d > e.params.max_distance_m {
+        return Err(Failure::TooLong);
+    }
     let ride = r.ride_type;
     let vi = ride.view_index();
-    let v = e.view(ride);
-    let w = Weighter::new(e, team, ride, r.mode, r.familiarity, r.off_team_cost_q8);
+    assert_eq!(win.vi, vi, "la fenêtre n'est pas celle de la vue du type demandé");
+    let v = &win.v;
+    let w = Weighter::new(v, team, ride, r.mode, r.familiarity, r.off_team_cost_q8);
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
     let ok = |c: u32| -> bool {
-        w.chain(c) != INF && strict_tt.is_none_or(|tt| tt.strict_comp_len_of_chain(v, c) >= min_dm)
+        w.chain(c) != INF && strict_tt.is_none_or(|tt| tt.strict_len_of(v.gid[c as usize]) >= min_dm)
     };
-    let s_snap = e.snap(ride, r.start, &ok, min_dm).ok_or(Failure::StartTooFar)?;
+    let s_snap =
+        e.snap(win, r.start, &ok, min_dm).map_err(|()| Failure::WindowEscape)?.ok_or(Failure::StartTooFar)?;
     let is_loop = r.end.is_none();
     let e_snap = match r.end {
         None => s_snap,
-        Some(p) => e.snap(ride, p, &ok, min_dm).ok_or(Failure::EndTooFar)?,
+        Some(p) => {
+            e.snap(win, p, &ok, min_dm).map_err(|()| Failure::WindowEscape)?.ok_or(Failure::EndTooFar)?
+        }
     };
+    let esc = Cell::new(false);
+    let halted = || if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
     let sa: Anchor = make_anchor(e, v, &w, s_snap);
     let ea: Anchor = if is_loop { sa } else { make_anchor(e, v, &w, e_snap) };
     let s_e7 = r.start.to_e7();
@@ -217,14 +262,16 @@ fn generate_inner<B: AsRef<[u8]>>(
     let d_dm = d * 10.0;
 
     for pass in 0..PASSES {
-        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb };
+        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc };
         let vws = &mut ws.views[vi];
-        if vws.ban.len() != v.n_chains {
+        // Le `ban` d'un usage précédent est gardé tant qu'il ne dépasse pas le double : sa génération croît
+        // strictement, une case ancienne n'est jamais lue comme posée (lot 6, §9).
+        if vws.ban.len() < v.n_chains || vws.ban.len() > (2 * v.n_chains).max(64) {
             vws.ban = vec![0; v.n_chains];
             vws.ban_gen = 0;
         }
-        tree_forward(&cx, &mut vws.t1, stop).map_err(|_| Failure::Stopped)?;
-        tree_backward(&cx, &mut vws.t2, stop).map_err(|_| Failure::Stopped)?;
+        tree_forward(&cx, &mut vws.t1, stop).map_err(|_| halted())?;
+        tree_backward(&cx, &mut vws.t2, stop).map_err(|_| halted())?;
         let ViewWs { t1, t2, ta, ban, ban_gen } = vws;
         let (t1, t2) = (&*t1, &*t2);
         if pass == 0 {
@@ -296,7 +343,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                 diag.astar_runs += 1;
                 let before = budget;
                 let found = astar(&cx, ta, t2, last, last_pred, &b, &mut budget, &mut exhausted, stop)
-                    .map_err(|_| Failure::Stopped)?;
+                    .map_err(|_| halted())?;
                 diag.astar_settled += before - budget;
                 // (états du parcours, mètres (dm) du parcours, mètres (dm) du retour)
                 let mut got: Option<(Vec<u32>, f64, f64)> = found.map(|f| {
@@ -327,7 +374,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                     let mut rev_exhausted = false;
                     let back =
                         astar_back(&cx, ta, t1, tnode, ret[0], &b, &mut rev_budget, &mut rev_exhausted, stop)
-                            .map_err(|_| Failure::Stopped)?;
+                            .map_err(|_| halted())?;
                     diag.astar_settled += before - rev_budget;
                     got = back.map(|f| {
                         let ret_m = f64::from(t2.meters(ret[0]));
@@ -370,14 +417,14 @@ fn generate_inner<B: AsRef<[u8]>>(
                     familiarity: r.familiarity,
                     family: Family::Turnaround,
                 };
-                let chk = check_route(e, team, r, &route);
+                let chk = check_route_in(e, win, team.map(|t| t.data), r, &route);
                 if !chk.violations.is_empty() {
                     for vcode in &chk.violations {
                         *rejected.entry(*vcode).or_insert(0) += 1;
                     }
                     for &i in &chk.sharp_at {
                         if let Some(st) = route.steps.get(i) {
-                            let (a, b) = e.bd.ends[st.base_edge as usize];
+                            let (a, b) = e.ends(st.base_edge);
                             diag.sharp_nodes.push(if st.reverse { a } else { b });
                         }
                         if i + 1 < step_field.len() && step_field[i] != step_field[i + 1] {
