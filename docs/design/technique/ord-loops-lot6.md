@@ -599,8 +599,8 @@ Chaque étape finit par `cargo fmt`, `cargo clippy --workspace --all-targets --l
 2. **La borne de distance** : le contrat dit 200 km ; la cible du plan parle d'un aller simple de 300 km. Le moteur est
    conçu jusqu'à 400 km (`max_distance_m`) ; relever `distance_m_max` du service est une décision de produit, hors de ce
    lot.
-3. **L'environnement du conteneur** (`MALLOC_ARENA_MAX`, `MALLOC_MMAP_THRESHOLD_`) se règle dans le fichier de
-   déploiement de Pédalons, pas dans ce dépôt.
+3. **L'environnement du conteneur** (`MALLOC_ARENA_MAX`, `MALLOC_MMAP_THRESHOLD_`) est posé par le `Dockerfile` ; le service journalise un avertissement s'il manque . Un déploiement qui
+   remplace l'environnement de l'image (Pédalons) doit les reprendre.
 4. **Le 503 sous charge extrême** (§16) plutôt qu'une limite de concurrence par taille de requête : acceptable ou non.
 
 ## 18. Sonde et reproduction (hors dépôt)
@@ -638,7 +638,7 @@ Le code a suivi la note ; ce qui a changé, et pourquoi :
    réserve avant de construire. La note l'annonçait ; le premier code l'avait oublié.
 7. **Ce qui n'est pas compté ni borné** : les agrégats d'équipe d'une fenêtre sont construits **hors du verrou** du cache
    (deux générations simultanées de la même équipe dans la même fenêtre neuve peuvent les calculer deux fois, la
-   seconde copie étant jetée) ; la mémoire d'une génération est réservée à 118 o par chaîne de fenêtre **après** son
+   seconde copie étant jetée) ; la mémoire d'une génération est réservée à 150 o par chaîne de fenêtre **après** son
    acquisition ; la gauge `ord_generator_memory_bytes{kind=workspace}` ne porte que la réserve (pas les espaces en
    cours d'usage).
 8. **Zone d'une grande équipe construite d'un bloc** (§16, risque « zone d'une très grande équipe ») : la construction

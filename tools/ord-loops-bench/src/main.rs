@@ -387,6 +387,9 @@ fn main() -> Result<()> {
         let t = std::time::Instant::now();
         let _ = sampler.take_max_mb();
         let plan = TeamData::plan_build(&engine, &overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
+        // Comme le service : la construction (données d'équipe puis tables du contrôleur) tient sa mémoire transitoire
+        // dans le budget des fenêtres.
+        wins.reserve_team_build(plan.estimated_bytes)?;
         let team = TeamData::build_planned(&engine, &overlay, &plan)
             .map_err(|e| anyhow!("équipe {letter} : {e}"))?;
         let peak = sampler.take_max_mb();
@@ -415,6 +418,7 @@ fn main() -> Result<()> {
         let tc_start = std::time::Instant::now();
         let team_check = TeamCheck::build(engine.base(), &graph_index, &overlay, &check_cfg);
         check_build_anon.push((letter.clone(), tc_start.elapsed().as_secs_f64(), sampler.take_max_mb()));
+        wins.release_team_build(plan.estimated_bytes);
         let checker =
             Checker::with_tables(engine.base(), Some(&overlay), check_cfg, &graph_index, Some(&team_check));
         let ctx = Context { engine: &engine, team: &team, checker: &checker };

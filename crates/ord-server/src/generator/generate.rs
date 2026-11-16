@@ -158,12 +158,11 @@ impl Ready {
     fn give_workspace(&self, mut ws: Workspace) {
         ws.shrink_to(self.cfg.workspace_keep_mb * 1_000_000);
         let mut pool = self.workspaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if pool.len() < self.cfg.max_concurrent {
-            let bytes = ws.bytes();
+        let bytes = ws.bytes();
+        let total: usize = pool.iter().map(Workspace::bytes).sum::<usize>() + bytes;
+        // Gardé seulement si le budget a la place : la réserve ne le dépasse jamais.
+        if pool.len() < self.cfg.max_concurrent && self.windows.pool_add(bytes, total) {
             pool.push(ws);
-            let total: usize = pool.iter().map(Workspace::bytes).sum();
-            drop(pool);
-            self.windows.pool_add(bytes, total);
         } else {
             metrics::counter!("ord_generator_window_evictions_total", "kind" => "workspace").increment(1);
         }
@@ -336,11 +335,19 @@ impl Ready {
             Some(c) => match self.store.ready(c, &self.engine, &self.graph_index, &|bytes| {
                 self.windows
                     .reserve_build(bytes, deadline, &|| cancel.load(Ordering::Relaxed))
-                    .ok()
                     .map(|g| Box::new(g) as Box<dyn Send + '_>)
+                    .map_err(|e| match e {
+                        AcquireError::Stopped => ReadyError::Stopped,
+                        AcquireError::Overloaded => ReadyError::Overloaded,
+                    })
             }) {
                 Ok(e) => Some(e),
-                Err(ReadyError::Busy) => return Err(overloaded()),
+                // Sans équipe, le mode découverte génère quand même : seule la mémoire d'équipe manque.
+                Err(ReadyError::Overloaded | ReadyError::Stopped) if !need_team => None,
+                Err(ReadyError::Overloaded) => return Err(overloaded()),
+                Err(ReadyError::Stopped) => {
+                    return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded"))
+                }
                 Err(ReadyError::State(state)) if need_team => {
                     return Err(overlay_required(match state {
                         State::Stale(StaleReason::Graph | StaleReason::Matcher) => OverlayProblemState::Stale,

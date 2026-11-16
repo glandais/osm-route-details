@@ -117,16 +117,18 @@ fn file_id(md: &std::fs::Metadata) -> FileId {
     FileId { ino, mtime_ns, len: md.len() }
 }
 
-/// Pourquoi une équipe n'est pas rendue : pas prête, ou plus de place dans le budget de mémoire pour la construire.
+/// Pourquoi une équipe n'est pas rendue : pas prête, plus de place dans le budget de mémoire pour la construire
+/// (503), ou la demande est coupée avant (client parti, échéance : 504).
 #[derive(Debug)]
 pub enum ReadyError {
     State(State),
-    Busy,
+    Overloaded,
+    Stopped,
 }
 
-/// Réserve la mémoire transitoire d'une construction d'équipe (`None` : pas de place à l'échéance) ; la garde
-/// rendue libère la réservation à sa chute.
-pub type Reserve<'a> = &'a dyn Fn(usize) -> Option<Box<dyn Send + 'a>>;
+/// Réserve la mémoire transitoire d'une construction d'équipe (`Overloaded` : pas de place à l'échéance ; `Stopped` :
+/// coupé par l'appelant) ; la garde rendue libère la réservation à sa chute.
+pub type Reserve<'a> = &'a dyn Fn(usize) -> Result<Box<dyn Send + 'a>, ReadyError>;
 
 /// Une équipe prête : surcouche et données du moteur.
 pub struct Entry {
@@ -404,9 +406,16 @@ impl Store {
         let plan = TeamData::plan_build(engine, &overlay).map_err(|_| stale())?;
         // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe) : sa place est réservée
         // dans le budget du générateur, ou la demande attend, puis 503.
-        let _guard = reserve(plan.estimated_bytes).ok_or(ReadyError::Busy)?;
-        let team = TeamData::build_planned(engine, &overlay, &plan).map_err(|_| stale())?;
-        let check = TeamCheck::build(engine.base(), gi, &overlay, &CheckConfig::default());
+        let _guard = reserve(plan.estimated_bytes)?;
+        // Les deux constructions ne dépendent que de la surcouche : en parallèle, le temps est celui de la plus longue
+        // (pages froides, une grosse équipe passait 8 s en série).
+        let (team, check) = std::thread::scope(|sc| {
+            let check = sc.spawn(|| TeamCheck::build(engine.base(), gi, &overlay, &CheckConfig::default()));
+            let team = TeamData::build_planned(engine, &overlay, &plan);
+            (team, check.join())
+        });
+        let team = team.map_err(|_| stale())?;
+        let check = check.unwrap_or_else(|e| std::panic::resume_unwind(e));
         let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
         let entry = Arc::new(Entry { id, serial, meta, overlay, team, check });
         let mut cache = lock(&self.cache);

@@ -204,14 +204,24 @@ impl WindowManager {
                 Some(match cached {
                     Some(wt) => wt,
                     None => {
+                        // Réservé avant d'être construit : un agrégat servi sans être gardé reste compté.
+                        let est = WindowTeam::estimate_bytes(&win);
+                        let mut g = lock(&self.inner);
+                        while !g.cache.reserve(est) {
+                            g = self.wait(g, deadline, stop, true)?;
+                        }
+                        drop(g);
                         let wt = WindowTeam::build(engine, &win, data);
                         let mut g = lock(&self.inner);
+                        g.cache.release(est);
                         let r = if g.cache.make_room(wt.bytes()) {
                             g.cache.insert_team(&win, serial, wt)
                         } else {
                             Arc::new(wt)
                         };
                         self.publish(&mut g, None);
+                        drop(g);
+                        self.cv.notify_all();
                         r
                     }
                 })
@@ -269,11 +279,13 @@ impl WindowManager {
         self.cv.notify_all();
     }
 
-    /// Des espaces de travail entrent en réserve (`bytes` octets) : ils comptent dans le budget.
-    pub fn pool_add(&self, bytes: usize, pool_total: usize) {
+    /// Un espace de travail entre en réserve (`bytes` octets) : il compte dans le budget, qui peut le refuser
+    /// (faux : l'appelant le libère).
+    pub fn pool_add(&self, bytes: usize, pool_total: usize) -> bool {
         let mut g = lock(&self.inner);
-        g.cache.force_reserve(bytes);
-        self.publish(&mut g, Some(pool_total));
+        let kept = g.cache.reserve(bytes);
+        self.publish(&mut g, Some(if kept { pool_total } else { pool_total - bytes }));
+        kept
     }
 
     /// Des espaces de travail sortent de la réserve.

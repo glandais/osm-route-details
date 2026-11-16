@@ -160,7 +160,7 @@ Repris de la version précédente de ces relevés, sans les avoir rejoués :
 
 ## 7. Écarts à la note et au compte rendu
 
-- La note (§19 point 7) dit l'espace de travail réservé à 118 o par chaîne ; le code et le point 12 disent 150 o.
+- La note (§19 point 7) disait l'espace de travail réservé à 118 o par chaîne ; le code et le point 12 disent 150 o : note corrigée.
 - La note (§10.1) annonce un budget unique qui borne ce que le générateur alloue ; mesuré, il ne le borne qu'avec
   `MALLOC_MMAP_THRESHOLD_` (§2.2), et les agrégats d'équipe d'une fenêtre neuve ne sont comptés qu'après coup.
 - Le compte rendu annonçait 0 réponse 5xx hors 503 au service : la relecture relève un 504 en série à chaque séance et
@@ -169,3 +169,23 @@ Repris de la version précédente de ces relevés, sans les avoir rejoués :
 - Les relevés mémoire du premier passage au service ont été pris pages déjà en cache : celles-ci n'étaient pas comptées
   au groupe de contrôle (« file » à 2 Mo), si bien que la limite de 2 Go n'éprouvait que l'anonyme. Pages froides, le
   groupe se remplit de pages de fichier jusqu'à la limite dès l'ouverture et les rend sous pression, sans mise à mort.
+
+## 8. Corrections après la relecture (non mesurées sur la France)
+
+Corrigées dans le code, vérifiées par fmt, clippy et les tests du workspace seulement : **aucune des mesures ci-dessus n'a
+été rejouée** après ces corrections.
+
+- **Réglage de `malloc`** : le `Dockerfile` pose `MALLOC_ARENA_MAX=2` et `MALLOC_MMAP_THRESHOLD_=1048576` ; le service
+  journalise un avertissement au démarrage si le second manque. Pas de test automatisé du RSS.
+- **504 de la première génération d'une équipe** : les données d'équipe sont construites en tâche de fond à la fin du
+  dépôt (sous `reserve_build`, 120 s d'attente au plus), et `TeamData` et `TeamCheck` se construisent en parallèle. Reste :
+  après un redémarrage, la clé de l'équipe n'est connue qu'avec sa première demande (la surcouche est chiffrée par cette
+  clé) : cette première demande construit encore dans son budget, en un temps réduit mais pas nul.
+- **Polygone de couverture** : la règle d'étendue tolère un débord du polygone de 20 % de la largeur de la boîte des
+  nœuds (la France : 12 %, un polygone de la France sur un graphe régional : bien plus) ; test unitaire sur les boîtes.
+  Décision à confirmer par le responsable ; le contrôle réel `france.poly` n'a pas été rejoué au démarrage du service.
+- **Refus de `reserve_build`** : coupure (client parti, échéance) en 504 `timeout`, manque de place en 503 ; en mode
+  découverte, la génération continue sans l'équipe.
+- **Budget** : les agrégats d'équipe d'une fenêtre neuve sont réservés (`WindowTeam::estimate_bytes`) avant leur
+  construction ; un espace de travail n'entre en réserve que si le budget a la place.
+- **Banc** : la construction d'équipe réserve dans le budget, et « pic au total » est le pic de toutes les phases.

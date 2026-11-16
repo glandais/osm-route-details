@@ -277,6 +277,12 @@ impl WindowTeam {
         Self { per }
     }
 
+    /// Octets que tiendront les agrégats de `win` (une `ChainTeam` par chaîne et par type de sortie de la vue) : de
+    /// quoi les réserver **avant** de les construire.
+    pub fn estimate_bytes(win: &Window) -> usize {
+        win.n_chains() * rides_of_view(win.vi).len() * std::mem::size_of::<ChainTeam>()
+    }
+
     pub(crate) fn chains_of(&self, ride: RideType) -> &[ChainTeam] {
         &self.per[ride.index()]
     }

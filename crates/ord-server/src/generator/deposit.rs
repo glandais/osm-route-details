@@ -21,9 +21,12 @@ use tokio::sync::mpsc;
 use utoipa::ToSchema;
 
 use super::crypto::Credentials;
-use super::store::{FileMeta, StoreError};
+use super::store::{FileMeta, ReadyError, StoreError};
 use super::Ready;
 use crate::problem::{FieldError, LimitKind, Problem, ProblemCode, ProblemDetails};
+
+/// Attente de place au plus longue de la construction en tâche de fond des données d'une équipe.
+const WARM_BUDGET: Duration = Duration::from_secs(120);
 
 /// Une ligne de trace : type de surface, drapeau « exclue du générateur », document `network_edges` (`null` :
 /// illisible). Les clés inconnues de la ligne sont refusées ; celles du document sont tolérées.
@@ -335,6 +338,7 @@ impl Ready {
 
         let (tx, rx) = mpsc::channel::<Msg>(1);
         let deadline = started + Duration::from_secs(self.cfg.deposit.budget_s);
+        let warm_creds = Arc::clone(&creds);
         let worker = Worker { ready: Arc::clone(self), creds, digest, deadline };
         // Le verrou de l'équipe et la place de dépôt vivent autant que le fil : un client qui part ne les rend pas
         // avant que l'écriture en cours soit finie.
@@ -356,7 +360,28 @@ impl Ready {
             let _ = (&mut join).await;
             return Err(p);
         }
-        Self::joined((&mut join).await)
+        let report = Self::joined((&mut join).await)?;
+        self.warm_team(warm_creds);
+        Ok(report)
+    }
+
+    /// Construit en tâche de fond les données de l'équipe qui vient de déposer : sa première génération les trouve au
+    /// cache au lieu de les construire dans son budget (pages froides, une grosse équipe y passait plus de 8 s : 504).
+    /// Seul un dépôt livre la clé qui ouvre la surcouche : au redémarrage, la première demande les construit.
+    fn warm_team(self: &Arc<Self>, creds: Arc<Credentials>) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else { return };
+        let r = Arc::clone(self);
+        drop(handle.spawn_blocking(move || {
+            let deadline = Instant::now() + WARM_BUDGET;
+            let reserve = |bytes: usize| -> Result<Box<dyn Send + '_>, ReadyError> {
+                r.windows
+                    .reserve_build(bytes, deadline, &|| false)
+                    .map(|g| Box::new(g) as Box<dyn Send + '_>)
+                    .map_err(|_| ReadyError::Overloaded)
+            };
+            // Un échec (place, surcouche déjà remplacée) n'est pas une erreur : la première génération construira.
+            let _ = r.store.ready(&creds, &r.engine, &r.graph_index, &reserve);
+        }));
     }
 
     fn joined(

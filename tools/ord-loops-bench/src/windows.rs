@@ -135,6 +135,25 @@ impl<'a, B: AsRef<[u8]>> Windows<'a, B> {
         Ok(Acquired { win, wt, built, build_ms })
     }
 
+    /// Réserve dans le budget la mémoire transitoire d'une construction d'équipe, comme le fait le service
+    /// (`reserve_build`) ; sans effet pour le moteur à plat (pas de budget). À rendre par `release_team_build`.
+    pub fn reserve_team_build(&mut self, bytes: usize) -> Result<()> {
+        if self.kind == Kind::Window && !self.cache.reserve(bytes) {
+            return Err(anyhow!(
+                "budget de mémoire épuisé : {bytes} octets demandés pour construire une équipe"
+            ));
+        }
+        self.peak_counted = self.peak_counted.max(self.counted_now());
+        Ok(())
+    }
+
+    /// Rend la réservation de `reserve_team_build`.
+    pub fn release_team_build(&mut self, bytes: usize) {
+        if self.kind == Kind::Window {
+            self.cache.release(bytes);
+        }
+    }
+
     /// Oublie les agrégats d'une équipe (équipe suivante) : ils ne servent plus au banc.
     pub fn forget_team(&mut self, team_key: u64) {
         self.cache.drop_team(team_key);
@@ -170,6 +189,8 @@ pub fn quantiles(mut v: Vec<f64>) -> Option<(f64, f64, f64)> {
 /// aux pages de fichier (récupérables) ; relevé aussi par phase (`mark`).
 pub struct AnonSampler {
     max_kb: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Pic sur toutes les phases : jamais remis à zéro par `take_max_mb`.
+    overall_kb: std::sync::Arc<std::sync::atomic::AtomicU64>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -189,25 +210,35 @@ impl AnonSampler {
     pub fn start() -> Self {
         use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         let max_kb = std::sync::Arc::new(AtomicU64::new(0));
+        let overall_kb = std::sync::Arc::new(AtomicU64::new(0));
         let stop = std::sync::Arc::new(AtomicBool::new(false));
-        let (m, st) = (std::sync::Arc::clone(&max_kb), std::sync::Arc::clone(&stop));
+        let (m, o, st) = (
+            std::sync::Arc::clone(&max_kb),
+            std::sync::Arc::clone(&overall_kb),
+            std::sync::Arc::clone(&stop),
+        );
         let handle = std::thread::spawn(move || {
             while !st.load(Ordering::Relaxed) {
-                m.fetch_max(rss_anon_kb(), Ordering::Relaxed);
+                let now = rss_anon_kb();
+                m.fetch_max(now, Ordering::Relaxed);
+                o.fetch_max(now, Ordering::Relaxed);
                 std::thread::sleep(std::time::Duration::from_millis(25));
             }
         });
-        Self { max_kb, stop, handle: Some(handle) }
+        Self { max_kb, overall_kb, stop, handle: Some(handle) }
     }
 
-    /// Pic observé depuis le départ (ou depuis la dernière remise à zéro), en Mo.
+    /// Pic observé depuis le départ **sur toutes les phases** (les relevés par phase ne le remettent pas à zéro), en Mo.
     pub fn max_mb(&self) -> f64 {
-        self.max_kb.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1000.0
+        let phase = self.max_kb.load(std::sync::atomic::Ordering::Relaxed);
+        self.overall_kb.fetch_max(phase, std::sync::atomic::Ordering::Relaxed);
+        self.overall_kb.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1000.0
     }
 
     /// Remet le pic à la valeur courante et rend l'ancien (relevé par phase), en Mo.
     pub fn take_max_mb(&self) -> f64 {
         let old = self.max_kb.swap(rss_anon_kb(), std::sync::atomic::Ordering::Relaxed);
+        self.overall_kb.fetch_max(old, std::sync::atomic::Ordering::Relaxed);
         old as f64 / 1000.0
     }
 }

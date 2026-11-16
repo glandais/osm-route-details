@@ -61,7 +61,11 @@ COPY --from=build --chown=65532:65532 /out/cache /var/cache/osm-route-details
 ENV ORD_SERVER__LISTEN_ADDR=0.0.0.0:8080 \
     ORD_SERVER__METRICS_ADDR=0.0.0.0:9090 \
     ORD_CACHE__DIR=/var/cache/osm-route-details \
-    ORD_LOG__FORMAT=json
+    ORD_LOG__FORMAT=json \
+    MALLOC_ARENA_MAX=2 \
+    MALLOC_MMAP_THRESHOLD_=1048576
+# malloc de glibc : au-delà de 1 Mo, les blocs (fenêtres du générateur) viennent de `mmap` et sont rendus au système
+# à leur éviction ; sans ce réglage, l'anonyme dépasse le budget compté de 400 à 600 Mo (lot 6, mesures §2.2).
 VOLUME ["/var/cache/osm-route-details"]
 # 8080 : API publique ; 9090 : /metrics et /openapi.json, à ne pas publier.
 EXPOSE 8080 9090

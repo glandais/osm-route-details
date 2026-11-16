@@ -37,9 +37,12 @@ pub use store::{GenEngine, TestHooks};
 pub const GENERATE_BODY_MAX: usize = 64 * 1024;
 /// Cohérence du polygone avec le graphe (écart à la note : la règle « boîte à 5 km de celle des nœuds » refusait la
 /// vraie région, dont le polygone Geofabrik couvre la mer jusqu'à 9 km au-delà des nœuds) :
-/// le polygone peut dépasser la boîte des nœuds de 15 km (mer), les nœuds peuvent dépasser celle du polygone de 5 km
-/// (voies qui sortent de l'extrait), et 95 % au moins des nœuds échantillonnés sont dans le polygone.
+/// le polygone peut dépasser la boîte des nœuds de 15 km (mer) **ou de 20 % de sa largeur** (le polygone Geofabrik de la
+/// France déborde de 1,8° à l'ouest, soit 12 %, sur l'Atlantique : un polygone de la France sur un graphe régional
+/// déborde de bien plus), les nœuds peuvent dépasser celle du polygone de 5 km (voies qui sortent de l'extrait), et 95 %
+/// au moins des nœuds échantillonnés sont dans le polygone.
 const POLY_OVERHANG_M: f64 = 15_000.0;
+const POLY_OVERHANG_FRACTION: f64 = 0.20;
 const NODES_OUTSIDE_M: f64 = 5_000.0;
 const POLY_MIN_NODES_INSIDE: f64 = 0.95;
 /// Un nœud sur `NODE_SAMPLE_EVERY` est testé contre le polygone.
@@ -262,7 +265,8 @@ fn node_extent(g: &MappedGraph, poly: &Poly) -> Option<([f64; 4], f64)> {
 fn polygon_fits(pb: [f64; 4], nb: [f64; 4], inside: f64) -> bool {
     let dlat = |m: f64| m / (ord_graph_match::geo::EARTH_R * std::f64::consts::PI / 180.0);
     let dlon = |m: f64| dlat(m) / f64::midpoint(nb[1], nb[3]).to_radians().cos().max(0.01);
-    let (over_lat, over_lon) = (dlat(POLY_OVERHANG_M), dlon(POLY_OVERHANG_M));
+    let over_lat = dlat(POLY_OVERHANG_M).max(POLY_OVERHANG_FRACTION * (nb[3] - nb[1]));
+    let over_lon = dlon(POLY_OVERHANG_M).max(POLY_OVERHANG_FRACTION * (nb[2] - nb[0]));
     let (out_lat, out_lon) = (dlat(NODES_OUTSIDE_M), dlon(NODES_OUTSIDE_M));
     pb[0] >= nb[0] - over_lon
         && pb[2] <= nb[2] + over_lon
@@ -367,6 +371,13 @@ impl Generator {
                 return disabled(DisabledReason::GraphUnreadable);
             }
         };
+        if std::env::var_os("MALLOC_MMAP_THRESHOLD_").is_none() {
+            // Le budget de mémoire du générateur ne tient que si glibc rend les grands blocs au système (lot 6).
+            tracing::warn!(
+                "MALLOC_MMAP_THRESHOLD_ is not set: evicted windows may stay resident and exceed the memory budget \
+                 (set MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=1048576, as the Docker image does)"
+            );
+        }
         let poly = match cfg.coverage_poly.as_deref().map(Poly::read) {
             Some(Ok(p)) => p,
             Some(Err(e)) => {
@@ -573,5 +584,21 @@ mod tests {
         assert_eq!(iso8601(1_700_000_000), "2023-11-14T22:13:20Z");
         assert_eq!(iso8601(951_782_400), "2000-02-29T00:00:00Z");
         assert_eq!(iso8601(-1), "1969-12-31T23:59:59Z");
+    }
+
+    /// Boîtes `[lon0, lat0, lon1, lat1]` : celles du polygone Geofabrik de la France et de son graphe (écart de 1,8° à
+    /// l'ouest sur l'Atlantique), puis du polygone régional.
+    #[test]
+    fn polygon_fits_tolerates_sea_but_not_a_larger_region() {
+        let france_nodes = [-5.2, 41.3, 9.6, 51.1];
+        let france_poly = [-6.94, 41.24, 9.9, 51.43];
+        assert!(polygon_fits(france_poly, france_nodes, 1.0));
+        // Le polygone de la France sur un graphe régional : refusé.
+        let region_nodes = [-2.6, 46.3, 0.9, 48.5];
+        assert!(!polygon_fits(france_poly, region_nodes, 1.0));
+        // Le polygone régional sur le graphe de la France : des nœuds hors polygone, refusé.
+        assert!(!polygon_fits(region_nodes, france_nodes, 0.1));
+        // La région, sa mer à 9 km : toujours acceptée.
+        assert!(polygon_fits([-2.67, 46.22, 0.92, 48.57], [-2.6, 46.3, 0.85, 48.5], 1.0));
     }
 }
