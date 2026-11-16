@@ -656,6 +656,11 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
         (r.a.get(), r.b.get())
     }
 
+    /// Id de la way OSM d'une arête (lecture directe, sans les ids de nœuds de `identity`).
+    pub fn edge_way(&self, edge: u32) -> u64 {
+        self.id_edges()[edge as usize].way.get()
+    }
+
     pub fn osm_node_id(&self, gid: u32) -> u64 {
         self.id_nodes()[gid as usize].get()
     }

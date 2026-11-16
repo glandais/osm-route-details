@@ -532,3 +532,25 @@ fn view_headings_follow_the_chain_geometry() {
     assert!((polyline_heading(&pts, true) - 180.0).abs() < 0.5);
     assert!((polyline_heading(&pts, false) - 180.0).abs() < 0.5);
 }
+
+#[test]
+fn the_allocation_free_readers_agree_with_the_bulk_ones() {
+    let g = base(&mut street_with_footway(), 11);
+    let v = view_of(&g, "road");
+    let all = v.view_headings().expect("section de caps");
+    assert_eq!(v.view_heading_count(), all.len());
+    for (c, h) in all.iter().enumerate() {
+        assert_eq!(v.view_heading(c as u32), Some(*h));
+    }
+    assert_eq!(v.view_heading(all.len() as u32), None);
+    let nodes = v.view_base_nodes().unwrap();
+    for (i, n) in nodes.iter().enumerate() {
+        assert_eq!(v.view_node_of_base(n.get()), Some(i as u32));
+    }
+    // Le nœud 6 (bout du trottoir) est dans la base mais pas dans la vue `road`.
+    let n6 = (0..g.header().nodes as u32).find(|&n| g.osm_node_id(n) == 6).unwrap();
+    assert_eq!(v.view_node_of_base(n6), None);
+    for e in 0..g.header().edges as u32 {
+        assert_eq!(g.edge_way(e), g.identity(e).0);
+    }
+}

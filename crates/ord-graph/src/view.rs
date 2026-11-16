@@ -755,6 +755,26 @@ impl<B: AsRef<[u8]>> GraphFile<B> {
         )
     }
 
+    /// Caps `[début, fin]` de l'arête `edge` de la vue, lus dans le fichier sans copie ; `None` si la vue n'a pas
+    /// la section (format minor 1 : le moteur les recalcule alors depuis la géométrie).
+    pub fn view_heading(&self, edge: u32) -> Option<[u16; 2]> {
+        let b = self.optional_section(KIND_VIEW_HEADING)?;
+        let c = b.get(edge as usize * 4..edge as usize * 4 + 4)?;
+        Some([u16::from_le_bytes([c[0], c[1]]), u16::from_le_bytes([c[2], c[3]])])
+    }
+
+    /// Nombre d'arêtes de vue dont la section de caps porte une entrée (0 si la vue n'a pas la section).
+    pub fn view_heading_count(&self) -> usize {
+        self.optional_section(KIND_VIEW_HEADING).map_or(0, |b| b.len() / 4)
+    }
+
+    /// Nœud de la vue dont le nœud de base est `base_node`, par dichotomie dans `VIEW_BASE_NODE`.
+    pub fn view_node_of_base(&self, base_node: u32) -> Option<u32> {
+        let nodes = self.view_base_nodes()?;
+        let i = nodes.partition_point(|n| n.get() < base_node);
+        (nodes.get(i)?.get() == base_node).then_some(i as u32)
+    }
+
     /// Nœud de base de chaque nœud de la vue (croissant).
     pub fn view_base_nodes(&self) -> Option<&[U32]> {
         <[U32]>::ref_from_bytes(self.optional_section(KIND_VIEW_BASE_NODE)?).ok()

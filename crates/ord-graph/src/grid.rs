@@ -25,6 +25,31 @@ pub fn tile_origin_deg(x: u32, y: u32, zoom: u8) -> (f64, f64) {
     (lat, lon)
 }
 
+/// Clé d'une tuile pour les index triés : `y << 16 | x` (x et y tiennent sur 16 bits jusqu'à z16).
+pub fn tile_key(x: u32, y: u32) -> u32 {
+    (y << 16) | x
+}
+
+/// Tuile `(x, y)` d'une clé de [`tile_key`].
+pub fn tile_of_key(key: u32) -> (u32, u32) {
+    (key & 0xffff, key >> 16)
+}
+
+/// Rectangle d'une tuile en degrés E7, **élargi d'une unité** vers l'extérieur : `(lat_min, lat_max, lon_min,
+/// lon_max)`. Tout point E7 dont `tile_of_e7` rend `(x, y)` y est compris ; l'inverse n'est pas vrai (le bord
+/// appartient à la tuile voisine), ce qui convient à un test « la tuile peut couper cette zone ».
+pub fn tile_rect_e7(x: u32, y: u32, zoom: u8) -> (i32, i32, i32, i32) {
+    let (lat_hi, lon_lo) = tile_origin_deg(x, y, zoom);
+    let (lat_lo, lon_hi) = tile_origin_deg(x + 1, y + 1, zoom);
+    let e7 = |d: f64| d * 1e7;
+    (
+        e7(lat_lo).floor() as i32 - 1,
+        e7(lat_hi).ceil() as i32 + 1,
+        e7(lon_lo).floor() as i32 - 1,
+        e7(lon_hi).ceil() as i32 + 1,
+    )
+}
+
 fn spread(v: u32) -> u64 {
     let mut x = u64::from(v);
     x = (x | (x << 16)) & 0x0000_ffff_0000_ffff;
@@ -61,6 +86,21 @@ mod tests {
     fn nantes_is_in_the_expected_z11_tile() {
         // Nantes ≈ 47.218 N, 1.554 W.
         assert_eq!(tile_of_deg(47.218, -1.554, 11), (1015, 718));
+    }
+
+    #[test]
+    fn tile_rect_contains_its_points_and_keys_roundtrip() {
+        let (x, y) = (1015, 718);
+        let (la0, la1, lo0, lo1) = tile_rect_e7(x, y, 11);
+        for (la, lo) in [(la0, lo0), (la1, lo1), ((la0 + la1) / 2, (lo0 + lo1) / 2), (la0 + 5, lo1 - 5)] {
+            let t = tile_of_e7(la, lo, 11);
+            // Les coins élargis peuvent tomber dans la tuile voisine ; le centre et l'intérieur non.
+            if la != la0 && la != la1 && lo != lo0 && lo != lo1 {
+                assert_eq!(t, (x, y));
+            }
+        }
+        assert_eq!(tile_of_key(tile_key(x, y)), (x, y));
+        assert!(tile_key(1, 0) < tile_key(0, 1), "tri par y puis x");
     }
 
     #[test]
