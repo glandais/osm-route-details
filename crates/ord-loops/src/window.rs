@@ -594,7 +594,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
     }
 }
 
-fn tile_key_of(p: &(i32, i32), zoom: u8) -> u32 {
+pub(crate) fn tile_key_of(p: &(i32, i32), zoom: u8) -> u32 {
     let (x, y) = tile_of_e7(p.0, p.1, zoom);
     tile_key(x, y)
 }

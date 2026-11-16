@@ -137,3 +137,50 @@ fn the_reference_overlays_exercise_bridging_and_strict_components() {
 fn the_kept_reference_construction_matches_the_frozen_reference() {
     assert_matches_fixture(&fixture_lines(&|e, ov| TeamData::build_reference(e, ov).unwrap()));
 }
+
+#[test]
+fn the_sparse_construction_is_the_reference_and_the_flat_engine_byte_for_byte() {
+    let engines = engines();
+    for i in 0..OVERLAYS {
+        let (name, e) = &engines[i % engines.len()];
+        let ov = overlay_of(e, &sparse_rows(e, i as u64));
+        let sparse = TeamData::build(e, &ov).unwrap();
+        assert!(!sparse.zone_retried(), "{i} {name} : reprise inattendue");
+        let want = sparse.canonical_bytes();
+        assert!(
+            TeamData::build_reference(e, &ov).unwrap().canonical_bytes() == want,
+            "{i} {name} : creuse ≠ référence"
+        );
+        assert!(
+            TeamData::build_on(e, &ov, true).unwrap().canonical_bytes() == want,
+            "{i} {name} : creuse ≠ moteur à plat"
+        );
+    }
+}
+
+#[test]
+fn a_forced_escape_is_retried_at_one_kilometre_and_gives_the_same_bytes_or_raises() {
+    let engines = engines();
+    let (mut escaped, mut quiet) = (0, 0);
+    for i in 0..OVERLAYS {
+        let (name, e) = &engines[i % engines.len()];
+        let ov = overlay_of(e, &sparse_rows(e, i as u64));
+        let want = TeamData::build_reference(e, &ov).unwrap().canonical_bytes();
+        // Des cases chaudes de 1 m : seules les cases des bouts de la surcouche, la règle des trous en sort.
+        match TeamData::build_forced(e, &ov, 1.0, false) {
+            Err(crate::EngineError::TeamZoneEscape) => {
+                escaped += 1;
+                let again = TeamData::build_forced(e, &ov, 1.0, true).unwrap();
+                assert!(again.zone_retried(), "{i} {name}");
+                assert!(again.canonical_bytes() == want, "{i} {name} : la reprise change le résultat");
+            }
+            Ok(t) => {
+                // Jamais un résultat faux : sans échappement, mêmes octets.
+                quiet += 1;
+                assert!(t.canonical_bytes() == want, "{i} {name} : résultat creux faux sans échappement");
+            }
+            Err(e) => panic!("{e}"),
+        }
+    }
+    assert!(escaped > 20, "le garde-fou n'a presque jamais été levé : {escaped} ({quiet} sans)");
+}

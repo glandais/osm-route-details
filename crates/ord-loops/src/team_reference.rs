@@ -47,7 +47,7 @@ fn build_zone<B: AsRef<[u8]>>(
         let (win, zv) = &views[r.view_index()];
         build_type(e, overlay, r, &win.v, zv)
     });
-    Ok(TeamData { per })
+    Ok(TeamData { per, retried: false })
 }
 
 /// Incidence d'une arête de base vivante en un nœud de base.

@@ -79,6 +79,9 @@ pub enum EngineError {
     ViewMismatch,
     /// La surcouche vient d'un autre graphe.
     OverlayMismatch,
+    /// La construction creuse des données d'équipe a quitté les cases chaudes, même élargies à la boîte de la zone
+    /// (lot 6, finition 2, §20.2) : jamais un résultat faux, une erreur.
+    TeamZoneEscape,
 }
 
 impl fmt::Display for EngineError {
@@ -87,6 +90,7 @@ impl fmt::Display for EngineError {
             Self::BadView(s) => write!(f, "vue inutilisable : {s}"),
             Self::ViewMismatch => write!(f, "la vue ne correspond pas à ce graphe de base"),
             Self::OverlayMismatch => write!(f, "la surcouche vient d'un autre graphe"),
+            Self::TeamZoneEscape => write!(f, "la construction de l'équipe a quitté son voisinage"),
         }
     }
 }

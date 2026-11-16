@@ -13,14 +13,14 @@ use std::collections::BinaryHeap;
 use ord_graph::attrs::HighwayClass;
 use ord_graph::format::DIR_BIT;
 use ord_graph::overlay::Overlay;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::cost::{self, is_greenway, RideType};
 use crate::engine::{
-    chain_strong_len, rides_of_view, strong_components, strong_lengths, Engine, EngineError, ViewData,
+    chain_strong_len, rides_of_view, strong_components, strong_lengths, Engine, EngineError,
 };
 use crate::geo::M_PER_DEG;
-use crate::window::{tiles_of_rect, Window};
+use crate::window::{tile_key_of, tiles_of_rect, Window};
 
 pub(crate) const TEAM: u8 = 1;
 pub(crate) const BRIDGED: u8 = 2;
@@ -77,6 +77,8 @@ impl TypeTeam {
 #[derive(Debug)]
 pub struct TeamData {
     pub(crate) per: [TypeTeam; 3],
+    /// La construction a dû être refaite à `ZONE_BOX_M` après un échappement du garde-fou (§20.2) : à compter.
+    pub(crate) retried: bool,
 }
 
 /// Résumé pour le rapport et les tests.
@@ -99,20 +101,78 @@ pub struct TeamCtx<'a> {
     pub win: &'a WindowTeam,
 }
 
-/// Ce qu'il faut construire pour une équipe : sa zone, et ce que la construction tiendra en mémoire le temps
-/// qu'elle dure (§7.1 : fenêtres de la zone, incidence des arêtes de base vivantes, composantes strictes).
+/// Ce qu'il faut construire pour une équipe : sa zone, ses cases chaudes (§20.2), et ce que la construction tiendra
+/// en mémoire le temps qu'elle dure.
 #[derive(Clone, Debug)]
 pub struct BuildPlan {
     zone: Vec<u32>,
+    hot: FxHashSet<u64>,
     /// Octets transitoires estimés de la construction.
     pub estimated_bytes: usize,
 }
 
-/// Octets transitoires par chaîne de la zone (la plus grande des deux vues) : fenêtre sans poids (≈ 61 o), arêtes
-/// vivantes et incidence (≈ 47 o), composantes strictes (≈ 20 o), tables de hachage de la règle des trous. Réglé sur
-/// les neuf équipes de la France (`ord-loops-lot6-mesures.md` §5) : le pic anonyme mesuré, moins les 32 Mo du banc,
-/// reste sous l'estimation pour chacune.
-const BUILD_BYTES_PER_CHAIN: usize = 210;
+impl BuildPlan {
+    /// Nombre de cases chaudes de la construction.
+    pub fn hot_cells(&self) -> usize {
+        self.hot.len()
+    }
+}
+
+/// Octets transitoires par case chaude (§20.2) : incidence chaude (16 o par entrée), arêtes vivantes, tables de la
+/// règle des trous et graphe strict, croissance des vecteurs comprise. Réglé sur les neuf équipes de la France au pic
+/// anonyme mesuré (`ord-loops-lot6-mesures.md` §10) plus 25 %.
+const BUILD_BYTES_PER_HOT_CASE: usize = 280;
+/// Octets fixes de la construction (tables, tampons).
+const BUILD_BYTES_FIXED: usize = 2_000_000;
+
+/// Côté (E7) d'une case chaude : 0,002° (~220 m).
+const HOT_CASE_E7: i32 = 20_000;
+/// Marge (m) ajoutée à la plus grande des portées de la règle des trous : le Dijkstra ne développe pas un nœud plus
+/// loin que `hole_m` d'un bout d'arête d'équipe, la boîte en prend de quoi couvrir l'arrondi des cases.
+const HOT_MARGIN_M: f64 = 150.0;
+
+/// Clé d'une case chaude.
+fn case_key(p: (i32, i32)) -> u64 {
+    (u64::from(p.0.div_euclid(HOT_CASE_E7) as u32) << 32) | u64::from(p.1.div_euclid(HOT_CASE_E7) as u32)
+}
+
+/// Les cases de 0,002° que touche la boîte de ± `hot_m` autour de **chaque bout** de chaque arête de la surcouche
+/// dont un compte est non nul (§20.2).
+fn hot_cells<B: AsRef<[u8]>>(e: &Engine<B>, ov: &Overlay, hot_m: f64) -> FxHashSet<u64> {
+    let ky = M_PER_DEG * 1e-7;
+    let dlat = (hot_m / ky) as i32 + 2;
+    let mut cases: FxHashSet<u64> = FxHashSet::default();
+    for (edge, c) in ov.iter() {
+        if c.iter().all(|&x| x == 0) {
+            continue;
+        }
+        let (a, b) = e.ends(edge);
+        for n in [a, b] {
+            let p = e.pos(n);
+            let dlon = (hot_m / (ky * (f64::from(p.0) * 1e-7).to_radians().cos().max(0.05))) as i32 + 2;
+            let (la0, la1) = (
+                p.0.saturating_sub(dlat).div_euclid(HOT_CASE_E7),
+                p.0.saturating_add(dlat).div_euclid(HOT_CASE_E7),
+            );
+            let (lo0, lo1) = (
+                p.1.saturating_sub(dlon).div_euclid(HOT_CASE_E7),
+                p.1.saturating_add(dlon).div_euclid(HOT_CASE_E7),
+            );
+            for la in la0..=la1 {
+                for lo in lo0..=lo1 {
+                    cases.insert((u64::from(la as u32) << 32) | u64::from(lo as u32));
+                }
+            }
+        }
+    }
+    cases
+}
+
+/// La portée chaude par défaut d'une équipe (m) : celle de la règle des trous la plus longue, plus la marge, sans
+/// dépasser la boîte de la zone.
+fn default_hot_m<B: AsRef<[u8]>>(e: &Engine<B>) -> f64 {
+    (e.params.hole_m.max(e.params.connector_m) + HOT_MARGIN_M).min(ZONE_BOX_M)
+}
 
 impl TeamData {
     /// Construit les attributs d'équipe pour les trois types sur la zone de l'équipe ; refuse une surcouche d'un
@@ -122,33 +182,79 @@ impl TeamData {
         Self::build_planned(e, overlay, &plan)
     }
 
-    /// La zone de l'équipe et la mémoire transitoire de sa construction : l'appelant la réserve avant de construire
-    /// (budget unique du service, §10.1).
+    /// La zone de l'équipe, ses cases chaudes et la mémoire transitoire de sa construction : l'appelant la réserve
+    /// avant de construire (budget unique du service, §10.1).
     pub fn plan_build<B: AsRef<[u8]>>(e: &Engine<B>, overlay: &Overlay) -> Result<BuildPlan, EngineError> {
         overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
         let zone = zone_tiles(e, overlay);
-        let chains: usize = (0..2).map(|vi| e.window_chain_count(vi, &zone)).max().unwrap_or(0);
-        Ok(BuildPlan { estimated_bytes: chains * BUILD_BYTES_PER_CHAIN, zone })
+        let hot_m = default_hot_m(e);
+        let hot = hot_cells(e, overlay, hot_m);
+        let estimated_bytes = BUILD_BYTES_FIXED + hot.len() * BUILD_BYTES_PER_HOT_CASE;
+        Ok(BuildPlan { zone, hot, estimated_bytes })
     }
 
-    /// Construit sur la zone d'un [`BuildPlan`].
+    /// Construit sur la zone et les cases chaudes d'un [`BuildPlan`]. Si le garde-fou lève (un Dijkstra développerait
+    /// un nœud hors des cases chaudes), la construction est refaite **une** fois avec des cases à `ZONE_BOX_M` ;
+    /// un second échappement rend [`EngineError::TeamZoneEscape`], jamais un résultat faux.
     pub fn build_planned<B: AsRef<[u8]>>(
         e: &Engine<B>,
         overlay: &Overlay,
         plan: &BuildPlan,
     ) -> Result<Self, EngineError> {
-        Self::build_zone(e, overlay, Some(&plan.zone))
+        match build_sparse(e, overlay, &plan.zone, &plan.hot) {
+            Ok(t) => Ok(t),
+            Err(Escape) => {
+                let wide = hot_cells(e, overlay, ZONE_BOX_M);
+                let mut t =
+                    build_sparse(e, overlay, &plan.zone, &wide).map_err(|_| EngineError::TeamZoneEscape)?;
+                t.retried = true;
+                Ok(t)
+            }
+        }
+    }
+
+    /// Construit avec des cases chaudes de `hot_m` mètres, sans reprise : [`EngineError::TeamZoneEscape`] au premier
+    /// échappement. Les tests forcent ainsi le garde-fou.
+    #[cfg(test)]
+    pub(crate) fn build_forced<B: AsRef<[u8]>>(
+        e: &Engine<B>,
+        overlay: &Overlay,
+        hot_m: f64,
+        retry: bool,
+    ) -> Result<Self, EngineError> {
+        let zone = zone_tiles(e, overlay);
+        let hot = hot_cells(e, overlay, hot_m);
+        match build_sparse(e, overlay, &zone, &hot) {
+            Ok(t) => Ok(t),
+            Err(Escape) if retry => {
+                let wide = hot_cells(e, overlay, ZONE_BOX_M);
+                let mut t =
+                    build_sparse(e, overlay, &zone, &wide).map_err(|_| EngineError::TeamZoneEscape)?;
+                t.retried = true;
+                Ok(t)
+            }
+            Err(Escape) => Err(EngineError::TeamZoneEscape),
+        }
+    }
+
+    /// Vrai si la construction a dû être refaite à `ZONE_BOX_M` (échappement du garde-fou ; doit rester rare).
+    pub fn zone_retried(&self) -> bool {
+        self.retried
     }
 
     /// Comme [`TeamData::build`], sur toutes les tuiles du graphe (`whole`) : le moteur à plat, référence des tests.
+    #[cfg(any(test, feature = "reference"))]
     pub fn build_on<B: AsRef<[u8]>>(
         e: &Engine<B>,
         overlay: &Overlay,
         whole: bool,
     ) -> Result<Self, EngineError> {
         overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
-        let zone = (!whole).then(|| zone_tiles(e, overlay));
-        Self::build_zone(e, overlay, zone.as_deref())
+        if whole {
+            Self::build_reference_zone(e, overlay, None)
+        } else {
+            Self::build(e, overlay)
+        }
     }
 
     /// La construction d'avant la finition 2 (fenêtres de toute la zone, incidence de toute la zone), gardée comme
@@ -158,27 +264,6 @@ impl TeamData {
         overlay.check_graph(&e.base.graph_identity()).map_err(|_| EngineError::OverlayMismatch)?;
         let zone = zone_tiles(e, overlay);
         Self::build_reference_zone(e, overlay, Some(&zone))
-    }
-
-    fn build_zone<B: AsRef<[u8]>>(
-        e: &Engine<B>,
-        overlay: &Overlay,
-        zone: Option<&[u32]>,
-    ) -> Result<Self, EngineError> {
-        let mut views: Vec<(Window, ZoneView)> = Vec::new();
-        for vi in 0..2 {
-            let win = match zone {
-                Some(z) => e.build_window_opts(vi, z, false, &mut || false).expect("jamais coupée"),
-                None => e.full_window(vi),
-            };
-            let zv = ZoneView::new(e, &win.v);
-            views.push((win, zv));
-        }
-        let per = RideType::ALL.map(|r| {
-            let (win, zv) = &views[r.view_index()];
-            build_type(e, overlay, r, &win.v, zv)
-        });
-        Ok(Self { per })
     }
 
     pub fn stats(&self, ride: RideType) -> TeamStats {
@@ -329,7 +414,7 @@ impl WindowTeam {
 
 /// Zone de l'équipe : les tuiles qui contiennent un point d'une arête roulée, et celles que touche la boîte de
 /// ± `ZONE_BOX_M` autour de chacun de ces points (§7.1).
-fn zone_tiles<B: AsRef<[u8]>>(e: &Engine<B>, ov: &Overlay) -> Vec<u32> {
+pub(crate) fn zone_tiles<B: AsRef<[u8]>>(e: &Engine<B>, ov: &Overlay) -> Vec<u32> {
     let zoom = e.zoom();
     let ky = M_PER_DEG * 1e-7;
     let dlat = (ZONE_BOX_M / ky) as i32 + 2;
@@ -362,44 +447,113 @@ fn zone_tiles<B: AsRef<[u8]>>(e: &Engine<B>, ov: &Overlay) -> Vec<u32> {
 
 /// Incidence d'une arête de base vivante en un nœud de base.
 #[derive(Clone, Copy)]
-struct Inc {
-    node: u32,
-    edge: u32,
-    other: u32,
-    len: u32,
+pub(crate) struct Inc {
+    pub node: u32,
+    pub edge: u32,
+    pub other: u32,
+    pub len: u32,
 }
 
-/// Ce qu'il faut de la vue d'une zone pour la règle des trous : les arêtes de base vivantes (liens des chaînes) et
-/// leur incidence par nœud de base, dans l'ordre croissant des arêtes (§7.1).
-struct ZoneView {
+/// Un Dijkstra de la règle des trous développerait un nœud hors des cases chaudes (§20.2) : la construction creuse
+/// n'a pas son incidence.
+pub(crate) struct Escape;
+
+pub(crate) fn type_index(o: &Overlay, name: &str) -> Option<usize> {
+    o.meta.types.iter().position(|t| t == name)
+}
+
+/// Cases chaudes et tuiles de la zone : un nœud de base est **chaud** si la case de sa position est chaude et si
+/// sa tuile est une tuile de la zone.
+struct Hot<'a> {
+    cases: &'a FxHashSet<u64>,
+    zone: &'a [u32],
+    zoom: u8,
+}
+
+impl Hot<'_> {
+    fn contains(&self, p: (i32, i32)) -> bool {
+        self.cases.contains(&case_key(p)) && self.zone.binary_search(&tile_key_of(&p, self.zoom)).is_ok()
+    }
+}
+
+/// Ce qu'il faut d'une vue pour la règle des trous, **autour du réseau de l'équipe seulement** (§20.2) : les arêtes
+/// de base vivantes qui ont un bout chaud, et l'incidence des nœuds chauds, dans l'ordre croissant des arêtes.
+struct SparseView<'a, B> {
+    e: &'a Engine<B>,
+    hot: Hot<'a>,
     alive: Vec<u32>,
     inc: Vec<Inc>,
 }
 
-impl ZoneView {
-    fn new<B: AsRef<[u8]>>(e: &Engine<B>, v: &ViewData) -> Self {
-        let mut alive: Vec<u32> = v.chain_links.iter().map(|l| l & !DIR_BIT).collect();
-        alive.sort_unstable();
-        alive.dedup();
-        let mut inc = Vec::with_capacity(2 * alive.len());
-        for &ed in &alive {
+impl<'a, B: AsRef<[u8]>> SparseView<'a, B> {
+    /// Lit en flux les chaînes de la zone de la vue `vi`, comme `build_window_opts` les choisit, mais sans fenêtre.
+    /// Rend aussi les chaînes candidates au réseau strict (tous les bouts de tous les liens sont chauds).
+    fn read(e: &'a Engine<B>, vi: usize, zone: &'a [u32], cases: &'a FxHashSet<u64>) -> (Self, Vec<u32>) {
+        let hot = Hot { cases, zone, zoom: e.zoom() };
+        let view = &e.views_files[vi];
+        let idx = &e.idx[vi];
+        let mut alive_m: Vec<(u32, u8)> = Vec::new();
+        let mut strict_cand: Vec<u32> = Vec::new();
+        let mut chain = |c: u32| {
+            let links = view.view_chain(c).expect("chaînes validées à l'ouverture");
+            let mut all_hot = true;
+            for l in links {
+                let ed = l.get() & !DIR_BIT;
+                let (a, b) = e.ends(ed);
+                let (ha, hb) = (hot.contains(e.pos(a)), hot.contains(e.pos(b)));
+                if ha || hb {
+                    alive_m.push((ed, u8::from(ha) | (u8::from(hb) << 1)));
+                }
+                all_hot &= ha && hb;
+            }
+            if all_hot {
+                strict_cand.push(c);
+            }
+        };
+        for &key in zone {
+            let (x, y) = ord_graph::grid::tile_of_key(key);
+            if let Some(ci) = view.find_cell(x, y) {
+                let i = view.cell_info(ci);
+                for c in i.first_edge..i.first_edge + i.n_edges {
+                    chain(c);
+                }
+            }
+            for f in idx.foreign_of(key) {
+                chain(f.1);
+            }
+        }
+        alive_m.sort_unstable();
+        alive_m.dedup();
+        strict_cand.sort_unstable();
+        strict_cand.dedup();
+        let mut inc: Vec<Inc> = Vec::with_capacity(alive_m.len() * 2);
+        for &(ed, m) in &alive_m {
             let (a, b) = e.ends(ed);
             let len = e.len_dm(ed);
-            inc.push(Inc { node: a, edge: ed, other: b, len });
-            inc.push(Inc { node: b, edge: ed, other: a, len });
+            if m & 1 != 0 {
+                inc.push(Inc { node: a, edge: ed, other: b, len });
+            }
+            if m & 2 != 0 {
+                inc.push(Inc { node: b, edge: ed, other: a, len });
+            }
         }
         inc.sort_unstable_by_key(|i| (i.node, i.edge));
-        Self { alive, inc }
+        let alive: Vec<u32> = alive_m.iter().map(|x| x.0).collect();
+        (Self { e, hot, alive, inc }, strict_cand)
     }
 
-    fn alive(&self, e: u32) -> bool {
-        self.alive.binary_search(&e).is_ok()
+    fn alive(&self, ed: u32) -> bool {
+        self.alive.binary_search(&ed).is_ok()
     }
 
-    fn inc_of(&self, x: u32) -> &[Inc] {
+    /// Incidence du nœud `x` ; `Escape` s'il n'est pas chaud (son incidence serait incomplète).
+    fn inc_of(&self, x: u32) -> Result<&[Inc], Escape> {
+        if !self.hot.contains(self.e.pos(x)) {
+            return Err(Escape);
+        }
         let lo = self.inc.partition_point(|i| i.node < x);
         let hi = self.inc.partition_point(|i| i.node <= x);
-        &self.inc[lo..hi]
+        Ok(&self.inc[lo..hi])
     }
 }
 
@@ -410,17 +564,34 @@ struct EdgeInfo {
     z: u8,
 }
 
-pub(crate) fn type_index(o: &Overlay, name: &str) -> Option<usize> {
-    o.meta.types.iter().position(|t| t == name)
+/// Construction creuse des trois types (§20.2) : une vue à la fois ; `road` sert `Road`, `gravel` sert `Gravel` et
+/// `Mtb`.
+fn build_sparse<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    ov: &Overlay,
+    zone: &[u32],
+    cases: &FxHashSet<u64>,
+) -> Result<TeamData, Escape> {
+    let mut per: [Option<TypeTeam>; 3] = [None, None, None];
+    for vi in 0..2 {
+        let (sp, strict_cand) = SparseView::read(e, vi, zone, cases);
+        for r in RideType::ALL {
+            if r.view_index() == vi {
+                per[r.index()] = Some(build_type(e, ov, r, vi, &sp, &strict_cand)?);
+            }
+        }
+    }
+    Ok(TeamData { per: per.map(|t| t.expect("un type par vue")), retried: false })
 }
 
 fn build_type<B: AsRef<[u8]>>(
     e: &Engine<B>,
     ov: &Overlay,
     ride: RideType,
-    v: &ViewData,
-    zv: &ZoneView,
-) -> TypeTeam {
+    vi: usize,
+    sp: &SparseView<'_, B>,
+    strict_cand: &[u32],
+) -> Result<TypeTeam, Escape> {
     let (i_road, i_gravel, i_mtb, i_mixed) =
         (type_index(ov, "ROAD"), type_index(ov, "GRAVEL"), type_index(ov, "MTB"), type_index(ov, "MIXED"));
     let cnt = |c: &[u16], idx: Option<usize>, dir: usize| idx.map_or(0u32, |i| u32::from(c[2 * i + dir]));
@@ -432,7 +603,7 @@ fn build_type<B: AsRef<[u8]>>(
         if !any {
             continue;
         }
-        if !zv.alive(edge) {
+        if !sp.alive(edge) {
             let typed = match ride {
                 RideType::Road => {
                     cnt(c, i_road, 0).max(cnt(c, i_road, 1)).max(cnt(c, i_mixed, 0)).max(cnt(c, i_mixed, 1))
@@ -497,8 +668,12 @@ fn build_type<B: AsRef<[u8]>>(
     }
     let is_team = |be: u32| info.contains_key(&be);
     let hole_dm = (e.params.hole_m * 10.0) as u32;
-    let mut starts: Vec<u32> =
-        tdeg.iter().filter(|&(&x, &d)| d == 1 && zv.inc_of(x).len() >= 2).map(|(&x, _)| x).collect();
+    let mut starts: Vec<u32> = Vec::new();
+    for (&x, &d) in &tdeg {
+        if d == 1 && sp.inc_of(x)?.len() >= 2 {
+            starts.push(x);
+        }
+    }
     starts.sort_unstable();
     starts.dedup();
     let mut to_bridge: Vec<u32> = Vec::new();
@@ -524,7 +699,7 @@ fn build_type<B: AsRef<[u8]>>(
                 walk_back(&dist, x, s, &mut to_bridge);
                 break;
             }
-            for i in zv.inc_of(x) {
+            for i in sp.inc_of(x)? {
                 if is_team(i.edge) {
                     continue;
                 }
@@ -547,7 +722,7 @@ fn build_type<B: AsRef<[u8]>>(
     let mut team_nodes: Vec<u32> = tdeg.keys().copied().collect();
     team_nodes.sort_unstable();
     for &s in &team_nodes {
-        if !zv.inc_of(s).iter().any(|i| !is_team(i.edge) && i.len <= conn_dm) {
+        if !sp.inc_of(s)?.iter().any(|i| !is_team(i.edge) && i.len <= conn_dm) {
             continue;
         }
         let mut dist: FxHashMap<u32, (u32, u32)> = FxHashMap::default();
@@ -562,7 +737,7 @@ fn build_type<B: AsRef<[u8]>>(
                 walk_back(&dist, x, s, &mut to_bridge);
                 continue;
             }
-            for i in zv.inc_of(x) {
+            for i in sp.inc_of(x)? {
                 if is_team(i.edge) {
                     continue;
                 }
@@ -595,34 +770,74 @@ fn build_type<B: AsRef<[u8]>>(
         }
     }
 
-    // Composantes fortement connexes du réseau strict (sens respectés, virages ignorés) : un réseau strict est fait
-    // d'arêtes d'équipe ou comblées, toutes dans la zone ; le calcul sur la fenêtre de la zone rend les composantes
-    // du graphe entier.
-    let flagged = |ed: u32| match edges.binary_search_by_key(&ed, |x| x.0) {
-        Ok(i) => edges[i].1 & (TEAM | BRIDGED) != 0,
-        Err(_) => false,
-    };
-    let strict: Vec<bool> =
-        (0..v.n_chains as u32).map(|c| v.links(c).iter().all(|l| flagged(l & !DIR_BIT))).collect();
-    let comp = strong_components(v.n_nodes, &|x, s: &mut Vec<u32>| {
-        s.extend(v.out(x).iter().filter(|&&f| strict[(f >> 1) as usize]).map(|&f| v.tgt(f)));
-    });
-    let lens = strong_lengths(&comp, &v.ends, &v.len_dm, &|c| strict[c]);
-    let mut strict_len: Vec<(u32, u64)> = Vec::new();
-    for c in 0..v.n_chains {
-        if strict[c] {
-            let l = chain_strong_len(&comp, &lens, v.ends[c]);
-            if l > 0 {
-                strict_len.push((v.gid[c], l));
-            }
-        }
-    }
-    TypeTeam {
+    let strict_len = strict_components_of(e, vi, &edges, strict_cand);
+    Ok(TypeTeam {
         edges,
         strict_len,
         team_edges,
         team_m: team_dm as f64 / 10.0,
         bridged_m: bridged_dm as f64 / 10.0,
         outside_m: (outside_dm.0 as f64 / 10.0, outside_dm.1 as f64 / 10.0),
+    })
+}
+
+/// Composantes fortement connexes du réseau strict (sens respectés, virages ignorés), sur le **seul graphe des chaînes
+/// strictes** (§20.2, point 4) : une chaîne est stricte si tous ses liens sont d'équipe ou comblés ; une composante
+/// est une propriété du graphe, pas de l'ordre de parcours, et un nœud sans chaîne stricte n'entre dans aucune
+/// longueur (§20.3, point 6). `(id global de chaîne stricte, longueur dm de sa composante)`, triés.
+fn strict_components_of<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    vi: usize,
+    edges: &[(u32, u8, u8)],
+    strict_cand: &[u32],
+) -> Vec<(u32, u64)> {
+    let flagged = |ed: u32| match edges.binary_search_by_key(&ed, |x| x.0) {
+        Ok(i) => edges[i].1 & (TEAM | BRIDGED) != 0,
+        Err(_) => false,
+    };
+    let view = &e.views_files[vi];
+    let (mut gid, mut ends_g, mut len_dm, mut open) = (Vec::new(), Vec::new(), Vec::new(), Vec::<u8>::new());
+    for &c in strict_cand {
+        let links = view.view_chain(c).expect("chaînes validées à l'ouverture");
+        if !links.iter().all(|l| flagged(l.get() & !DIR_BIT)) {
+            continue;
+        }
+        let ci = view.edge_cell(c);
+        let first = view.cell_info(ci).first_edge;
+        let o = view.cell(ci).owned((c - first) as usize);
+        gid.push(c);
+        ends_g.push(view.edge_ends(c));
+        len_dm.push(o.len_dm);
+        open.push(u8::from(o.attrs.fwd_ok()) | (u8::from(o.attrs.bwd_ok()) << 1));
     }
+    let mut ngid: Vec<u32> = ends_g.iter().flat_map(|&(a, b): &(u32, u32)| [a, b]).collect();
+    ngid.sort_unstable();
+    ngid.dedup();
+    let local = |g: u32| ngid.binary_search(&g).expect("bout d'une chaîne stricte") as u32;
+    let ends: Vec<(u32, u32)> = ends_g.iter().map(|&(a, b)| (local(a), local(b))).collect();
+    // Arcs dans l'ordre croissant des chaînes, sens ouverts comme `ViewData::out`.
+    let mut arcs: Vec<(u32, u32)> = Vec::with_capacity(2 * ends.len());
+    for (c, &(a, b)) in ends.iter().enumerate() {
+        if open[c] & 1 != 0 {
+            arcs.push((a, b));
+        }
+        if open[c] & 2 != 0 {
+            arcs.push((b, a));
+        }
+    }
+    arcs.sort_by_key(|x| x.0);
+    let comp = strong_components(ngid.len(), &|x, s: &mut Vec<u32>| {
+        let lo = arcs.partition_point(|a| a.0 < x);
+        let hi = arcs.partition_point(|a| a.0 <= x);
+        s.extend(arcs[lo..hi].iter().map(|a| a.1));
+    });
+    let lens = strong_lengths(&comp, &ends, &len_dm, &|_| true);
+    let mut out: Vec<(u32, u64)> = Vec::new();
+    for (k, &c) in gid.iter().enumerate() {
+        let l = chain_strong_len(&comp, &lens, ends[k]);
+        if l > 0 {
+            out.push((c, l));
+        }
+    }
+    out
 }
