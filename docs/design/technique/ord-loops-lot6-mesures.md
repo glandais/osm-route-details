@@ -308,3 +308,114 @@ L'altitude réelle dans le conteneur (pas de données locales) ; le service à 1
 villes ; un disque lent ; un relevé du binaire `8a6f8d7` dans le même conteneur avec 18 équipes (les chiffres du
 §2.2 sont à 9 équipes et sous `systemd-run`, pas directement comparables) ; l'arrêt pendant une attente de
 `warm_team` (relu, non provoqué).
+
+## 10. Finition 2 : construction d'équipe creuse, réserve évincée d'abord, équipes hors des réservations (17 novembre 2026)
+
+Commit `c93b17c` (étape 5 ; paquet 1.9.1, contrat inchangé). Binaires `release` du banc (une équipe par processus,
+pages chaudes, `MALLOC_ARENA_MAX=2`) et image `osm-route-details:lot6` **reconstruite** depuis le `Dockerfile` du dépôt
+(40,5 Mo ; la fonctionnalité `reference` n'y est pas : l'image se construit avec `-p ord-server`). Même poste, mêmes
+fichiers et mêmes neuf surcouches que le §9. Équipes lettrées A à I ; aucune coordonnée, aucun identifiant, aucune clé.
+
+**La séance du §9.2 est reconstruite, non rejouée** : son script n'avait pas été gardé. Mêmes formes et mêmes nombres
+(18 dépôts réels sous deux clés tirées au hasard et jamais écrites, 18 premières générations, 54 réseaux en série, 60
+villes en série, 114 requêtes à 4 clients deux fois), mais **d'autres requêtes** : les chiffres de latence et de
+refus fonctionnels (422) ne se comparent pas ligne à ligne avec le §9.2. Ce qui se compare : les 503, les 504, les
+reconstructions, les évictions, la mémoire. Même configuration (`ORD_CACHE__OFFLINE=true`, IGN désactivé, aucune
+altitude), `docker run --memory=… --memory-swap=…` identiques, volume neuf. Les 422 sont des refus fonctionnels du
+moteur (`no_candidate` 33, `start_too_far` 27, `network_too_small` 9, `out_of_coverage` 3 sur 2 × 114 + 114 requêtes),
+aucun n'est budgétaire.
+
+### 10.1 Vérifications
+
+| Quoi | Résultat |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` | verts |
+| `cargo test --workspace --locked` | **759 tests, 0 échec** (744 + 15 : fixtures de 200 surcouches, égalités creuse = référence = à plat, garde-fou forcé, constat A, plafonds du magasin, ticket de l'entrée) ; `window_reference.txt` inchangée ; contrat OpenAPI inchangé (test `contract`) |
+| Équipes de la France (neuf), `--dump-teams`, avant / après | **18 lignes identiques** (données et contrôleur, empreinte xxh3 et octets) |
+| Équipes de la région (neuf), idem | **18 lignes identiques** |
+| `--dump-teams --teams-reference` sur la France, dans le même processus | neuf équipes : données et contrôleur **égaux** à la construction d'avant, octet pour octet |
+| Banc région `--compare --self-check --budget-mb 1000 --rounds 0` | **969 / 969, 0 différence** ; auto-contrôle identique à la force brute ; violations du contrôleur : aucune ; parcours refusés alors que le moteur les acceptait : 0 |
+| Rapports du banc région, contre ceux de `e66503d` | identiques champ à champ (hors durées) ; seule différence : le dernier bit de quelques sommes de flottants du contrôleur (l'ordre d'itération d'un `HashSet` change à chaque processus ; arrondi à 1e-5, 0 écart) |
+
+### 10.2 Construction d'une équipe (France, une par processus)
+
+Pic anonyme du **processus du banc** (18 Mo de base compris), temps, estimation réservée. Avant : `e66503d`.
+
+| | données, avant | données, après | estimé | contrôleur, avant | contrôleur, après | estimé |
+|---|---|---|---|---|---|---|
+| A | 1,63 s, 343 Mo | 1,26 s, 61 Mo | 59 Mo | 0,99 s, 231 Mo | 1,34 s, 72 Mo | 71 Mo |
+| B | 0,20 s, 55 Mo | 0,17 s, 22 Mo | 11 Mo | 0,16 s, 55 Mo | 0,22 s, 23 Mo | 13 Mo |
+| C | 1,83 s, 434 Mo | 0,93 s, 41 Mo | 38 Mo | 1,28 s, 283 Mo | 1,59 s, 48 Mo | 46 Mo |
+| **D** | **3,12 s, 706 Mo** | **1,58 s, 65 Mo** | **64 Mo** | 1,88 s, 418 Mo | 2,44 s, 66 Mo | 77 Mo |
+| E | 0,40 s, 108 Mo | 0,24 s, 23 Mo | 12 Mo | 0,23 s, 108 Mo | 0,31 s, 23 Mo | 14 Mo |
+| F à I | 0,03 à 0,07 s, 26 à 32 Mo | 0,03 à 0,04 s, 18 Mo | 3 Mo | 0,05 à 0,06 s | 0,07 à 0,09 s, 18 Mo | 3 Mo |
+
+La réservation de D passe de **924 Mo à 141 Mo** (données 64 + contrôleur 77) ; le pic de sa construction, de 748 Mo à
+65 Mo (moins la base de 18 Mo : 47 Mo). L'estimation reste au-dessus du pic mesuré moins la base pour les neuf équipes
+(marge de 25 % à 100 %, plus au petit bout). **Le contrôleur est plus lent qu'avant** (D 1,88 → 2,44 s) : le balayage
+unique lit la position des deux bouts de chaque arête admise pour tester la case chaude, ce que l'ancien balayage ne
+faisait pas ; les deux constructions tournent en parallèle, le temps d'une équipe est celui du contrôleur (D : 3,12 s
+→ 2,44 s).
+
+### 10.3 Constat A, reproduction (conteneur 2 Gio, un seul client)
+
+Dépôt de D seul, redémarrage du conteneur, neuf découvertes sans équipe (réserve d'espaces de travail : 149 Mo), puis
+quatre générations de D (200 km gravel, 30 km route, deux fois).
+
+| | image d'avant (`e66503d`) | image de la finition 2 |
+|---|---|---|
+| générations de D | **4 × 503 `overloaded` à 8,0 s** | **4 × 200** : 4,6 / 0,3 / 1,5 / 0,2 s |
+| équipes construites, éviction d'équipe | — | 1 construction, 0 éviction |
+
+### 10.4 Séance complète, 2 Gio
+
+| | Mesure |
+|---|---|
+| écoute / générateur prêt | 5,5 s (pages déjà chaudes sur l'hôte) |
+| 18 dépôts | 18 × 200 ; 703 Mo en 59 s, 67 Mo en 5 s, 38 Mo en 70 s, 30 Mo en 46 s, les cinq autres de 1 à 7 s ; `anon` après dépôts **477 Mo** |
+| équipes résidentes | 69,6 Mo comptés (`team_cache`), 18 équipes, **0 éviction d'équipe** (le compteur `ord_generator_team_evictions_total` n'a jamais été incrémenté) |
+| reconstructions de données d'équipe | **18** sur toute la séance (`ord_overlay_cache_misses_total` = 18, construites au dépôt ; 357 réussites de cache) ; avant : 262 défauts de cache |
+| premières générations (18) | 18 × 200 ; médiane 0,19 s, max 0,37 s (avant : 0,88 s, max 5,58 s, 16 reconstructions) |
+| réseaux, 54 en série | 31 × 200, 23 × 422 ; 0,27 / 1,41 / 3,56 s (médiane / p90 / max) |
+| villes en découverte avec identifiants d'équipe, 60 en série | 59 × 200, 1 × 422 (hors couverture) ; 0,60 / 2,41 / 3,95 s ; **0 × 503** (avant : 2) |
+| réseaux + villes, 114 à 4 clients, deux passages | 90 × 200, 24 × 422 chacun ; 1,14 / 3,50 / 4,48 s puis 1,32 / 2,87 / 5,32 s ; **0 × 503, 0 × 504** (avant : 10 et 10 × 503, 5 et 5 × 504) |
+| évictions sur la séance | fenêtres 255, agrégats d'équipe par fenêtre 310, **espaces de travail 215** (la réserve s'évince en premier) ; équipes **0** (avant : 208 au budget, 25 au nombre) ; `team_build_escapes` et `window_escapes` : jamais incrémentés |
+| `anon` | 477 Mo après les dépôts ; **1 099 Mo au plus** (au pic des réseaux en série, puis 1 090 à 1 099 Mo tant que les fenêtres tiennent le budget) ; avant : 1 309 Mo, soit **−210 Mo** |
+| `memory.peak` / événements | 1 115 Mo ; `max` 0, `oom` 0, `oom_kill` 0, `OOMKilled=false` |
+
+Les pages de fichier ne se comparent pas au §9 (3 Mo ici : le cache de pages des fichiers France était chargé dans le
+groupe de contrôle d'une séance précédente) ; l'`anon` est la mesure qui compte.
+
+### 10.5 Même séance à 1,5 Gio (2 Go moins les 512 Mo de l'altitude), dépôts et série de villes compris
+
+18 dépôts, 18 premières générations (18 × 200), 54 réseaux (31 × 200, 23 × 422), 60 villes (59 × 200, 1 × 422),
+2 × 114 à 4 clients (90 × 200, 24 × 422 chacun) : **0 × 503, 0 × 504**, 0 OOM, `memory.events` `max` 0 (le plafond de
+1 536 Mo n'est jamais atteint) ; `anon` au plus **1 105 Mo**, `memory.peak` 1 128 Mo. Latences : 1,13 / 3,44 / 4,57 s puis
+1,34 / 2,89 / 5,35 s.
+
+### 10.6 Critères
+
+| Critère | Résultat |
+|---|---|
+| 0 × 503 et 0 × 504 en série et à 4 clients, à 2 Gio et à 1,5 Gio | **tenu** |
+| reconstructions d'équipe = nombre d'équipes | **tenu** (18 pour 18) |
+| 0 éviction d'équipe | **tenu** |
+| `anon` du conteneur sous 1,15 Go | **tenu** : 1,10 Go à 2 Gio, 1,105 Go à 1,5 Gio |
+| 0 OOM | **tenu** |
+| banc région `--compare` à 969 / 0 ; fixture figée et résultats inchangés | **tenu** |
+| « pic d'anonyme du générateur nettement sous 1 Go » | **non tenu** : 1,10 Go pour un budget compté de 800 Mo ; voir ci-dessous |
+
+### 10.7 Ce qui reste au-dessus de 1 Go
+
+- **Le plancher n'est pas le générateur** : 477 Mo d'`anon` **avant la première génération**, au repos, après les 18
+  dépôts (le budget compté du générateur n'en voit que 70, les équipes). C'est ce que retiennent le dépôt (index par
+  cellule de 128 Mo, mémo géométrie → chaîne de 400 000 entrées) et l'allocateur. Les fenêtres remplissent ensuite le
+  budget jusqu'à 800 Mo compté, d'où ~1,10 Go.
+- Budget à **650 Mo** (`ORD_GENERATOR__MEMORY_BUDGET_MB`, sans autre changement) : mêmes résultats fonctionnels
+  (0 × 503, 0 × 504, mêmes latences), `anon` au plus **975 Mo**. Le plancher théorique du budget (équipes + deux
+  générations de 200 km en gravel dense + une construction : ~800 Mo, §20.9) n'est alors plus garanti dans le cas
+  extrême de deux générations denses simultanées : 503 de charge, accepté au §17. À décider avec l'altitude réelle.
+- `MALLOC_MMAP_THRESHOLD_=262144` (premier essai sans code du §20.8) : `anon` au plus **1 125 Mo**, plus que les
+  1 099 Mo du seuil de 1 Mio : **non retenu**. `malloc_trim` reste une décision du propriétaire (§20.8).
+- Non mesuré : l'altitude réelle dans le conteneur ; un disque lent ; un déploiement sur le réseau partagé.
+

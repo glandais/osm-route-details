@@ -2,7 +2,8 @@
 
 > Statut : **codé** (branche `feat/ord-loops-window`) ; les relevés sont dans [`ord-loops-lot6-mesures.md`](ord-loops-lot6-mesures.md).
 > Les écarts entre cette note et le code sont listés au §19 ; les passages concernés sont corrigés ci-dessous.
-> La finition 2 (budget sans éviction en cascade, construction d'équipe creuse) est conçue au §20, pas encore codée. Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
+> La finition 2 (budget sans éviction en cascade, construction d'équipe creuse) est conçue au §20 et **codée** (§20.12 :
+> écarts du codage ; relevés au §10 des mesures). Socle : [lot 2](ord-loops-lot2.md) (moteur), [lot 3a](ord-loops-lot3a.md)
 > (service) et leurs relevés ; graphe et vues France construits le 16 novembre 2026 (extrait Geofabrik du 15/11).
 > **[mesuré]** : commande lancée pour cette note (binaires `release` de `develop`, ou sonde jetable hors dépôt du §18) ;
 > **[calculé]** : compte des tableaux du code à partir des comptes mesurés du graphe ; **[estimé]** : à relever au codage.
@@ -1012,3 +1013,53 @@ Chaque étape : `cargo fmt`, `cargo clippy --workspace --all-targets --locked --
   reste la règle.
 - `malloc_trim` et le seuil `mmap` (§20.8), et le budget de 800 Mo dans un conteneur partagé (§17, point 1) restent des
   décisions du propriétaire.
+
+### 20.12 Écarts du codage (16 novembre 2026)
+
+Ce qui a été codé comme écrit, et ce qui a changé en route.
+
+- **Identité** : `canonical_bytes()` des deux types, constructions de référence (`team_reference.rs` dans `ord-loops` et
+  dans `ord-loops-check`, `cfg(test)` et fonctionnalité `reference`), banc `--dump-teams <fichier>` (lettre, objet,
+  empreinte xxh3, octets) et `--teams-reference` (construit chaque équipe des deux façons dans le même processus et
+  exige les mêmes octets). Le `--self-check` du banc n'a **pas** été étendu aux équipes : c'est `--dump-teams
+  --teams-reference` qui joue ce rôle. Les neuf équipes de la France et les neuf de la région : empreintes **égales**
+  à celles du binaire d'avant (l'étape 0), ligne à ligne, et construction creuse égale à la référence dans le même
+  processus.
+- **Fixture synthétique** : 200 surcouches (de un à trois rectangles de 2 à 8 carrefours, 45 à 100 % des arêtes, types
+  et sens variés) sur **quatre** moteurs (z11 et z16, grille à chaînes et grille dense), avec `hole_m` = 300 m et
+  `connector_m` = 150 m pour que la règle des trous comble vraiment (aux valeurs par défaut, sur des rues de 140 m, elle
+  ne comble presque rien : le test `the_reference_overlays_exercise_bridging_and_strict_components` le vérifie). La
+  « grille irrégulière à longueurs tirées » et la surcouche « à 240 m d'un nœud hors réseau » du §20.4 n'ont **pas** été
+  écrites : les trous à cheval sur une frontière de tuile (z16), les chaussées à sens unique (8 % des rues), les chaînes
+  (7 % de segments absents) et les composantes strictes viennent des grilles existantes. Le pendant du contrôleur
+  (`ord-loops-check`) utilise la grille de 16 × 16 carrefours avec l'arête expresse de 2,9 km, 200 surcouches de même
+  forme. Fixtures : `tests/fixtures/team_reference.txt` et `team_check_reference.txt`, écrites **avant** tout
+  changement (étape 0).
+- **Garde-fou** : forcé par des cases chaudes de 1 m (plus de 20 surcouches sur 200 l'atteignent) ; la reprise à 1 km
+  rend les mêmes octets que la référence, la reprise désactivée lève `TeamZoneEscape` (moteur) ou `TeamCheckEscape`
+  (contrôleur). Un nœud est chaud si **la case de sa position est chaude et sa tuile est une tuile de la zone** (le
+  contrôleur aussi : sans ce test, une case qui dépasse la boîte de 1 km pourrait donner un nœud dont les arêtes
+  incidentes sont possédées par une cellule non balayée). Le service compte `ord_generator_team_build_escapes_total` à
+  chaque reprise ou échec (500 `internal`, `ReadyError::Failed`).
+- **`TeamCheck`** : deux listes d'incidence (route ; gravel et VTT, qui partagent l'admission) et non trois, en un
+  balayage ; `plan` prend maintenant la `Config` (la portée chaude en dépend) ; `build_planned` rend un `Result` ;
+  `build` (commodité des tests et du `Checker` sans tables partagées) retombe, au second échappement, sur la
+  construction sans filtre : elle ne peut pas paniquer.
+- **Estimation** : `BUILD_BYTES_PER_HOT_CASE` = 280 o (données) et 340 o (contrôleur), plus 2 Mo fixes chacune, réglées sur
+  les neuf équipes de la France au pic anonyme mesuré (moins les 18 Mo du processus du banc) **plus 25 %**. Les
+  anciennes constantes `BUILD_BYTES_PER_CHAIN`, `…_PER_CELL_EDGE` et `…_PER_OVERLAY_EDGE` ont disparu.
+- **Temps** (France, binaire `release`, une équipe par processus, pages chaudes) : D, données 3,1 s → 1,6 s ; D,
+  contrôleur 1,9 s → **2,4 s** (plus lent qu'avant, et non « ~1 s » comme estimé : le balayage unique lit la position
+  des deux bouts de chaque arête admise, ce que l'ancien balayage ne faisait pas ; les deux constructions sont
+  parallèles, le temps est celui du contrôleur). A : 1,6 s → 1,3 s et 1,0 s → 1,4 s.
+- **Réserve d'espaces de travail** : évincée **en entier** (pas un par un) quand la place manque ; un espace de zéro
+  octet (libéré par `shrink_to`) n'est pas gardé. Le test du constat A existe en deux formes : au niveau du
+  gestionnaire (`R + P > B`, réserve vidée, fenêtre restée) et de bout en bout avec un vrai magasin (`ready` d'une
+  vraie équipe pendant que la réserve est pleine) ; la seconde échoue si l'on retire l'éviction de la réserve.
+- **Équipes** : `Entry` porte un `TeamTicket` dont le `Drop` appelle `release_team(bytes, serial)` ; plafonds du
+  magasin 64 entrées et 96 Mo (`team_cache_mb` refusé au démarrage s'il n'est pas sous `memory_budget_mb` / 2) ;
+  `Store::ready` est générique sur le support des octets (il servait un seul type, `Mmap`) pour que les tests le
+  jouent sur le petit moteur. `TeamEvictor`, `set_evictor`, `evict_team` et `pool_add`/`pool_sub` n'existent plus.
+- **`malloc_trim`** : non fait (décision du propriétaire, §20.8). Le seuil `mmap` est resté à 1 048 576 (voir les
+  relevés).
+
