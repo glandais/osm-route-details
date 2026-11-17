@@ -15,8 +15,8 @@ pub mod measure;
 pub mod out;
 pub mod play;
 pub mod shape;
-#[allow(dead_code)] // branché par `--variants` au commit suivant
 pub mod taste;
+pub mod variants;
 pub mod walk;
 
 use std::path::PathBuf;
@@ -29,12 +29,14 @@ use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_graph::util::Poly;
 use ord_graph_match::SegIndex;
-use ord_loops::{Params, TeamData, Workspace};
+use ord_loops::{Params, Taste, TeamData, Workspace};
 use ord_loops_check::{Checker, Config, GraphIndex, TeamCheck, TypeIndex};
 use rayon::prelude::*;
 
 use self::measure::Measures;
 use self::play::Eng;
+use self::taste::{ClassSums, TasteParams, TasteTable};
+use self::variants::{TasteSource, Variant, VariantMeta};
 use crate::windows::AnonSampler;
 use ord_loops::Engine;
 
@@ -116,6 +118,59 @@ pub struct LikenessArgs {
     /// Ne fait que l'étalonnage `shapes.py` (sans graphe) et s'arrête.
     #[arg(long)]
     pub calibrate_only: bool,
+    /// Sonde du goût (§12 de la note) : variantes jouées l'une après l'autre, séparées par des virgules — `base`, ou
+    /// des composants joints par `+` : `fam:<f>`, `ge:<γ>` (goût d'équipe), `gg:<γ>` (général), `rc:<γ>` (recalé).
+    /// Absent : le banc du 4a à l'identique (une passe `base`, sorties `<label>-report.json` et `<label>-summary.md`).
+    #[arg(long, value_delimiter = ',')]
+    pub variants: Vec<String>,
+    /// Goût : lissage `m`.
+    #[arg(long, default_value_t = 0.5)]
+    pub taste_m: f64,
+    /// Goût : `g` est borné à `[1 / bound, bound]`.
+    #[arg(long, default_value_t = 3.0)]
+    pub taste_bound: f64,
+    /// Goût : seuil de données (km-passages, ou km de traces pour `rc`) sous lequel la table est neutre.
+    #[arg(long, default_value_t = 200.0)]
+    pub taste_min_km: f64,
+    /// Goût : côté de la trame du couloir, m.
+    #[arg(long, default_value_t = 500.0)]
+    pub taste_cell_m: f64,
+    /// Goût : dilatation du couloir, en cases.
+    #[arg(long, default_value_t = 2)]
+    pub taste_corridor_cells: u32,
+}
+
+/// L'empreinte de résultat de `base` au 4a (relevé `ord-loops-lot4-mesures.md`) : le crochet du goût est neutre si la
+/// variante `base` la redonne, bit pour bit, aux défauts.
+pub const BASE_4A_FINGERPRINT: &str = "55c3b065dc085f42";
+
+impl LikenessArgs {
+    pub fn taste_params(&self) -> TasteParams {
+        TasteParams {
+            m: self.taste_m,
+            bound: self.taste_bound,
+            min_km: self.taste_min_km,
+            cell_m: self.taste_cell_m,
+            corridor_cells: self.taste_corridor_cells,
+        }
+    }
+
+    /// Les réglages du 4a : le seul cas où l'empreinte de `base` est comparable à celle du relevé.
+    pub fn at_4a_defaults(&self) -> bool {
+        self.limit.is_none()
+            && self.max_km.is_none()
+            && self.teams.is_empty()
+            && self.cursors == [0.25, 1.0]
+            && !self.no_holdout
+            && self.min_km == 5.0
+            && self.loop_gap == 0.05
+            && self.min_matched == 0.95
+            && self.max_hole_m == 1000.0
+            && self.holdout_share == 0.10
+            && self.holdout_min_loops == 10
+            && self.seed == 20_261_117
+            && self.radius_step_m == 10_000.0
+    }
 }
 
 fn home() -> Result<PathBuf> {
@@ -211,6 +266,11 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     if a.calibrate_only {
         return calibrate_only(a, &paths);
     }
+    // La sonde du goût : refus avant toute phase lourde. Sans `--variants`, une passe `base` et les sorties du 4a.
+    let listed = variants::parse_variants(&a.variants)?;
+    let legacy = listed.is_empty();
+    let variants = if legacy { vec![Variant::base()] } else { listed };
+    let tp = a.taste_params();
     let t_all = std::time::Instant::now();
     let load0 = crate::load_avg();
     let letters = read_letters(&paths.letters)?;
@@ -333,6 +393,8 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         reals.iter().map(|(m, _)| [m.r_over_d, m.far_pos, m.compactness]).collect();
     let real_edges: Vec<std::collections::BTreeSet<u32>> =
         loops.par_iter().map(|l| measure::taken_edges(gf, &l.walk)).collect();
+    let real_class_m: Vec<[f64; ord_loops::TASTE_CLASSES]> =
+        loops.par_iter().map(|l| measure::class_lengths(gf, &l.walk, &l.trace)).collect();
     let twins = holdout::twin_shares(gf, &loops, &held, &real_edges);
     let mut iqr = [[1.0; 3]; 3];
     for (ty, row) in iqr.iter_mut().enumerate() {
@@ -348,130 +410,332 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     }
     ph.end("mesures du réel");
 
-    // 8. Les jeux, équipe par équipe dans l'ordre des lettres.
+    // 7 bis. Goût : les sommes par classe de chaque surcouche, complète et « écart » (si une variante en a besoin).
+    let mut order: Vec<usize> =
+        team_ids.iter().copied().filter(|&t| loops.iter().any(|l| l.team == t)).collect();
+    order.sort_by(|&x, &y| letter_of[x].cmp(&letter_of[y]));
+    let mut sums_full: Vec<ClassSums> = Vec::new();
+    let mut sums_gap: Vec<Option<ClassSums>> = Vec::new();
+    if variants.iter().any(|v| matches!(v.taste, Some((TasteSource::Team | TasteSource::General, _)))) {
+        let (road, gravel) = (open_graph(&paths.road)?, open_graph(&paths.gravel)?);
+        let ve = taste::ViewEdges::build([&road, &gravel], gf.header().edges as usize);
+        for t in 0..overlays.len() {
+            sums_full.push(taste::class_sums(gf, &ve, &overlays[t], &tp));
+            sums_gap.push(gap_overlays[t].as_ref().map(|g| taste::class_sums(gf, &ve, g, &tp)));
+        }
+        drop(ve);
+        ph.end("goût : sommes par classe");
+    }
+
+    // 8. Les jeux : les variantes l'une après l'autre ; équipe par équipe dans l'ordre des lettres.
     let wins = play::SharedWindows::new(&engine, a.budget_mb * 1_000_000, a.radius_step_m);
     let ctx =
         play::PlayCtx { engine: &engine, wins: &wins, iqr, real_shape: &real_shape, real_edges: &real_edges };
     let mut workspaces: Vec<Workspace> = (0..threads).map(|_| Workspace::new()).collect();
-    let mut plays: Vec<Vec<play::PlayRec>> = loops.iter().map(|_| Vec::new()).collect();
-    let mut order: Vec<usize> = team_ids.clone();
-    order.sort_by(|&x, &y| letter_of[x].cmp(&letter_of[y]));
-    for t in order {
-        let mine: Vec<usize> = (0..loops.len()).filter(|&i| loops[i].team == t).collect();
-        if mine.is_empty() {
-            continue;
-        }
-        let tt = std::time::Instant::now();
-        let overlay = &overlays[t];
-        let (team, team_check) = build_team(&engine, &graph_index, overlay, &letter_of[t])?;
-        let checker =
-            Checker::with_tables(gf, Some(overlay), Config::default(), &graph_index, Some(&team_check));
-        let env = play::TeamEnv {
-            key: 2 * t as u64,
-            overlay,
-            types: TypeIndex::of(overlay),
-            team: &team,
-            checker: &checker,
-        };
-        let mut tasks: Vec<play::Task> = Vec::new();
-        for &i in &mine {
-            for &c in &a.cursors {
-                let req = play::request_of(gf, &loops[i], c, a.seed)?;
-                tasks.push(play::Task { loop_idx: i, cursor: c, req, ride: play::ride_of(loops[i].ty) });
-            }
-        }
-        tasks.sort_by_key(play::locality_key);
-        for (k, rec) in play::run_tasks(&ctx, &env, &tasks, "full", &mut workspaces) {
-            plays[tasks[k].loop_idx].push(rec);
-        }
-        wins.drop_team(env.key);
-        // Les boucles mises à l'écart, rejouées sur la surcouche sans elles : même requête, même graine.
-        if let Some(gap) = &gap_overlays[t] {
-            let (team, team_check) = build_team(&engine, &graph_index, gap, &letter_of[t])?;
-            let checker =
-                Checker::with_tables(gf, Some(gap), Config::default(), &graph_index, Some(&team_check));
-            let env = play::TeamEnv {
-                key: 2 * t as u64 + 1,
-                overlay: gap,
-                types: TypeIndex::of(gap),
-                team: &team,
-                checker: &checker,
-            };
-            let mut tasks: Vec<play::Task> = Vec::new();
-            for &i in mine.iter().filter(|i| held.contains(i)) {
-                for &c in &a.cursors {
-                    let req = play::request_of(gf, &loops[i], c, a.seed)?;
-                    tasks.push(play::Task { loop_idx: i, cursor: c, req, ride: play::ride_of(loops[i].ty) });
-                }
-            }
-            tasks.sort_by_key(play::locality_key);
-            for (k, rec) in play::run_tasks(&ctx, &env, &tasks, "holdout", &mut workspaces) {
-                plays[tasks[k].loop_idx].push(rec);
-            }
-            wins.drop_team(env.key);
-        }
-        eprintln!("équipe {} : {} boucles, {:.1} s", letter_of[t], mine.len(), tt.elapsed().as_secs_f64());
-    }
-    ph.end("jeux");
-
-    // 9. Les sorties.
-    let mut recs: Vec<out::LoopRec> = Vec::new();
-    for (i, l) in loops.iter().enumerate() {
-        let mut p = std::mem::take(&mut plays[i]);
-        p.sort_by(|x, y| x.overlay.cmp(&y.overlay).then(x.cursor.total_cmp(&y.cursor)));
-        recs.push(out::LoopRec {
-            team: letter_of[l.team].clone(),
-            i: l.i,
-            ty: out::TYPE_NAMES[usize::from(l.ty).min(2)].to_string(),
-            d_km: l.trace.d_graph / 1000.0,
-            matched_share: l.matched_share,
-            contiguous: l.walk.is_continuous(),
-            holdout: held.contains(&i),
-            twin_share: twins[i],
-            poly_vs_graph: if l.trace.d_graph > 0.0 {
-                (l.trace.l_poly - l.trace.d_graph).abs() / l.trace.d_graph
-            } else {
-                0.0
-            },
-            real: reals[i].0.clone(),
-            real_check: reals[i].1.clone(),
-            plays: p,
-        });
-    }
-    recs.sort_by(|x, y| (&x.team, x.i).cmp(&(&y.team, y.i)));
+    let bench = Bench {
+        args: a,
+        gf,
+        engine: &engine,
+        graph_index: &graph_index,
+        loops: &loops,
+        held: &held,
+        overlays: &overlays,
+        gap_overlays: &gap_overlays,
+        letter_of: &letter_of,
+        order: &order,
+        ctx: &ctx,
+        params: &tp,
+        sums_full: &sums_full,
+        sums_gap: &sums_gap,
+    };
     let mut retention: BTreeMap<String, export::RetentionCounts> = BTreeMap::new();
     for (t, c) in counts.into_iter().enumerate() {
         retention.insert(letter_of[t].clone(), c);
     }
     overlay_checks.sort_by(|x, y| x.team.cmp(&y.team));
     let vertex_histograms = vertex_histograms(&loops, &raw, &reals);
-    ph.end("sorties");
-    let fingerprint = out::fingerprint(&recs);
-    let meta = meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
-    let report = out::Report {
-        meta,
-        retention,
-        calibration,
-        vertex_histograms,
-        overlays: overlay_checks,
-        phases: ph.list.clone(),
-        windows: wins.counters(),
-        cursors: a.cursors.clone(),
-        fingerprint,
-        loops: recs,
-    };
+    let mut rc_inputs: Option<RcInputs> = None;
     std::fs::create_dir_all(&paths.out)?;
-    let json = paths.out.join(format!("{}-report.json", a.label));
-    let md = paths.out.join(format!("{}-summary.md", a.label));
-    std::fs::write(&json, serde_json::to_vec_pretty(&report)?)?;
-    std::fs::write(&md, out::summary(&report))?;
-    eprintln!(
-        "rapport : {}\nrésumé : {}\nempreinte de résultat : {}",
-        json.display(),
-        md.display(),
-        report.fingerprint
-    );
+    for v in &variants {
+        wins.take_team_counters();
+        let w0 = wins.counters();
+        let run = bench.play_variant(v, rc_inputs.as_ref(), &mut workspaces)?;
+        ph.end(&if legacy { "jeux".to_string() } else { format!("variante {}", v.name) });
+        let team_windows = wins.take_team_counters();
+        let w1 = wins.counters();
+        let windows = play::WindowCounters {
+            built: w1.built - w0.built,
+            hits: w1.hits - w0.hits,
+            overflow: w1.overflow - w0.overflow,
+            escapes: w1.escapes - w0.escapes,
+        };
+        if v.is_base() && rc_inputs.is_none() {
+            rc_inputs = Some(RcInputs::of(&loops, &held, &real_class_m, &run.plays));
+        }
+
+        // 9. Les sorties de la variante.
+        let mut plays = run.plays;
+        let mut recs: Vec<out::LoopRec> = Vec::new();
+        for (i, l) in loops.iter().enumerate() {
+            let mut p = std::mem::take(&mut plays[i]);
+            p.sort_by(|x, y| x.overlay.cmp(&y.overlay).then(x.cursor.total_cmp(&y.cursor)));
+            recs.push(out::LoopRec {
+                team: letter_of[l.team].clone(),
+                i: l.i,
+                ty: out::TYPE_NAMES[usize::from(l.ty).min(2)].to_string(),
+                d_km: l.trace.d_graph / 1000.0,
+                matched_share: l.matched_share,
+                contiguous: l.walk.is_continuous(),
+                holdout: held.contains(&i),
+                twin_share: twins[i],
+                poly_vs_graph: if l.trace.d_graph > 0.0 {
+                    (l.trace.l_poly - l.trace.d_graph).abs() / l.trace.d_graph
+                } else {
+                    0.0
+                },
+                real: reals[i].0.clone(),
+                real_check: reals[i].1.clone(),
+                plays: p,
+            });
+        }
+        recs.sort_by(|x, y| (&x.team, x.i).cmp(&(&y.team, y.i)));
+        let fingerprint = out::fingerprint(&recs);
+        let mut tables = run.tables;
+        tables.sort_by(|x, y| (&x.source, &x.overlay).cmp(&(&y.source, &y.overlay)));
+        let last = ph.list.last().cloned();
+        let variant = (!legacy).then(|| VariantMeta {
+            name: v.name.clone(),
+            fam: v.fam,
+            taste: v.taste.map(|(s, _)| s.code().to_string()),
+            gamma: v.taste.map(|(_, g)| g),
+            params: tp.clone(),
+            taste_xxh3: taste::taste_xxh3(&tables),
+            tables,
+            team_windows,
+            secs: last.as_ref().map_or(0.0, |p| p.secs),
+            peak_anon_mb: last.as_ref().map_or(0.0, |p| p.peak_anon_mb),
+        });
+        let mut meta =
+            meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
+        if !legacy {
+            meta.push(("variante".into(), v.name.clone()));
+            meta.push(("goût, paramètres".into(), format!("{tp:?}")));
+        }
+        let report = out::Report {
+            meta,
+            retention: retention.clone(),
+            calibration: calibration.clone(),
+            vertex_histograms: vertex_histograms.clone(),
+            overlays: overlay_checks.clone(),
+            phases: ph.list.clone(),
+            windows,
+            variant,
+            cursors: a.cursors.clone(),
+            fingerprint,
+            loops: recs,
+        };
+        let stem = if legacy { a.label.clone() } else { format!("{}-{}", a.label, v.name) };
+        let json = paths.out.join(format!("{stem}-report.json"));
+        let md = paths.out.join(format!("{stem}-summary.md"));
+        std::fs::write(&json, serde_json::to_vec_pretty(&report)?)?;
+        std::fs::write(&md, out::summary(&report))?;
+        eprintln!(
+            "rapport : {}\nrésumé : {}\nempreinte de résultat de {} : {}",
+            json.display(),
+            md.display(),
+            v.name,
+            report.fingerprint
+        );
+        if v.is_base() {
+            let same = report.fingerprint == BASE_4A_FINGERPRINT;
+            if a.at_4a_defaults() {
+                eprintln!("« `base` = 4a : {BASE_4A_FINGERPRINT} » : {}", if same { "oui" } else { "NON" });
+                anyhow::ensure!(
+                    same || legacy,
+                    "l'empreinte de `base` n'est pas celle du 4a ({BASE_4A_FINGERPRINT}) : le crochet du goût n'est pas \
+                     neutre, ou le banc a changé ; chercher, ne pas lire la suite"
+                );
+            }
+        }
+    }
     Ok(())
+}
+
+/// Ce que `rc` lit de `base` : par type, les mètres par classe du réel et ceux du **premier** parcours de `base` (mêmes
+/// boucles non mises à l'écart, surcouche complète, tous les curseurs, jeux `OK`).
+struct RcInputs {
+    num: [Vec<f64>; 3],
+    den: [Vec<f64>; 3],
+}
+
+impl RcInputs {
+    fn of(
+        loops: &[export::Loop],
+        held: &std::collections::HashSet<usize>,
+        real_class_m: &[[f64; ord_loops::TASTE_CLASSES]],
+        plays: &[Vec<play::PlayRec>],
+    ) -> Self {
+        let z = || vec![0.0; ord_loops::TASTE_CLASSES];
+        let (mut num, mut den) = ([z(), z(), z()], [z(), z(), z()]);
+        for (i, l) in loops.iter().enumerate().filter(|(i, _)| !held.contains(i)) {
+            let ty = usize::from(l.ty).min(2);
+            for p in plays[i].iter().filter(|p| p.overlay == "full" && p.outcome == "OK") {
+                let Some(fc) = &p.first_class_m else { continue };
+                for c in 0..ord_loops::TASTE_CLASSES {
+                    num[ty][c] += real_class_m[i][c];
+                    den[ty][c] += fc[c];
+                }
+            }
+        }
+        Self { num, den }
+    }
+}
+
+/// Tout ce que le jeu d'une variante lit.
+struct Bench<'a> {
+    args: &'a LikenessArgs,
+    gf: &'a MappedGraph,
+    engine: &'a Eng,
+    graph_index: &'a GraphIndex,
+    loops: &'a [export::Loop],
+    held: &'a std::collections::HashSet<usize>,
+    overlays: &'a [Overlay],
+    gap_overlays: &'a [Option<Overlay>],
+    letter_of: &'a [String],
+    /// Les équipes jouées (qui ont des boucles), dans l'ordre des lettres.
+    order: &'a [usize],
+    ctx: &'a play::PlayCtx<'a>,
+    params: &'a TasteParams,
+    sums_full: &'a [ClassSums],
+    sums_gap: &'a [Option<ClassSums>],
+}
+
+/// Ce qu'une variante rend : ses jeux (par boucle, dans l'ordre des boucles) et les tables de goût jouées.
+struct VariantRun {
+    plays: Vec<Vec<play::PlayRec>>,
+    tables: Vec<TasteTable>,
+}
+
+impl Bench<'_> {
+    /// Les jeux d'une variante : équipe par équipe dans l'ordre des lettres, exactement le §11.9 (8) du 4a — `build_team`,
+    /// jeux sur la surcouche complète, puis jeux des boucles mises à l'écart sur la surcouche « écart » — avec la
+    /// `Taste` de la variante pour cette équipe et cette surcouche (`None` si neutre ou sans goût) et les requêtes
+    /// adaptées par `fam`. `drop_team` après chaque (équipe, surcouche) : aucun agrégat d'une variante n'est lu par la
+    /// suivante ; les `Window` restent en cache d'une variante à l'autre.
+    fn play_variant(
+        &self,
+        v: &Variant,
+        rc: Option<&RcInputs>,
+        workspaces: &mut [Workspace],
+    ) -> Result<VariantRun> {
+        let (a, gf) = (self.args, self.gf);
+        let mut tables: Vec<TasteTable> = Vec::new();
+        // Les goûts qui ne dépendent pas de l'équipe : général (sommes de toutes les équipes jouées) et recalé.
+        let mut fixed: (Option<Taste>, Option<Taste>) = (None, None);
+        match v.taste {
+            Some((TasteSource::General, gamma)) => {
+                let (mut full, mut gap) = (ClassSums::new(), ClassSums::new());
+                for &t in self.order {
+                    full.add(&self.sums_full[t]);
+                    gap.add(self.sums_gap[t].as_ref().unwrap_or(&self.sums_full[t]));
+                }
+                let (tf, tbl) = taste::learn_from_sums("général", "full", &full, gamma, self.params);
+                tables.extend(tbl);
+                let (tg, tbl) = taste::learn_from_sums("général", "holdout", &gap, gamma, self.params);
+                tables.extend(tbl);
+                fixed = (tf, tg);
+            }
+            Some((TasteSource::Recal, gamma)) => {
+                let rc = rc.ok_or_else(|| anyhow!("`rc` a besoin des jeux de `base`"))?;
+                let (t, tbl) = taste::learn("recalé", "full", &rc.num, &rc.den, 1_000.0, gamma, self.params);
+                tables.extend(tbl);
+                fixed = (t.clone(), t);
+            }
+            _ => {}
+        }
+        let mut plays: Vec<Vec<play::PlayRec>> = self.loops.iter().map(|_| Vec::new()).collect();
+        for &t in self.order {
+            let mine: Vec<usize> = (0..self.loops.len()).filter(|&i| self.loops[i].team == t).collect();
+            let tt = std::time::Instant::now();
+            let tasks_of = |ids: &[usize]| -> Result<Vec<play::Task>> {
+                let mut tasks: Vec<play::Task> = Vec::new();
+                for &i in ids {
+                    for &c in &a.cursors {
+                        let req =
+                            variants::adapt_request(play::request_of(gf, &self.loops[i], c, a.seed)?, v.fam);
+                        tasks.push(play::Task {
+                            loop_idx: i,
+                            cursor: c,
+                            req,
+                            ride: play::ride_of(self.loops[i].ty),
+                        });
+                    }
+                }
+                tasks.sort_by_key(play::locality_key);
+                Ok(tasks)
+            };
+            // (surcouche, étiquette, clé du cache d'équipe, boucles jouées)
+            let held_mine: Vec<usize> = mine.iter().copied().filter(|i| self.held.contains(i)).collect();
+            let mut jobs: Vec<(&Overlay, &str, u64, &[usize])> =
+                vec![(&self.overlays[t], "full", 2 * t as u64, &mine)];
+            if let Some(gap) = &self.gap_overlays[t] {
+                jobs.push((gap, "holdout", 2 * t as u64 + 1, &held_mine));
+            }
+            for (overlay, label, key, ids) in jobs {
+                let taste: Option<Taste> = match v.taste {
+                    Some((TasteSource::Team, gamma)) => {
+                        let sums = if label == "full" {
+                            &self.sums_full[t]
+                        } else {
+                            self.sums_gap[t].as_ref().expect("somme « écart » de l'équipe")
+                        };
+                        let (taste, tbl) =
+                            taste::learn_from_sums(&self.letter_of[t], label, sums, gamma, self.params);
+                        tables.extend(tbl);
+                        taste
+                    }
+                    Some(_) => {
+                        if label == "full" {
+                            fixed.0.clone()
+                        } else {
+                            fixed.1.clone()
+                        }
+                    }
+                    None => None,
+                };
+                let (team, team_check) =
+                    build_team(self.engine, self.graph_index, overlay, &self.letter_of[t])?;
+                let checker = Checker::with_tables(
+                    gf,
+                    Some(overlay),
+                    Config::default(),
+                    self.graph_index,
+                    Some(&team_check),
+                );
+                let env = play::TeamEnv {
+                    key,
+                    overlay,
+                    types: TypeIndex::of(overlay),
+                    team: &team,
+                    checker: &checker,
+                    taste: taste.as_ref(),
+                };
+                let tasks = tasks_of(ids)?;
+                for (k, rec) in play::run_tasks(self.ctx, &env, &tasks, label, workspaces) {
+                    plays[tasks[k].loop_idx].push(rec);
+                }
+                self.ctx.wins.drop_team(env.key);
+            }
+            eprintln!(
+                "{} : équipe {} : {} boucles, {:.1} s",
+                v.name,
+                self.letter_of[t],
+                mine.len(),
+                tt.elapsed().as_secs_f64()
+            );
+        }
+        Ok(VariantRun { plays, tables })
+    }
 }
 
 /// Données d'équipe et tables du contrôleur d'une surcouche, construites en parallèle comme le fait le service.

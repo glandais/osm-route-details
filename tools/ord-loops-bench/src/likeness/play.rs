@@ -15,16 +15,17 @@ use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_loops::{
-    generate_with_diagnostics_in, Bearing8, Engine, Failure, LatLon, Request, RideType, Route, TeamCtx,
-    TeamData, Window, WindowCache, WindowTeam, Workspace,
+    generate_with_diagnostics_in, Bearing8, Engine, Failure, LatLon, Request, RideType, Route, Taste,
+    TeamCtx, TeamData, Window, WindowCache, WindowTeam, Workspace,
 };
 use ord_loops_check::{team_edge, Checker, TypeIndex};
 use serde::Serialize;
 use xxhash_rust::xxh3::xxh3_64;
 
 use super::export::Loop;
-use super::measure::{measure, Measures};
+use super::measure::{class_lengths, measure, Measures};
 use super::shape;
+use super::variants::TeamWindowCounters;
 use super::walk::{start_latlon, Walk};
 use crate::record::failure_code;
 
@@ -41,6 +42,10 @@ pub struct SharedWindows<'e> {
     /// Fenêtres insérées alors que le budget ne laissait pas la place (le budget du banc est souple).
     overflow: AtomicU64,
     escapes: AtomicU64,
+    /// Constructions de `WindowTeam` depuis le dernier `take_team_counters` : nombre, nanosecondes, plus gros `bytes()`.
+    team_builds: AtomicU64,
+    team_ns: AtomicU64,
+    team_max_bytes: AtomicU64,
 }
 
 /// Compteurs rapportés.
@@ -62,7 +67,29 @@ impl<'e> SharedWindows<'e> {
             hits: AtomicU64::new(0),
             overflow: AtomicU64::new(0),
             escapes: AtomicU64::new(0),
+            team_builds: AtomicU64::new(0),
+            team_ns: AtomicU64::new(0),
+            team_max_bytes: AtomicU64::new(0),
         }
+    }
+
+    /// Les constructions de `WindowTeam` depuis le dernier appel (les compteurs repartent de zéro).
+    pub fn take_team_counters(&self) -> TeamWindowCounters {
+        TeamWindowCounters {
+            builds: self.team_builds.swap(0, Ordering::Relaxed),
+            ms: self.team_ns.swap(0, Ordering::Relaxed) as f64 / 1e6,
+            max_bytes: self.team_max_bytes.swap(0, Ordering::Relaxed),
+        }
+    }
+
+    /// `WindowTeam::build_with_taste`, chronométré et compté.
+    fn build_team(&self, win: &Window, team: &TeamData, taste: Option<&Taste>) -> WindowTeam {
+        let t = Instant::now();
+        let wt = WindowTeam::build_with_taste(self.engine, win, team, taste);
+        self.team_ns.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        self.team_builds.fetch_add(1, Ordering::Relaxed);
+        self.team_max_bytes.fetch_max(wt.bytes() as u64, Ordering::Relaxed);
+        wt
     }
 
     pub fn counters(&self) -> WindowCounters {
@@ -80,7 +107,13 @@ impl<'e> SharedWindows<'e> {
 
     /// La fenêtre de la requête et les agrégats de l'équipe `team_key` : du cache, sinon construits (hors verrou).
     /// Deux fils peuvent bâtir la même fenêtre : sans effet sur les résultats.
-    pub fn acquire(&self, team_key: u64, team: &TeamData, req: &Request) -> (Arc<Window>, Arc<WindowTeam>) {
+    pub fn acquire(
+        &self,
+        team_key: u64,
+        team: &TeamData,
+        req: &Request,
+        taste: Option<&Taste>,
+    ) -> (Arc<Window>, Arc<WindowTeam>) {
         let plan = self.engine.plan(req, self.step_m);
         let vi = plan.view;
         let hit = self.lock().lookup(vi, &plan.need);
@@ -103,7 +136,7 @@ impl<'e> SharedWindows<'e> {
         let wt = match cached {
             Some(wt) => wt,
             None => {
-                let wt = WindowTeam::build(self.engine, &win, team);
+                let wt = self.build_team(&win, team, taste);
                 let mut c = self.lock();
                 if c.make_room(wt.bytes()) {
                     c.insert_team(&win, team_key, wt)
@@ -117,13 +150,18 @@ impl<'e> SharedWindows<'e> {
 
     /// La reprise du service après un échappement : fenêtre élargie de la plus longue chaîne et de 10 km, construite
     /// hors cache.
-    pub fn acquire_wide(&self, team: &TeamData, req: &Request) -> (Arc<Window>, Arc<WindowTeam>) {
+    pub fn acquire_wide(
+        &self,
+        team: &TeamData,
+        req: &Request,
+        taste: Option<&Taste>,
+    ) -> (Arc<Window>, Arc<WindowTeam>) {
         self.escapes.fetch_add(1, Ordering::Relaxed);
         let vi = req.ride_type.view_index();
         let extra = self.engine.longest_chain_m(vi) + 10_000.0;
         let plan = self.engine.plan_with(req, self.step_m, extra);
         let win = Arc::new(self.engine.build_window(vi, &plan.class, &mut || false).expect("jamais coupée"));
-        let wt = Arc::new(WindowTeam::build(self.engine, &win, team));
+        let wt = Arc::new(self.build_team(&win, team, taste));
         (win, wt)
     }
 
@@ -238,6 +276,9 @@ pub struct PlayRec {
     pub routes: Vec<GenRoute>,
     pub best_shape: Option<usize>,
     pub best_recovered: Option<usize>,
+    /// Mètres par classe de goût du **premier** parcours gardé (sonde du goût, §12.2) ; en mémoire seulement.
+    #[serde(skip)]
+    pub first_class_m: Option<Vec<f64>>,
 }
 
 /// Une tâche : jouer la requête de la boucle `loop_idx` à la valeur `cursor` sur la surcouche de l'environnement.
@@ -257,6 +298,8 @@ pub struct TeamEnv<'a> {
     pub types: TypeIndex,
     pub team: &'a TeamData,
     pub checker: &'a Checker<'a, Mmap>,
+    /// Goût de l'équipe pour cette surcouche (sonde du goût) ; `None` : le moteur d'aujourd'hui.
+    pub taste: Option<&'a Taste>,
 }
 
 /// Ce qui est commun à tous les jeux.
@@ -362,6 +405,7 @@ pub fn play_one(
         routes: Vec::new(),
         best_shape: None,
         best_recovered: None,
+        first_class_m: None,
     };
     let call = |ws: &mut Workspace, win: &Window, wt: &WindowTeam| {
         catch_unwind(AssertUnwindSafe(|| {
@@ -369,11 +413,11 @@ pub fn play_one(
             generate_with_diagnostics_in(ctx.engine, win, Some(tc), req, ws, &mut || false).0
         }))
     };
-    let (win, wt) = ctx.wins.acquire(env.key, env.team, req);
+    let (win, wt) = ctx.wins.acquire(env.key, env.team, req, env.taste);
     let mut res = call(ws, &win, &wt);
     drop((win, wt));
     if matches!(res, Ok(Err(Failure::WindowEscape))) {
-        let (win, wt) = ctx.wins.acquire_wide(env.team, req);
+        let (win, wt) = ctx.wins.acquire_wide(env.team, req, env.taste);
         res = call(ws, &win, &wt);
     }
     rec.ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -402,6 +446,9 @@ pub fn play_one(
         let trace = walk.trace(gf);
         let m = measure(gf, &walk, &trace, Some(rep.crossings));
         let rc = recovered(gf, real, &edge_set(&walk), env.overlay, &env.types, task.ride);
+        if rec.routes.is_empty() {
+            rec.first_class_m = Some(class_lengths(gf, &walk, &trace).to_vec());
+        }
         rec.routes.push(GenRoute {
             length_over_target: rep.length_m / req.distance_m,
             team_share: if rep.length_m > 0.0 { rep.team_m / rep.length_m } else { 0.0 },

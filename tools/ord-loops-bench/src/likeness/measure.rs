@@ -56,7 +56,6 @@ pub fn surface_group(a: Attrs) -> usize {
 
 /// Longueur parcourue par classe de goût (`ord_loops::taste_class`), en mètres, trous exclus : `Σ leg_m` des jambes
 /// de la marche (sonde du goût, §12.2).
-#[allow(dead_code)] // lue par la phase 7 du banc (commit suivant)
 pub fn class_lengths(gf: &MappedGraph, walk: &Walk, t: &Trace) -> [f64; ord_loops::TASTE_CLASSES] {
     let mut out = [0.0; ord_loops::TASTE_CLASSES];
     for (l, &m) in walk.legs.iter().zip(&t.leg_m) {

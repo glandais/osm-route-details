@@ -13,6 +13,7 @@ use super::holdout::OverlayCheck;
 use super::measure::Measures;
 use super::play::{GenRoute, PlayRec, Recovered, WindowCounters};
 use super::shape::{median, quantiles5, wasserstein1, wasserstein1_normalised};
+use super::variants::VariantMeta;
 
 pub const TYPE_NAMES: [&str; 3] = ["ROAD", "GRAVEL", "MTB"];
 
@@ -58,6 +59,9 @@ pub struct Report {
     pub overlays: Vec<OverlayCheck>,
     pub phases: Vec<Phase>,
     pub windows: WindowCounters,
+    /// Sonde du goût : ce que la variante a joué ; absent au banc du 4a.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<VariantMeta>,
     pub cursors: Vec<f64>,
     pub fingerprint: String,
     pub loops: Vec<LoopRec>,
@@ -230,10 +234,42 @@ fn recon_stats(
     format!("{} / {}", if den > 0.0 { f3(num / den) } else { "-".into() }, opt3(median(&med)))
 }
 
+/// Les lignes que la variante ajoute en tête de son résumé (sonde du goût, §12.5).
+fn variant_head(s: &mut String, v: &VariantMeta, r: &Report) {
+    let _ = writeln!(s, "# Sonde du goût, variante `{}`\n", v.name);
+    let taste = match (&v.taste, v.gamma) {
+        (Some(t), Some(g)) => format!("goût `{t}`, γ = {g}"),
+        _ => "pas de goût".into(),
+    };
+    let fam = v.fam.map_or("familiarité du curseur".to_string(), |f| format!("familiarité imposée {f}"));
+    let _ = writeln!(s, "- variante : {taste} ; {fam}");
+    let _ = writeln!(s, "- paramètres du goût : {:?}", v.params);
+    let _ = writeln!(s, "- empreinte xxh3 des tables de goût (`taste_xxh3`) : `{}`", v.taste_xxh3);
+    let _ = writeln!(
+        s,
+        "- tables jouées : {} ({} non neutres)",
+        v.tables.len(),
+        v.tables.iter().filter(|t| !t.neutral).count()
+    );
+    let w = &v.team_windows;
+    let _ = writeln!(
+        s,
+        "- constructions de `WindowTeam` : {}, {:.0} ms au total, plus gros {:.1} Mo",
+        w.builds,
+        w.ms,
+        w.max_bytes as f64 / 1e6
+    );
+    let _ = writeln!(s, "- durée de la variante : {:.0} s, pic anonyme {:.0} Mo", v.secs, v.peak_anon_mb);
+    let _ = writeln!(s, "- empreinte de résultat : `{}`\n", r.fingerprint);
+}
+
 /// Le résumé `.md`.
 pub fn summary(r: &Report) -> String {
     let mut s = String::new();
     let cursors = &r.cursors;
+    if let Some(v) = &r.variant {
+        variant_head(&mut s, v, r);
+    }
     let _ = writeln!(s, "# Banc de vraisemblance (lot 4, 4a) : résumé\n");
     // 1. Conditions
     let _ = writeln!(s, "## 1. Conditions\n");
