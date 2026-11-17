@@ -13,6 +13,7 @@ mod input;
 mod likeness;
 mod record;
 mod report;
+mod taste_common;
 mod teams;
 mod windows;
 
@@ -48,9 +49,12 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Banc de vraisemblance du lot 4 (4a) : formes réelles contre générées, reconstruction.
     Likeness(likeness::LikenessArgs),
+    /// Exporte la table de goût commune du moteur depuis les rapports de la chaîne commune rejouée (lot 4, 3b).
+    TasteCommon(taste_common::TasteCommonArgs),
 }
 
 /// Les arguments du banc du lot 2.
@@ -255,6 +259,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Likeness(a)) => likeness::run(&a),
+        Some(Command::TasteCommon(a)) => taste_common::run(&a),
         None => run_bench(cli.bench),
     }
 }
@@ -824,7 +829,7 @@ mod tests {
         let cli = Cli::try_parse_from(["ord-loops-bench", "likeness", "--limit", "3"]).unwrap();
         match cli.command {
             Some(Command::Likeness(a)) => assert_eq!(a.limit, Some(3)),
-            None => panic!("sous-commande attendue"),
+            _ => panic!("sous-commande attendue"),
         }
         assert!(Cli::try_parse_from(["ord-loops-bench", "--cursors", "1", "likeness"]).is_err());
     }

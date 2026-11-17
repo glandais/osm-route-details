@@ -13,7 +13,7 @@ use super::export::Loop;
 use super::play::PlayRec;
 use super::taste::{ratio_table, shares, TasteParams, TasteTable, TYPES};
 pub use super::variants::Dims;
-use super::variants::{OwnerGap, TasteSource};
+use super::variants::{ClassMetersOut, OwnerGap, TasteSource, TypeMeters};
 
 /// Dans l'intervalle `]-DEAD_ZONE, DEAD_ZONE[`, une correction n'a pas de signe (§13.2.2, étape 2).
 const DEAD_ZONE: f64 = 0.02;
@@ -95,6 +95,21 @@ impl ClassMeters {
             }
         }
         Self { pooled, team }
+    }
+}
+
+/// Les mètres de toutes équipes réunies, tels que le rapport les écrit (§14.3.1).
+pub fn pooled_out(m: &ClassMeters) -> ClassMetersOut {
+    ClassMetersOut {
+        pooled: (0..3)
+            .map(|ty| TypeMeters {
+                ride: TYPES[ty].0.to_string(),
+                real_m: m.pooled.real[ty].clone(),
+                gen_m: m.pooled.gen[ty].clone(),
+                loops: m.pooled.loops[ty],
+                pairs: m.pooled.pairs[ty],
+            })
+            .collect(),
     }
 }
 

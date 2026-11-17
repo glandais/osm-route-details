@@ -277,6 +277,27 @@ pub struct TeamTime {
     pub wall_s: f64,
 }
 
+/// Mètres par classe de goût, pour un type, toutes équipes réunies (lot 4, 3b, §14.3.1) : le réel et le généré du premier
+/// parcours gardé, sommés sur les boucles non mises à l'écart (jeux `full`, issue `OK`). **Jamais par équipe** : un
+/// agrégat de 72 nombres par type. C'est ce dont la table commune du moteur tire ses poids `R` (décimètres générés par
+/// boucle).
+#[derive(Clone, Debug, Serialize)]
+pub struct TypeMeters {
+    /// `ROAD`, `GRAVEL` ou `MTB`.
+    pub ride: String,
+    pub real_m: Vec<f64>,
+    pub gen_m: Vec<f64>,
+    /// Boucles comptées (au moins une paire comptée) et paires (boucle, curseur) comptées.
+    pub loops: u32,
+    pub pairs: u32,
+}
+
+/// Les trois types, dans l'ordre `RideType::index()`.
+#[derive(Clone, Debug, Serialize)]
+pub struct ClassMetersOut {
+    pub pooled: Vec<TypeMeters>,
+}
+
 /// Ce que chaque variante écrit sur elle-même (le rapport de la variante).
 #[derive(Clone, Debug, Serialize)]
 pub struct VariantMeta {
@@ -298,6 +319,8 @@ pub struct VariantMeta {
     pub chain: Option<ChainMeta>,
     pub l1_after: Vec<OwnerGap>,
     pub team_times: Vec<TeamTime>,
+    /// Les mètres par classe de la variante, toutes équipes réunies (§14.3.1).
+    pub class_meters: ClassMetersOut,
 }
 
 #[cfg(test)]

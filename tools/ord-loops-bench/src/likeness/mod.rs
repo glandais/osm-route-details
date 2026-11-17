@@ -161,6 +161,23 @@ pub const BASE_4A_FINGERPRINT: &str = "55c3b065dc085f42";
 pub const RC05_FINGERPRINT: &str = "ebb20ed148f75185";
 pub const RC05_TASTE_XXH3: &str = "4002e232ea272c83";
 
+/// La campagne 2 (`recal-equipe`, seconde sonde, 25 % mis à l'écart, `rc:0.5+n:3`) : empreinte de résultat et
+/// `taste_xxh3` de `base`, `rc05-p1`, `rc05-p2` et `rc05-p3`. Le rejeu de la chaîne commune du 3b (§14.3.1) doit les
+/// redonner, bit pour bit : sinon le banc a changé et la table commune exportée ne serait pas celle qu'on croit.
+pub const RECAL_EQUIPE_CHECKS: [(&str, &str, &str); 4] = [
+    ("base", "4686c904975302e7", "2d06800538d394c2"),
+    ("rc05-p1", "a123cb82e6b36fc1", "40c8278314911d91"),
+    ("rc05-p2", "ad57882c3ed75c10", "2f57dc10b00d143d"),
+    ("rc05-p3", "2c563b8bbe8059ae", "66ee08d3eb9c910c"),
+];
+
+/// Le contrôle de la campagne 2 pour une variante, s'il s'applique : `Some((empreinte, taste_xxh3))` attendus.
+pub fn recal_equipe_expected(a: &LikenessArgs, name: &str) -> Option<(&'static str, &'static str)> {
+    (a.at_4a_defaults_but_holdout_share() && a.holdout_share == 0.25 && a.taste_at_4a_defaults())
+        .then(|| RECAL_EQUIPE_CHECKS.iter().find(|c| c.0 == name).map(|c| (c.1, c.2)))
+        .flatten()
+}
+
 impl LikenessArgs {
     pub fn taste_params(&self) -> TasteParams {
         TasteParams {
@@ -524,6 +541,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         let pooled_name =
             if matches!(v.taste, Some((TasteSource::RecalTeam, _))) { "commun" } else { "général" };
         let l1_after = chain::l1_gaps(&meters, &order, &letter_of, pooled_name);
+        let class_meters = chain::pooled_out(&meters);
         let chain_diag = step.map(|s| s.diag).unwrap_or_default();
         let team_times = run.team_times;
         match &v.chain {
@@ -588,6 +606,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             }),
             l1_after,
             team_times,
+            class_meters,
         });
         let mut meta =
             meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
@@ -642,6 +661,18 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             anyhow::ensure!(
                 ok,
                 "le pas 1 n'est pas `rc05` ({} · {taste}) : chercher, ne pas lire la suite",
+                report.fingerprint
+            );
+        }
+        if let Some((fp, tx)) = recal_equipe_expected(a, &v.name) {
+            let taste = report.variant.as_ref().map_or("", |m| m.taste_xxh3.as_str());
+            let ok = report.fingerprint == fp && taste == tx;
+            eprintln!("« `{}` = campagne 2 ({fp}, {tx}) » : {}", v.name, if ok { "oui" } else { "NON" });
+            anyhow::ensure!(
+                ok,
+                "`{}` n'est pas celle de la campagne 2 ({} · {taste}, attendu {fp} · {tx}) : le banc a changé, \
+                 chercher, ne pas lire la suite",
+                v.name,
                 report.fingerprint
             );
         }

@@ -867,6 +867,7 @@ mod tests {
             peak_anon_mb: 1.0,
             chain,
             l1_after: Vec::new(),
+            class_meters: crate::likeness::variants::ClassMetersOut { pooled: Vec::new() },
             team_times: ["A", "B", "C"]
                 .iter()
                 .map(|t| TeamTime {
