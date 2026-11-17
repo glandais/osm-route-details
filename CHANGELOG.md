@@ -11,9 +11,10 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
   appariées de l'équipe (au plus 500, tirées par empreinte du contenu, donc indépendamment de l'ordre des lignes), trois
   pas de recalé itéré, et écrit `<team>.ordp.enc` à côté de la surcouche (même chiffrement, autre magie `ORDPENC1`).
   La phase se fait hors de la place de dépôt, dans une place de profil unique pour tous les environnements.
-  Réglages `generator.profile.*` (`enabled`, `threads` 4, `max_concurrent` 1, `budget_s` 720, `max_loops` 500, `per_type`).
+  Réglages `generator.profile.*` (`enabled`, `threads` 4, `max_concurrent` 1, `budget_s` 720, `max_loops` 500, borné à 5 000, `per_type`).
 - **Contrat HTTP (ajouts seulement)** : `GET /v1/generator/overlay` rend `state: stale` avec `stale_reason: profile`
-  quand le profil manque ou a été appris avec d'autres réglages, et un objet `profile` (`state`, `learned_at`, `steps`,
+  quand le profil manque, a été appris avec d'autres réglages, ou n'est que partiel (1 ou 2 pas) sans profil complet depuis
+  plus de 7 jours, et un objet `profile` (`state`, `learned_at`, `steps`,
   `loops`) ; le rapport de dépôt porte `profile` (`outcome`, `steps`, `loops`, `plays`, `seconds`) ; la réponse de
   génération porte `taste` (`team` ou `common`).
 - Métriques `ord_profile_builds_total{outcome}`, `ord_profile_build_seconds`, `ord_profile_slot_wait_seconds`,

@@ -30,6 +30,23 @@ pub struct ProfileMeta {
     pub loops: [u32; 3],
     pub pairs: [u32; 3],
     pub normalized: bool,
+    /// Date du dernier profil **complet** (tous les pas, ou ensemble vide), secondes depuis l'époque. Un profil partiel
+    /// (1 ou 2 pas, budget épuisé) la recopie de celui qu'il remplace ; tant qu'aucun profil complet n'existe, c'est le
+    /// début de la série de profils partiels. Absent (écrit sans) : la date d'apprentissage. Décision 6 du 17 novembre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complete_at: Option<i64>,
+}
+
+impl ProfileMeta {
+    /// Le profil est complet : les `steps` pas du réglage ont tous été joués, ou il n'y avait aucune boucle à rejouer.
+    pub fn is_complete(&self, steps: u8) -> bool {
+        self.steps >= steps || self.loops == [0, 0, 0]
+    }
+
+    /// Depuis quand le service n'a plus de profil complet pour cette équipe (secondes depuis l'époque).
+    pub fn complete_since(&self) -> i64 {
+        self.complete_at.unwrap_or(self.learned_at)
+    }
 }
 
 /// Pourquoi un profil n'est pas servi.
@@ -117,6 +134,7 @@ mod tests {
             loops: [10, 5, 0],
             pairs: [20, 10, 0],
             normalized: learn.normalize,
+            complete_at: None,
         };
         let mut taste = Taste::neutral();
         taste.q8[0][3] = 400;
@@ -130,6 +148,23 @@ mod tests {
         let bytes = encode(&meta, &taste);
         let (m2, t2) = decode(&bytes, &common, &learn).unwrap();
         assert_eq!((m2, t2), (meta, taste));
+    }
+
+    #[test]
+    fn completeness_and_the_date_of_the_last_complete_profile() {
+        let (_, learn, meta, _) = fixture();
+        assert!(meta.is_complete(learn.steps));
+        let partial = ProfileMeta { steps: 2, ..meta.clone() };
+        assert!(!partial.is_complete(learn.steps));
+        // Aucune boucle : rien à rejouer, complet.
+        assert!(ProfileMeta { steps: 0, loops: [0; 3], ..meta.clone() }.is_complete(learn.steps));
+        // Sans date écrite : celle de l'apprentissage ; écrite : elle prime ; et elle survit à l'aller-retour.
+        assert_eq!(partial.complete_since(), meta.learned_at);
+        let carried = ProfileMeta { complete_at: Some(1_600_000_000), ..partial };
+        assert_eq!(carried.complete_since(), 1_600_000_000);
+        let (common, learn, _, taste) = fixture();
+        let (back, _) = decode(&encode(&carried, &taste), &common, &learn).unwrap();
+        assert_eq!(back, carried);
     }
 
     #[test]

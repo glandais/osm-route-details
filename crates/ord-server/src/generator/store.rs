@@ -27,6 +27,9 @@ pub const FILE_EXT: &str = "ordo.enc";
 /// le mettent hors d'atteinte de la purge d'une 1.9.x (§14.9) : le temporaire contient `.tmp-` et ne finit pas par
 /// `.ordo.enc` ; le nom définitif ne contient pas `.tmp-`.
 pub const PROFILE_EXT: &str = "ordp.enc";
+/// Âge au-delà duquel un profil **partiel** (1 ou 2 pas) ne suffit plus : sans profil complet depuis plus de 7 jours,
+/// l'état est `stale` raison `profile` et le backend redépose (décision 6 du 17 novembre 2026).
+pub const PARTIAL_PROFILE_MAX_AGE: Duration = Duration::from_secs(7 * 86_400);
 const TMP_MARK: &str = ".tmp-";
 /// Un `.tmp` plus ancien que cela est un reste d'écriture interrompue.
 const TMP_MAX_AGE: Duration = Duration::from_secs(3600);
@@ -554,6 +557,11 @@ impl Store {
 
     /// État de l'équipe sans construire ses données (`GET`). Les raisons `graph` et `matcher` priment sur `profile`.
     pub fn status(&self, c: &Credentials) -> Status {
+        self.status_at(c, secs(SystemTime::now()))
+    }
+
+    /// `status` à une date donnée (secondes depuis l'époque) : la règle des 7 jours d'un profil partiel en dépend.
+    pub fn status_at(&self, c: &Credentials, now: i64) -> Status {
         match self.read_current(c) {
             Some((_, meta, _)) if meta.matcher_hash == self.matcher_hash_hex() => {
                 if !self.profiles_enabled() {
@@ -561,7 +569,13 @@ impl Store {
                 }
                 let (state, info) = match self.read_profile(c) {
                     ProfileRead::Present(_, pm, _) => (
-                        State::Ready,
+                        // Un profil partiel est servi comme un autre et l'état reste `ready`, sauf si le dernier
+                        // profil complet date de plus de 7 jours : la nuit suivante le backend réessaie.
+                        if self.partial_profile_is_too_old(&pm, now) {
+                            State::Stale(StaleReason::Profile)
+                        } else {
+                            State::Ready
+                        },
                         ProfileInfo {
                             state: ProfileState::Present,
                             learned_at: Some(pm.learned_at),
@@ -606,6 +620,13 @@ impl Store {
                 None => Status { state: State::Absent, profile: None, meta: None, file_time: None },
             },
         }
+    }
+
+    fn partial_profile_is_too_old(&self, pm: &ProfileMeta, now: i64) -> bool {
+        let steps = self.cfg.profile.as_ref().map_or(0, |p| p.learn.steps);
+        !pm.is_complete(steps)
+            && now.saturating_sub(pm.complete_since())
+                > i64::try_from(PARTIAL_PROFILE_MAX_AGE.as_secs()).unwrap_or(i64::MAX)
     }
 
     /// L'équipe prête pour une génération : depuis le cache si le fichier n'a pas changé, sinon relue puis `TeamData`
@@ -1532,6 +1553,7 @@ mod tests {
             loops: [4, 2, 0],
             pairs: [8, 4, 0],
             normalized: st.learn.normalize,
+            complete_at: None,
         };
         let mut taste = ord_loops::Taste::neutral();
         taste.q8[0][3] = 400;
@@ -1562,6 +1584,68 @@ mod tests {
         assert_eq!(st.state, State::Ready);
         let p = st.profile.unwrap();
         assert_eq!((p.state, p.steps, p.loops), (ProfileState::Present, Some(3), Some(6)));
+    }
+
+    #[test]
+    fn a_partial_profile_is_ready_unless_the_last_complete_one_is_older_than_seven_days() {
+        let dir = tempfile::tempdir().unwrap();
+        let (c, s) = (creds(1, "t"), store_with_profiles(dir.path(), 1));
+        let now = 1_700_000_000_i64 + 100 * 86_400;
+        let day = 86_400_i64;
+        let state_at = |s: &Store, now: i64| s.status_at(&c, now);
+        // Complet : prêt, quel que soit son âge (rien ne dit qu'il faut le refaire avant le changement des traces).
+        s.commit_with_profile(
+            &c,
+            &meta(1),
+            &ordo(),
+            Some(&profile_bytes(|m, _| m.learned_at = now - 30 * day)),
+        )
+        .unwrap();
+        assert_eq!(state_at(&s, now).state, State::Ready);
+        // Partiel, récent (le complet remonte à 1 jour) : prêt, et le statut dit les pas faits.
+        let recent = profile_bytes(|m, _| {
+            m.steps = 2;
+            m.learned_at = now;
+            m.complete_at = Some(now - day);
+        });
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&recent)).unwrap();
+        let st = state_at(&s, now);
+        assert_eq!(st.state, State::Ready);
+        assert_eq!(st.profile.unwrap().steps, Some(2));
+        // Partiel dont le dernier complet a 8 jours : `stale` raison `profile` ; le profil, lui, est bien là.
+        let old = profile_bytes(|m, _| {
+            m.steps = 1;
+            m.learned_at = now;
+            m.complete_at = Some(now - 8 * day);
+        });
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&old)).unwrap();
+        let st = state_at(&s, now);
+        assert_eq!(st.state, State::Stale(StaleReason::Profile));
+        assert_eq!(st.profile.unwrap().state, ProfileState::Present);
+        // Exactement 7 jours : encore prêt (« plus de 7 jours »).
+        let edge = profile_bytes(|m, _| {
+            m.steps = 1;
+            m.learned_at = now;
+            m.complete_at = Some(now - 7 * day);
+        });
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&edge)).unwrap();
+        assert_eq!(state_at(&s, now).state, State::Ready);
+        // Écrit sans `complete_at` (date inconnue) : celle de l'apprentissage, donc récent.
+        let none = profile_bytes(|m, _| {
+            m.steps = 2;
+            m.learned_at = now - day;
+        });
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&none)).unwrap();
+        assert_eq!(state_at(&s, now).state, State::Ready);
+        // Une surcouche sans boucle (ensemble vide, `steps = 0`) est complète.
+        let empty = profile_bytes(|m, _| {
+            m.steps = 0;
+            m.loops = [0; 3];
+            m.pairs = [0; 3];
+            m.learned_at = now - 20 * day;
+        });
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&empty)).unwrap();
+        assert_eq!(state_at(&s, now).state, State::Ready);
     }
 
     #[test]

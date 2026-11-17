@@ -187,8 +187,9 @@ pub enum OverlayStateV1 {
 pub enum StaleReasonV1 {
     Graph,
     Matcher,
-    /// No usable taste profile (absent, or learned with other settings): a new deposit learns it. Generations are
-    /// served meanwhile, with the common table.
+    /// No usable taste profile (absent, or learned with other settings), or only partial ones (1 or 2 steps) for more
+    /// than 7 days: a new deposit learns it. Generations are served meanwhile, with the profile if any, else the
+    /// common table.
     Profile,
 }
 

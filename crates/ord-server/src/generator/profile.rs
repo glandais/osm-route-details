@@ -207,6 +207,16 @@ impl Player for ServicePlayer<'_> {
     }
 }
 
+/// La date `complete_at` du profil qu'on écrit : maintenant s'il est complet (tous les pas, ou rien à rejouer) ; sinon
+/// celle du profil qu'il remplace, ou, faute de profil, maintenant (début de la série de profils partiels).
+fn complete_at(steps_done: u8, loops: [u32; 3], steps: u8, now: i64, previous: Option<i64>) -> i64 {
+    if steps_done >= steps || loops == [0; 3] {
+        now
+    } else {
+        previous.unwrap_or(now)
+    }
+}
+
 fn unix_now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -228,13 +238,16 @@ impl Ready {
     }
 
     /// La phase de profil d'un dépôt (§14.7.1, point 4). `overlay_deposited_at` : la date de dépôt écrite dans la
-    /// surcouche, recopiée dans l'en-tête du profil ; `deposit_deadline` : l'échéance du dépôt. `None` quand les profils
+    /// surcouche, recopiée dans l'en-tête du profil ; `previous_complete_since` : la date `complete_since` du profil
+    /// que celui-ci remplace (lisible et appris avec les mêmes réglages), recopiée par un profil partiel ;
+    /// `deposit_deadline` : l'échéance du dépôt. `None` quand les profils
     /// sont désactivés.
     pub(crate) fn profile_phase(
         &self,
         set: Option<LearnSet>,
         overlay_bytes: &[u8],
         overlay_deposited_at: i64,
+        previous_complete_since: Option<i64>,
         deposit_deadline: Instant,
     ) -> Option<Phase> {
         let settings = self.profile.as_ref()?;
@@ -256,6 +269,15 @@ impl Ready {
             }
         };
         let meta_of = |l: &Learned, now: i64| ProfileMeta {
+            // Complet (ou ensemble vide) : c'est maintenant. Partiel : la date du profil complet précédent, ou, faute
+            // de profil, le début de la série de profils partiels.
+            complete_at: Some(complete_at(
+                l.steps_done,
+                l.loops,
+                settings.learn.steps,
+                now,
+                previous_complete_since,
+            )),
             format: FORMAT,
             learned_at: now,
             overlay_deposited_at,
@@ -388,5 +410,25 @@ struct HeldTeam<'a> {
 impl Drop for HeldTeam<'_> {
     fn drop(&mut self) {
         self.windows.release_team(self.bytes, self.serial);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::complete_at;
+
+    #[test]
+    fn a_complete_profile_dates_itself_and_a_partial_one_carries_the_last_complete_date() {
+        let (now, before) = (2_000_000, 1_000_000);
+        // Trois pas sur trois : maintenant, quel que soit le profil remplacé.
+        assert_eq!(complete_at(3, [4, 2, 0], 3, now, Some(before)), now);
+        assert_eq!(complete_at(3, [4, 2, 0], 3, now, None), now);
+        // Ensemble vide (aucun pas, aucune boucle) : complet.
+        assert_eq!(complete_at(0, [0; 3], 3, now, Some(before)), now);
+        // Partiel : la date du complet précédent, recopiée de nuit en nuit...
+        assert_eq!(complete_at(2, [4, 2, 0], 3, now, Some(before)), before);
+        assert_eq!(complete_at(1, [4, 2, 0], 3, now + 86_400, Some(before)), before);
+        // ... ou, sans profil, le début de la série.
+        assert_eq!(complete_at(1, [4, 2, 0], 3, now, None), now);
     }
 }
