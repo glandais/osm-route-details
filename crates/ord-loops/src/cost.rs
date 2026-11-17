@@ -134,6 +134,73 @@ pub fn edge_weight(ride: RideType, a: Attrs, len_dm: u32) -> u32 {
     (u64::from(len_dm) * k).div_ceil(64).min(u64::from(u32::MAX / 8)) as u32
 }
 
+/// Nombre de classes de goût : 6 voies × 3 revêtements × balisé × destination (note lot 4, §3.2 et §12).
+pub const TASTE_CLASSES: usize = 72;
+
+/// Voie (§3.2), dans cet ordre : voie cyclable ou verte (`Cycleway` ou [`is_greenway`], la définition du moteur) → 4 ;
+/// `Primary | Secondary | Trunk | Motorway` → 0 (grande route ; `Motorway`, fermée au vélo, n'y arrive que par une
+/// trace réelle) ; `Tertiary` → 1 ; `Unclassified | Road` → 2 (petite route) ; `Residential | LivingStreet | Service`
+/// → 3 (rue) ; tout le reste et classe absente → 5 (chemin). Les `_link` suivent leur classe.
+pub fn taste_way(a: Attrs) -> usize {
+    use HighwayClass::*;
+    if a.class() == Some(Cycleway) || is_greenway(a) {
+        return 4;
+    }
+    match a.class() {
+        Some(Primary | Secondary | Trunk | Motorway) => 0,
+        Some(Tertiary) => 1,
+        Some(Unclassified | Road) => 2,
+        Some(Residential | LivingStreet | Service) => 3,
+        _ => 5,
+    }
+}
+
+/// Groupe de revêtement : `surface() == 0` → 1 (présumé) ; sinon non revêtu connu → 2 ; sinon 0 (revêtu connu).
+pub fn taste_surface(a: Attrs) -> usize {
+    if a.surface() == 0 {
+        1
+    } else if a.is_unpaved() {
+        2
+    } else {
+        0
+    }
+}
+
+/// Classe de goût d'une arête de base : `((voie × 3 + revêtement) × 2 + balisé) × 2 + destination`, balisé =
+/// `routes() != 0`, destination = accès `destination`. Pure, dans `[0, 72)`.
+pub fn taste_class(a: Attrs) -> usize {
+    let marked = usize::from(a.routes() != 0);
+    let dest = usize::from(a.access() == Access::Destination);
+    ((taste_way(a) * 3 + taste_surface(a)) * 2 + marked) * 2 + dest
+}
+
+/// Goût par classe : multiplicateur du poids d'une arête de base, en 256es, par type (`RideType::index()`) et par
+/// classe de goût. 256 = neutre. Pas de `Default` (tableaux de plus de 32 éléments) : [`Taste::neutral`] en tient lieu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Taste {
+    pub q8: [[u16; TASTE_CLASSES]; 3],
+}
+
+impl Taste {
+    pub fn neutral() -> Self {
+        Self { q8: [[256; TASTE_CLASSES]; 3] }
+    }
+
+    /// 256 partout, les trois types.
+    pub fn is_neutral(&self) -> bool {
+        self.q8.iter().all(|t| t.iter().all(|&q| q == 256))
+    }
+}
+
+/// Poids d'une arête de base au goût : `⌈len_dm × K × q8[classe] / (64 × 256)⌉`, borné à `u32::MAX / 8` comme
+/// [`edge_weight`]. Avec 256 partout, rend exactement `edge_weight` (`⌈256 x / 16 384⌉ = ⌈x / 64⌉`). Le produit tient
+/// en `u64` : `len_dm` < 2³², `K` ≤ 1 000, `q8` < 2¹⁶.
+pub fn taste_weight(ride: RideType, a: Attrs, len_dm: u32, q8: &[u16; TASTE_CLASSES]) -> u32 {
+    let k = u64::from(k64(ride, a));
+    let q = u64::from(q8[taste_class(a)]);
+    (u64::from(len_dm) * k * q).div_ceil(64 * 256).min(u64::from(u32::MAX / 8)) as u32
+}
+
 /// `e^x` en virgule fixe : `x` en Q20 (`|x| <= 2^20 * 2`), résultat en Q30. Série de Taylor, entiers seuls.
 fn exp_q30(x_q20: i64) -> i64 {
     let one = 1i128 << 30;
@@ -181,4 +248,124 @@ mod tests {
     }
 
     const GOLDEN_SUM_700: u64 = 54_014;
+
+    use ord_graph::attrs::{Fields, ROUTE_LOCAL};
+
+    fn attrs(class: HighwayClass, f: impl FnOnce(&mut Fields)) -> Attrs {
+        let mut fields = Fields { class: class as u8, fwd_ok: true, bwd_ok: true, ..Fields::default() };
+        f(&mut fields);
+        Attrs::pack(&fields)
+    }
+
+    /// Code de `surface` pour une valeur nommée (code = position + 1).
+    fn surface(name: &str) -> u8 {
+        ord_graph::attrs::SURFACES.iter().position(|s| *s == name).unwrap() as u8 + 1
+    }
+
+    #[test]
+    fn taste_class_reaches_the_72_distinct_classes_and_stays_below() {
+        use HighwayClass::*;
+        // Une représentante par voie, avec ses revêtements, balisage et accès.
+        let ways: [Attrs; 6] = [
+            attrs(Primary, |_| {}),
+            attrs(Tertiary, |_| {}),
+            attrs(Unclassified, |_| {}),
+            attrs(Residential, |_| {}),
+            attrs(Cycleway, |_| {}),
+            attrs(Track, |_| {}),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for w in ways {
+            for surf in [surface("asphalt"), 0, surface("gravel")] {
+                for routes in [0, ROUTE_LOCAL] {
+                    for access in [Access::Yes as u8, Access::Destination as u8] {
+                        let mut f = w.unpack();
+                        (f.surface, f.routes, f.access) = (surf, routes, access);
+                        let c = taste_class(Attrs::pack(&f));
+                        assert!(c < TASTE_CLASSES);
+                        seen.insert(c);
+                    }
+                }
+            }
+        }
+        assert_eq!(seen.len(), TASTE_CLASSES);
+    }
+
+    #[test]
+    fn taste_class_known_cases() {
+        use HighwayClass::*;
+        let paved = surface("asphalt");
+        let primary = attrs(Primary, |f| f.surface = paved);
+        assert_eq!((taste_way(primary), taste_surface(primary), taste_class(primary)), (0, 0, 0));
+        assert_eq!(taste_way(attrs(Cycleway, |_| {})), 4);
+        // Voie verte : `path` désigné aux vélos (is_greenway) ; sans désignation, un chemin.
+        assert_eq!(taste_way(attrs(Path, |f| f.bicycle_tag = 2)), 4);
+        assert_eq!(taste_way(attrs(Path, |_| {})), 5);
+        // `track` sans `surface` : chemin, revêtement présumé.
+        let track = attrs(Track, |_| {});
+        assert_eq!((taste_way(track), taste_surface(track)), (5, 1));
+        // `access=destination` : bit de destination (le plus faible) ; balisé : le suivant.
+        let dest = attrs(Residential, |f| (f.surface, f.access) = (paved, Access::Destination as u8));
+        assert_eq!(taste_class(dest) & 1, 1);
+        let marked = attrs(Residential, |f| (f.surface, f.routes) = (paved, ROUTE_LOCAL));
+        assert_eq!(taste_class(marked) & 3, 2);
+        // Une `_link` suit sa classe.
+        let link = attrs(Primary, |f| (f.surface, f.link) = (paved, true));
+        assert_eq!(taste_class(link), taste_class(primary));
+        assert_eq!(taste_surface(attrs(Residential, |f| f.surface = surface("gravel"))), 2);
+    }
+
+    /// Un échantillon d'attributs : toutes les classes, avec et sans surface, accès `yes` / `destination`.
+    fn sample_attrs() -> Vec<Attrs> {
+        let mut out = Vec::new();
+        for c in HighwayClass::ALL {
+            for surf in [0, surface("asphalt"), surface("gravel"), surface("sand")] {
+                for access in [Access::Yes as u8, Access::Destination as u8] {
+                    for (bike, routes) in [(0, 0), (2, ROUTE_LOCAL)] {
+                        out.push(attrs(c, |f| {
+                            (f.surface, f.access, f.bicycle_tag, f.routes) = (surf, access, bike, routes);
+                        }));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    const LENS: [u32; 7] = [1, 7, 999, 1_000_000, u32::MAX / 8, u32::MAX / 2, u32::MAX];
+
+    #[test]
+    fn neutral_taste_weight_is_exactly_edge_weight() {
+        let q = Taste::neutral();
+        for ride in RideType::ALL {
+            for a in sample_attrs() {
+                for len in LENS {
+                    assert_eq!(
+                        taste_weight(ride, a, len, &q.q8[ride.index()]),
+                        edge_weight(ride, a, len),
+                        "{ride:?} {a:?} {len}"
+                    );
+                }
+            }
+        }
+        assert!(q.is_neutral());
+    }
+
+    #[test]
+    fn taste_weight_scales_and_never_vanishes() {
+        for ride in RideType::ALL {
+            for a in sample_attrs().into_iter().filter(|a| k64(ride, *a) > 0) {
+                for len in [1u32, 7, 999, 1_000_000] {
+                    let k = u64::from(k64(ride, a));
+                    let double = taste_weight(ride, a, len, &[512; TASTE_CLASSES]);
+                    assert_eq!(u64::from(double), (2 * u64::from(len) * k).div_ceil(64));
+                    assert!(taste_weight(ride, a, len, &[85; TASTE_CLASSES]) > 0);
+                }
+            }
+        }
+        let mut q = Taste::neutral();
+        assert!(q.is_neutral());
+        q.q8[1][3] = 255;
+        assert!(!q.is_neutral());
+    }
 }

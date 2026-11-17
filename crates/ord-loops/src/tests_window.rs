@@ -55,6 +55,18 @@ fn the_window_of_all_tiles_is_the_flat_engine() {
 }
 
 #[test]
+fn a_neutral_taste_keeps_the_frozen_reference_bit_for_bit() {
+    // Le goût neutre passe par l'arithmétique du goût (`taste_weight`) et rend la référence figée, sans bénédiction :
+    // les trois modes, la découverte avec équipe comprise.
+    assert_matches_reference(&|e, team, r, ws| {
+        let win = e.full_window(r.ride_type.view_index());
+        let wt = team.map(|t| WindowTeam::build_with_taste(e, &win, t, Some(&crate::Taste::neutral())));
+        let ctx = team.zip(wt.as_ref()).map(|(data, win)| TeamCtx { data, win });
+        generate_with_diagnostics_in(e, &win, ctx, r, ws, &mut || false)
+    });
+}
+
+#[test]
 fn the_class_window_gives_the_same_routes_as_the_needed_tiles() {
     assert_matches_reference(&|e, team, r, ws| run_in(e, team, r, ws, &|_, p| p.class.clone()));
 }

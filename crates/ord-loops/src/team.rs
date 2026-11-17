@@ -15,7 +15,7 @@ use ord_graph::format::DIR_BIT;
 use ord_graph::overlay::Overlay;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::cost::{self, is_greenway, RideType};
+use crate::cost::{self, is_greenway, RideType, Taste, TASTE_CLASSES};
 use crate::engine::{
     chain_strong_len, rides_of_view, strong_components, strong_lengths, Engine, EngineError,
 };
@@ -357,31 +357,66 @@ pub(crate) fn rough_surface(a: ord_graph::attrs::Attrs) -> bool {
 #[derive(Debug, Default)]
 pub struct WindowTeam {
     per: [Vec<ChainTeam>; 3],
+    /// Sonde du goût (lot 4, §12) : poids sans équipe de chaque chaîne **au goût**, par type ; vide = pas de goût.
+    w_taste: [Vec<u32>; 3],
+    taste: Option<Box<Taste>>,
 }
 
 impl WindowTeam {
     /// Calcule les agrégats : les drapeaux de chaque lien viennent de [`TeamData`], par dichotomie.
     pub fn build<B: AsRef<[u8]>>(e: &Engine<B>, win: &Window, team: &TeamData) -> Self {
+        Self::build_with_taste(e, win, team, None)
+    }
+
+    /// Comme [`WindowTeam::build`], avec un goût (sonde du lot 4, §12). Avec `Some(taste)`, pour **chaque** type servi
+    /// par la vue (même si sa table est neutre : les tests y passent par l'arithmétique), le poids de chaque lien est
+    /// `taste_weight(ride, attrs, len, &taste.q8[ride])` : `w_taste[ride][c]` est la somme sur tous les liens (bornée
+    /// à `u32::MAX / 8` comme `w_osm`), et `a`, `b`, `z` de [`ChainTeam`] sont faits des **mêmes** poids au goût. Avec
+    /// `None`, exactement le calcul sans goût. Le goût ne touche ni la [`Window`] ni la relaxation : il n'existe que
+    /// dans ces agrégats, déjà propres à une équipe. Surcoût de temps : `attrs_len` de **tous** les liens (sans goût :
+    /// ceux d'équipe ou comblés seulement).
+    pub fn build_with_taste<B: AsRef<[u8]>>(
+        e: &Engine<B>,
+        win: &Window,
+        team: &TeamData,
+        taste: Option<&Taste>,
+    ) -> Self {
         let v = &win.v;
         let mut per: [Vec<ChainTeam>; 3] = Default::default();
+        let mut w_taste: [Vec<u32>; 3] = Default::default();
         for &ride in rides_of_view(win.vi) {
             let tt = team.of(ride);
+            let q8 = taste.map(|t| &t.q8[ride.index()]);
             let mut chains = vec![ChainTeam::default(); v.n_chains];
+            let mut wt: Vec<u32> = if q8.is_some() { Vec::with_capacity(v.n_chains) } else { Vec::new() };
             for (c, ct) in chains.iter_mut().enumerate() {
-                let (mut a, mut b, mut zs, mut strict) = (0u64, 0u64, 0u64, true);
+                let (mut a, mut b, mut zs, mut strict, mut all) = (0u64, 0u64, 0u64, true, 0u64);
                 for l in v.links(c as u32) {
                     let ed = l & !DIR_BIT;
                     let (fl, z) = tt.flags(ed);
                     if fl & TEAM != 0 {
                         let (attrs, len) = e.attrs_len(ed);
-                        let w = u64::from(cost::edge_weight(ride, attrs, len));
+                        let w = u64::from(match q8 {
+                            None => cost::edge_weight(ride, attrs, len),
+                            Some(q) => cost::taste_weight(ride, attrs, len, q),
+                        });
                         a += w;
+                        all += w;
                         zs += w * u64::from(z);
                     } else if fl & BRIDGED != 0 {
                         let (attrs, len) = e.attrs_len(ed);
-                        b += u64::from(cost::edge_weight(ride, attrs, len));
+                        let w = u64::from(match q8 {
+                            None => cost::edge_weight(ride, attrs, len),
+                            Some(q) => cost::taste_weight(ride, attrs, len, q),
+                        });
+                        b += w;
+                        all += w;
                     } else {
                         strict = false;
+                        if let Some(q) = q8 {
+                            let (attrs, len) = e.attrs_len(ed);
+                            all += u64::from(cost::taste_weight(ride, attrs, len, q));
+                        }
                     }
                 }
                 *ct = ChainTeam {
@@ -390,10 +425,14 @@ impl WindowTeam {
                     z: (zs / a.max(1)).min(255) as u8,
                     strict,
                 };
+                if q8.is_some() {
+                    wt.push(all.min(u64::from(u32::MAX / 8)) as u32);
+                }
             }
             per[ride.index()] = chains;
+            w_taste[ride.index()] = wt;
         }
-        Self { per }
+        Self { per, w_taste, taste: taste.map(|t| Box::new(t.clone())) }
     }
 
     /// Octets que tiendront les agrégats de `win` (une `ChainTeam` par chaîne et par type de sortie de la vue) : de
@@ -408,7 +447,18 @@ impl WindowTeam {
 
     /// Octets tenus (capacités réelles).
     pub fn bytes(&self) -> usize {
-        self.per.iter().map(|c| c.capacity() * std::mem::size_of::<ChainTeam>()).sum()
+        self.per.iter().map(|c| c.capacity() * std::mem::size_of::<ChainTeam>()).sum::<usize>()
+            + self.w_taste.iter().map(|w| w.capacity() * std::mem::size_of::<u32>()).sum::<usize>()
+    }
+
+    /// `(poids au goût des chaînes, table du type)` si un goût a été donné et que la vue sert ce type.
+    pub(crate) fn taste_of(&self, ride: RideType) -> Option<(&[u32], &[u16; TASTE_CLASSES])> {
+        let t = self.taste.as_deref()?;
+        let w = &self.w_taste[ride.index()];
+        if w.is_empty() {
+            return None;
+        }
+        Some((w, &t.q8[ride.index()]))
     }
 }
 

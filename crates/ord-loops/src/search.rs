@@ -7,7 +7,7 @@ use std::collections::BinaryHeap;
 
 use ord_graph::format::DIR_BIT;
 
-use crate::cost::{self, RideType};
+use crate::cost::{self, RideType, TASTE_CLASSES};
 use crate::engine::{Engine, Snap, ViewData};
 use crate::geo::{heading_deg, polyline_m, Local};
 use crate::team::{ChainTeam, TeamCtx, TypeTeam, BRIDGED, TEAM};
@@ -171,6 +171,8 @@ pub(crate) struct Weighter<'a> {
     ride: RideType,
     mode: Mode,
     w_osm: &'a [u32],
+    /// Goût (sonde du lot 4, §12) : multiplicateurs par classe d'une arête de base, pour `edge`.
+    taste: Option<&'a [u16; TASTE_CLASSES]>,
     ct: Option<&'a [ChainTeam]>,
     tt: Option<&'a TypeTeam>,
     /// λ en 256es.
@@ -192,10 +194,13 @@ impl<'a> Weighter<'a> {
             (_, Some(t)) => Some((t.data.of(ride), t.win.chains_of(ride))),
         };
         let fam = (familiarity.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        // Indépendant du mode : le goût s'applique aussi en découverte dès qu'il y a une surcouche (décision 1 du §9.1).
+        let taste = team.and_then(|t| t.win.taste_of(ride));
         Self {
             ride,
             mode,
-            w_osm: &v.w_osm[ride.index()],
+            w_osm: taste.map_or(&v.w_osm[ride.index()][..], |(w, _)| w),
+            taste: taste.map(|(_, q)| q),
             ct: tt.map(|t| t.1),
             tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
@@ -236,7 +241,10 @@ impl<'a> Weighter<'a> {
     /// Poids d'une arête de base (pour les morceaux partiels du départ et de l'arrivée).
     pub fn edge<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
         let (attrs, len) = eng.attrs_len(e);
-        let w = cost::edge_weight(self.ride, attrs, len);
+        let w = match self.taste {
+            None => cost::edge_weight(self.ride, attrs, len),
+            Some(q) => cost::taste_weight(self.ride, attrs, len, q),
+        };
         let Some(tt) = self.tt else { return w };
         let (f, z) = tt.flags(e);
         if f & TEAM != 0 {

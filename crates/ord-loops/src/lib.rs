@@ -39,7 +39,10 @@ mod tests_team_sparse;
 mod tests_window;
 
 pub use cache::{CacheStats, WindowCache};
-pub use cost::{is_greenway, multiplier_table, RideType};
+pub use cost::{
+    is_greenway, multiplier_table, taste_class, taste_surface, taste_way, taste_weight, RideType, Taste,
+    TASTE_CLASSES,
+};
 pub use engine::{Engine, EngineError, Params};
 pub use generate::{
     generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, route_geometry,

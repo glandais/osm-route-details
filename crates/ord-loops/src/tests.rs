@@ -6,7 +6,7 @@ use ord_graph::format::{write_graph, GraphFile};
 use ord_graph::overlay::{encode, Overlay, OverlayMeta};
 use ord_graph::view::{build_view, check_view_structure, ViewSpec};
 
-use crate::cost::RideType;
+use crate::cost::{self, RideType, Taste};
 use crate::engine::{Engine, Params};
 use crate::generate::generate;
 use crate::search::{in_head_ext, turn_cost, Weighter, Workspace, INF, NONE};
@@ -237,6 +237,101 @@ fn weights_are_monotone_in_lambda_and_strict_is_infinite_off_team() {
         assert!(high.chain(c_team) < low.chain(c_team));
         assert_eq!(high.chain(c_off), low.chain(c_off));
     }
+}
+
+// --- Goût (sonde du lot 4, §12) -----------------------------------------------------------------------------------
+
+fn team_of_street_two(e: &Engine<Vec<u8>>) -> TeamData {
+    let id = |i: u64, j: u64| 1 + i * 5 + j;
+    let rows: Vec<_> = (0..4).map(|j| (edge_between(e, id(2, j), id(2, j + 1)), ROAD1)).collect();
+    TeamData::build(e, &overlay_of(e, &rows)).unwrap()
+}
+
+#[test]
+fn a_neutral_taste_gives_the_same_window_team_chain_by_chain() {
+    let e = engine_with(&mut grid(5, 300.0), Params::default());
+    let team = team_of_street_two(&e);
+    for vi in 0..2 {
+        let win = e.full_window(vi);
+        let plain = WindowTeam::build(&e, &win, &team);
+        let neutral = WindowTeam::build_with_taste(&e, &win, &team, Some(&Taste::neutral()));
+        assert!(plain.taste_of(RideType::Road).is_none() && plain.taste_of(RideType::Gravel).is_none());
+        for ride in RideType::ALL {
+            let served = crate::engine::rides_of_view(vi).contains(&ride);
+            assert_eq!(neutral.taste_of(ride).is_some(), served, "{ride:?}");
+            if !served {
+                continue;
+            }
+            let (a, b) = (plain.chains_of(ride), neutral.chains_of(ride));
+            assert_eq!(a.len(), b.len());
+            for (x, y) in a.iter().zip(b) {
+                assert_eq!((x.a, x.b, x.z, x.strict), (y.a, y.b, y.z, y.strict));
+            }
+            let (w, q) = neutral.taste_of(ride).unwrap();
+            assert_eq!(w, &win.v.w_osm[ride.index()][..], "{ride:?}");
+            assert!(q.iter().all(|&x| x == 256));
+        }
+        assert!(neutral.bytes() > plain.bytes());
+    }
+}
+
+#[test]
+fn a_taste_scales_every_edge_of_the_view_team_edges_included_in_every_mode() {
+    // Une grille de rues résidentielles et une voie tertiaire hors équipe, accrochée au coin (0, 0).
+    let mut s = grid(5, 300.0);
+    pt(&mut s, 100, -300.0, 0.0);
+    s.way(3000, &[1, 100], &tags("tertiary", &[]));
+    let e = engine_with(&mut s, Params::default());
+    let team = team_of_street_two(&e);
+    let win = e.full_window(0);
+    let v = &win.v;
+    let id = |i: u64, j: u64| 1 + i * 5 + j;
+    let (c_team, c_off, c_other) = (
+        chain_of_edge(v, edge_between(&e, id(2, 1), id(2, 2))),
+        chain_of_edge(v, edge_between(&e, id(1, 1), id(1, 2))),
+        chain_of_edge(v, edge_between(&e, 1, 100)),
+    );
+    // La classe de la rue résidentielle roulée vaut 512 : les rues, roulées ou non, doublent ; la tertiaire non.
+    let street = e.attrs_len(edge_between(&e, id(2, 1), id(2, 2))).0;
+    let tertiary = e.attrs_len(edge_between(&e, 1, 100)).0;
+    assert_ne!(cost::taste_class(street), cost::taste_class(tertiary));
+    let mut taste = Taste::neutral();
+    taste.q8[RideType::Road.index()][cost::taste_class(street)] = 512;
+    let plain = WindowTeam::build(&e, &win, &team);
+    let tasted = WindowTeam::build_with_taste(&e, &win, &team, Some(&taste));
+    let (ctx_plain, ctx_taste) =
+        (TeamCtx { data: &team, win: &plain }, TeamCtx { data: &team, win: &tasted });
+    let double = |w: u32, len_dm: u32| {
+        // Valeur exacte : ⌈2 × len × K / 64⌉ pour une arête (K = 64 en rue résidentielle).
+        assert_eq!(w, 2 * len_dm, "attendu le double exact");
+        w
+    };
+    let len_dm = e.attrs_len(edge_between(&e, id(2, 1), id(2, 2))).1;
+    for (mode, fam) in [(Mode::Discovery, 0.5), (Mode::TeamFirst, 0.5), (Mode::TeamFirst, 0.0)] {
+        let base = Weighter::new(v, Some(ctx_plain), RideType::Road, mode, fam, 768);
+        let got = Weighter::new(v, Some(ctx_taste), RideType::Road, mode, fam, 768);
+        assert_eq!(base.chain(c_other), got.chain(c_other), "{mode:?} : la tertiaire ne bouge pas");
+        if mode == Mode::Discovery {
+            // Sans goût, la découverte rend toujours `w_osm` ; avec, les rues doublent, équipe ou non.
+            assert_eq!(base.chain(c_team), v.w_osm[0][c_team as usize]);
+            assert_eq!(base.chain(c_off), v.w_osm[0][c_off as usize]);
+            double(got.chain(c_team), v.w_osm[0][c_team as usize]);
+            double(got.chain(c_off), v.w_osm[0][c_off as usize]);
+        } else if fam == 0.5 {
+            // λ = 3 hors équipe, 1 en équipe à f = 0,5 : le goût double les deux.
+            assert_eq!(got.chain(c_team), 2 * base.chain(c_team));
+            assert_eq!(got.chain(c_off), 2 * base.chain(c_off));
+        } else {
+            assert!(got.chain(c_team) > base.chain(c_team));
+            assert_eq!(got.chain(c_off), 2 * base.chain(c_off));
+        }
+    }
+    // Les morceaux partiels du départ et de l'arrivée (`edge`) lisent le même goût.
+    let base = Weighter::new(v, Some(ctx_plain), RideType::Road, Mode::Discovery, 0.5, 768);
+    let got = Weighter::new(v, Some(ctx_taste), RideType::Road, Mode::Discovery, 0.5, 768);
+    assert_eq!(got.edge(&e, edge_between(&e, id(2, 1), id(2, 2))), 2 * len_dm);
+    assert_eq!(base.edge(&e, edge_between(&e, id(2, 1), id(2, 2))), len_dm);
+    assert_eq!(got.edge(&e, edge_between(&e, 1, 100)), base.edge(&e, edge_between(&e, 1, 100)));
 }
 
 // --- Attributs d'équipe -------------------------------------------------------------------------------------------
