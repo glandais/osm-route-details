@@ -356,6 +356,19 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
    automatique et les trois propositions varient les figures.
 6. **Seuil de 50 boucles** pour que la distribution de formes de l'équipe remplace la générale.
 
+### 9.1 Décisions (2026-11-17, après le relevé du 4a)
+
+1. **Découverte** : oui, le goût appris s'applique dès qu'une surcouche existe ; sans équipe, OSM seul.
+2. **Pente et trafic** : hors lot ; à revoir après la sonde du goût.
+3. **Juger le goût** : la mise à l'écart de 10 % reste pour les formes ; le goût se juge sur la répartition des classes de
+   voie (grandes routes, cyclables, chemins) des parcours générés contre les vrais, pas sur la reconstruction.
+4. **Lieux d'équipe comme attracteurs** : après le lot 4 ; le 4d s'en tient aux destinations OSM.
+5. **Figure choisie** : non, tirage automatique sur la répartition réelle (sommets à 10 % de D).
+6. **Seuil** : 50 boucles.
+7. **Ordre** : celui du relevé (`ord-loops-lot4-mesures.md`) : sonde du goût dans le banc (toutes arêtes, équipe
+   comprise) → 4c réduit au triangle et au couloir (quadrilatère hors lot) → 4b complet seulement si la sonde divise par
+   deux les écarts de classes → 4d.
+
 ---
 
 ## 10. Étapes, dans l'ordre
