@@ -6,6 +6,7 @@
 //! Les données lues sont **privées** : rien d'ici n'est journalisé.
 
 pub mod agg;
+pub mod csv;
 pub mod deposit;
 pub mod doc;
 pub mod geo;
