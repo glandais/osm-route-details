@@ -128,6 +128,8 @@ s'accumule dans la même passe, trace par trace, mémoire bornée (§3.5).
 
 > **Abandonné le 2026-11-17 (§9.2)** : l'estimateur « roulé contre disponible » ci-dessous aggrave les écarts de classes
 > en GRAVEL (`ord-loops-lot4-sonde.md`). Les classes de goût restent ; l'estimateur sera recalé. Texte gardé pour mémoire.
+> **Remplacé (§9.4)** par un profil recalé par équipe, appris au dépôt par regénération, et une table commune dans le
+> moteur : `ord-loops-lot4-sonde2.md` §10.1 ; spécification au 3b.
 
 **Classe de goût** d'une arête de base, tirée de ses seuls attributs, 6 × 3 × 2 × 2 = 72 cases au plus :
 
@@ -406,6 +408,17 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
 9. **Service** : critères inchangés (P50 par appel ≤ +25 % de `base`, part `OK` en baisse d'un point au plus, aucune
    `PANIC` ni `WINDOW_ESCAPE`) ; un multiplicateur moyen hors de 1 ± 0,10 est signalé.
 
+### 9.4 Décisions (2026-11-17, après la seconde sonde, `ord-loops-lot4-sonde2.md`)
+
+1. **Goût** : profil **par équipe**, appris au dépôt par regénération (recalé, 72 cases, 3 pas, γ = 0,5, amortissement au
+   changement de signe, bornes `[1/3, 3]` par pas et `[1/4, 4]` cumulée, `n0` = 25, au plus 500 boucles par équipe), et
+   **table commune** constante du moteur, repli des requêtes sans équipe ou sans profil. Appliqué à toutes les arêtes de la
+   vue, aux deux curseurs. Remplace le §3.2 (§10.1 du relevé de la seconde sonde).
+2. **Rythme** : le profil se recalcule à **chaque dépôt de nuit**, dans la même passe que la surcouche.
+3. **Normalisation des tables** (A à 0,891) : tranchée **au banc pendant le 3b**, normalisée contre non normalisée.
+4. **Familiarité** : reste à 0,5 partout ; la décision 3 du §9.2 est levée, l'étape « familiarité par type » supprimée.
+5. **Suite** : 3b (profil au dépôt, table commune dans le moteur), puis le 4c avec ses distributions rejouées sur le profil.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -413,8 +426,12 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
 1. 4a : mesures de forme en Rust, sous-commande du banc, relevé du moteur 1.9.2 → `ord-loops-lot4-mesures.md`.
    **Arrêt et relecture** : les §3 à §5 sont confirmés ou réordonnés.
 2. Sonde du coût d'une recherche point à point (§4.5).
-3. 4b : profil au dépôt (goût, formes, destinations), stockage, table de coût ; reconstruction rejouée.
-4. 4c : couloir sur la lentille, puis triangle, puis quadrilatère ; distributions rejouées après chacun.
+3. 4b, révisé après les sondes (§9.2 à §9.4) :
+   - 3a : sondes du goût au banc → `ord-loops-lot4-sonde.md`, `ord-loops-lot4-sonde2.md` (fait) ;
+   - 3b : profil de goût recalé par équipe, appris au dépôt par regénération (au plus 500 boucles), fichier `.ordp.enc`
+     (§3.5), table commune dans le moteur ; normalisation tranchée au banc ; mémoire mesurée dans 3 Gio ; références
+     figées re-bénies, version du moteur montée.
+4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
