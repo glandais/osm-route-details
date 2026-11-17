@@ -172,6 +172,10 @@ fn group_table(out: &mut String, loops: &[&LoopRec], cursor: f64) {
     table_head(out);
     for (name, get) in MEASURES {
         let real: Vec<f64> = loops.iter().filter_map(|l| get(&l.real)).collect();
+        // Le généré des seules boucles dont le réel est mesuré : `crossings` n'est connu que des marches réelles
+        // continues, et le comparer à tous les jeux mêlerait deux populations. Sans effet sur les autres mesures.
+        let ok: Vec<(&LoopRec, &PlayRec)> =
+            ok.iter().filter(|(l, _)| get(&l.real).is_some()).copied().collect();
         let g1: Vec<f64> = ok.iter().filter_map(|(_, p)| first(p).and_then(|r| get(&r.m))).collect();
         let gb: Vec<f64> = ok.iter().filter_map(|(_, p)| best_shape(p).and_then(|r| get(&r.m))).collect();
         let deltas: Vec<f64> =
