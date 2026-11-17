@@ -126,6 +126,9 @@ s'accumule dans la même passe, trace par trace, mémoire bornée (§3.5).
 
 ### 3.2 Goût par classe (plan §7.2)
 
+> **Abandonné le 2026-11-17 (§9.2)** : l'estimateur « roulé contre disponible » ci-dessous aggrave les écarts de classes
+> en GRAVEL (`ord-loops-lot4-sonde.md`). Les classes de goût restent ; l'estimateur sera recalé. Texte gardé pour mémoire.
+
 **Classe de goût** d'une arête de base, tirée de ses seuls attributs, 6 × 3 × 2 × 2 = 72 cases au plus :
 
 | Axe | Valeurs |
@@ -368,6 +371,15 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
 7. **Ordre** : celui du relevé (`ord-loops-lot4-mesures.md`) : sonde du goût dans le banc (toutes arêtes, équipe
    comprise) → 4c réduit au triangle et au couloir (quadrilatère hors lot) → 4b complet seulement si la sonde divise par
    deux les écarts de classes → 4d.
+
+### 9.2 Décisions (2026-11-17, après la sonde du goût, `ord-loops-lot4-sonde.md`)
+
+1. **Le goût « roulé contre disponible » du §3.2 est abandonné** : il double les biais de `K` (GRAVEL 1,20 à 1,48 fois
+   l'écart de `base`). Les classes de goût (72 cases) restent ; s'il y a un goût, il est **recalé** (réel contre généré).
+2. **Seconde sonde, au banc seulement, avant tout le reste** : recalé itéré en 2 à 3 pas et recalé par équipe. Elle
+   tranche entre une table générale par type dans les poids OSM et un profil par équipe appris au dépôt.
+3. **Familiarité** : reste à 0,5 au service pour l'instant ; réglée avec le goût retenu (meilleure combinaison mesurée :
+   familiarité 1 + recalé γ 0,5, ROAD au curseur 0,25).
 
 ---
 
