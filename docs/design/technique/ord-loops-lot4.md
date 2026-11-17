@@ -419,6 +419,28 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
 4. **Familiarité** : reste à 0,5 partout ; la décision 3 du §9.2 est levée, l'étape « familiarité par type » supprimée.
 5. **Suite** : 3b (profil au dépôt, table commune dans le moteur), puis le 4c avec ses distributions rejouées sur le profil.
 
+### 9.5 Décisions (2026-11-17, après la relecture du 3b, avant la campagne 4)
+
+Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.16 (points 24 à 29).
+
+1. **Ordre** : la campagne 4 (§14.13) tourne **avant** la fusion ; on ne fusionne que si les critères tiennent (faits (a) à
+   (d) du §14.12.5, règle du §14.12.4 pour la normalisation, service).
+2. **B ROAD et le mélange** : si B ROAD reste ≥ 1,0 avec `svc`, **retour au mélange de la sonde** (forme de `rt` : chaîner
+   depuis la table neutre en mélangeant à chaque pas avec la table commune de ce pas, poids nu `G_T / (G_T + n0 · G_P / N_P)`,
+   sans plafond `N / (N + n0)`) : pas d'autre levier. La campagne 4 joue donc les deux formes **dans la même campagne**
+   (`svc` et `svc+mix:sonde`).
+3. **Normalisation** : la règle du §14.12.4 tranche sur la campagne 4, **définitivement**.
+4. **Plafond de 500 boucles** : **par type** si `svc+capt:500` fait gagner au moins 0,03 au GRAVEL de A (lecture « toutes »),
+   **sinon par équipe**. Lu sur la forme retenue (`svc-capt500` contre `svc`, ou `svc-sonde-capt500` contre `svc-sonde`).
+5. **Table commune** : mesurée sur 75 % (celle du dépôt), puis **réapprise sur 100 % une seule fois** avant la mise en
+   service, en le disant : nouveau `Common::hash`, nouvelle table commitée (et, si la forme `sonde` est retenue, les mètres
+   des trois pas, qu'exporte la même sous-commande : §14.16, point 26).
+6. **Profil partiel** (1 ou 2 pas dans le budget) : `present` et état `ready`, **sauf** si le dernier profil **complet** date
+   de plus de 7 jours : `stale`, raison `profile`.
+7. **`generator.profile.max_loops`** reçoit une borne haute à la validation : 5 000.
+8. **Mesure en conteneur de 3 Gio** : la séance (§14.13) est rejouée **une fois**, après tout changement d'apprentissage,
+   juste avant la fusion.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -433,8 +455,8 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
      figées re-bénies, version du moteur montée.
      **Fait** sur la branche `feat/ord-loops-lot4-3b` (paquet 1.10.0, API 1.10) : code, tests, mesure en conteneur de 3 Gio
      (relevé : [`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md)). **Reste** : les campagnes 2 à 4 du §14.13
-     (la normalisation et les faits du §14.12.5 ne sont pas tranchés sur une vraie campagne), la mise en service ; écarts :
-     §14.16.
+     (la normalisation et les faits du §14.12.5 ne sont pas tranchés sur une vraie campagne ; commande retenue au §14.16, point
+     29, avec la forme `sonde` du §9.5), la mise en service ; écarts : §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
@@ -2700,7 +2722,8 @@ relevé le dit en tête : la mise en service revient au propriétaire.
 4. Campagne : `$B likeness --label lot4-3b --holdout-share 0.25
    --variants base,rt:0.5+n:3,common,common+norm,svc,svc+norm,svc+cap:0,svc+capt:500` ; contrôles affichés (sans arrêt) :
    `base` = `4686c904975302e7`, `rt05-p3` = `451651c82f8a4b92` / `3fc8e87f9b9fbfcf` (seconde sonde). [estimé] ~70 min, RSS ≤
-   21 Gio.
+   21 Gio. **Commande retenue après les décisions du §9.5, qui ajoute la forme `sonde` dans la même campagne** : voir le
+   §14.16, point 29.
 5. Après le commit 6 : le banc région du lot 6 (`--compare --self-check --budget-mb 1000`) avec `--base-taste common` :
    0 différence fenêtre contre graphe entier ; temps de construction des fenêtres contre `--base-taste neutral`.
 
@@ -2846,8 +2869,92 @@ accès à la production.
     `a_panic_in_the_profile_phase_still_writes_the_overlay_and_gives_its_memory_back` échoue si l'on retire la garde.
 22. **`overlay_deposited_at`** (corrigé, `fix(server)`) : l'en-tête du profil recevait l'heure de fin de la phase, et non
     la date de dépôt écrite dans la surcouche (§14.6). Ce champ n'est ni lu ni exposé.
-23. **Non corrigé, à trancher** : `generator.profile.max_loops` n'a pas de borne haute. La mémoire et le temps de
+23. **À trancher** (tranché par les décisions 6 et 7 du §9.5, codé aux points 24 et 25) : `generator.profile.max_loops` n'a pas de borne haute. La mémoire et le temps de
     l'apprentissage ne sont bornés que par ce réglage et par le budget de 720 s. Un profil `partial` (1 ou 2 pas) est
     servi comme `present`, l'état est `ready`, et le backend ne redépose qu'au changement des traces ou à l'échéance. Le
     §14.1 (question 7) l'accepte ; une variante `stale` raison `profile` sur un profil partiel ferait réessayer la nuit
     suivante.
+
+**Après les décisions du §9.5 (17 novembre, branche `feat/ord-loops-lot4-3b`, rien de poussé ni de déployé)**
+
+24. **Décision 7, `max_loops` borné** (`feat(server)`) : la validation de `generator.profile` refuse `max_loops` hors de
+    `1..=5 000` (`PROFILE_MAX_LOOPS_BOUND`, le défaut reste 500) ; le test de validation couvre 0, 5 001 et la borne. Le
+    plafond entre déjà dans `LearnParams::hash` : aucune incidence sur les profils écrits. **Clôt le point 23, première
+    moitié.**
+25. **Décision 6, profil partiel** (`feat(server)`) : l'en-tête du profil (format 1, champ facultatif, jamais lu par 1.9.2)
+    porte `complete_at`, la date du dernier profil **complet** (tous les pas du réglage, ou ensemble vide) ; un profil
+    partiel la **recopie** de celui qu'il remplace (`Store::read_profile` au dépôt). Choix prudents, que rien ne tranchait :
+    - sans profil précédent lisible (absent, ou appris avec d'autres réglages), un premier profil partiel **ouvre la série** :
+      `complete_at` = sa date. Sept jours de profils seulement partiels, de nuit en nuit, finissent donc en `stale` raison
+      `profile` (le backend redépose au changement des traces ou à l'échéance du TTL de 14 jours, jamais plus tôt : c'est
+      lui qui décide, l'état ne fait que le demander) ;
+    - un en-tête sans `complete_at` vaut la date d'apprentissage ; **« plus de 7 jours »** est strict (exactement 7 jours :
+      `ready`) ;
+    - `Store::status` lit l'horloge (`status_at(c, now)` pour les tests) ; `ready()` ne rend toujours jamais `stale(profile)` :
+      un profil partiel trop vieux est servi comme avant ;
+    - **le contrat ne change pas** : l'objet `profile` reste `state: present` avec ses `steps`, seul l'état de la surcouche passe
+      à `stale` raison `profile` (la description de la raison dans le code dit « ou partiel depuis plus de 7 jours »).
+    Tests : `a_partial_profile_is_ready_unless_the_last_complete_one_is_older_than_seven_days` (complet vieux de 30 jours :
+    `ready` ; partiel avec un complet d'hier : `ready` ; partiel avec un complet de 8 jours : `stale` profil ; exactement 7
+    jours : `ready` ; sans date : `ready` ; ensemble vide : `ready`), `a_complete_profile_dates_itself_and_a_partial_one_carries_the_last_complete_date`
+    (service) et `completeness_and_the_date_of_the_last_complete_profile` (format). **Clôt le point 23.**
+26. **Décision 2, le mélange de la sonde, en option** (`feat(bench)` puis `feat(server)`) : `generator.profile.mix =
+    capped | sonde`, **défaut `capped`** (le 3b tel que codé : mêmes octets, mêmes empreintes `learn` et `common` qu'avant,
+    vérifié sur la fumée). `LearnParams.mix` entre dans `LearnParams::hash` **dès `sonde`** (`;mix=sonde` en fin de texte
+    canonique) et `Common::hash_for(mix)` ajoute à l'empreinte de la table commune celle des mètres des pas : un profil de
+    l'autre forme, ou appris sur d'autres mètres de pas, est `incompatible` (réglages), jamais effacé. La forme `sonde` :
+    - part de la table **neutre** (pas 1 joué à `K`, comme `rt`), pas de `C` ; un type sans boucle garde `C` au bit près ;
+    - à chaque pas `k`, `ln ĝ[c] = w · ln g_T[c] + (1 − w) · ln g_P[c]`, `w = G_T / (G_T + n0 · G_P / N_P)` (poids nu, `w = 0`
+      si le dénominateur n'est pas un nombre strictement positif, donc `N_P = 0` compris ; `w = 0` rend exactement `g_P`, `w
+      ≥ 1` exactement `g_T`), `g_T` sans seuil de kilomètres, `g_P` neutre sous 200 km de réel ; puis signe, γ, `mult` et
+      `q8` comme le pas plafonné. Ce sont les expressions et l'ordre d'opérations de `team_weight`, `blend` et `ratio_table`
+      du banc ;
+    - **la cible de chaque pas est figée** : `Common.steps[k]`, les mètres (réel, généré, boucles), toutes équipes réunies, que
+      joue la table de départ du pas `k` de la **chaîne commune** (`base`, `rc05-p1`, `rc05-p2`), exportés en décimètres par
+      `taste-common --step2 <rc05-p1-report> --step3 <rc05-p2-report>` (constantes `COMMON_STEP_*`, accesseurs
+      `ord_loops::common_step_*`). Les quatre constantes d'avant sont inchangées bit pour bit (diff de `taste_common.rs`).
+      **Écart avec `rt05-p3`** : `rt` mélange avec le `g_P` des jeux **contemporains** des tables d'équipe (chaque équipe joue
+      sa table) ; au dépôt une équipe est seule, la cible est celle de la chaîne commune (tout le monde joue la même table).
+      L'égalité au bit près est celle de l'arithmétique **à entrées égales** (test), pas celle des deux chaînes ;
+    - au-delà de trois pas, le pas 3 se relit ; `normalize` s'applique comme au plafonné (après chaque pas, sur les mètres
+      générés de l'équipe), les cibles des pas restant celles de la chaîne brute ; un profil partiel de la forme `sonde` est
+      plus près de la table neutre que de `C` (T₁ ou T₂ de `rt`), à savoir avant de la mettre en service.
+    **Test demandé** : `the_sonde_mix_gives_the_benchs_rt_tables_bit_for_bit` (`likeness/svc.rs`) : une équipe de 14 boucles
+    ROAD et 6 GRAVEL, trois pas, un joueur jouet, une cible commune synthétique à trois pas (classes sans généré, classe à `w =
+    1`, MTB sans boucle) ; les `q8` du service redonnent ceux de `ChainState::step(RecalTeam, …)` du banc, case par case, aux
+    deux types ; et la forme plafonnée en donne d'autres. Autres tests : départ neutre et type sans donnée
+    (`learn.rs`), poids nu sans le plafond, empreintes (`learn.rs`, `format.rs`), `ProfileMix` (`config.rs`), `mix:sonde`
+    (`variants.rs`), export des pas (`taste_common.rs`).
+27. **Variantes du banc** : `svc+mix:sonde`, combinable avec `norm`, `cap:<n>` et `capt:<n>` (noms `svc-sonde`,
+    `svc-sonde-norm`, `svc-sonde-cap0`, `svc-sonde-capt500`) ; `mix` sans `svc`, `mix:capped` (le défaut n'a pas de suffixe) et
+    deux `mix` sont refusés. `SvcMeta` gagne `mix`. La section « 3b » de la comparaison range les nouvelles colonnes, lit
+    les faits (a) à (d) **pour chaque forme** (`svc` et `svc-sonde`, (c) et (d) contre `rt05-p3` et `common`) et applique la
+    règle de la normalisation **aussi** à la paire `svc-sonde-norm` / `svc-sonde` (rubrique « sonde », pour la décision 3 si la
+    forme `sonde` est retenue ; la décision écrite pour le plafonné ne change pas).
+28. **Fumée** (`likeness --teams C --limit 8 --holdout-share 0.25 --variants base,svc,svc+mix:sonde,svc+mix:sonde+norm`, 1 fil et
+    16 fils, sorties sous `G/lot4/smoke-3b-sonde/`) : **mêmes empreintes de résultat et mêmes `taste_xxh3` à 1 et à 16 fils**
+    pour les quatre variantes ; `svc` (plafonné) garde exactement l'empreinte `learn` (`3f83f013b3a80305`), l'empreinte `common`
+    et l'empreinte de résultat (`2f9a295d010c540c`) de la fumée de la relecture ; `svc-sonde` et `svc-sonde-norm` ont les leurs.
+    Équipe C seule, 22 boucles d'apprentissage, 8 jouées : **les `S / S_base` ne se lisent pas** (A et B absentes).
+29. **Commande exacte de la campagne 4**, une seule campagne, tout le reste arrêté (16 cœurs, 30 Go ; pic ~21 Gio ; [estimé]
+    ~100 min, soit les ~70 min du §14.13 plus trois variantes `svc` de ~10 min) :
+
+    ```bash
+    G=~/.cache/osm-route-details/graph
+    B=./target/release/ord-loops-bench      # cargo build --release -p ord-loops-bench, depuis le commit de la branche
+    $B likeness --label lot4-3b --holdout-share 0.25 \
+      --variants base,rt:0.5+n:3,common,common+norm,svc,svc+norm,svc+cap:0,svc+capt:500,svc+mix:sonde,svc+mix:sonde+norm,svc+mix:sonde+capt:500 \
+      > $G/lot4/lot4-3b.log 2>&1
+    ```
+
+    Variantes produites : `base`, `rt05-p1` à `rt05-p3`, `common`, `common-norm`, `svc`, `svc-norm`, `svc-cap0`, `svc-capt500`,
+    `svc-sonde`, `svc-sonde-norm`, `svc-sonde-capt500`. Contrôles inchangés (`base` = `4686c904975302e7`, `rt05-p3` =
+    `451651c82f8a4b92` / `3fc8e87f9b9fbfcf`). Pas de `svc-sonde-cap0` : la décision 4 ne le demande pas et c'est la variante la
+    plus chère (A sans plafond) ; `svc+cap:0` reste pour la forme plafonnée. **Comment lire, dans l'ordre du §9.5** :
+    (1) B ROAD « toutes » de `svc` aux deux curseurs : < 1,0 aux deux, on garde `svc` (forme plafonnée, défaut) ; sinon
+    `svc-sonde` (décision 2), à condition que ses faits (a) à (d) tiennent ; (2) la normalisation par la règle du §14.12.4
+    lue sur la forme retenue (`norm_rule` ou `norm_rule_sonde` du `compare.json`) ; (3) le plafond par type si
+    `svc-capt500` (ou `svc-sonde-capt500`) gagne au moins 0,03 au GRAVEL de A, « toutes », contre `svc` (ou `svc-sonde`) ;
+    (4) si la forme `sonde` est retenue, `generator.profile.mix = sonde` devient le défaut du service (une ligne de
+    `config.rs`) et l'export à 100 % (décision 5) réécrit aussi les `COMMON_STEP_*`. **À rejouer après tout cela, avant la
+    fusion** (décision 8) : la séance en conteneur de 3 Gio.
