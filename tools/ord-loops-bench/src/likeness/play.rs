@@ -4,7 +4,7 @@
 //! reprise après un échappement de fenêtre), les parcours que le contrôleur indépendant refuse sont écartés, et on
 //! garde le premier parcours rendu et deux « meilleurs des trois ».
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -172,16 +172,17 @@ impl Recovered {
     }
 }
 
-/// `E(X)` : arêtes de base de `X`, chacune une fois (sens ignorés).
-fn edge_set(w: &Walk) -> HashSet<u32> {
+/// `E(G)` d'un parcours généré : ses arêtes de base, chacune une fois (sens ignorés). `E(R)` d'une boucle réelle est
+/// `measure::taken_edges` (les arêtes que le dépôt compte pour elle).
+fn edge_set(w: &Walk) -> BTreeSet<u32> {
     w.edges().collect()
 }
 
 /// La part retrouvée du parcours `generated` dans la boucle `real`, contre la surcouche `o` (§11.8).
 pub fn recovered(
     gf: &MappedGraph,
-    real: &HashSet<u32>,
-    generated: &HashSet<u32>,
+    real: &BTreeSet<u32>,
+    generated: &BTreeSet<u32>,
     o: &Overlay,
     ti: &TypeIndex,
     ride: RideType,
@@ -267,8 +268,8 @@ pub struct PlayCtx<'a> {
     pub iqr: [[f64; 3]; 3],
     /// Mesures du réel de chaque boucle (index de `Task::loop_idx`) pour `best_shape`.
     pub real_shape: &'a [[f64; 3]],
-    /// Arêtes de chaque boucle réelle.
-    pub real_edges: &'a [HashSet<u32>],
+    /// `E(R)` de chaque boucle réelle : les arêtes que le dépôt compte pour elle (`measure::taken_edges`).
+    pub real_edges: &'a [BTreeSet<u32>],
 }
 
 pub fn ride_of(ty: u8) -> RideType {

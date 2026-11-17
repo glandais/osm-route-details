@@ -1,9 +1,10 @@
 //! Les mesures qui lisent le graphe : classes de voie et de revêtement (§3.2), degrés, recouvrement (§11.5).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use ord_graph::attrs::{Access, Attrs, HighwayClass};
 use ord_graph::mmap::MappedGraph;
+use ord_graph_match::agg::{coverage_threshold, union_coverage, Cov};
 use ord_loops::is_greenway;
 use serde::Serialize;
 
@@ -84,7 +85,8 @@ pub fn degree(gf: &MappedGraph, n: u32, e_in: u32, e_out: u32) -> u8 {
 /// Part de longueur du graphe des arêtes prises par deux jambes ou plus (sens confondus), chaque arête comptée une
 /// fois, sur `d_graph`.
 pub fn shared_share(gf: &MappedGraph, walk: &Walk, d_graph: f64) -> f64 {
-    let mut count: HashMap<u32, u32> = HashMap::new();
+    // Ordonné : la somme se fait toujours dans le même ordre (sorties identiques d'un lancement à l'autre).
+    let mut count: BTreeMap<u32, u32> = BTreeMap::new();
     for e in walk.edges() {
         *count.entry(e).or_default() += 1;
     }
@@ -95,6 +97,37 @@ pub fn shared_share(gf: &MappedGraph, walk: &Walk, d_graph: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Les arêtes que la marche **prend au sens du dépôt** (`agg::push_chain_covs` puis `agg::count_track`) : sens
+/// ouvert au vélo, union des portions parcourues dans un sens au moins égale à `coverage_threshold` (la moitié de
+/// l'arête, 50 m au plus). C'est `E(R)` de la reconstruction (§11.8) : une arête qu'une trace réelle ne fait
+/// qu'effleurer (bruit de recalage d'un bout d'appariement au carrefour, quelques mètres sur une rue transversale)
+/// n'est comptée par le dépôt ni pour elle ni pour aucune autre ; comptée à sa pleine longueur, elle gonflerait le
+/// dénominateur, et surtout celui de la part « qu'aucune autre trace ne prend », même dans l'échantillon.
+pub fn taken_edges(gf: &MappedGraph, walk: &Walk) -> BTreeSet<u32> {
+    let mut covs: Vec<Cov> = Vec::with_capacity(walk.legs.len());
+    for l in &walk.legs {
+        let a = gf.edge(l.edge).attrs;
+        if !(if l.reverse { a.bwd_ok() } else { a.fwd_ok() }) {
+            continue;
+        }
+        let len = gf.edge(l.edge).len_dm as f32 / 10.0;
+        covs.push(Cov {
+            edge: l.edge,
+            dir: u8::from(l.reverse),
+            lo: l.lo as f32 * len,
+            hi: l.hi as f32 * len,
+            elen: len,
+        });
+    }
+    let mut out = BTreeSet::new();
+    union_coverage(&mut covs, |edge, _, covered, elen| {
+        if covered + 1e-6 >= coverage_threshold(elen) {
+            out.insert(edge);
+        }
+    });
+    out
 }
 
 /// Les mesures d'une marche et de sa polyligne. `crossings` : celles du contrôleur, quand on les a.
@@ -196,6 +229,27 @@ mod tests {
         assert!(
             (m.compactness - 4.0 * std::f64::consts::PI * 300.0 * 300.0 / (1200.0f64).powi(2)).abs() < 0.05
         );
+    }
+
+    #[test]
+    fn an_edge_only_grazed_is_not_taken() {
+        let dir = tempfile::tempdir().unwrap();
+        let gf = graph(dir.path());
+        let (e1, _) = edge_between(&gf, id(0, 0), id(0, 1));
+        let (e2, _) = edge_between(&gf, id(0, 1), id(1, 1));
+        let (e3, _) = edge_between(&gf, id(0, 1), id(0, 2));
+        let l3 = len_m(&gf, e3) as f32;
+        // (0,0) → (0,1) entière, 12 m sur (0,1)-(1,1) (bruit de recalage), puis 60 m de (0,1)-(0,2) : seuil de 50 m.
+        let mut p2 = full(&gf, id(0, 1), id(1, 1));
+        p2.to = if p2.to > p2.from { p2.from + 12.0 } else { p2.from - 12.0 };
+        let mut p3 = full(&gf, id(0, 1), id(0, 2));
+        p3.to = if p3.to > p3.from { p3.from + 60.0 } else { p3.from - 60.0 };
+        let w = Walk::from_pieces(&gf, &[full(&gf, id(0, 0), id(0, 1)), p2, p3]);
+        assert_eq!(w.legs.len(), 3);
+        let taken = taken_edges(&gf, &w);
+        assert!(taken.contains(&e1) && taken.contains(&e3), "{taken:?}");
+        assert!(!taken.contains(&e2), "12 m sur 300 : effleurée");
+        assert!(l3 > 100.0);
     }
 
     #[test]

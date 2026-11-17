@@ -329,8 +329,8 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         loops.par_iter().map(|l| measure_real(gf, &checker0, l)).collect();
     let real_shape: Vec<[f64; 3]> =
         reals.iter().map(|(m, _)| [m.r_over_d, m.far_pos, m.compactness]).collect();
-    let real_edges: Vec<std::collections::HashSet<u32>> =
-        loops.iter().map(|l| l.walk.edges().collect()).collect();
+    let real_edges: Vec<std::collections::BTreeSet<u32>> =
+        loops.par_iter().map(|l| measure::taken_edges(gf, &l.walk)).collect();
     let mut iqr = [[1.0; 3]; 3];
     for (ty, row) in iqr.iter_mut().enumerate() {
         for (k, cell) in row.iter_mut().enumerate() {
