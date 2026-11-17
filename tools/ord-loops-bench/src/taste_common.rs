@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, ensure, Context as _, Result};
 use clap::Args;
+use ord_graph_match::profile::learn::normalize_q8;
 use ord_loops::TASTE_CLASSES;
 use serde::Deserialize;
 use xxhash_rust::xxh3::xxh3_64;
@@ -106,22 +107,6 @@ pub fn q8_xxh3(q8: &[[u16; TASTE_CLASSES]; 3]) -> String {
         }
     }
     format!("{:016x}", xxh3_64(&bytes))
-}
-
-/// Normalise une table : `M̄ = Σ R·q8 / Σ R` (en 256es), `q8n = round(256·q8 / M̄)` borné à `[256/b, 256·b]` ; inchangée
-/// si `Σ R = 0`.
-pub fn normalize_q8(q8: &[u16; TASTE_CLASSES], r: &[f64; TASTE_CLASSES], bound: f64) -> [u16; TASTE_CLASSES] {
-    let sr: f64 = r.iter().sum();
-    if sr <= 0.0 {
-        return *q8;
-    }
-    let mean: f64 = r.iter().zip(q8).map(|(w, &q)| w * f64::from(q)).sum::<f64>() / sr;
-    let (lo, hi) = ((256.0 / bound).round(), (256.0 * bound).round());
-    let mut out = [0u16; TASTE_CLASSES];
-    for (o, &q) in out.iter_mut().zip(q8) {
-        *o = (256.0 * f64::from(q) / mean).round().clamp(lo, hi) as u16;
-    }
-    out
 }
 
 /// Ce que l'export calcule, avant l'écriture.
