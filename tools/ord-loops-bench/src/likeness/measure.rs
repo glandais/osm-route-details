@@ -10,11 +10,6 @@ use serde::Serialize;
 use super::shape;
 use super::walk::{Join, Trace, Walk};
 
-/// Les classes de voie du §3.2 : grande route, tertiaire, petite route, rue, voie cyclable ou verte, chemin.
-pub const WAY_NAMES: [&str; 6] = ["major", "tertiary", "minor", "street", "cycle", "path"];
-/// Les groupes de revêtement : revêtu connu, présumé, non revêtu connu.
-pub const SURFACE_NAMES: [&str; 3] = ["paved", "presumed", "unpaved"];
-
 /// Tout ce qu'on mesure d'une marche, réelle ou générée (§11.5).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Measures {
@@ -33,9 +28,9 @@ pub struct Measures {
     pub shared_share: f64,
     /// Croisements du contrôleur ; `None` pour une marche réelle non continue.
     pub crossings: Option<u32>,
-    /// Parts de longueur par classe de voie ([`WAY_NAMES`]).
+    /// Parts de longueur par classe de voie : grande route, tertiaire, petite route, rue, voie cyclable ou verte, chemin.
     pub way: [f64; 6],
-    /// Parts de longueur par groupe de revêtement ([`SURFACE_NAMES`]).
+    /// Parts de longueur par groupe de revêtement : revêtu connu, présumé, non revêtu connu.
     pub surface: [f64; 3],
     /// Part sur un itinéraire balisé.
     pub marked: f64,

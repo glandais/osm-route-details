@@ -7,9 +7,6 @@
 //! part ailleurs ; les équipes y sont lettrées, une boucle y est désignée par `(lettre, i)`, et seuls des agrégats et
 //! des empreintes en sortent.
 
-// Retiré quand le dernier module est branché.
-#![allow(dead_code)]
-
 pub mod export;
 #[cfg(test)]
 mod fixture;
@@ -176,6 +173,9 @@ pub fn read_letters(path: &std::path::Path) -> Result<std::collections::BTreeMap
         .collect()
 }
 
+/// Surcouche complète (avec ses kilomètres comptés) et variante « écart ».
+type Built = Result<((Overlay, f64), Option<Overlay>)>;
+
 /// Une phase : durée et pic de mémoire anonyme.
 struct Phases {
     sampler: AnonSampler,
@@ -262,19 +262,43 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         max_km: a.max_km,
         loop_gap: a.loop_gap,
     };
-    let (loops, counts) = export::retain(gf, &ing, &jobs, &rp, a.limit);
+    let (loops, mut counts) = export::retain(gf, &ing, &jobs, &rp, a.limit);
+    // La mise à l'écart : stable, par rang d'empreinte de l'id de trace, équipe par équipe.
+    let held: std::collections::HashSet<usize> = if a.no_holdout {
+        std::collections::HashSet::new()
+    } else {
+        holdout::select(&loops, a.holdout_share, a.holdout_min_loops)
+    };
+    for &i in &held {
+        counts[loops[i].team].holdout += 1;
+    }
     ph.end("marches et retenue");
 
     // 5. Les surcouches, par le code du dépôt.
     let team_ids: Vec<usize> = (0..ing.teams.len()).collect();
-    let built: Vec<Result<(Overlay, f64)>> = team_ids
+    // Complète, et « écart » (sans les boucles mises à l'écart) pour les équipes qui en ont.
+    let skips: Vec<std::collections::HashSet<usize>> = team_ids
+        .iter()
+        .map(|&t| held.iter().filter(|&&i| loops[i].team == t).map(|&i| loops[i].track).collect())
+        .collect();
+    let built: Vec<Built> = team_ids
         .par_iter()
-        .map(|&t| holdout::build_overlay(gf, &seg, &poly, &ing, &jobs, t, &std::collections::HashSet::new()))
+        .map(|&t| {
+            let full =
+                holdout::build_overlay(gf, &seg, &poly, &ing, &jobs, t, &std::collections::HashSet::new())?;
+            let gap = if skips[t].is_empty() {
+                None
+            } else {
+                Some(holdout::build_overlay(gf, &seg, &poly, &ing, &jobs, t, &skips[t])?.0)
+            };
+            Ok((full, gap))
+        })
         .collect();
     let mut overlays: Vec<Overlay> = Vec::new();
+    let mut gap_overlays: Vec<Option<Overlay>> = Vec::new();
     let mut overlay_checks: Vec<holdout::OverlayCheck> = Vec::new();
     for (t, b) in built.into_iter().enumerate() {
-        let (o, km) = b?;
+        let ((o, km), gap) = b?;
         let differing = paths
             .overlays
             .as_ref()
@@ -285,10 +309,11 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             team: letter_of[t].clone(),
             edges: o.len(),
             km_counted: km,
-            holdout_edges: None,
+            holdout_edges: gap.as_ref().map(Overlay::len),
             differing_edges: differing,
         });
         overlays.push(o);
+        gap_overlays.push(gap);
     }
     ph.end("surcouches du dépôt");
 
@@ -357,13 +382,32 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             plays[tasks[k].loop_idx].push(rec);
         }
         wins.drop_team(env.key);
-        eprintln!(
-            "équipe {} : {} boucles, {} jeux, {:.1} s",
-            letter_of[t],
-            mine.len(),
-            tasks.len(),
-            tt.elapsed().as_secs_f64()
-        );
+        // Les boucles mises à l'écart, rejouées sur la surcouche sans elles : même requête, même graine.
+        if let Some(gap) = &gap_overlays[t] {
+            let (team, team_check) = build_team(&engine, &graph_index, gap, &letter_of[t])?;
+            let checker =
+                Checker::with_tables(gf, Some(gap), Config::default(), &graph_index, Some(&team_check));
+            let env = play::TeamEnv {
+                key: 2 * t as u64 + 1,
+                overlay: gap,
+                types: TypeIndex::of(gap),
+                team: &team,
+                checker: &checker,
+            };
+            let mut tasks: Vec<play::Task> = Vec::new();
+            for &i in mine.iter().filter(|i| held.contains(i)) {
+                for &c in &a.cursors {
+                    let req = play::request_of(gf, &loops[i], c, a.seed)?;
+                    tasks.push(play::Task { loop_idx: i, cursor: c, req, ride: play::ride_of(loops[i].ty) });
+                }
+            }
+            tasks.sort_by_key(play::locality_key);
+            for (k, rec) in play::run_tasks(&ctx, &env, &tasks, "holdout", &mut workspaces) {
+                plays[tasks[k].loop_idx].push(rec);
+            }
+            wins.drop_team(env.key);
+        }
+        eprintln!("équipe {} : {} boucles, {:.1} s", letter_of[t], mine.len(), tt.elapsed().as_secs_f64());
     }
     ph.end("jeux");
 
@@ -379,7 +423,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             d_km: l.trace.d_graph / 1000.0,
             matched_share: l.matched_share,
             contiguous: l.walk.is_continuous(),
-            holdout: false,
+            holdout: held.contains(&i),
             poly_vs_graph: if l.trace.d_graph > 0.0 {
                 (l.trace.l_poly - l.trace.d_graph).abs() / l.trace.d_graph
             } else {
