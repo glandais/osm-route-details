@@ -169,11 +169,43 @@ fn step_tables(s: &mut String, cmp: &Compare, done: &[Done], team: &str, reading
     }
 }
 
-/// La fuite par pas et par groupe : `S/S_base` « écart, dans l'échantillon » moins « écart ».
+/// La fuite de la surcouche par pas et par groupe : `S/S_base` « écart, dans l'échantillon » moins « écart ».
 fn leak(cmp: &Compare, g: &(&str, f64), variant: &str) -> Option<f64> {
     let a = cell(&cmp.criterion, "toutes", Reading::GapIn, g, variant)?.0;
     let b = cell(&cmp.criterion, "toutes", Reading::Gap, g, variant)?.0;
     Some(a - b)
+}
+
+/// Le surapprentissage par pas et par groupe : `S/S_base` « écart, dans l'échantillon » (boucles mises à l'écart) moins
+/// « apprentissage » (boucles sur lesquelles la table apprend), même surcouche complète, même table. Positif : les boucles
+/// qui n'ont pas servi se lisent moins bien que celles qui ont servi. `p0` vaut 0 par construction.
+fn overfit(cmp: &Compare, team: &str, g: &(&str, f64), variant: &str) -> Option<f64> {
+    let a = cell(&cmp.criterion, team, Reading::GapIn, g, variant)?.0;
+    let b = cell(&cmp.criterion, team, Reading::Train, g, variant)?.0;
+    Some(a - b)
+}
+
+/// Une différence de lectures pour un groupe et une variante.
+type DiffFn<'a> = &'a dyn Fn(&(&str, f64), &str) -> Option<f64>;
+
+/// Une table « pas × groupe » d'une différence de lectures.
+fn diff_table(s: &mut String, c: &ChainSummary, base: &str, gs: &[(&str, f64)], f: DiffFn<'_>) {
+    let _ = writeln!(
+        s,
+        "| pas | variante |{}\n|---|---|{}",
+        gs.iter().map(|g| format!(" {} |", group_name(g))).collect::<String>(),
+        gs.iter().map(|_| "---:|").collect::<String>()
+    );
+    for (label, name) in steps_of(c, base) {
+        let _ = writeln!(
+            s,
+            "| {label} | {name} |{}",
+            gs.iter()
+                .map(|g| format!(" {} |", f(g, name).map_or_else(|| "-".to_string(), |x| format!("{x:+.2}"))))
+                .collect::<String>()
+        );
+    }
+    s.push('\n');
 }
 
 fn leak_md(s: &mut String, cmp: &Compare, done: &[Done]) {
@@ -181,30 +213,29 @@ fn leak_md(s: &mut String, cmp: &Compare, done: &[Done]) {
     let gs = groups(&cmp.conditions.cursors);
     let _ = writeln!(
         s,
-        "La fuite de l'apprentissage, par pas : `S/S_base` en lecture « écart, dans l'échantillon » moins « écart » (négatif : l'échantillon se lit mieux que l'écart, c'est la fuite ; au-delà de 0,10 en valeur absolue au dernier \
-         pas, la chaîne surapprend, §13.11 point 3).\n"
+        "La fuite de la surcouche, par pas : `S/S_base` en lecture « écart, dans l'échantillon » moins « écart » (§13.4 ; \
+         négatif : les boucles mises à l'écart se lisent mieux quand leurs propres traces sont dans la surcouche). Elle ne \
+         mesure **pas** le surapprentissage des tables : aucune table n'apprend sur ces boucles.\n"
     );
     for c in &cmp.chains {
         let _ = writeln!(s, "**{}**\n", c.stem);
-        let _ = writeln!(
-            s,
-            "| pas | variante |{}\n|---|---|{}",
-            gs.iter().map(|g| format!(" {} |", group_name(g))).collect::<String>(),
-            gs.iter().map(|_| "---:|").collect::<String>()
-        );
-        for (label, name) in steps_of(c, base) {
-            let _ = writeln!(
-                s,
-                "| {label} | {name} |{}",
-                gs.iter()
-                    .map(|g| format!(
-                        " {} |",
-                        leak(cmp, g, name).map_or_else(|| "-".to_string(), |x| format!("{x:+.2}"))
-                    ))
-                    .collect::<String>()
-            );
+        diff_table(s, c, base, &gs, &|g, n| leak(cmp, g, n));
+    }
+    let _ = writeln!(
+        s,
+        "Le surapprentissage, par pas : `S/S_base` en lecture « écart, dans l'échantillon » moins « apprentissage » (même \
+         surcouche complète, même table ; positif : les boucles mises à l'écart se lisent moins bien que celles sur lesquelles \
+         la table apprend ; au-delà de 0,10 au dernier pas, la chaîne surapprend, §13.11 point 3 lu ainsi, §13.13). Toutes \
+         équipes, puis A et B (indicatif : leurs boucles mises à l'écart sont peu nombreuses).\n"
+    );
+    for c in &cmp.chains {
+        for team in ["toutes", "A", "B"] {
+            if team != "toutes" && cmp.criterion.iter().all(|r| r.team != team) {
+                continue;
+            }
+            let _ = writeln!(s, "**{}, {team}**\n", c.stem);
+            diff_table(s, c, base, &gs, &|g, n| overfit(cmp, team, g, n));
         }
-        s.push('\n');
     }
 }
 
@@ -626,7 +657,11 @@ fn reading_md(s: &mut String, cmp: &Compare, done: &[Done]) {
         );
     }
     // La plus grande fuite et la dérive d'échelle.
-    let _ = writeln!(s, "\n**Fuite la plus grande, dérive d'échelle la plus forte** :\n");
+    let _ = writeln!(
+        s,
+        "\n**Fuite de la surcouche la plus grande (en valeur absolue), surapprentissage le plus fort (toutes équipes), dérive \
+         d'échelle la plus forte** :\n"
+    );
     for c in &cmp.chains {
         let mut worst: Option<(f64, usize, String)> = None;
         for (k, n) in c.steps.iter().enumerate() {
@@ -634,6 +669,16 @@ fn reading_md(s: &mut String, cmp: &Compare, done: &[Done]) {
                 if let Some(x) = leak(cmp, g, n) {
                     if worst.as_ref().is_none_or(|w| x.abs() > w.0.abs()) {
                         worst = Some((x, k + 1, group_name(g)));
+                    }
+                }
+            }
+        }
+        let mut over: Option<(f64, usize, String)> = None;
+        for (k, n) in c.steps.iter().enumerate() {
+            for g in &gs {
+                if let Some(x) = overfit(cmp, "toutes", g, n) {
+                    if over.as_ref().is_none_or(|w| x > w.0) {
+                        over = Some((x, k + 1, group_name(g)));
                     }
                 }
             }
@@ -649,9 +694,10 @@ fn reading_md(s: &mut String, cmp: &Compare, done: &[Done]) {
         }
         let _ = writeln!(
             s,
-            "- {} : fuite {} ; `mult. moyen` {}",
+            "- {} : fuite de la surcouche {} ; surapprentissage {} ; `mult. moyen` {}",
             c.stem,
             worst.map_or_else(|| "-".to_string(), |(x, k, g)| format!("{x:+.2} (p{k}, {g})")),
+            over.map_or_else(|| "-".to_string(), |(x, k, g)| format!("{x:+.2} (p{k}, {g})")),
             far.map_or_else(|| "-".to_string(), |(x, k, o)| format!("{x:.3} (p{k}, {o})"))
         );
     }
@@ -907,6 +953,13 @@ mod tests {
         // La fuite de p3 : (S_in − S_gap) / S_base, 0,04 / 0,40 = 0,10 au curseur 0,25 seulement.
         assert!((leak(&cmp, &g, "rt05-p3").unwrap() - 0.10).abs() < 1e-9);
         assert!(leak(&cmp, &("ROAD", 1.0), "rt05-p3").unwrap().abs() < 1e-9);
+        // Le surapprentissage de p3 : mises à l'écart (0,34 / 0,40) contre apprentissage (0,30 / 0,40), même surcouche ;
+        // nul ailleurs, et nul à p0 par construction ; par équipe aussi.
+        assert!((overfit(&cmp, "toutes", &g, "rt05-p3").unwrap() - 0.10).abs() < 1e-9);
+        assert!((overfit(&cmp, "A", &g, "rt05-p3").unwrap() - 0.10).abs() < 1e-9);
+        assert!(overfit(&cmp, "toutes", &("ROAD", 1.0), "rt05-p3").unwrap().abs() < 1e-9);
+        assert!(overfit(&cmp, "toutes", &g, "rt05-p1").unwrap().abs() < 1e-9);
+        assert!(overfit(&cmp, "toutes", &g, "base").unwrap().abs() < 1e-12);
         // Le rendu : l'ordre des pas, p0 = 1.00 d'abord.
         let md = markdown(&cmp, &done);
         let t = md.find("### rt05 — lecture « toutes »").expect("table de chaîne");

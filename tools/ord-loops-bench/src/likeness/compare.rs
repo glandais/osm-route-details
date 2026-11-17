@@ -58,25 +58,39 @@ pub enum Reading {
     All,
     /// Les boucles mises à l'écart, jouées sur la surcouche « écart », tables apprises sans elles : la lecture honnête.
     Gap,
-    /// Les mêmes boucles, jouées sur la surcouche complète : l'écart avec `Gap` mesure la fuite de l'apprentissage.
+    /// Les mêmes boucles, jouées sur la surcouche complète : l'écart avec `Gap` mesure la fuite de la surcouche (leurs
+    /// propres traces y sont).
     GapIn,
+    /// Les boucles **non** mises à l'écart (celles sur lesquelles les tables recalées apprennent), sur la surcouche
+    /// complète : l'écart entre `GapIn` et elle, même surcouche, même table, mesure le surapprentissage (§13.13).
+    Train,
 }
 
 impl Reading {
-    pub const ALL: [Reading; 3] = [Reading::All, Reading::Gap, Reading::GapIn];
+    pub const ALL: [Reading; 4] = [Reading::All, Reading::Gap, Reading::GapIn, Reading::Train];
 
     pub fn name(self) -> &'static str {
         match self {
             Self::All => "toutes",
             Self::Gap => "écart",
             Self::GapIn => "écart, dans l'échantillon",
+            Self::Train => "apprentissage",
         }
     }
 
     fn overlay(self) -> &'static str {
         match self {
-            Self::All | Self::GapIn => "full",
+            Self::All | Self::GapIn | Self::Train => "full",
             Self::Gap => "holdout",
+        }
+    }
+
+    /// La boucle est-elle dans le groupe de cette lecture ?
+    fn keeps(self, holdout: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::Gap | Self::GapIn => holdout,
+            Self::Train => !holdout,
         }
     }
 }
@@ -173,7 +187,7 @@ fn group<'a>(
 ) -> Vec<(&'a LoopRec, Option<&'a GenRoute>)> {
     loops
         .iter()
-        .filter(|l| l.ty == ty && team.is_none_or(|t| l.team == t) && (reading == Reading::All || l.holdout))
+        .filter(|l| l.ty == ty && team.is_none_or(|t| l.team == t) && reading.keeps(l.holdout))
         .map(|l| {
             let p: Option<&PlayRec> =
                 l.plays.iter().find(|p| p.overlay == reading.overlay() && p.cursor == cursor);
@@ -317,10 +331,8 @@ fn criterion_rows(done: &[Done], cursors: &[f64]) -> Vec<CritRow> {
         .collect();
     for team in teams_of_interest {
         for reading in Reading::ALL {
-            // Par équipe : « toutes » et « écart » seulement (le tableau 5 du §12.5).
-            if team.is_some() && reading == Reading::GapIn {
-                continue;
-            }
+            // Par équipe, les quatre lectures : le tableau 5 du §12.5 n'en montre que deux (« toutes » et « écart »), le
+            // surapprentissage par équipe (§13.13) lit « écart, dans l'échantillon » contre « apprentissage ».
             for (ty, iq) in &iqrs {
                 for &cursor in cursors {
                     let s_of = |d: &Done| {
