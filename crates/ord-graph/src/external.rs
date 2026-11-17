@@ -586,7 +586,8 @@ pub fn build_external(
         let mut prev: Option<(i64, i64, i64)> = None;
         let mut e = 0u64;
         while let Some(ed) = sorted.pull()? {
-            if e >= 1 << 31 {
+            // Même limite que `write_graph` : moins de 2^31 arêtes (le bit 31 porte le sens).
+            if e + 1 >= 1 << 31 {
                 return Err(FormatError::Build("plus de 2^31 arêtes".into()).into());
             }
             let ident = (ed.a.get(), ed.way_id.get(), ed.b.get());
@@ -652,6 +653,10 @@ pub fn build_external(
                 edges.pull()?;
             }
             writer.put_cell(&cn, &cd, &co, geom_len)?;
+        }
+        // Les cellules couvrent tous les sommets : rien ne doit rester dans les trois flux.
+        if nodes.pull()?.is_some() || dirs.peek()?.is_some() || edges.peek()?.is_some() {
+            return Err(BuildError::Source("écriture : sommets ou arêtes hors des cellules".into()).into());
         }
     }
     // La géométrie passe de l'ordre des ways à celui des arêtes, droit dans le fichier de sortie. Le tri des

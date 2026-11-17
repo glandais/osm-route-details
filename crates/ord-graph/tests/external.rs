@@ -159,6 +159,112 @@ fn random_source(seed: u64) -> MemSource {
     s
 }
 
+// --- Oracle : le code d'avant la découpe partagée ------------------------------------------------------
+
+/// Les deux constructions partagent `keep_way` et `cut_way` (§13.3, point 8) : se comparer l'une à l'autre ne
+/// dit rien d'une erreur dans ce code commun. Ces sommes viennent du code de `develop` (`b47ae2d`), d'avant la
+/// construction hors mémoire, sur les mêmes entrées : elles gardent une référence indépendante de la découpe.
+/// Une somme : xxh3 de « nom=somme; » pour chaque section hors `STATS`, outil `test`, date 1 700 000 000.
+const ORACLE_RANDOM: [u64; 60] = [
+    0x44757c4856d77639,
+    0xed0daa89b0286efb,
+    0xaac1ca9dd0b169af,
+    0x3f340b8340a27112,
+    0x5fe8a9d8c1122011,
+    0x4710809034d2b23c,
+    0x578168ce40a856a3,
+    0x1d3a01802078d267,
+    0x8c303f398115232e,
+    0xf1beea3dd3886b63,
+    0xbfaf927814aa6beb,
+    0xc264dbc72bc5bb06,
+    0x5dfd1bc488d88ab2,
+    0x9cb90804218c7a4e,
+    0x3599e5ba34f8309a,
+    0xcd4785e81f1c443c,
+    0x755363b0945c87f7,
+    0x6eb9e210f01439de,
+    0x30faaface04689fa,
+    0x9b0c00183fdf525f,
+    0x6bce1a211e8ee33c,
+    0x237271a6159f8ecf,
+    0x5559d85091dffb3d,
+    0x78fdc8d3953d1453,
+    0x50c14b710553a6f0,
+    0x165ffb91f5018463,
+    0xfe007aede173fd10,
+    0x011550813f51556e,
+    0xca3988c6c79b50f1,
+    0x1455e9025cbc672d,
+    0x3df10cebca9296f0,
+    0x487ded3f2ed8a8cd,
+    0xf1e45ebd07a0ddd7,
+    0x40f23b2f4fadfe5a,
+    0xdd140a21f5a4d569,
+    0x369d098ab1b03e80,
+    0x7fff1114b3afb6eb,
+    0xe319538a690abd7a,
+    0xd6e870c00cc17db7,
+    0x4a95dca47a5f34ee,
+    0x4a3609e0f4b424ec,
+    0xc2dccbb9265e5de6,
+    0x4155c7c41d691e5a,
+    0x4a428b9f6bdfdfc7,
+    0xf75f5ad5f17f6cf2,
+    0x87e7fc85baab7d32,
+    0x8c596796b31cc5c7,
+    0x4399289866ed7fe5,
+    0x5ac046f9703e2e02,
+    0x6a7fa927051954fa,
+    0xd5487fd54b5bc6d9,
+    0x6fd568f69ceeb483,
+    0x55522c247eca4991,
+    0x21f95fa1517390c9,
+    0x8e3d34bf8316295d,
+    0x557d5b6e81611573,
+    0xadccca3623539de0,
+    0x37814a93a4c9e192,
+    0x49087254f040a375,
+    0xc08e5dd8a1cc8203,
+];
+const ORACLE_DENSE: u64 = 0xf59670f898c031e6;
+#[cfg(feature = "pbf")]
+const ORACLE_MINI: u64 = 0x8aedcc66a86535f6;
+
+fn digest(path: &Path) -> u64 {
+    let g = GraphFile::open(std::fs::read(path).unwrap()).unwrap();
+    let s: String = g.section_digests().iter().map(|(n, d)| format!("{n}={d:016x};")).collect();
+    xxhash_rust::xxh3::xxh3_64(s.as_bytes())
+}
+
+/// Les deux constructions retrouvent, octet pour octet, le graphe du code d'avant.
+fn assert_oracle(src: &mut dyn FnMut() -> Box<dyn OsmSource>, zoom: u8, want: u64, what: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let (mem, _) = in_memory(&mut *src(), zoom, dir.path());
+    assert_eq!(digest(&mem), want, "{what} : en mémoire contre develop");
+    let (ext, _) = external(&mut *src(), zoom, 1, dir.path());
+    assert_eq!(digest(&ext), want, "{what} : hors mémoire contre develop");
+}
+
+#[test]
+fn same_graphs_as_develop() {
+    for (seed, &want) in ORACLE_RANDOM.iter().enumerate() {
+        let zoom = [11u8, 13, 15][seed % 3];
+        assert_oracle(&mut || Box::new(random_source(seed as u64)), zoom, want, &format!("graine {seed}"));
+    }
+    assert_oracle(&mut || Box::new(dense_source()), 13, ORACLE_DENSE, "réseau dense");
+    #[cfg(feature = "pbf")]
+    {
+        let pbf = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/mini.osm.pbf");
+        assert_oracle(
+            &mut || Box::new(ord_graph::pbf::PbfSource::open(&pbf).unwrap()),
+            11,
+            ORACLE_MINI,
+            "mini-PBF",
+        );
+    }
+}
+
 #[test]
 fn random_graphs_same_bytes_whatever_budget_and_threads() {
     let mut total = BuildStats::default();
@@ -192,9 +298,8 @@ fn random_graphs_same_bytes_whatever_budget_and_threads() {
     assert!(max_cells > 4, "cellules : {max_cells}");
 }
 
-#[test]
-fn multi_level_merge_same_bytes() {
-    // Un réseau assez gros pour plus de K_MAX séries de références au budget minimal.
+/// Un réseau assez gros pour plus de K_MAX séries de références au budget minimal.
+fn dense_source() -> MemSource {
     let mut s = MemSource::default();
     let mut r = Rng(42);
     for i in 0..3_000i64 {
@@ -204,6 +309,12 @@ fn multi_level_merge_same_bytes() {
         let refs: Vec<i64> = (0..8).map(|_| 1 + r.below(3_000) as i64).collect();
         s.way(w + 1, &refs, &[("highway", "residential")]);
     }
+    s
+}
+
+#[test]
+fn multi_level_merge_same_bytes() {
+    let s = dense_source();
     let dir = tempfile::tempdir().unwrap();
     let (mem, _) = in_memory(&mut s.clone(), 13, dir.path());
     let (ext, report) = external(&mut s.clone(), 13, 1, dir.path());

@@ -418,3 +418,19 @@ Dix points relevés à la relecture, corrigés. Les octets écrits ne changent p
 |---|---|
 | Tests | Ceux du §13.2, plus : paquets de géométrie sur plusieurs passes et paquet plus petit qu'une géométrie, avec contrôle de la mémoire tenue ; capacité du tampon de tri ; reste d'une construction morte supprimé, dossier d'une construction en cours gardé ; quatre constructions simultanées dans le même dossier ; arrêt de la source à la première erreur de passe 1. `clippy -D warnings` propre |
 | Andorre | Le binaire d'avant ces corrections et celui d'après, en mémoire, puis `--external` à 1 Mo et 1 fil, puis au budget par défaut : octets identiques de la fin de l'en-tête au début de `STATS` |
+
+### 13.4 Seconde relecture (17 novembre 2026)
+
+1. **Oracle de la découpe.** Depuis le point 8 du §13.3, les deux constructions partagent `keep_way` et
+   `cut_way`. Une erreur dans ce code commun passait donc tous les tests d'équivalence. Le test
+   `same_graphs_as_develop` (`tests/external.rs`) fige les sommes des sections (hors `STATS`) que le code de
+   `develop` (`b47ae2d`, d'avant ce chantier) produit sur les mêmes entrées : les 60 graphes aléatoires, le réseau
+   dense et le mini-PBF. Les deux constructions doivent les retrouver. Contrôle : une coupe en trop introduite
+   dans `cut_way` ne fait échouer que ce test, les huit autres passent.
+2. **Limite de 2^31 arêtes** : le chemin hors mémoire refusait à partir de 2^31 + 1 arêtes, `write_graph` dès
+   2^31. Les deux refusent maintenant au même compte.
+3. **Fin de l'écriture des blocs** : après la dernière cellule, les flux de sommets, d'arêtes et d'arêtes
+   orientées doivent être vides ; sinon, l'erreur est explicite au lieu d'un échec de `verify()`.
+
+Vérifié : `cargo test --workspace` (839 tests) et `clippy -D warnings` ; Andorre, en mémoire et en `--external`
+à 1 Mo, identique au binaire de `develop`, de la fin de l'en-tête au début de `STATS`.
