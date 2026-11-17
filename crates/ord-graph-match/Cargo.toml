@@ -9,6 +9,9 @@ license.workspace = true
 
 [dependencies]
 ord-graph = { workspace = true, features = ["mmap", "parallel"] }
+# Le profil de goût rejoue le moteur (lot 4, 3b) ; ni l'un ni l'autre ne dépend de ce crate : pas de cycle.
+ord-loops.workspace = true
+ord-loops-check.workspace = true
 
 rayon.workspace = true
 rstar.workspace = true

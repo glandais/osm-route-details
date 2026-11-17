@@ -15,8 +15,8 @@ use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_loops::{
-    generate_with_diagnostics_in, Bearing8, Engine, Failure, LatLon, Request, RideType, Route, Taste,
-    TeamCtx, TeamData, Window, WindowCache, WindowTeam, Workspace,
+    generate_with_diagnostics_in, Engine, Failure, Request, RideType, Route, Taste, TeamCtx, TeamData,
+    Window, WindowCache, WindowTeam, Workspace,
 };
 use ord_loops_check::{team_edge, Checker, TypeIndex};
 use serde::Serialize;
@@ -24,10 +24,10 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use super::export::Loop;
 use super::measure::{class_lengths, measure, Measures};
-use super::shape;
 use super::variants::TeamWindowCounters;
 use super::walk::{start_latlon, Walk};
 use crate::record::failure_code;
+use ord_graph_match::profile::collect::{bearing_of, loop_request, request_distance_m};
 
 pub type Eng = Engine<Mmap>;
 
@@ -315,36 +315,7 @@ pub struct PlayCtx<'a> {
     pub real_edges: &'a [BTreeSet<u32>],
 }
 
-pub fn ride_of(ty: u8) -> RideType {
-    match ty {
-        0 => RideType::Road,
-        1 => RideType::Gravel,
-        _ => RideType::Mtb,
-    }
-}
-
-/// Cap arrondi à 45° (`None` si le barycentre est à moins de 2 % de la longueur du départ).
-fn bearing_of(pts: &[shape::Pt], l_poly: f64) -> Option<Bearing8> {
-    let c = shape::barycentre(pts);
-    let o = pts[0];
-    if shape::dist(o, c) < 0.02 * l_poly {
-        return None;
-    }
-    let h = shape::heading_deg(o, c);
-    let k = ((h / 45.0).round() as i64).rem_euclid(8);
-    Some(
-        [
-            Bearing8::N,
-            Bearing8::NE,
-            Bearing8::E,
-            Bearing8::SE,
-            Bearing8::S,
-            Bearing8::SW,
-            Bearing8::W,
-            Bearing8::NW,
-        ][k as usize],
-    )
-}
+pub use ord_graph_match::profile::collect::ride_of;
 
 /// La requête de la boucle réelle `lp` à la valeur `cursor` du curseur (§11.6).
 pub fn request_of(gf: &MappedGraph, lp: &Loop, cursor: f64, seed: u64) -> Result<Request> {
@@ -353,17 +324,16 @@ pub fn request_of(gf: &MappedGraph, lp: &Loop, cursor: f64, seed: u64) -> Result
         ord_server::generator::cursor::hundredths(cursor)
             .ok_or_else(|| anyhow!("curseur hors de [0, 1] : {cursor}"))?,
     );
-    Ok(Request {
-        start: LatLon::new(lat, lon),
-        end: None,
-        bearing: bearing_of(&lp.trace.pts, lp.trace.l_poly),
-        distance_m: (lp.trace.d_graph / 1000.0).round().max(1.0) * 1000.0,
-        ride_type: ride_of(lp.ty),
-        mode: applied.mode,
-        familiarity: applied.familiarity,
-        off_team_cost_q8: applied.off_team_cost_q8,
-        seed: lp.id_hash ^ seed,
-    })
+    Ok(loop_request(
+        (lat, lon),
+        bearing_of(&lp.trace.pts, lp.trace.l_poly),
+        request_distance_m(lp.trace.d_graph),
+        lp.ty,
+        applied.mode,
+        applied.familiarity,
+        applied.off_team_cost_q8,
+        lp.id_hash ^ seed,
+    ))
 }
 
 /// Empreinte d'un parcours : `(arête, sens)` de chaque étape puis les deux décalages au décimètre.

@@ -54,15 +54,7 @@ pub fn surface_group(a: Attrs) -> usize {
     ord_loops::taste_surface(a)
 }
 
-/// Longueur parcourue par classe de goût (`ord_loops::taste_class`), en mètres, trous exclus : `Σ leg_m` des jambes
-/// de la marche (sonde du goût, §12.2).
-pub fn class_lengths(gf: &MappedGraph, walk: &Walk, t: &Trace) -> [f64; ord_loops::TASTE_CLASSES] {
-    let mut out = [0.0; ord_loops::TASTE_CLASSES];
-    for (l, &m) in walk.legs.iter().zip(&t.leg_m) {
-        out[ord_loops::taste_class(gf.edge(l.edge).attrs)] += m;
-    }
-    out
-}
+pub use ord_graph_match::walk::class_lengths;
 
 /// Degré du nœud `n` : les ids d'arête distincts du CSR de sa cellule (les sens ouverts au vélo), plus `e_in` et
 /// `e_out` (la marche arrive peut-être par un sens unique que le CSR ne porte pas).

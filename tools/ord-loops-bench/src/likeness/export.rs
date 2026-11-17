@@ -266,19 +266,7 @@ pub fn track_match(jobs: &[Job], t: &ExportTrack) -> TrackMatch {
     m
 }
 
-/// Pourquoi une trace n'est pas retenue, dans l'ordre où c'est jugé.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Refusal {
-    Excluded,
-    Unreadable,
-    Type,
-    Matched,
-    Empty,
-    Hole,
-    Short,
-    NotLoop,
-    Long,
-}
+pub use ord_graph_match::profile::collect::{judge_pieces, Refusal, RetainParams};
 
 /// Les décomptes d'une équipe (aucun id).
 #[derive(Clone, Debug, Default, Serialize)]
@@ -316,16 +304,6 @@ pub struct Loop {
     pub matched_share: f64,
 }
 
-/// Paramètres de retenue.
-#[derive(Clone, Copy, Debug)]
-pub struct RetainParams {
-    pub min_matched: f64,
-    pub max_hole_m: f64,
-    pub min_km: f64,
-    pub max_km: Option<f64>,
-    pub loop_gap: f64,
-}
-
 /// Juge une trace (§11.3) : la boucle retenue (sans rang) ou la cause du refus.
 pub fn judge(
     gf: &MappedGraph,
@@ -335,40 +313,8 @@ pub fn judge(
     p: &RetainParams,
 ) -> Result<Loop, Refusal> {
     let t = &ing.tracks[idx];
-    if t.excluded {
-        return Err(Refusal::Excluded);
-    }
-    if !t.readable {
-        return Err(Refusal::Unreadable);
-    }
-    if t.ty > 2 {
-        return Err(Refusal::Type);
-    }
     let m = track_match(jobs, t);
-    if m.matched_share() < p.min_matched {
-        return Err(Refusal::Matched);
-    }
-    if m.pieces.is_empty() {
-        return Err(Refusal::Empty);
-    }
-    let walk = Walk::from_pieces(gf, &m.pieces);
-    if walk.legs.is_empty() {
-        return Err(Refusal::Empty);
-    }
-    let trace = walk.trace(gf);
-    if trace.max_hole_m > p.max_hole_m {
-        return Err(Refusal::Hole);
-    }
-    if trace.d_graph < p.min_km * 1000.0 {
-        return Err(Refusal::Short);
-    }
-    let gap = super::shape::dist(trace.pts[0], trace.pts[trace.pts.len() - 1]);
-    if gap >= p.loop_gap * trace.l_poly {
-        return Err(Refusal::NotLoop);
-    }
-    if p.max_km.is_some_and(|k| trace.d_graph > k * 1000.0) {
-        return Err(Refusal::Long);
-    }
+    let (walk, trace) = judge_pieces(gf, p, t.ty, t.excluded, t.readable, m.total_m, m.matched_m, &m.pieces)?;
     Ok(Loop {
         team: t.team,
         i: 0,

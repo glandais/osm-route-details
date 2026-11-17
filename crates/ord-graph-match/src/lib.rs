@@ -9,10 +9,15 @@ pub mod agg;
 pub mod csv;
 pub mod deposit;
 pub mod doc;
+#[cfg(test)]
+mod fixture;
 pub mod geo;
 pub mod index;
 pub mod job;
 pub mod matcher;
+pub mod plane;
+pub mod profile;
+pub mod walk;
 
 pub use deposit::{Deposit, DepositStats};
 pub use index::{CellIndex, Near, SegIndex};
