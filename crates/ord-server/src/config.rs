@@ -467,6 +467,10 @@ impl Default for GeneratorDepositConfig {
     }
 }
 
+/// Borne haute de `generator.profile.max_loops` (décision 7 du 17 novembre 2026) : la mémoire et le temps de
+/// l'apprentissage croissent avec le plafond, et le défaut est 500.
+pub const PROFILE_MAX_LOOPS_BOUND: usize = 5_000;
+
 /// Le profil de goût d'une équipe, appris au dépôt en rejouant le moteur sur ses boucles (3b, §14.7.2). La
 /// normalisation n'est pas un réglage : elle va avec la table commune du moteur.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -655,10 +659,16 @@ impl Config {
             return invalid("generator.deposit", "size bounds must be positive");
         }
         let p = &g.profile;
-        if !(1..=16).contains(&p.threads) || p.max_concurrent == 0 || p.max_loops == 0 || p.budget_s == 0 {
+        if !(1..=16).contains(&p.threads) || p.max_concurrent == 0 || p.budget_s == 0 {
             return invalid(
                 "generator.profile",
-                "threads must be between 1 and 16, and concurrency, budget and max_loops positive",
+                "threads must be between 1 and 16, and concurrency and budget positive",
+            );
+        }
+        if !(1..=PROFILE_MAX_LOOPS_BOUND).contains(&p.max_loops) {
+            return invalid(
+                "generator.profile.max_loops",
+                "max_loops must be between 1 and 5000 (memory and learning time grow with it)",
             );
         }
         if p.budget_s >= d.budget_s {
@@ -786,6 +796,7 @@ mod tests {
             |c: &mut Config| c.generator.profile.threads = 17,
             |c: &mut Config| c.generator.profile.max_concurrent = 0,
             |c: &mut Config| c.generator.profile.max_loops = 0,
+            |c: &mut Config| c.generator.profile.max_loops = PROFILE_MAX_LOOPS_BOUND + 1,
             |c: &mut Config| c.generator.profile.budget_s = 0,
             // Le profil se fait sous le budget du dépôt, jamais au-delà.
             |c: &mut Config| c.generator.profile.budget_s = 900,
@@ -796,6 +807,9 @@ mod tests {
         }
         config.generator.profile.threads = 16;
         assert!(config.validate().is_ok());
+        config.generator.profile.max_loops = PROFILE_MAX_LOOPS_BOUND;
+        assert!(config.validate().is_ok(), "la borne elle-même est permise");
+        config.generator.profile.max_loops = 500;
         figment::Jail::expect_with(|jail| {
             jail.set_env("ORD_GENERATOR__PROFILE__THREADS", "2");
             jail.set_env("ORD_GENERATOR__PROFILE__PER_TYPE", "true");
