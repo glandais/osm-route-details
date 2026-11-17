@@ -31,6 +31,7 @@
 | Conteneur | `docker run -d --memory=3g --memory-swap=3g -p 127.0.0.1:18080:8080 -v <ordg, deux ordv, france.poly>:/data/…:ro -v ord3b-vol:/var/cache/osm-route-details -e ORD_CACHE__OFFLINE=true -e ORD_GENERATOR__{GRAPH,VIEW_ROAD,VIEW_GRAVEL,COVERAGE_POLY,OVERLAY_DIR}=…` (volume nommé neuf, IGN désactivé, réglages par défaut dont `profile.threads` = 4) |
 | Séance | script privé (hors dépôt) : deux clés tirées au hasard et jamais écrites, `curl -T` avec `Expect: 100-continue`, un fil par clé, les neuf corps NDJSON de `$G/lot3a/deposit/` |
 | Tests | `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` |
+| Fumée de la relecture (après les deux `fix(server)`) | `cargo build --release -p ord-loops-bench`, puis `$B likeness --teams C --limit 8 --holdout-share 0.25 --variants base,common,svc --threads {1,16} --label relecture-det{1,16} --out $G/lot4/smoke-3b-relecture` |
 
 ## 2. Vérifications
 
@@ -149,6 +150,17 @@ purges périodiques (aucun effacé, aucun temporaire) ; 18 états `ready` (sans 
 `taste` (champ inconnu de 1.9.2). Retour sur 1.10 : **18 états `ready` / `present`**. La purge de 1.9.2 ne reconnaît pas un
 `.ordp.enc` (relu dans son code : seuls les noms contenant `.tmp-` et ceux qui finissent par `.ordo.enc`), ce que le test
 `the_192_purge_rules_never_touch_a_profile_file` recopie.
+
+## 5 bis. Relecture
+
+[mesuré] Après les deux corrections de la relecture (§14.16, points 21 et 22 de la note), qui ne touchent que la phase de
+profil du service : `cargo fmt` et `cargo clippy --workspace --all-targets -- -D warnings` sont verts, et
+`cargo test --workspace` passe **871 tests sans échec**, 11 ignorés. Le test ajouté est
+`a_panic_in_the_profile_phase_still_writes_the_overlay_and_gives_its_memory_back`. La fumée du banc à 1 puis 16 fils
+redonne les empreintes du §4.1 : `base` `0de54eb273e40d42`, `common` `a67948a2da2acf7a`, `svc` `2f9a295d010c540c`, et les
+`taste_xxh3` `ea699c10cdd18e0c` (`common`) et `b331aec32a9b8956` (`svc`). Elle a pris 149 s à 1 fil et 48 s à 16 fils, avec un
+pic de 10,4 Gio puis de 13,6 Gio (`/usr/bin/time`). La séance en conteneur n'a pas été rejouée. Les corrections ne
+changent ni les tables ni les jeux : seuls le traitement d'une panique et un champ d'en-tête non lu sont touchés.
 
 ## 6. Ce qui n'a pas été fait
 

@@ -2834,3 +2834,20 @@ accès à la production.
 **Conteneur**
 
 20. La séance en conteneur (§14.13) est **réduite** : voir le relevé pour ce qui a été fait.
+
+**Relecture (17 novembre, après le commit 8)**
+
+21. **Panique de la phase de profil** (corrigé, `fix(server)`) : seul `generate_in` tournait sous `catch_unwind` dans le
+    joueur du service. Une panique ailleurs dans la phase faisait tomber tout le dépôt : le contrôleur et la marche du
+    parcours gardé (`first_kept_class_meters`), la construction des données de la nouvelle surcouche, ou le `join` des fils.
+    Le backend recevait alors un 500 et la surcouche n'était pas écrite, ce qui contredit le §14.7.4. Les octets de
+    `hold_team` n'étaient pas rendus non plus : le budget de mémoire restait amputé jusqu'au redémarrage. Désormais, une
+    panique donne `skipped`, la surcouche est écrite et une garde rend les octets. Le test
+    `a_panic_in_the_profile_phase_still_writes_the_overlay_and_gives_its_memory_back` échoue si l'on retire la garde.
+22. **`overlay_deposited_at`** (corrigé, `fix(server)`) : l'en-tête du profil recevait l'heure de fin de la phase, et non
+    la date de dépôt écrite dans la surcouche (§14.6). Ce champ n'est ni lu ni exposé.
+23. **Non corrigé, à trancher** : `generator.profile.max_loops` n'a pas de borne haute. La mémoire et le temps de
+    l'apprentissage ne sont bornés que par ce réglage et par le budget de 720 s. Un profil `partial` (1 ou 2 pas) est
+    servi comme `present`, l'état est `ready`, et le backend ne redépose qu'au changement des traces ou à l'échéance. Le
+    §14.1 (question 7) l'accepte ; une variante `stale` raison `profile` sur un profil partiel ferait réessayer la nuit
+    suivante.
