@@ -101,10 +101,19 @@ pub fn norm_rule(cmp: &Compare, done: &[Done]) -> Option<NormRule> {
     norm_rule_for(cmp, done, &[("common-norm", "common"), ("svc-norm", "svc")], ("svc-norm", "svc"))
 }
 
-/// La même règle pour la forme de la sonde : `svc-sonde-norm` contre `svc-sonde` seulement (la table commune brute ou
-/// normalisée est déjà jugée par la première).
+/// La même règle pour la forme de la sonde. Les deux paires du §14.12.4, la seconde lue sur la forme de la sonde :
+/// `common-norm` contre `common` (la normalisation change aussi la table commune, poids de base du moteur pour toutes les
+/// requêtes, quelle que soit la forme) et `svc-sonde-norm` contre `svc-sonde`.
 pub fn norm_rule_sonde(cmp: &Compare, done: &[Done]) -> Option<NormRule> {
-    norm_rule_for(cmp, done, &[("svc-sonde-norm", "svc-sonde")], ("svc-sonde-norm", "svc-sonde"))
+    if !(has(done, "svc-sonde-norm") && has(done, "svc-sonde")) {
+        return None;
+    }
+    norm_rule_for(
+        cmp,
+        done,
+        &[("common-norm", "common"), ("svc-sonde-norm", "svc-sonde")],
+        ("svc-sonde-norm", "svc-sonde"),
+    )
 }
 
 fn norm_rule_for(
@@ -237,7 +246,8 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
 #[derive(Clone, Debug, Serialize)]
 pub struct ThreeB {
     pub norm_rule: Option<NormRule>,
-    /// La règle sur la forme de la sonde (`svc-sonde-norm` contre `svc-sonde`), si elle a été jouée.
+    /// La règle sur la forme de la sonde (`common-norm` contre `common`, et `svc-sonde-norm` contre `svc-sonde`), si
+    /// elle a été jouée.
     pub norm_rule_sonde: Option<NormRule>,
     pub facts: Vec<Fact>,
 }
