@@ -192,6 +192,49 @@ impl Taste {
     }
 }
 
+/// La table commune (lot 4, 3b, §14.3) est-elle servie normalisée ? Posé par la règle du §14.12.4 de la note : `false`
+/// (brute) tant que le banc n'a pas montré mieux. Le profil d'une équipe (`ord-graph-match`, `profile`) apprend avec la
+/// même forme : changer cette constante change `Common::hash` et rend tous les profils écrits incompatibles.
+pub const COMMON_USE_NORMALIZED: bool = false;
+
+impl Taste {
+    /// La table commune brute : la table recalée commune à trois pas, 72 cases par type (constantes générées).
+    pub fn common_raw() -> Self {
+        Self { q8: crate::taste_common::COMMON_Q8 }
+    }
+
+    /// La table commune normalisée (moyenne pondérée de 1 par les décimètres générés par classe).
+    pub fn common_normalized() -> Self {
+        Self { q8: crate::taste_common::COMMON_Q8_NORMALIZED }
+    }
+
+    /// La table commune servie : l'une ou l'autre selon [`COMMON_USE_NORMALIZED`]. Poids de base du moteur
+    /// (`Params::base_taste`) et point de départ de l'apprentissage d'un profil d'équipe.
+    pub fn common() -> Self {
+        if COMMON_USE_NORMALIZED {
+            Self::common_normalized()
+        } else {
+            Self::common_raw()
+        }
+    }
+}
+
+/// Décimètres générés par boucle sous la table commune brute (les deux curseurs), par type et par classe : le `R` du
+/// mélange d'un profil d'équipe (§14.5.2).
+pub fn common_gen_dm_per_loop() -> &'static [[u32; TASTE_CLASSES]; 3] {
+    &crate::taste_common::COMMON_GEN_DM_PER_LOOP
+}
+
+/// Boucles comptées par type pour [`common_gen_dm_per_loop`].
+pub fn common_loops() -> [u32; 3] {
+    crate::taste_common::COMMON_LOOPS
+}
+
+/// D'où vient la table commune (provenance, sans donnée privée).
+pub fn common_source() -> &'static str {
+    crate::taste_common::COMMON_SOURCE
+}
+
 /// Poids d'une arête de base au goût : `⌈len_dm × K × q8[classe] / (64 × 256)⌉`, borné à `u32::MAX / 8` comme
 /// [`edge_weight`]. Avec 256 partout, rend exactement `edge_weight` (`⌈256 x / 16 384⌉ = ⌈x / 64⌉`). Le produit tient
 /// en `u64` : `len_dm` < 2³², `K` ≤ 1 000, `q8` < 2¹⁶.
@@ -331,6 +374,41 @@ mod tests {
         }
         out
     }
+
+    /// Empreinte des `q8` d'une table, petit-boutiste, dans l'ordre (type, classe).
+    fn q8_hash(q: &[[u16; TASTE_CLASSES]; 3]) -> u64 {
+        let bytes: Vec<u8> = q.iter().flatten().flat_map(|x| x.to_le_bytes()).collect();
+        fnv1a64(&bytes)
+    }
+
+    /// FNV-1a 64 bits : sans dépendance, suffisant pour figer une table dans un test (ce n'est pas le `taste_xxh3` du banc).
+    fn fnv1a64(b: &[u8]) -> u64 {
+        b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &x| (h ^ u64::from(x)).wrapping_mul(0x0100_0000_01b3))
+    }
+
+    #[test]
+    fn the_common_table_is_bounded_neutral_for_mtb_and_frozen() {
+        let (raw, norm) = (Taste::common_raw(), Taste::common_normalized());
+        for t in [&raw, &norm] {
+            assert!(t.q8.iter().flatten().all(|&q| (64..=1_024).contains(&q)));
+        }
+        // MTB : apprise sur 3 boucles, sous le seuil de 50 : neutre, brute comme normalisée.
+        assert!(raw.q8[2].iter().all(|&q| q == 256) && norm.q8[2].iter().all(|&q| q == 256));
+        assert!(!raw.is_neutral() && !norm.is_neutral() && raw != norm);
+        // La table commune servie suit la constante.
+        assert_eq!(Taste::common(), if COMMON_USE_NORMALIZED { norm.clone() } else { raw.clone() });
+        // Empreintes figées : changer une constante générée sans le dire casse ce test (re-bénir ici, et le dire).
+        assert_eq!(q8_hash(&raw.q8), RAW_HASH, "{:#x}", q8_hash(&raw.q8));
+        assert_eq!(q8_hash(&norm.q8), NORMALIZED_HASH, "{:#x}", q8_hash(&norm.q8));
+        // Les poids du mélange : des décimètres par boucle, jamais tous nuls pour un type qui a des boucles.
+        let r = common_gen_dm_per_loop();
+        assert!(r[0].iter().any(|&x| x > 0) && r[1].iter().any(|&x| x > 0));
+        let loops = common_loops();
+        assert!(loops[0] >= 50 && loops[1] >= 50 && !common_source().is_empty());
+    }
+
+    const RAW_HASH: u64 = 0x8f43a55dab78eda4;
+    const NORMALIZED_HASH: u64 = 0xdad60f58ca7c0dea;
 
     const LENS: [u32; 7] = [1, 7, 999, 1_000_000, u32::MAX / 8, u32::MAX / 2, u32::MAX];
 

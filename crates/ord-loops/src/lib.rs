@@ -21,6 +21,7 @@ mod index;
 mod reverse;
 mod search;
 mod selfcheck;
+mod taste_common;
 mod team;
 #[cfg(any(test, feature = "reference"))]
 mod team_reference;
@@ -40,8 +41,8 @@ mod tests_window;
 
 pub use cache::{CacheStats, WindowCache};
 pub use cost::{
-    is_greenway, multiplier_table, taste_class, taste_surface, taste_way, taste_weight, RideType, Taste,
-    TASTE_CLASSES,
+    common_gen_dm_per_loop, common_loops, common_source, is_greenway, multiplier_table, taste_class,
+    taste_surface, taste_way, taste_weight, RideType, Taste, COMMON_USE_NORMALIZED, TASTE_CLASSES,
 };
 pub use engine::{Engine, EngineError, Params};
 pub use generate::{
