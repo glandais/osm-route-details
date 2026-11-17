@@ -227,12 +227,14 @@ impl Ready {
         }
     }
 
-    /// La phase de profil d'un dépôt (§14.7.1, point 4). `deposit_deadline` : l'échéance du dépôt. `None` quand les
-    /// profils sont désactivés.
+    /// La phase de profil d'un dépôt (§14.7.1, point 4). `overlay_deposited_at` : la date de dépôt écrite dans la
+    /// surcouche, recopiée dans l'en-tête du profil ; `deposit_deadline` : l'échéance du dépôt. `None` quand les profils
+    /// sont désactivés.
     pub(crate) fn profile_phase(
         &self,
         set: Option<LearnSet>,
         overlay_bytes: &[u8],
+        overlay_deposited_at: i64,
         deposit_deadline: Instant,
     ) -> Option<Phase> {
         let settings = self.profile.as_ref()?;
@@ -256,7 +258,7 @@ impl Ready {
         let meta_of = |l: &Learned, now: i64| ProfileMeta {
             format: FORMAT,
             learned_at: now,
-            overlay_deposited_at: now,
+            overlay_deposited_at,
             common: hex16(settings.common.hash()),
             learn: hex16(settings.learn.hash()),
             engine: env!("CARGO_PKG_VERSION").to_string(),

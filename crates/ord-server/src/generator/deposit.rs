@@ -248,7 +248,7 @@ impl Worker {
             return Err(Some(over_budget()));
         }
         // Le profil de goût : un échec ou un dépassement ne fait jamais échouer le dépôt.
-        let phase = r.profile_phase(learn, &ordo, self.deadline);
+        let phase = r.profile_phase(learn, &ordo, meta.deposited_at, self.deadline);
         if Instant::now() >= self.deadline {
             return Err(Some(over_budget()));
         }
