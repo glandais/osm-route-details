@@ -1419,3 +1419,12 @@ fait autrement que le §12, ou en plus :
     1 contre 16 fils : mêmes empreintes de résultat et mêmes `taste_xxh3`). La neutralité à grande échelle (`base` =
     `55c3b065dc085f42`) est **vérifiée par la campagne elle-même** (arrêt automatique sinon) ; l'essai de fumée ne la
     couvre pas, il tourne sur une équipe et quelques boucles.
+12. **À la relecture** (même jour, binaire `release` de la branche) : la neutralité a été vérifiée sur toute l'équipe B
+    (397 boucles, jeux « écart » compris) : `base` redonne `5f04c040f3d10bf4`, l'empreinte de B au 4a (relevé, commandes de l'en-tête), et le
+    binaire de `develop` donne la même ; sur C (5 boucles), `develop` et la branche donnent aussi la même empreinte. Le
+    point 2 du §12.7 a été joué tel quel sur B (`base,ge:1,gg:1,rc:1`, 1 fil contre 16) : mêmes empreintes de résultat
+    et mêmes `taste_xxh3`, variante par variante. `taste_xxh3` ne lit que les `q8` : `ge` et `gg` ont la même sur une
+    seule équipe qui a des boucles mises à l'écart, et diffèrent sans elles (`ge` n'a alors que ses trois tables
+    `full`, `gg` en a six). Les `q8` d'une table ne sont pas normalisées (`Σ p_d · q8 / 256` n'est pas 1 : sur B en
+    GRAVEL, la plupart des classes passent au-dessus de 1) : le goût change aussi l'échelle des poids contre le coût
+    absolu des virages (§12.0, point 5), à lire au relevé.
