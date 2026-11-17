@@ -1,4 +1,4 @@
-//! Comparaison des variantes de la sonde du goût (note lot 4, §12.5 et §12.6) : `<label>-compare.json` et
+//! Comparaison des variantes de la sonde du goût (note lot 4, §12.5, §12.6 et §13.7) : `<label>-compare.json` et
 //! `<label>-compare.md`. **Lettres et agrégats seulement** : jamais un départ, une coordonnée, un id.
 //!
 //! Le critère du 4b (décision 7 du §9.1) : `S(v) / S(base) ≤ 0,5` dans le même groupe et la même lecture, `S` étant la
@@ -12,6 +12,10 @@ use std::path::Path;
 use anyhow::Result;
 use serde::Serialize;
 
+use super::compare_chain::{
+    all_check, all_check_md, chains, chains_reading_md, diagnostics_md, steps_md, team_cost, teams_md,
+    AllCheck, ChainSummary, TeamCostRow,
+};
 use super::out::{Getter, LoopRec, MEASURES};
 use super::play::{GenRoute, PlayRec};
 use super::shape::{iqr, median, quantile_sorted, sorted, wasserstein1};
@@ -129,16 +133,16 @@ fn pct_of(v: &[f64], p: f64) -> Option<f64> {
     quantile_sorted(&sorted(v), p)
 }
 
-fn f3(x: f64) -> String {
+pub(super) fn f3(x: f64) -> String {
     format!("{x:.3}")
 }
 
-fn o3(x: Option<f64>) -> String {
+pub(super) fn o3(x: Option<f64>) -> String {
     x.map_or_else(|| "-".into(), f3)
 }
 
 /// Un rapport en gras s'il atteint le critère.
-fn ratio_cell(r: Option<f64>) -> String {
+pub(super) fn ratio_cell(r: Option<f64>) -> String {
     match r {
         Some(x) if x <= 0.5 => format!("**{x:.2}**"),
         Some(x) => format!("{x:.2}"),
@@ -253,6 +257,8 @@ pub struct ServiceRow {
     pub team_share_p50: Option<f64>,
     pub length_over_target_p10: Option<f64>,
     pub length_over_target_p90: Option<f64>,
+    /// `ms_p50` contre celui de `base` au même curseur (`× base`, §13.7 point 5).
+    pub ms_p50_x_base: Option<f64>,
     /// Signaux du §12.6 contre `base` au même curseur.
     pub signals: Vec<String>,
 }
@@ -280,6 +286,12 @@ pub struct Compare {
     pub service: Vec<ServiceRow>,
     /// Les tables apprises (parts, g, q8) par variante.
     pub tables: Vec<(String, Vec<TasteTable>)>,
+    /// Les chaînes de recalé, pas à pas (§13.7).
+    pub chains: Vec<ChainSummary>,
+    /// Coût d'un profil par équipe appris au dépôt, par chaîne `rt` (§13.7 point 6).
+    pub team_cost: Vec<TeamCostRow>,
+    /// Contrôle « toutes » (§13.6) : les `S_base` « toutes » contre ceux du 4a ; `None` s'il ne s'applique pas.
+    pub all_check: Option<AllCheck>,
 }
 
 const NAMED: [(&str, &[&str]); 2] =
@@ -288,7 +300,7 @@ const SHAPES: [&str; 7] =
     ["r_over_d", "compactness", "far_pos", "detour_far", "sinuosity_10", "turns_per_10km", "vertices_10"];
 const TYPES: [&str; 2] = ["ROAD", "GRAVEL"];
 
-fn base_index(done: &[Done]) -> usize {
+pub(super) fn base_index(done: &[Done]) -> usize {
     done.iter().position(|d| d.variant.is_base()).unwrap_or(0)
 }
 
@@ -426,6 +438,7 @@ fn service_rows(done: &[Done], cursors: &[f64]) -> Vec<ServiceRow> {
                 team_share_p50: median(&share),
                 length_over_target_p10: pct_of(&lot, 0.1),
                 length_over_target_p90: pct_of(&lot, 0.9),
+                ms_p50_x_base: None,
                 signals: Vec::new(),
             });
         }
@@ -433,8 +446,15 @@ fn service_rows(done: &[Done], cursors: &[f64]) -> Vec<ServiceRow> {
     // Les signaux du §12.6, contre `base` au même curseur.
     let base_name = done[b].variant.name.clone();
     let base_rows: Vec<ServiceRow> = rows.iter().filter(|r| r.variant == base_name).cloned().collect();
-    for r in rows.iter_mut().filter(|r| r.variant != base_name) {
+    for r in rows.iter_mut() {
         let Some(bs) = base_rows.iter().find(|x| x.cursor == r.cursor) else { continue };
+        r.ms_p50_x_base = match (r.ms_p50, bs.ms_p50) {
+            (Some(a), Some(b)) if b > 0.0 => Some(a / b),
+            _ => None,
+        };
+        if r.variant == base_name {
+            continue;
+        }
         if bs.ok_share - r.ok_share > 0.01 {
             r.signals
                 .push(format!("part `OK` en baisse de {:.1} points", 100.0 * (bs.ok_share - r.ok_share)));
@@ -461,6 +481,7 @@ fn service_rows(done: &[Done], cursors: &[f64]) -> Vec<ServiceRow> {
 /// Construit la comparaison.
 pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
     let crit = criterion_rows(done, &conds.cursors);
+    let all_check = conds.all_check_applies.then(|| all_check(&crit));
     let variants = done
         .iter()
         .map(|d| {
@@ -490,6 +511,9 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
         shapes: named_rows(done, &conds.cursors, &NAMED, true),
         service: service_rows(done, &conds.cursors),
         tables: done.iter().map(|d| (d.variant.name.clone(), d.meta.tables.clone())).collect(),
+        chains: chains(done),
+        team_cost: team_cost(done, &conds.cursors),
+        all_check,
     }
 }
 
@@ -498,12 +522,12 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
 /// Agrège les 72 classes en lignes : une par voie (6), par revêtement (3) et « balisé » : `(Σ p_n, Σ p_d, g moyen
 /// pondéré par p_d, multiplicateur moyen pondéré par p_d)`.
 /// Une ligne agrégée : nom, Σ p_n, Σ p_d, g moyen, multiplicateur moyen.
-type ClassRow = (String, f64, f64, f64, f64);
+pub(super) type ClassRow = (String, f64, f64, f64, f64);
 
 /// Axe d'agrégation : l'indice de voie, de revêtement ou de balisage d'une classe de goût.
 type Axis = fn(usize) -> usize;
 
-fn class_rows(t: &TasteTable) -> Vec<ClassRow> {
+pub(super) fn class_rows(t: &TasteTable) -> Vec<ClassRow> {
     // Les 10 lignes : 6 voies, 3 revêtements, balisé ; chacune est un prédicat sur l'indice de classe.
     let sel: Vec<(String, Axis, usize)> = (0..6)
         .map(|w| (WAYS[w].to_string(), (|c| c / 12) as Axis, w))
@@ -687,19 +711,20 @@ fn service_md(s: &mut String, rows: &[ServiceRow], cmp: &Compare) {
     let _ = writeln!(s, "## 7. Service\n");
     let _ = writeln!(
         s,
-        "Jeux sur la surcouche complète, toutes les boucles. `D ≥ 100` : boucles de 100 km et plus.\n\n| variante | curseur | jeux | `OK` | issues | ms P50 / P90 | ms P50 / P90, D ≥ 100 | `team_share` P50 | L/D P10 · P90 | signaux |\n|---|---:|---:|---:|---|---|---|---:|---|---|"
+        "Jeux sur la surcouche complète, toutes les boucles. `D ≥ 100` : boucles de 100 km et plus.\n\n| variante | curseur | jeux | `OK` | issues | ms P50 / P90 | × base (P50) | ms P50 / P90, D ≥ 100 | `team_share` P50 | L/D P10 · P90 | signaux |\n|---|---:|---:|---:|---|---|---:|---|---:|---|---|"
     );
     for r in rows {
         let outcomes = r.outcomes.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ");
         let _ = writeln!(
             s,
-            "| {} | {} | {} | {:.1} % | {outcomes} | {} / {} | {} / {} | {} | {} · {} | {} |",
+            "| {} | {} | {} | {:.1} % | {outcomes} | {} / {} | {} | {} / {} | {} | {} · {} | {} |",
             r.variant,
             r.cursor,
             r.plays,
             100.0 * r.ok_share,
             o3(r.ms_p50),
             o3(r.ms_p90),
+            r.ms_p50_x_base.map_or_else(|| "-".to_string(), |x| format!("{x:.2}")),
             o3(r.ms_p50_d100),
             o3(r.ms_p90_d100),
             o3(r.team_share_p50),
@@ -727,14 +752,19 @@ fn service_md(s: &mut String, rows: &[ServiceRow], cmp: &Compare) {
 }
 
 /// Le rapport `.md`.
-pub fn markdown(cmp: &Compare) -> String {
+pub fn markdown(cmp: &Compare, done: &[Done]) -> String {
     let mut s = String::new();
     let c = &cmp.conditions;
-    let _ = writeln!(s, "# Sonde du goût : comparaison des variantes (lot 4, §12)\n");
+    let _ = writeln!(s, "# Sonde du goût : comparaison des variantes (lot 4, §12 et §13)\n");
     let _ = writeln!(s, "## 1. Conditions\n");
     let _ = writeln!(s, "- commit : {}", c.commit);
     let _ = writeln!(s, "- curseurs : {:?}", c.cursors);
     let _ = writeln!(s, "- paramètres du goût : {:?}", c.params);
+    let _ = writeln!(
+        s,
+        "- recalé par équipe : `n0` = {} boucles ; borne du multiplicateur cumulé : {} ; part mise à l'écart : {}",
+        c.params.team_n0, c.params.mult_bound, c.holdout_share
+    );
     let _ =
         writeln!(s, "\n| variante | empreinte de résultat | `taste_xxh3` | durée (s) |\n|---|---|---|---:|");
     for v in &cmp.variants {
@@ -747,14 +777,30 @@ pub fn markdown(cmp: &Compare) -> String {
         (true, None) => "sans objet (pas de variante `base`)".to_string(),
     };
     let _ = writeln!(s, "\nContrôle « `base` = 4a : `{}` » : **{check}**\n", c.base_4a_fingerprint);
+    let step1 = match c.step1_check {
+        Some(true) => "oui",
+        Some(false) => "NON",
+        None => "sans objet (réglages hors 4a, ou pas de chaîne `rc05`)",
+    };
+    let _ = writeln!(
+        s,
+        "Contrôle « pas 1 = `rc05` : `{}` · `{}` » : **{step1}**\n",
+        super::RC05_FINGERPRINT,
+        super::RC05_TASTE_XXH3
+    );
+    all_check_md(&mut s, &cmp.all_check);
+    s.push('\n');
     learned_md(&mut s, cmp);
     criterion_md(&mut s, cmp);
+    steps_md(&mut s, cmp, done);
+    diagnostics_md(&mut s, cmp, done);
     named_md(
         &mut s,
         "## 4. Les écarts nommés du relevé (lecture « toutes », toutes équipes)\n\nP50 du réel, P50 de chaque variante, W1 / IQR de chaque variante.",
         &cmp.named,
     );
     team_md(&mut s, cmp);
+    teams_md(&mut s, cmp, done);
     named_md(
         &mut s,
         "## 6. Forme (lecture « toutes »)\n\nP50 du réel, P50 de chaque variante et W1 / IQR (IQR du réel du type), par type et curseur.",
@@ -781,6 +827,8 @@ pub fn markdown(cmp: &Compare) -> String {
             if sig.is_empty() { "aucun".to_string() } else { sig.join(" ; ") }
         );
     }
+    s.push('\n');
+    chains_reading_md(&mut s, cmp, done);
     s
 }
 
@@ -793,7 +841,7 @@ pub fn write(dir: &Path, label: &str, conds: &Conditions, done: &[Done]) -> Resu
     std::fs::create_dir_all(dir)?;
     let (json, md) = (dir.join(format!("{label}-compare.json")), dir.join(format!("{label}-compare.md")));
     std::fs::write(&json, serde_json::to_vec_pretty(&cmp)?)?;
-    std::fs::write(&md, markdown(&cmp))?;
+    std::fs::write(&md, markdown(&cmp, done))?;
     eprintln!("comparaison : {}\ncomparaison : {}", json.display(), md.display());
     Ok(())
 }

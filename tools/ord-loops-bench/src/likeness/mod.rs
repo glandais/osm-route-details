@@ -9,6 +9,7 @@
 
 pub mod chain;
 pub mod compare;
+pub mod compare_chain;
 pub mod export;
 #[cfg(test)]
 mod fixture;
