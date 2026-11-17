@@ -916,3 +916,19 @@ agrégats seulement**, jamais une coordonnée ni un id. Puis **arrêt et relectu
 Pas de GeoJSON ni de visionneuse (un besoin de regarder un cas se traitera par le banc existant) ; pas de jeu HTTP ;
 pas de mode strict par défaut (`--cursors 0` le permet) ; pas de profil d'équipe (4b) ni de règle de forme dans le
 moteur ; aucun réglage du moteur, du contrôleur ou du service.
+
+### 11.15 Écarts du codage (17 novembre, après relecture et campagne)
+
+Ce que le codage et la relecture ont changé à la spécification ci-dessus ; détail et effets mesurés au §11 de
+[`ord-loops-lot4-mesures.md`](ord-loops-lot4-mesures.md), qui porte aussi le relevé et ce qu'il propose pour les §3 à §5.
+
+- **§11.4, raccord au nœud commun** : deux jambes voisines arrêtées à 25 m ou moins, le long de leur arête, d'un nœud
+  qu'elles partagent sont prolongées jusqu'à lui (`Walk::bridge_at_nodes`), avant le classement des jonctions.
+- **§11.8, E(R)** : une arête de la trace ne compte que si le dépôt la compte (sens ouvert au vélo, union couverte ≥
+  `coverage_threshold`) ; mise à l'écart en `ceil(0,10 × n)` sans erreur d'arrondi flottante.
+- **§11.7, croisements** : le généré d'une mesure ne prend que les boucles dont le réel est mesuré.
+- **§11.10, jumelles** : `twin_share` dans `LoopRec` (part des mètres d'une boucle mise à l'écart prise par une autre
+  boucle retenue de l'équipe), deux colonnes de plus en section 9 du résumé.
+- **§11.13, étalonnage** : la sortie de `shapes.py` se compare tronquée au nombre de lignes de
+  `<label>-calibration.txt` (la ligne « unpaved share » n'est pas portée).
+- **§11.9, mémoire** : pic anonyme de 14,2 Go à la campagne France (estimé ~12 Go) ; durée 231 s.
