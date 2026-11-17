@@ -1382,3 +1382,40 @@ Chacun passe `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings
 Rien au dépôt ni au service (`ord-server`, contrat, version : inchangés) ; rien au contrôleur ; pas de stockage de
 profil ; pas de formes ni de destinations (4c, 4d) ; pas de nouveau réglage de `K` dans le moteur (si `rc` gagne, le
 réglage se décidera après le relevé) ; pas de pente ni de trafic (décision 2 : à revoir après la sonde, au relevé).
+
+### 12.11 Écarts du codage
+
+Écrit après le codage des commits 1 à 5 du §12.9 (les campagnes du §12.7 et le relevé restent à faire). Ce que le code
+fait autrement que le §12, ou en plus :
+
+1. **`WindowTeam::taste_of` rend `None` si la vue ne sert pas le type** (`w_taste` vide), même quand un goût a été donné :
+   un `Weighter` du type `Mtb` sur la vue `road` n'existe pas, mais le crochet ne lit jamais un `w_taste` absent.
+2. **Une `Taste` entièrement neutre n'est jamais passée au moteur** (`learn` rend `None`), comme le §12.2 le demande ; les
+   tests passent, eux, `Some(&Taste::neutral())` pour exercer l'arithmétique (§12.8, points 3 et 4).
+3. **`ViewEdges::build(views, n_base_edges)`** reçoit les deux vues déjà ouvertes (la phase 7 bis les rouvre par
+   `open_graph`, mmap seul, sans copie) ; les bits sont posés en parallèle (`AtomicU64::fetch_or`).
+4. **`rc` : km de traces** = Σ des mètres du réel sur les paires (boucle, curseur) dont le jeu de `base` est `OK`, donc
+   chaque boucle y compte une fois par curseur ; le seuil `min_km` de 200 s'y lit sur cette somme. La table porte la
+   source `recalé` et l'étiquette de surcouche `full`, et sert aussi aux jeux « écart » (une seule table, §12.2).
+5. **`PlayRec::first_class_m`** est rempli pour le premier parcours gardé de **tout** jeu (pas seulement `base` sur la
+   surcouche complète) : le coût est négligeable (72 flottants) et `rc` filtre par surcouche et issue.
+6. **Les compteurs de fenêtres du rapport d'une variante sont des écarts** (`windows` : fenêtres construites, servies du
+   cache, reprises) et `team_windows` (constructions de `WindowTeam`, ms, plus gros `bytes()`) est remis à zéro entre
+   variantes (`SharedWindows::take_team_counters`) ; les phases d'une variante listent toutes les phases déjà faites.
+7. **L'arrêt « `base` ≠ 4a »** n'a lieu que si `--variants` est donné et que le banc tourne aux réglages du 4a
+   (`LikenessArgs::at_4a_defaults` : ni `--limit`, ni `--max-km`, ni `--teams`, curseurs `0,25,1`, réglages de retenue et
+   graine par défaut) ; sans `--variants`, le banc imprime le contrôle et ne s'arrête pas. Il écrit d'abord les sorties de
+   `base`, puis s'arrête avant la variante suivante. Le contrôle apparaît aussi dans `<label>-compare.md`.
+8. **`detour_far` et `sinuosity_10` sont calculées dans `shape::shape`** (le périmètre `P` d'un polygone dégénéré, sans
+   aucun sommet gardé, est 2 × la distance départ-arrivée) ; `shape::vertices` appelle `vertex_indices` (`len − 2`,
+   saturé).
+9. **La comparaison n'affiche pas la colonne de `base` dans le tableau du critère** (`S` et `S / S_base` y valent
+   trivialement `S` et 1) ; le JSON la garde. Les tableaux « par équipe » ne portent que A et B, lectures « toutes » et
+   « écart » (la lecture « écart, dans l'échantillon » n'existe que pour toutes les équipes) ; les groupes de moins de
+   30 boucles y sont marqués indicatifs.
+10. **Les tables apprises du tableau 2** sont celles des surcouches complètes ; les multiplicateurs moyens se lisent par
+    variante, les parts (`Σ p_n`, `Σ p_d`, `g`) ne dépendent pas de γ.
+11. **Le déterminisme de l'essai (§12.7, point 2)** a été vérifié à petite échelle (équipe C, 3 boucles, quatre variantes,
+    1 contre 16 fils : mêmes empreintes de résultat et mêmes `taste_xxh3`). La neutralité à grande échelle (`base` =
+    `55c3b065dc085f42`) est **vérifiée par la campagne elle-même** (arrêt automatique sinon) ; l'essai de fumée ne la
+    couvre pas, il tourne sur une équipe et quelques boucles.
