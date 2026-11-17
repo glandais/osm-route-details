@@ -181,6 +181,12 @@ impl LikenessArgs {
 
     /// Les réglages du 4a : le seul cas où l'empreinte de `base` est comparable à celle du relevé.
     pub fn at_4a_defaults(&self) -> bool {
+        self.at_4a_defaults_but_holdout_share() && self.holdout_share == 0.10 && self.holdout_min_loops == 10
+    }
+
+    /// Les réglages du 4a hormis la part mise à l'écart : la lecture « toutes » de `base` (surcouche complète, toutes
+    /// les boucles) n'en dépend pas, ses `S_base` se comparent alors à ceux du 4a (contrôle « toutes », §13.6).
+    pub fn at_4a_defaults_but_holdout_share(&self) -> bool {
         self.limit.is_none()
             && self.max_km.is_none()
             && self.teams.is_empty()
@@ -190,8 +196,6 @@ impl LikenessArgs {
             && self.loop_gap == 0.05
             && self.min_matched == 0.95
             && self.max_hole_m == 1000.0
-            && self.holdout_share == 0.10
-            && self.holdout_min_loops == 10
             && self.seed == 20_261_117
             && self.radius_step_m == 10_000.0
     }
@@ -664,12 +668,9 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             base_4a_fingerprint: BASE_4A_FINGERPRINT.to_string(),
             holdout_share: a.holdout_share,
             step1_check,
-            all_check_applies: !a.at_4a_defaults()
-                && a.cursors == [0.25, 1.0]
-                && a.limit.is_none()
-                && a.max_km.is_none()
-                && a.teams.is_empty()
-                && !a.no_holdout,
+            // Hors des réglages du 4a, mais seulement par la part mise à l'écart : un autre `--seed`, `--min-km`…
+            // changerait les boucles ou les requêtes, et le contrôle échouerait à tort.
+            all_check_applies: !a.at_4a_defaults() && a.at_4a_defaults_but_holdout_share(),
         };
         compare::write(&paths.out, &a.label, &conds, &done)?;
     }
