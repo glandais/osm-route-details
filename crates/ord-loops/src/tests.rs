@@ -253,6 +253,22 @@ fn team_of_street_two(e: &Engine<Vec<u8>>) -> TeamData {
     TeamData::build(e, &overlay_of(e, &rows)).unwrap()
 }
 
+/// Test 5 du 3b : l'estimation avec goût couvre ce qu'une `WindowTeam` construite avec un goût tient, et celle sans goût
+/// ce qu'elle tient sans goût (de quoi réserver avant de construire).
+#[test]
+fn the_estimate_covers_the_bytes_a_team_window_holds_with_and_without_a_taste() {
+    let e = engine_with(&mut grid(5, 300.0), neutral_params());
+    let team = team_of_street_two(&e);
+    for vi in 0..2 {
+        let win = e.full_window(vi);
+        let plain = WindowTeam::build(&e, &win, &team);
+        let tasted = WindowTeam::build_with_taste(&e, &win, &team, Some(&Taste::common()));
+        assert!(WindowTeam::estimate_bytes(&win, false) >= plain.bytes(), "vue {vi}");
+        assert!(WindowTeam::estimate_bytes(&win, true) >= tasted.bytes(), "vue {vi}");
+        assert!(WindowTeam::estimate_bytes(&win, true) > WindowTeam::estimate_bytes(&win, false));
+    }
+}
+
 #[test]
 fn a_neutral_taste_gives_the_same_window_team_chain_by_chain() {
     let e = engine_with(&mut grid(5, 300.0), neutral_params());

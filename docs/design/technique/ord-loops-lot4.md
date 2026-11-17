@@ -431,6 +431,10 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
    - 3b : profil de goût recalé par équipe, appris au dépôt par regénération (au plus 500 boucles), fichier `.ordp.enc`
      (§3.5), table commune dans le moteur ; normalisation tranchée au banc ; mémoire mesurée dans 3 Gio ; références
      figées re-bénies, version du moteur montée.
+     **Fait** sur la branche `feat/ord-loops-lot4-3b` (paquet 1.10.0, API 1.10) : code, tests, mesure en conteneur de 3 Gio
+     (relevé : [`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md)). **Reste** : les campagnes 2 à 4 du §14.13
+     (la normalisation et les faits du §14.12.5 ne sont pas tranchés sur une vraie campagne), la mise en service ; écarts :
+     §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
@@ -2754,4 +2758,79 @@ accès à la production.
 
 ### 14.16 Écarts du codage
 
-À écrire au commit 8.
+Écrits au commit 8, après le codage ; chaque écart dit ce qui a été fait à la place et pourquoi. Les mesures sont dans
+[`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md).
+
+**Ordre et découpage des commits**
+
+1. **Les commits 2 et 3 sont permutés** dans l'historique : le refactor des morceaux partagés (`refactor(graph-match)`) est
+   avant la table commune (`feat(loops)`). Le rejeu de la chaîne commune (18 min, 17 Gio) tournait pendant le codage du
+   refactor et la table n'existait pas encore ; le contenu de chaque commit est celui de la spécification. Les deux ne se
+   touchent pas (le 3 ne change que `ord-graph-match` et le banc, le 2 que `ord-loops`).
+2. Le commit 6 porte aussi `--base-taste` du banc du lot 2 et le moteur neutre de `likeness`, comme prévu au §14.3.3 ; le
+   commit 5 compile sans eux (retirés puis remis à la main, le moteur n'ayant pas encore `base_taste`).
+3. Le commit 7 contient le contrat régénéré, `CHANGELOG.md` et les tests du service ; les tests de stockage du service qui
+   comptaient « un fichier par dépôt » comptent désormais séparément surcouches et profils (`World::overlays`,
+   `World::profiles`), et le dépôt « disque plein » laisse le **profil neuf** à côté de l'ancienne surcouche : c'est l'ordre
+   voulu du §14.7.4 (profil d'abord), la date d'apprentissage du profil change, rien d'autre.
+
+**Table commune**
+
+4. `COMMON_LOOPS` vaut `[1545, 553, 3]` : le MTB a **3** boucles comptées dans le rejeu, là où le §14.0 point 10 en lisait 4 dans
+   le rapport privé de la campagne 2 (écart non investigué : le MTB est neutre dans les deux cas, sous le seuil de 50). Les
+   quatre contrôles `RECAL_EQUIPE_*` (`base`, `rc05-p1`, `rc05-p2`, `rc05-p3`) sont **passés aux bits près** : empreintes de
+   résultat et `taste_xxh3` identiques à la campagne 2.
+5. L'en-tête de `taste_common.rs` porte « commit ad94ccd (arbre modifié) » : le binaire de la campagne était celui de
+   `55e81fc` (commit 1), mais le banc lit `git` au moment d'écrire chaque rapport et le dernier (`rc05-p3`) a été écrit après
+   le commit du refactor. Provenance exacte : binaire du commit 1, rejeu aux réglages de la campagne 2.
+6. `COMMON_USE_NORMALIZED` reste à `false` : voir le point 17. Pas de rejeu à 100 % des boucles (question 3 du §14.1) : à
+   décider par le propriétaire une fois le banc validé.
+
+**Apprentissage et dépôt**
+
+7. Le test 10c (un pas sur une table commune neutre avec `n0 = 0` égale le `step72` du banc sur `ratio_table` à
+   `min_km = 0`) est dans le banc (`svc.rs`), avec un joueur jouet, pas sur les parcours du moteur : l'égalité est celle des
+   tables rendues pour les mêmes mètres, c'est ce que dit la spécification.
+8. Test 23 (banc) : **`BenchPlayer ≡ FlatPlayer` n'est pas écrit.** Le banc n'a pas de graphe synthétique avec ses deux
+   vues (seulement le graphe de base de `fixture.rs`), et le joueur du banc n'est pas une copie du service : il appelle le
+   même `first_kept_class_meters` et le même moteur. Il est exercé par la fumée (déterminisme à 1 et 16 fils, §3 du
+   relevé). `ServicePlayer ≡ FlatPlayer` est, lui, testé de bout en bout côté service
+   (`the_service_learns_what_the_reference_player_learns_on_the_same_loops`).
+9. Le test 16 n'utilise pas le crochet caché `min_km` : des anneaux de 7,2 km (six rues de 300 m par côté) passent le seuil
+   de 5 km sur la grille de 21 × 21 des tests du générateur. Le crochet (`TestHooks::profile_min_km_milli`) existe quand
+   même, lu à la construction du générateur, pour un graphe plus petit ; un second crochet (`profile_hold`) retient la
+   phase de profil (tests 18 et 19).
+10. `ServicePlayer` traite `AcquireError::Overloaded` comme un arrêt : `WindowManager::acquire` attend déjà la place
+    jusqu'à l'échéance qu'on lui passe (celle de la phase), et ne rend `Overloaded` qu'à l'échéance. C'est le comportement
+    « attendre jusqu'à l'échéance » du §14.7.3 par la même attente.
+11. Le plafond (`max_loops`, `per_type`) entre dans `LearnParams::hash` (§14.6) : **changer `generator.profile.max_loops`
+    rend tous les profils écrits `incompatibles` (réglages)**, donc `stale` raison `profile` jusqu'au prochain dépôt. C'est ce
+    que dit le §14.6 (« dont le plafond du réglage ») ; à savoir avant de toucher au réglage.
+12. La purge d'un dossier d'un autre graphe compte ses profils sous `profile_ttl` (le §14.9 ne dit pas où) ; le dossier part
+    en entier après la grâce de 48 h, profils compris.
+13. `Deposit::finish` est gardé (appelle `finish_learn`) : l'outil `ord-graph-overlay` ne change pas.
+14. `/v1/capabilities` est inchangé (§14.10), donc ne dit pas si les profils sont actifs : l'état d'une équipe le dit
+    (`profile` absent de la réponse = profils désactivés).
+
+**Banc et campagnes**
+
+15. **Aucune campagne complète n'a tourné** (consigne : une fumée). Le rejeu de la chaîne commune (campagne 1) est fait, car
+    la table en dépend ; les campagnes 2 à 4 du §14.13 ne le sont pas. L'essai du §14.13 (point 2) a tourné avec
+    `--limit 20` sur B et C : il exerce le chemin de bout en bout, mais ses `S / S_base` ne se lisent pas (20 boucles par
+    équipe, A absente). Les faits du §14.12.5 ne sont donc **pas établis** : (a), (b), (c), (d) restent à mesurer par la
+    campagne 4. En tête du relevé.
+16. `svc` apprend sur **toutes** les boucles de l'équipe non mises à l'écart (le dépôt collecte tout), même avec `--limit` :
+    `--limit` ne borne que les boucles jouées. Choix cohérent avec le service (qui apprend sur ses traces, pas sur un
+    échantillon), noté parce qu'un essai à `--limit 20` apprend sur plusieurs centaines de boucles.
+17. **Normalisation (décision 3 du §9.4)** : la règle du §14.12.4 est codée (`compare_svc::norm_rule`) et appliquée à l'essai,
+    qui la rejette (perte de 0,145 et service moins bon) ; **elle n'est pas tranchée par une vraie campagne**. Par prudence,
+    `COMMON_USE_NORMALIZED = false` (brute, la configuration mesurée à la seconde sonde). Le propriétaire peut renverser :
+    une constante, `Common::hash` change, les profils écrits deviennent incompatibles.
+18. Variantes `svc+cap:0` et `svc+capt:500` : codées et testées (`parse_variants`, `LearnSet::capped` = collecteur plafonné),
+    **non jouées**.
+19. Le banc région du lot 6 (`--compare --self-check --budget-mb 1000 --base-taste common`, §14.13 point 5) n'a pas été
+    rejoué : voir le relevé.
+
+**Conteneur**
+
+20. La séance en conteneur (§14.13) est **réduite** : voir le relevé pour ce qui a été fait.
