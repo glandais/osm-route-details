@@ -789,6 +789,37 @@ async fn deposits_of_other_environments_queue_fairly_instead_of_being_refused() 
 }
 
 #[tokio::test]
+async fn a_queued_deposit_asks_for_its_body_at_once_so_that_100_continue_is_not_held_back() {
+    // Le serveur HTTP ne répond « 100 Continue » qu'à la première lecture du corps. Faite après la file, elle arrivait
+    // trop tard pour le client du JDK, qui prenait ce « 100 » pour la réponse et n'entendait jamais la vraie.
+    let w = World::with(|c| c.generator.deposit.queue_wait_s = 5);
+    let (k1, k2) = (key(1), key(2));
+    let doc = document(21, &[8], &[]);
+    let first_line = ndjson(&[track_line("ROAD", false, &doc)], None).into_bytes();
+    let app = w.app.clone();
+    let req = put(&k1, "team-a", Frames::new(vec![first_line]).then_stall().body());
+    let held = tokio::spawn(async move { send(app, req).await });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let polls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let app = w.app.clone();
+    let whole = team_deposit().into_bytes();
+    let (a, b) = whole.split_at(whole.len() / 2);
+    let body = Frames::new(vec![a.to_vec(), b.to_vec()]).counting(std::sync::Arc::clone(&polls)).body();
+    let req2 = put(&k2, "team-a", body);
+    let queued = tokio::spawn(async move { send(app, req2).await });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!queued.is_finished(), "il attend sa place");
+    // Une seule trame est lue d'avance : le reste du corps attend la place.
+    assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 1, "le corps est demandé pendant l'attente");
+    held.abort();
+    let _ = held.await;
+    // La trame lue d'avance n'est pas perdue : le dépôt entier est compté.
+    let r = queued.await.unwrap();
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["tracks"], 2);
+}
+
+#[tokio::test]
 async fn a_failed_directory_sync_after_the_rename_is_still_a_successful_deposit() {
     let w = World::new();
     let k = key(1);

@@ -231,11 +231,12 @@ pub fn generate(key: Option<&str>, team: Option<&str>, body: &Value) -> Request<
 pub struct Frames {
     frames: VecDeque<Result<Bytes, std::io::Error>>,
     stall: bool,
+    polls: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
 }
 
 impl Frames {
     pub fn new(chunks: Vec<Vec<u8>>) -> Self {
-        Self { frames: chunks.into_iter().map(|c| Ok(Bytes::from(c))).collect(), stall: false }
+        Self { frames: chunks.into_iter().map(|c| Ok(Bytes::from(c))).collect(), stall: false, polls: None }
     }
 
     /// Après les trames, le flux casse.
@@ -247,6 +248,12 @@ impl Frames {
     /// Après les trames, plus rien n'arrive et le flux ne se ferme pas.
     pub fn then_stall(mut self) -> Self {
         self.stall = true;
+        self
+    }
+
+    /// Compte les lectures du corps par le serveur (une lecture, c'est ce qui lui fait répondre « 100 Continue »).
+    pub fn counting(mut self, polls: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        self.polls = Some(polls);
         self
     }
 
@@ -263,6 +270,9 @@ impl http_body::Body for Frames {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<http_body::Frame<Bytes>, Self::Error>>> {
+        if let Some(p) = &self.polls {
+            p.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         match self.frames.pop_front() {
             Some(r) => Poll::Ready(Some(r.map(http_body::Frame::data))),
             None if self.stall => Poll::Pending,

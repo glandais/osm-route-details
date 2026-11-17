@@ -265,6 +265,17 @@ fn trim(raw: &[u8]) -> &[u8] {
     &raw[start..end]
 }
 
+/// La première trame du corps, lue pendant l'attente de la place (`None` : corps vide).
+type FirstFrame = Option<Result<axum::body::Bytes, ()>>;
+
+/// Lit la trame suivante du corps ; une trame sans données (en-têtes de fin) compte pour vide.
+async fn next_data(body: &mut Body) -> FirstFrame {
+    Some(match body.frame().await? {
+        Ok(f) => Ok(f.into_data().unwrap_or_default()),
+        Err(_) => Err(()),
+    })
+}
+
 /// Ce qui reste du budget d'un dépôt.
 fn budget_left(started: Instant, cfg: &crate::config::GeneratorConfig) -> Duration {
     Duration::from_secs(cfg.deposit.budget_s).saturating_sub(started.elapsed())
@@ -323,7 +334,25 @@ impl Ready {
         // La place de dépôt est une file équitable (première arrivée, première servie) : un environnement qui vient de
         // finir repasse derrière ceux qui attendent. L'attente est bornée, puis 503.
         let wait = Duration::from_secs(self.cfg.deposit.queue_wait_s).min(budget_left(started, &self.cfg));
-        let permit = match tokio::time::timeout(wait, Arc::clone(&self.deposit_slots).acquire_owned()).await {
+        // Le corps est demandé dès l'attente de la place : c'est cette première lecture qui fait répondre
+        // « 100 Continue » au serveur HTTP. Sans elle, un client qui a envoyé `Expect: 100-continue` ne le reçoit
+        // qu'après la file ; celui du JDK envoie alors son corps de lui-même au bout de quelques secondes, puis prend
+        // le « 100 » tardif pour la réponse et n'entend jamais la vraie (dépôt de staging bloqué derrière celui de la
+        // prod, 17 novembre 2026). Une seule trame est lue d'avance : le reste attend la place, retenu par TCP.
+        let mut body = body;
+        let mut first: Option<FirstFrame> = None;
+        let permit = {
+            let acquire = tokio::time::timeout(wait, Arc::clone(&self.deposit_slots).acquire_owned());
+            tokio::pin!(acquire);
+            loop {
+                tokio::select! {
+                    biased;
+                    p = &mut acquire => break p,
+                    f = next_data(&mut body), if first.is_none() => first = Some(f),
+                }
+            }
+        };
+        let permit = match permit {
             Ok(Ok(p)) => p,
             _ => return Err(busy("deposit capacity is in use")),
         };
@@ -349,7 +378,7 @@ impl Ready {
         });
 
         // `feed` possède l'émetteur : s'il échoue, l'émetteur tombe, le fil abandonne et rien n'est écrit.
-        let feed = self.feed(body, tx, deadline);
+        let feed = self.feed(first, body, tx, deadline);
         tokio::pin!(feed);
         let fed = tokio::select! {
             r = &mut feed => r,
@@ -401,7 +430,13 @@ impl Ready {
     }
 
     /// Lit le corps, coupe les lignes et les envoie. Bornes : corps décompressé, ligne, silence, budget.
-    async fn feed(&self, mut body: Body, tx: mpsc::Sender<Msg>, deadline: Instant) -> Result<(), Problem> {
+    async fn feed(
+        &self,
+        mut first: Option<FirstFrame>,
+        mut body: Body,
+        tx: mpsc::Sender<Msg>,
+        deadline: Instant,
+    ) -> Result<(), Problem> {
         let d = &self.cfg.deposit;
         let idle = Duration::from_secs(d.idle_timeout_s);
         let tokio_deadline = tokio::time::Instant::from_std(deadline);
@@ -428,7 +463,12 @@ impl Ready {
         loop {
             let remaining =
                 deadline.checked_duration_since(Instant::now()).ok_or_else(|| timeout("budget exceeded"))?;
-            let frame = match tokio::time::timeout(idle.min(remaining), body.frame()).await {
+            // La trame lue pendant l'attente de la place passe d'abord.
+            let next = match first.take() {
+                Some(f) => Ok(f),
+                None => tokio::time::timeout(idle.min(remaining), next_data(&mut body)).await,
+            };
+            let data = match next {
                 Err(_) if remaining <= idle => return Err(timeout("budget exceeded")),
                 Err(_) => return Err(timeout("stalled")),
                 Ok(None) => break,
@@ -437,7 +477,6 @@ impl Ready {
                 }
                 Ok(Some(Ok(f))) => f,
             };
-            let Ok(data) = frame.into_data() else { continue };
             total += data.len() as u64;
             if total > d.max_body_bytes {
                 return Err(Problem::too_large(LimitKind::BodyBytes, "deposit body exceeds the limit"));
