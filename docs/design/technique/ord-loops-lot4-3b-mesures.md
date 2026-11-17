@@ -8,10 +8,17 @@
 > `3b-essai-*`, `smoke-3b/`, `3b-conteneur/`). Équipes désignées par les lettres A à I ; ni départ, ni coordonnée, ni
 > identifiant d'équipe, de trace ou d'arête ici. Rien n'a été poussé, publié ni déployé : les images Docker sont locales.
 >
-> **Ce relevé n'est pas une campagne.** La consigne était une fumée : la chaîne commune a été rejouée (la table en dépend),
-> le banc a joué le chemin du service sur une équipe et sur deux équipes à 20 boucles, le service a tourné dans un conteneur
-> de 3 Gio. **Les campagnes 2 à 4 du §14.13 n'ont pas tourné** : les faits du §14.12.5 (S / S_base du chemin du service,
-> B ROAD sous 1,0, `svc ≤ rt05-p3 + 0,05`, A) et la décision sur la normalisation ne sont **pas établis** ici.
+> **Mise à jour du 17 novembre au soir : la campagne 4 a tourné** (§6 à §9 ci-dessous, commits `8131ab1` à `502c6ac`).
+> Le relevé lit ses chiffres et applique les décisions 2, 3 et 4 du §9.5 de la note. **La forme retenue est la forme
+> plafonnée (`capped`), le plafond est par équipe et la table est brute** : ce sont les défauts déjà codés, aucun ne
+> change. B ROAD vaut 0,750 · 0,924 et le service tient. **Le fait (d) ne tient pas** : sur A, ROAD au curseur 1, `svc`
+> perd 0,044 contre `common`, pour un seuil de 0,03. Selon la décision 1, la branche **n'est donc pas prête à fusionner**.
+> La réapprise sur 100 % (décision 5) et la séance en conteneur (décision 8) **n'ont pas été faites** : elles sont
+> conditionnées aux critères (§9). Les §1 à §5 qui suivent sont le relevé d'avant la campagne, tel quel.
+>
+> **Ce relevé n'était pas une campagne** (§1 à §5) : la consigne était une fumée. La chaîne commune a été rejouée (la table
+> en dépend), le banc a joué le chemin du service sur une équipe puis sur deux équipes à 20 boucles, et le service a tourné
+> dans un conteneur de 3 Gio.
 >
 > Marques : **[mesuré]** vient des rapports du banc, de la séance en conteneur ou des tests ; **[calculé]** d'un calcul fait
 > ici sur ces mesures. Sans marque dans un tableau : mesuré.
@@ -32,6 +39,8 @@
 | Séance | script privé (hors dépôt) : deux clés tirées au hasard et jamais écrites, `curl -T` avec `Expect: 100-continue`, un fil par clé, les neuf corps NDJSON de `$G/lot3a/deposit/` |
 | Tests | `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` |
 | Fumée de la relecture (après les deux `fix(server)`) | `cargo build --release -p ord-loops-bench`, puis `$B likeness --teams C --limit 8 --holdout-share 0.25 --variants base,common,svc --threads {1,16} --label relecture-det{1,16} --out $G/lot4/smoke-3b-relecture` |
+| **Campagne 4** (binaire de `e779537`) | `/usr/bin/time -v $B likeness --label lot4-3b --holdout-share 0.25 --variants base,rt:0.5+n:3,common,common+norm,svc,svc+norm,svc+cap:0,svc+capt:500,svc+mix:sonde,svc+mix:sonde+norm,svc+mix:sonde+capt:500 > $G/lot4/lot4-3b.log 2>&1` |
+| Second tirage des temps (même binaire) | `$B likeness --label lot4-3b-p50 --holdout-share 0.25 --variants base,svc,svc+capt:500,svc+mix:sonde` |
 
 ## 2. Vérifications
 
@@ -162,10 +171,148 @@ redonne les empreintes du §4.1 : `base` `0de54eb273e40d42`, `common` `a67948a2d
 pic de 10,4 Gio puis de 13,6 Gio (`/usr/bin/time`). La séance en conteneur n'a pas été rejouée. Les corrections ne
 changent ni les tables ni les jeux : seuls le traitement d'une panique et un champ d'en-tête non lu sont touchés.
 
-## 6. Ce qui n'a pas été fait
+## 6. Campagne 4 (17 novembre, après les décisions du §9.5)
 
-- **Campagnes 2 à 4** (`svc+cap:0`, `svc+capt:500`, A en entier, les faits du §14.12.5, la normalisation sur toutes les
-  équipes) ; question 2 du §14.1 (500 par équipe ou par type) donc sans chiffres ; question 3 (réapprendre `C` sur 100 %).
+[mesuré] 1 h 24 min au mur, pic de RSS 18,2 Gio (`/usr/bin/time -v`), 13 variantes, une seule campagne sur la machine.
+Les contrôles sont **passés aux bits près** : `base` `4686c904975302e7` · `2d06800538d394c2`, `rt05-p3` `451651c82f8a4b92` ·
+`3fc8e87f9b9fbfcf`, soit ceux de la seconde sonde. Les empreintes de résultat sont `common` `d1360d75ec7304bd`, `svc`
+`6bc8a67e3f5369e4`, `svc-capt500` `653ddeece5686adf` et `svc-sonde` `b1a1dc7f2e9bb42c`. Le second tirage des temps (§6.4)
+redonne ces quatre empreintes.
+
+### 6.1 `S / S_base`, toutes équipes [mesuré]
+
+| lecture · groupe | rt05-p3 | common | common-norm | svc | svc-norm | svc-cap0 | svc-capt500 | svc-sonde | svc-sonde-norm | svc-sonde-capt500 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| toutes · ROAD 0,25 | 0,244 | 0,255 | 0,240 | **0,236** | 0,212 | 0,211 | 0,218 | 0,239 | 0,249 | 0,242 |
+| toutes · ROAD 1 | 0,195 | 0,194 | 0,197 | **0,209** | 0,197 | 0,186 | 0,184 | 0,194 | 0,196 | 0,198 |
+| toutes · GRAVEL 0,25 | 0,371 | 0,377 | 0,377 | **0,289** | 0,286 | 0,257 | 0,257 | 0,395 | 0,406 | 0,366 |
+| toutes · GRAVEL 1 | 0,259 | 0,303 | 0,293 | **0,224** | 0,210 | 0,239 | 0,239 | 0,293 | 0,304 | 0,265 |
+| écart · ROAD 0,25 | 0,203 | 0,228 | 0,221 | **0,207** | 0,190 | 0,195 | 0,190 | 0,208 | 0,222 | 0,208 |
+| écart · ROAD 1 | 0,183 | 0,176 | 0,184 | **0,200** | 0,184 | 0,177 | 0,170 | 0,178 | 0,186 | 0,180 |
+| écart · GRAVEL 0,25 | 0,379 | 0,387 | 0,384 | **0,330** | 0,295 | 0,287 | 0,287 | 0,398 | 0,436 | 0,379 |
+| écart · GRAVEL 1 | 0,286 | 0,303 | 0,304 | **0,218** | 0,218 | 0,213 | 0,213 | 0,310 | 0,326 | 0,258 |
+
+Par type, `svc` est au plus à **0,236 en ROAD** et **0,330 en GRAVEL** (lecture « écart » comprise) : bien sous 0,5. Le
+`rt05-p3` de cette campagne redonne au millième celui de la seconde sonde (0,244 · 0,195 · 0,371 · 0,259).
+
+### 6.2 A et B [mesuré]
+
+| lecture · groupe | A rt05-p3 | A common | A svc | A svc-capt500 | A svc-sonde | B rt05-p3 | B common | B svc | B svc-sonde |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| toutes · ROAD 0,25 | 0,219 | 0,198 | 0,219 | 0,200 | 0,213 | 0,800 | 1,776 | **0,750** | 0,818 |
+| toutes · ROAD 1 | 0,174 | 0,146 | **0,191** | 0,166 | 0,169 | 0,931 | 2,143 | **0,924** | 0,953 |
+| toutes · GRAVEL 0,25 | 0,406 | 0,529 | 0,334 | 0,296 | 0,459 | 0,433 | 0,674 | 0,393 | 0,451 |
+| toutes · GRAVEL 1 | 0,244 | 0,388 | 0,224 | 0,221 | 0,292 | 0,424 | 0,822 | 0,403 | 0,460 |
+| écart · ROAD 0,25 | 0,184 | 0,193 | 0,197 | 0,180 | 0,182 | 0,847 | 1,535 | 0,775 | 0,718 |
+| écart · ROAD 1 | 0,166 | 0,144 | 0,191 | 0,160 | 0,163 | 0,896 | 1,816 | 0,837 | 0,924 |
+
+B est sous son plafond de 500 boucles (297 boucles apprises) : `svc-cap0` et `svc-capt500` y redonnent `svc` au bit près.
+
+### 6.3 Faits du §14.12.5 et règle du §14.12.4 (lus par le banc, [mesuré])
+
+| Fait | `svc` (plafonné) | `svc-sonde` |
+|---|---|---|
+| (a) 4 groupes ≤ 0,5, « toutes » et « écart » | **oui** (au plus 0,330) | oui (au plus 0,398) |
+| (b) B ROAD « toutes » < 1,0 aux deux curseurs | **oui** : 0,750 · 0,924 | oui : 0,818 · 0,953 |
+| (c) ≤ `rt05-p3` + 0,05 par groupe, « toutes » | **oui** : au plus +0,014 (ROAD 1) | oui : au plus +0,034 (GRAVEL 1) |
+| (d) A : forme − `common` ≤ +0,03 en ROAD, « toutes » | **NON** : +0,021 · **+0,044** | oui : +0,014 · +0,022 |
+| A : forme − `rt05-p3` en « toutes », pire groupe [calculé] | +0,017 (ROAD 1) | +0,053 (GRAVEL 0,25) |
+
+Pour la règle de la normalisation, **brute** sur les deux formes :
+- `common-norm` contre `common` : pire perte +0,008, meilleur gain 0,014. Le seuil de gain de 0,02 n'est pas atteint.
+- `svc-norm` contre `svc` : pire perte 0,000, meilleur gain 0,035. La paire est satisfaite, mais la règle demande les deux
+  paires.
+- `svc-sonde-norm` contre `svc-sonde` : pire perte +0,038, meilleur gain −0,001. Non satisfaite.
+
+B ROAD normalisée reste sous 1,0, et le service normalisé n'est pas pire.
+
+### 6.4 Service [mesuré]
+
+P50 par appel contre `base` du même tirage, et part `OK` (`base` : 98,1 % · 98,2 %). Il y a deux tirages : la campagne,
+puis `lot4-3b-p50` (même binaire, machine seule). Ni `PANIC` ni `WINDOW_ESCAPE` dans aucune variante. Une `VIOLATION` à
+0,25 dans `svc-sonde-norm` et `svc-sonde-capt500` (signalée, hors des variantes retenues).
+
+| variante | × base P50, curseur 0,25 (campagne · second tirage) | curseur 1 | `OK` 0,25 · 1 |
+|---|---|---|---|
+| `svc` | **1,12 · 1,17** | **1,05 · 1,08** | 98,3 % · 97,8 % (−0,4 point au plus) |
+| `svc-capt500` | 1,32 · 1,26 | 1,26 · 1,22 | 98,3 % · 97,9 % |
+| `svc-sonde` | 1,27 · 1,22 | 1,19 · 1,15 | 98,1 % · 98,0 % |
+| `svc-cap0` | 1,33 | 1,29 | 98,1 % · 97,9 % |
+| `rt05-p3` (rappel) | 1,23 | 1,14 | 98,0 % · 97,9 % |
+
+Le critère de service (P50 ≤ +25 % de `base`, `OK` −1 point au plus) **tient pour `svc`** aux deux tirages. `svc-capt500`
+le manque à 0,25 aux deux tirages (+32 %, +26 %). `svc-sonde` est à la limite à 0,25 (+27 %, puis +22 %). D'un tirage à
+l'autre, le P50 bouge de ±0,06 : c'est du bruit de mesure sur une machine pleine, à 16 fils.
+
+### 6.5 Coût d'apprentissage (estimé sur 4 fils = CPU / 4, [calculé])
+
+| variante | A : boucles (R, G) · jeux | A : estimé sur 4 fils | budget 720 s |
+|---|---|---:|---|
+| `svc` | 391, 109 · 3 000 | 324 s | tient |
+| `svc-capt500` | 500, 400 · 5 400 | **809 s** | dépasse (estimation pessimiste : le conteneur faisait 237 s là où le banc estime 324 s, soit ~430 s [calculé] pour 5 400 jeux) |
+| `svc-sonde-capt500` | 500, 400 · 5 400 | 625 s | tient |
+| `svc-cap0` | 1 384, 400 · 10 704 | 1 327 s | dépasse |
+
+## 7. Décisions du §9.5 appliquées
+
+1. **Forme du mélange (décision 2) : `capped`**, défaut inchangé. B ROAD « toutes » vaut 0,750 · 0,924 : il est sous 1,0
+   aux deux curseurs. A ne perd pas plus de 0,03 contre `rt05-p3` en « toutes » (au plus +0,017, en ROAD au curseur 1), ni
+   en « écart » (au plus +0,025). La décision 2 ne déclenche donc pas le retour à la sonde. `svc-sonde`, mesurée pour
+   comparaison, tiendrait les faits (a) à (d), mais pas le service à 0,25 au premier tirage.
+2. **Normalisation (décision 3) : brute, définitivement.** `COMMON_USE_NORMALIZED = false` reste. La paire de la table
+   commune ne gagne nulle part 0,02. La règle de la forme sonde, corrigée pour juger les deux paires (`502c6ac`), dit aussi
+   brute.
+3. **Plafond (décision 4) : par équipe**, défaut inchangé (`per_type = false`). Sur le GRAVEL de A en « toutes »,
+   `svc-capt500` gagne 0,038 au curseur 0,25 et 0,003 au curseur 1 (0,021 en moyenne) [calculé]. **Choix prudent,
+   signalé** : la décision dit « au moins 0,03 au GRAVEL de A » sans dire par quel curseur. Ce relevé exige le gain sur le
+   GRAVEL entier, donc aux deux curseurs, et ne retient pas un seul curseur. Sur ce choix, le plafond par type perd aussi
+   le service à 0,25, et A dépasse l'estimation du budget sur 4 fils (§6.5). Lu curseur par curseur, la décision donnerait
+   « par type ».
+4. **Défauts du service** : aucun ne change (`mix = capped`, `max_loops = 500`, `per_type = false`, table brute). Il n'y a
+   pas de commit de défauts.
+
+**Critères de fusion (décision 1)** : (a), (b), (c), service, `S / S_base` ≤ 0,5 par type tiennent ; **(d) ne tient pas**
+(A, ROAD, curseur 1 : `svc` 0,191 contre `common` 0,146, +0,044 pour +0,03). **Prêt à fusionner : non.** Cause probable
+[calculé, non mesuré à part] : avec le plafond de 500 boucles par équipe, A n'apprend que 391 boucles ROAD. La table commune,
+elle, est apprise sur 1 545 boucles, dont une large majorité de A. Le plafond par type (500 ROAD) ramène (d) à +0,002 ·
++0,020.
+
+## 8. Réapprise sur 100 % et conteneur : non faites
+
+Les étapes 3 de la consigne (décision 5, table commune réapprise sur 100 %) et 8 (séance en conteneur de 3 Gio, une fois)
+sont conditionnées aux critères, qui ne tiennent pas. Elles ne sont pas faites, pour deux raisons prudentes :
+- **Tables à 100 % :** une table commune apprise sur 100 % des boucles verrait les boucles mises à l'écart. Elle fausserait
+  toute campagne de contrôle qu'il faudrait rejouer après le choix du propriétaire, par exemple le plafond par type. Elle
+  vient donc en dernier.
+- **Conteneur :** la décision 8 ne permet qu'une séance, à rejouer après tout changement d'apprentissage. Changer le plafond
+  ou la forme change l'apprentissage.
+
+La séance du §5 (forme plafonnée, par équipe, table à 75 %) reste la dernière mesure en conteneur. Le script privé de la
+séance est prêt à être rejoué, sorties sous `G/lot4/3b-conteneur-2/`.
+
+## 9. Ce qui reste avant la mise en service
+
+1. **Au propriétaire, le fait (d)**, avec trois issues mesurées ici :
+   - accepter (d) à +0,044, A ROAD au curseur 1, avec la forme et le plafond actuels ;
+   - passer au plafond par type (`per_type = true`) : (d) tient (+0,002 · +0,020), mais le P50 est à +26 % ou +32 % à 0,25,
+     et A est estimé à 809 s sur 4 fils, au-delà des 720 s du budget. Le budget est à vérifier en conteneur, où le banc
+     surestime (§6.5) ;
+   - passer à la forme `sonde` (`mix = sonde`) : (a) à (d) tiennent, mais le P50 est à +22 % ou +27 % à 0,25. Ce n'est pas
+     ce que dit la décision 2, puisque B ROAD est sous 1,0.
+2. Puis, une seule fois et dans cet ordre :
+   - réapprendre `C` sur 100 % (`likeness --label lot4-3b-commune100 --variants base,rc:0.5+n:3` sans `--holdout-share`,
+     puis `taste-common` avec `--step2/--step3`) ;
+   - commiter la nouvelle `taste_common.rs` (nouveau `Common::hash` : les profils écrits deviennent `incompatibles`) ;
+   - re-bénir `window_reference.txt` en le disant ;
+   - rejouer la séance en conteneur de 3 Gio.
+3. Inchangé depuis le §5 : le banc région du lot 6 avec `--base-taste common`, les pages évincées avant les démarrages, et
+   l'arrêt du service pendant une phase de profil.
+
+## 10. Ce qui n'a pas été fait (relevé d'avant la campagne)
+
+- ~~Campagnes 2 à 4~~ : la campagne 4 est faite (§6). Les campagnes 2 (essai) et 3 (déterminisme sur B et C) ne sont pas
+  rejouées à part. La campagne 4 vérifie le déterminisme autrement : deux exécutions donnent les mêmes empreintes de
+  résultat (§6). Question 2 du §14.1 : tranchée au §7. Question 3 (réapprendre `C` sur 100 %) : décision 5, à faire au §9.
 - Le banc région du lot 6 (`--compare --self-check --base-taste common`) : l'égalité fenêtre / graphe entier avec la table
   commune est tenue par les tests existants rejoués sur la référence re-bénie (`the_window_of_all_tiles_is_the_flat_engine`,
   `any_superset_of_the_needed_tiles_gives_the_same_routes_and_no_escape`) ; le temps de construction des fenêtres avec la
@@ -174,10 +321,13 @@ changent ni les tables ni les jeux : seuls le traitement d'une panique et un cha
   phase de profil (testé en logique, pas provoqué).
 - Les générations de la séance ne rejouent pas celles du lot 6 (§5, encadré) : les temps ne se comparent pas ligne à ligne.
 
-## 7. Tests
+## 11. Tests
 
 [mesuré] `cargo test --workspace` : 870 passés, 0 échec, 11 ignorés (les mêmes que les relevés précédents : cache de banc
 d'altitude requis). Nouveaux : `ord-graph-match` 31 (collecteur, dépôt avec collecteur, joueur jouet, format, marche déplacée),
 `ord-loops-bench` 58 (variantes `svc`, règle de la normalisation, `taste-common`, un pas contre `step72`), `ord-loops` 57
 (poids de base, référence 1.9.2 sans re-bénédiction, table commune comme poids de base ou par le crochet), `ord-server` 53 de
 bibliothèque (magasin, purge, chiffrement, réglages) et 9 de bout en bout (`generator_profile`).
+
+[mesuré] Après les commits des décisions du §9.5 et la correction `502c6ac` : `cargo fmt` et `cargo clippy --workspace
+--all-targets -- -D warnings` sont verts. `cargo test --workspace` passe **880 tests sans échec**, 11 ignorés.

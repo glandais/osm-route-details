@@ -441,6 +441,23 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
 8. **Mesure en conteneur de 3 Gio** : la séance (§14.13) est rejouée **une fois**, après tout changement d'apprentissage,
    juste avant la fusion.
 
+**Appliquées sur la campagne 4** (17 novembre au soir ; chiffres au §6 du relevé
+[`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md), décisions au §7 du relevé) :
+- **Décision 2, forme `capped`** (défaut inchangé). B ROAD « toutes » de `svc` vaut 0,750 · 0,924 [mesuré], sous 1,0 aux deux
+  curseurs. A ne perd pas plus de 0,03 contre `rt05-p3` (au plus +0,017 [calculé]). Le retour à la sonde n'est donc pas
+  déclenché.
+- **Décision 3, normalisation brute, définitivement** (`COMMON_USE_NORMALIZED = false`). La paire `common-norm` / `common`
+  gagne au mieux 0,014, sous le seuil de 0,02 [mesuré].
+- **Décision 4, plafond par équipe** (défaut inchangé). `svc-capt500` gagne 0,038 sur le GRAVEL de A au curseur 0,25, mais
+  0,003 au curseur 1 [mesuré]. **Lecture prudente, signalée** : le gain est exigé sur le GRAVEL entier, donc aux deux
+  curseurs.
+- **Décision 1, fusion : non.** (a), (b), (c), le service et `S / S_base` ≤ 0,5 par type tiennent. **(d) ne tient pas** :
+  sur A, ROAD au curseur 1, `svc` est à +0,044 de `common`, pour un seuil de 0,03 [mesuré].
+- **Décisions 5 et 8 : non faites**, car les critères ne tiennent pas. Elles viennent en dernier : la table à 100 % fausserait
+  une campagne de contrôle, et la séance en conteneur ne se joue qu'une fois. Le propriétaire tranche d'abord (d) : §9 du
+  relevé.
+- **Décisions 6 et 7 : codées** (§14.16, points 24 et 25), relues sans correction.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -454,9 +471,16 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
      (§3.5), table commune dans le moteur ; normalisation tranchée au banc ; mémoire mesurée dans 3 Gio ; références
      figées re-bénies, version du moteur montée.
      **Fait** sur la branche `feat/ord-loops-lot4-3b` (paquet 1.10.0, API 1.10) : code, tests, mesure en conteneur de 3 Gio
-     (relevé : [`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md)). **Reste** : les campagnes 2 à 4 du §14.13
-     (la normalisation et les faits du §14.12.5 ne sont pas tranchés sur une vraie campagne ; commande retenue au §14.16, point
-     29, avec la forme `sonde` du §9.5), la mise en service ; écarts : §14.16.
+     (relevé : [`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md)).
+     **Campagne 4 faite** (17 novembre au soir, §6 et §7 du relevé). Les choix retenus sont la forme `capped`, le plafond
+     par équipe et la table brute, définitivement : aucun défaut ne change. B ROAD vaut 0,750 · 0,924 et le service tient.
+     **Le fait (d) ne tient pas** (A ROAD, curseur 1 : +0,044 contre `common`) : **pas prêt à fusionner**.
+     **Reste** :
+     - la décision du propriétaire sur (d) (trois issues mesurées, §9 du relevé) ;
+     - puis, une seule fois, la table commune réapprise sur 100 %, les références re-bénies et la séance en conteneur ;
+     - la mise en service.
+
+     Écarts : §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
@@ -2958,3 +2982,24 @@ accès à la production.
     (4) si la forme `sonde` est retenue, `generator.profile.mix = sonde` devient le défaut du service (une ligne de
     `config.rs`) et l'export à 100 % (décision 5) réécrit aussi les `COMMON_STEP_*`. **À rejouer après tout cela, avant la
     fusion** (décision 8) : la séance en conteneur de 3 Gio.
+
+**Relecture et campagne 4 (17 novembre au soir, branche `feat/ord-loops-lot4-3b`, rien de poussé ni de déployé)**
+
+30. **Relecture des commits `8131ab1` à `e779537`** :
+    - **Neutralité du défaut `capped`** : vérifiée. Le texte canonique et `Common::hash` sont inchangés. Le chemin du pas est
+      le même, et un type sans boucle garde `C`. Les empreintes de la fumée étaient restées les mêmes (point 28).
+    - **Fidélité de la forme `sonde` à `rt`** : vérifiée. `team_weight`, `blend` et `ratio_table` sont repris avec le même
+      ordre d'opérations, au seuil de 200 km de `TasteParams`, à `n0` = 25 et avec les bornes de `TasteParams`. Le test au
+      bit près compare bien avec `ChainState::step(RecalTeam, …)`. L'écart de la cible figée est celui du point 26.
+    - **Règle des 7 jours** : vérifiée. La date est recopiée depuis le profil précédent lisible, la comparaison est stricte,
+      et l'ensemble vide compte comme complet.
+    - **Un défaut corrigé** (`502c6ac`, `feat(bench)`) : `norm_rule_sonde` ne jugeait que la paire `svc-sonde-norm` /
+      `svc-sonde`. Le §14.12.4 demande aussi la paire `common-norm` / `common`, car la normalisation change le poids de base
+      de toutes les requêtes. La règle juge désormais les deux paires. La conclusion de la campagne 4 n'en change pas.
+31. **Campagne 4** : la commande du point 29 a tourné en 1 h 24, avec un pic de 18,2 Gio. Les contrôles `base` et `rt05-p3`
+    sont passés aux bits près. Les décisions 2, 3 et 4 appliquées sont au §9.5, les chiffres au §6 du relevé.
+    - **Second tirage des temps** (`lot4-3b-p50`) : les empreintes sont les mêmes, et le P50 bouge de ±0,06 × `base`.
+    - **Pas de commit de défauts** : la campagne confirme les défauts codés.
+    - **Choix prudent, signalé** : pour la décision 4, le gain est exigé sur le GRAVEL de A aux deux curseurs, pas à un seul.
+    - **Pas prêt à fusionner** : le fait (d) ne tient pas. La réapprise sur 100 % et la séance en conteneur sont donc
+      remises après la décision du propriétaire (§8 et §9 du relevé).
