@@ -306,6 +306,8 @@ pub struct Compare {
     pub team_cost: Vec<TeamCostRow>,
     /// Contrôle « toutes » (§13.6) : les `S_base` « toutes » contre ceux du 4a ; `None` s'il ne s'applique pas.
     pub all_check: Option<AllCheck>,
+    /// Le 3b (§14.12.3) : règle de la normalisation et faits sur le chemin du service ; `None` sans `common` ni `svc`.
+    pub three_b: Option<super::compare_svc::ThreeB>,
 }
 
 const NAMED: [(&str, &[&str]); 2] =
@@ -515,7 +517,7 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
             }
         })
         .collect();
-    Compare {
+    let mut cmp = Compare {
         conditions: conds.clone(),
         variants,
         criterion: crit,
@@ -526,7 +528,10 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
         chains: chains(done),
         team_cost: team_cost(done, &conds.cursors),
         all_check,
-    }
+        three_b: None,
+    };
+    cmp.three_b = super::compare_svc::three_b(&cmp, done);
+    cmp
 }
 
 // --- Rendu ----------------------------------------------------------------------------------------------------------------
@@ -841,6 +846,7 @@ pub fn markdown(cmp: &Compare, done: &[Done]) -> String {
     }
     s.push('\n');
     chains_reading_md(&mut s, cmp, done);
+    super::compare_svc::section_md(&mut s, cmp, done);
     s
 }
 

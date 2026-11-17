@@ -15,6 +15,7 @@ use ord_graph_match::agg::params_hash;
 use ord_graph_match::doc::TYPES;
 use ord_graph_match::index::SegIndex;
 use ord_graph_match::job::Job;
+use ord_graph_match::profile::collect::{LearnSet, LoopCollector};
 use ord_graph_match::Deposit;
 use serde::Serialize;
 
@@ -58,8 +59,11 @@ pub struct OverlayCheck {
     pub differing_edges: Option<usize>,
 }
 
-/// Surcouche d'une équipe par le dépôt, en sautant les traces de `skip` (indices dans `Ingest::tracks`).
-pub fn build_overlay(
+/// Surcouche d'une équipe par le dépôt, en sautant les traces de `skip` (indices dans `Ingest::tracks`), avec un
+/// collecteur facultatif de boucles d'apprentissage (3b) : le dépôt les retient au passage, sur les traces non sautées. Les
+/// tableaux de la surcouche sont les mêmes avec ou sans collecteur.
+#[allow(clippy::too_many_arguments)]
+pub fn build_overlay_learn(
     gf: &MappedGraph,
     seg: &SegIndex,
     poly: &Poly,
@@ -67,8 +71,12 @@ pub fn build_overlay(
     jobs: &[Job],
     team: usize,
     skip: &HashSet<usize>,
-) -> Result<(Overlay, f64)> {
-    let mut dep = Deposit::new(gf, seg, poly, 1);
+    collector: Option<LoopCollector>,
+) -> Result<(Overlay, f64, Option<LearnSet>)> {
+    let mut dep = match collector {
+        Some(c) => Deposit::with_collector(gf, seg, poly, 1, c),
+        None => Deposit::new(gf, seg, poly, 1),
+    };
     for (idx, t) in ing.tracks.iter().enumerate() {
         if t.team != team || skip.contains(&idx) {
             continue;
@@ -76,7 +84,7 @@ pub fn build_overlay(
         let edges = t.readable.then(|| t.edges.iter().map(|e| (e.wk, e.trv, &jobs[e.key as usize])));
         dep.push_matched(t.ty, t.excluded, edges);
     }
-    let (edges, counts, stats) = dep.finish();
+    let (edges, counts, stats, learn) = dep.finish_learn();
     let meta = OverlayMeta {
         graph: gf.graph_identity(),
         team_id: 0,
@@ -89,7 +97,7 @@ pub fn build_overlay(
     };
     let bytes = encode(&meta, &edges, &counts).map_err(|e| anyhow!("encodage de la surcouche : {e}"))?;
     let o = Overlay::decode(&bytes).map_err(|e| anyhow!("relecture de la surcouche : {e}"))?;
-    Ok((o, stats.km_counted))
+    Ok((o, stats.km_counted, learn))
 }
 
 /// Nombre d'arêtes dont les comptes diffèrent entre deux surcouches (absente d'un côté comptée comme différente).

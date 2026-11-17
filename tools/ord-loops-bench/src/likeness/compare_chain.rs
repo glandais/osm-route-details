@@ -868,6 +868,7 @@ mod tests {
             chain,
             l1_after: Vec::new(),
             class_meters: crate::likeness::variants::ClassMetersOut { pooled: Vec::new() },
+            svc: None,
             team_times: ["A", "B", "C"]
                 .iter()
                 .map(|t| TeamTime {
@@ -900,6 +901,7 @@ mod tests {
             fam_road_only: false,
             taste: Some((TasteSource::RecalTeam, 0.5)),
             chain: Some(Chain { stem: "rt05".into(), step: k, steps: 3, dims: Dims::D72 }),
+            svc: None,
         };
         let cm = ChainMeta {
             stem: "rt05".into(),

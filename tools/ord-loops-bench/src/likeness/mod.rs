@@ -10,6 +10,7 @@
 pub mod chain;
 pub mod compare;
 pub mod compare_chain;
+pub mod compare_svc;
 pub mod export;
 #[cfg(test)]
 mod fixture;
@@ -18,6 +19,7 @@ pub mod measure;
 pub mod out;
 pub mod play;
 pub mod shape;
+pub mod svc;
 pub mod taste;
 pub mod variants;
 pub mod walk;
@@ -31,6 +33,8 @@ use clap::Args;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_graph::util::Poly;
+use ord_graph_match::profile::collect::LearnSet;
+use ord_graph_match::profile::learn::LearnParams;
 use ord_graph_match::SegIndex;
 use ord_loops::{Params, Taste, TeamData, Workspace};
 use ord_loops_check::{Checker, Config, GraphIndex, TeamCheck, TypeIndex};
@@ -276,7 +280,7 @@ pub fn read_letters(path: &std::path::Path) -> Result<std::collections::BTreeMap
 }
 
 /// Surcouche complète (avec ses kilomètres comptés) et variante « écart ».
-type Built = Result<((Overlay, f64), Option<Overlay>)>;
+type Built = Result<((Overlay, f64), Option<Overlay>, Option<LearnSet>)>;
 
 /// Une phase : durée et pic de mémoire anonyme.
 struct Phases {
@@ -388,24 +392,64 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         .iter()
         .map(|&t| held.iter().filter(|&&i| loops[i].team == t).map(|&i| loops[i].track).collect())
         .collect();
+    // Le 3b : les boucles d'apprentissage de `svc`, collectées au passage du dépôt sur les traces non mises à l'écart (la
+    // surcouche « écart » si l'équipe en a une, sinon la complète), sans plafond : les plafonds se tirent ensuite.
+    let want_learn = variants.iter().any(|v| v.svc.is_some_and(|s| s.kind == variants::SvcKind::Svc));
+    let retain = ord_graph_match::profile::collect::RetainParams {
+        min_matched: a.min_matched,
+        max_hole_m: a.max_hole_m,
+        min_km: a.min_km,
+        max_km: a.max_km.or(LearnParams::default().retain.max_km),
+        loop_gap: a.loop_gap,
+    };
+    let collector = |on: bool| {
+        on.then(|| {
+            ord_graph_match::profile::collect::LoopCollector::new(
+                retain,
+                ord_graph_match::profile::collect::Cap::None,
+            )
+        })
+    };
     let built: Vec<Built> = team_ids
         .par_iter()
         .map(|&t| {
-            let full =
-                holdout::build_overlay(gf, &seg, &poly, &ing, &jobs, t, &std::collections::HashSet::new())?;
-            let gap = if skips[t].is_empty() {
-                None
+            let none = std::collections::HashSet::new();
+            let has_gap = !skips[t].is_empty();
+            let (full, km, l_full) = holdout::build_overlay_learn(
+                gf,
+                &seg,
+                &poly,
+                &ing,
+                &jobs,
+                t,
+                &none,
+                collector(want_learn && !has_gap),
+            )?;
+            let (gap, l_gap) = if has_gap {
+                let (g, _, l) = holdout::build_overlay_learn(
+                    gf,
+                    &seg,
+                    &poly,
+                    &ing,
+                    &jobs,
+                    t,
+                    &skips[t],
+                    collector(want_learn),
+                )?;
+                (Some(g), l)
             } else {
-                Some(holdout::build_overlay(gf, &seg, &poly, &ing, &jobs, t, &skips[t])?.0)
+                (None, None)
             };
-            Ok((full, gap))
+            Ok(((full, km), gap, l_gap.or(l_full)))
         })
         .collect();
     let mut overlays: Vec<Overlay> = Vec::new();
     let mut gap_overlays: Vec<Option<Overlay>> = Vec::new();
+    let mut learn_sets: Vec<Option<LearnSet>> = Vec::new();
     let mut overlay_checks: Vec<holdout::OverlayCheck> = Vec::new();
     for (t, b) in built.into_iter().enumerate() {
-        let ((o, km), gap) = b?;
+        let ((o, km), gap, learn_set) = b?;
+        learn_sets.push(learn_set);
         let differing = paths
             .overlays
             .as_ref()
@@ -492,6 +536,9 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         params: &tp,
         sums_full: &sums_full,
         sums_gap: &sums_gap,
+        learn_sets: &learn_sets,
+        retain,
+        threads,
     };
     let mut retention: BTreeMap<String, export::RetentionCounts> = BTreeMap::new();
     for (t, c) in counts.into_iter().enumerate() {
@@ -544,6 +591,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         let class_meters = chain::pooled_out(&meters);
         let chain_diag = step.map(|s| s.diag).unwrap_or_default();
         let team_times = run.team_times;
+        let run_svc_teams = run.svc_teams;
         match &v.chain {
             Some(c) if c.step < c.steps => prev_meters = Some(meters),
             Some(_) => chain = None,
@@ -607,6 +655,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             l1_after,
             team_times,
             class_meters,
+            svc: v.svc.map(|sv| svc_meta(&sv, a, retain, run_svc_teams)),
         });
         let mut meta =
             meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
@@ -725,6 +774,10 @@ struct Bench<'a> {
     params: &'a TasteParams,
     sums_full: &'a [ClassSums],
     sums_gap: &'a [Option<ClassSums>],
+    /// 3b : les boucles d'apprentissage de chaque équipe (indice de `Ingest::teams`), sans plafond.
+    learn_sets: &'a [Option<LearnSet>],
+    retain: ord_graph_match::profile::collect::RetainParams,
+    threads: usize,
 }
 
 /// Ce qu'une variante rend : ses jeux (par boucle, dans l'ordre des boucles) et les tables de goût jouées.
@@ -732,6 +785,7 @@ struct VariantRun {
     plays: Vec<Vec<play::PlayRec>>,
     tables: Vec<TasteTable>,
     team_times: Vec<TeamTime>,
+    svc_teams: Vec<svc::SvcTeam>,
 }
 
 impl Bench<'_> {
@@ -778,7 +832,27 @@ impl Bench<'_> {
         }
         let mut plays: Vec<Vec<play::PlayRec>> = self.loops.iter().map(|_| Vec::new()).collect();
         let mut team_times: Vec<TeamTime> = Vec::new();
+        let mut svc_teams: Vec<svc::SvcTeam> = Vec::new();
+        // Le chemin du service (3b) : `common` passe la même table à toutes les équipes.
+        let common_taste: Option<Taste> = match v.svc {
+            Some(sv) if sv.kind == variants::SvcKind::Common => {
+                let c = svc::common_of(sv.norm).taste();
+                tables.extend(taste_tables("commun", "full", &c));
+                Some(c)
+            }
+            _ => None,
+        };
         for &t in self.order {
+            // `svc` : le profil de l'équipe, appris une fois (sur la surcouche « écart »), servi aux deux surcouches.
+            let learned_taste: Option<Taste> = match v.svc {
+                Some(sv) if sv.kind == variants::SvcKind::Svc => {
+                    let (taste, meta) = self.learn_team(t, &sv)?;
+                    tables.extend(taste_tables(&self.letter_of[t], "full", &taste));
+                    svc_teams.push(meta);
+                    Some(taste)
+                }
+                _ => None,
+            };
             let mine: Vec<usize> = (0..self.loops.len()).filter(|&i| self.loops[i].team == t).collect();
             let tt = std::time::Instant::now();
             // Temps de l'équipe (§13.6) : constructions des deux surcouches, et jeux `full` (cumul des `PlayRec::ms`).
@@ -814,6 +888,7 @@ impl Bench<'_> {
             }
             for (overlay, label, key, ids) in jobs {
                 let taste: Option<Taste> = match v.taste {
+                    _ if v.svc.is_some() => learned_taste.clone().or_else(|| common_taste.clone()),
                     Some((TasteSource::Team, gamma)) => {
                         let sums = if label == "full" {
                             &self.sums_full[t]
@@ -879,8 +954,112 @@ impl Bench<'_> {
                 wall_s,
             });
         }
-        Ok(VariantRun { plays, tables, team_times })
+        Ok(VariantRun { plays, tables, team_times, svc_teams })
     }
+}
+
+impl Bench<'_> {
+    /// L'apprentissage d'une équipe par le code du dépôt (§14.12.2) : ses boucles non mises à l'écart (plafonnées comme le
+    /// service), le joueur du banc sur la surcouche « écart » (la complète sans mise à l'écart), `learn`.
+    fn learn_team(&self, t: usize, sv: &variants::Svc) -> Result<(Taste, svc::SvcTeam)> {
+        use ord_server::generator::cursor;
+        let a = self.args;
+        let hs: Vec<u32> = a
+            .cursors
+            .iter()
+            .map(|&c| cursor::hundredths(c).ok_or_else(|| anyhow!("curseur hors de [0, 1] : {c}")))
+            .collect::<Result<_>>()?;
+        let hs: [u32; 2] =
+            hs.try_into().map_err(|_| anyhow!("`svc` joue exactement deux curseurs (`--cursors`)"))?;
+        let lp = svc::learn_params(sv, self.retain, hs, a.seed);
+        let cursors: Vec<(ord_loops::Mode, f32, u32)> = lp
+            .cursors
+            .iter()
+            .map(|&h| {
+                let c = cursor::apply(h);
+                (c.mode, c.familiarity, c.off_team_cost_q8)
+            })
+            .collect();
+        let set = self.learn_sets[t].as_ref().map(|s| s.capped(svc::cap_of(sv))).unwrap_or_default();
+        let mut by_type = [0u32; 3];
+        for l in &set.loops {
+            by_type[usize::from(l.ty).min(2)] += 1;
+        }
+        let overlay = self.gap_overlays[t].as_ref().unwrap_or(&self.overlays[t]);
+        let t0 = std::time::Instant::now();
+        let (team, team_check) = build_team(self.engine, self.graph_index, overlay, &self.letter_of[t])?;
+        let checker = Checker::with_tables(
+            self.gf,
+            Some(overlay),
+            Config::default(),
+            self.graph_index,
+            Some(&team_check),
+        );
+        let (keys, cpu) = (svc::BenchPlayer::fresh_keys(), std::sync::atomic::AtomicU64::new(0));
+        let player = svc::BenchPlayer {
+            engine: self.engine,
+            gf: self.gf,
+            wins: self.ctx.wins,
+            team: &team,
+            checker: &checker,
+            threads: self.threads,
+            next_key: &keys,
+            cpu_ns: &cpu,
+        };
+        let learned =
+            ord_graph_match::profile::learn::learn(&set, &cursors, &player, &svc::common_of(sv.norm), &lp);
+        let wall = t0.elapsed().as_secs_f64();
+        let cpu_s = cpu.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1e9;
+        eprintln!(
+            "  profil de l'équipe {} : {} boucles, {} pas, {} jeux, {wall:.1} s",
+            self.letter_of[t],
+            set.loops.len(),
+            learned.steps_done,
+            learned.plays
+        );
+        let meta = svc::team_meta(&self.letter_of[t], by_type, &learned, wall, cpu_s);
+        Ok((learned.taste, meta))
+    }
+}
+
+/// Ce que `common` et `svc` écrivent sur eux-mêmes (§14.12.2).
+fn svc_meta(
+    sv: &variants::Svc,
+    a: &LikenessArgs,
+    retain: ord_graph_match::profile::collect::RetainParams,
+    teams: Vec<svc::SvcTeam>,
+) -> svc::SvcMeta {
+    let hs: Vec<u32> =
+        a.cursors.iter().filter_map(|&c| ord_server::generator::cursor::hundredths(c)).collect();
+    let cursors = [hs.first().copied().unwrap_or(25), hs.get(1).copied().unwrap_or(100)];
+    let lp = svc::learn_params(sv, retain, cursors, a.seed);
+    svc::SvcMeta {
+        common: ord_graph_match::profile::format::hex16(svc::common_of(sv.norm).hash()),
+        learn: ord_graph_match::profile::format::hex16(lp.hash()),
+        cap: if sv.kind == variants::SvcKind::Svc { format!("{:?}", lp.cap) } else { String::new() },
+        normalize: sv.norm,
+        teams,
+    }
+}
+
+/// Les trois tables d'une `Taste` pour la sortie (source, surcouche) : seulement les `q8`, que `taste_xxh3` hache.
+fn taste_tables(source: &str, overlay: &str, t: &Taste) -> Vec<TasteTable> {
+    taste::TYPES
+        .iter()
+        .enumerate()
+        .map(|(i, (name, _))| TasteTable {
+            source: source.to_string(),
+            overlay: overlay.to_string(),
+            ride: (*name).to_string(),
+            num_km: 0.0,
+            neutral: t.q8[i].iter().all(|&q| q == 256),
+            // Pas de parts apprises à montrer (la table vient du dépôt) : des vecteurs de la bonne taille, sans effet.
+            pn: vec![0.0; ord_loops::TASTE_CLASSES],
+            pd: vec![0.0; ord_loops::TASTE_CLASSES],
+            g: vec![1.0; ord_loops::TASTE_CLASSES],
+            q8: t.q8[i].to_vec(),
+        })
+        .collect()
 }
 
 /// Données d'équipe et tables du contrôleur d'une surcouche, construites en parallèle comme le fait le service.

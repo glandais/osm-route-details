@@ -60,6 +60,32 @@ pub struct Chain {
     pub dims: Dims,
 }
 
+/// Ce que la variante passe à toutes les équipes (3b, §14.12.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub enum SvcKind {
+    /// `common` : la table commune du moteur, la même pour toutes les équipes et les deux surcouches.
+    Common,
+    /// `svc` : par équipe, le profil appris par le code du dépôt, joué sur les deux surcouches.
+    Svc,
+}
+
+/// Plafond des boucles d'apprentissage de `svc` : `cap:<n>` par équipe (0 : aucun), `capt:<n>` par type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub enum SvcCap {
+    Team(usize),
+    PerType(usize),
+}
+
+/// Variante du chemin du service (3b) : `common`, `svc`, avec `norm`, `cap:<n>` ou `capt:<n>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Svc {
+    pub kind: SvcKind,
+    /// La table commune normalisée, et des pas normalisés.
+    pub norm: bool,
+    /// `None` : le plafond du service (500 par équipe).
+    pub cap: Option<SvcCap>,
+}
+
 /// Une variante : `base`, ou la familiarité et/ou un goût.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variant {
@@ -73,15 +99,17 @@ pub struct Variant {
     pub taste: Option<(TasteSource, f64)>,
     /// `Some` pour `rc` et `rt` (`rc` seul : `steps = 1`, nom sans suffixe).
     pub chain: Option<Chain>,
+    /// `Some` pour `common` et `svc` (3b) : ni goût du banc, ni familiarité.
+    pub svc: Option<Svc>,
 }
 
 impl Variant {
     pub fn base() -> Self {
-        Self { name: "base".into(), fam: None, fam_road_only: false, taste: None, chain: None }
+        Self { name: "base".into(), fam: None, fam_road_only: false, taste: None, chain: None, svc: None }
     }
 
     pub fn is_base(&self) -> bool {
-        self.fam.is_none() && self.taste.is_none()
+        self.fam.is_none() && self.taste.is_none() && self.svc.is_none()
     }
 
     /// Variante de recalé (commun ou par équipe).
@@ -107,11 +135,35 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     // Nom : les composants dans l'ordre donné ; `dim:me` vient juste après le goût.
     let mut names: Vec<String> = Vec::new();
     let mut taste_pos: Option<usize> = None;
+    // Le chemin du service (3b) : `common` ou `svc`, `norm`, `cap:<n>`, `capt:<n>`.
+    let (mut kind, mut norm, mut cap): (Option<SvcKind>, bool, Option<SvcCap>) = (None, false, None);
     ensure!(!spec.is_empty(), "variante vide");
     for comp in spec.split('+') {
+        match comp {
+            "common" | "svc" => {
+                ensure!(kind.is_none(), "variante « {spec} » : `common` et `svc` ne vont pas ensemble");
+                kind = Some(if comp == "svc" { SvcKind::Svc } else { SvcKind::Common });
+                names.push(comp.to_string());
+                continue;
+            }
+            "norm" => {
+                ensure!(!norm, "variante « {spec} » : deux `norm`");
+                norm = true;
+                names.push("norm".into());
+                continue;
+            }
+            _ => {}
+        }
         let (key, val) =
             comp.split_once(':').ok_or_else(|| anyhow!("variante : composant inconnu : « {comp} »"))?;
         match key {
+            "cap" | "capt" => {
+                ensure!(cap.is_none(), "variante « {spec} » : `cap` et `capt` ne vont pas ensemble");
+                let n: usize =
+                    val.parse().map_err(|_| anyhow!("variante : `{key}` attend un entier : « {val} »"))?;
+                cap = Some(if key == "cap" { SvcCap::Team(n) } else { SvcCap::PerType(n) });
+                names.push(format!("{key}{n}"));
+            }
             "fam" | "famroad" => {
                 ensure!(fam.is_none(), "variante « {spec} » : deux familiarités");
                 let f = number("la familiarité", val)?;
@@ -153,6 +205,18 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
             _ => bail!("variante : composant inconnu : « {comp} »"),
         }
     }
+    ensure!(!norm || kind.is_some(), "variante « {spec} » : `norm` demande `common` ou `svc`");
+    ensure!(
+        cap.is_none() || kind == Some(SvcKind::Svc),
+        "variante « {spec} » : `cap` et `capt` demandent `svc`"
+    );
+    if kind.is_some() {
+        ensure!(
+            taste.is_none() && fam.is_none() && n.is_none() && dims.is_none(),
+            "variante « {spec} » : `common` et `svc` n'acceptent ni autre goût, ni `fam`, ni `famroad`, ni `n`, ni `dim`"
+        );
+    }
+    let svc = kind.map(|kind| Svc { kind, norm, cap });
     let recal = matches!(taste, Some((TasteSource::Recal | TasteSource::RecalTeam, _)));
     ensure!(
         recal || (n.is_none() && dims.is_none()),
@@ -162,7 +226,7 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         names.insert(taste_pos.map_or(names.len(), |p| p + 1), "me".into());
     }
     let stem = names.join("-");
-    let mk = |name: String, chain: Option<Chain>| Variant { name, fam, fam_road_only, taste, chain };
+    let mk = |name: String, chain: Option<Chain>| Variant { name, fam, fam_road_only, taste, chain, svc };
     if !recal {
         return Ok(vec![mk(stem, None)]);
     }
@@ -190,6 +254,12 @@ pub fn parse_variants(s: &[String]) -> Result<Vec<Variant>> {
     for spec in s {
         for v in one(spec.trim())? {
             ensure!(out.iter().all(|x| x.name != v.name), "variante en double : « {} »", v.name);
+            if v.svc.is_some() {
+                ensure!(
+                    out.iter().any(Variant::is_base),
+                    "variante « {spec} » : `common` et `svc` ont besoin de `base` plus tôt dans la liste"
+                );
+            }
             if v.is_recal() {
                 ensure!(
                     out.iter().any(Variant::is_base),
@@ -321,6 +391,8 @@ pub struct VariantMeta {
     pub team_times: Vec<TeamTime>,
     /// Les mètres par classe de la variante, toutes équipes réunies (§14.3.1).
     pub class_meters: ClassMetersOut,
+    /// `common` et `svc` (3b) : empreintes, plafond, et par équipe ce que l'apprentissage a coûté (§14.12.2).
+    pub svc: Option<super::svc::SvcMeta>,
 }
 
 #[cfg(test)]
@@ -392,6 +464,58 @@ mod tests {
         assert!(parse(&["base", "rc:1"]).is_ok());
         assert!(parse(&["base", "ge:1", "rc:1"]).is_ok());
         assert!(parse(&["base", "rt:0.5"]).is_ok());
+    }
+
+    #[test]
+    fn the_service_path_variants_parse_and_refuse_what_they_cannot_mix() {
+        let v = parse(&[
+            "base",
+            "common",
+            "common+norm",
+            "svc",
+            "svc+norm",
+            "svc+cap:0",
+            "svc+capt:500",
+            "svc+norm+cap:300",
+        ])
+        .unwrap();
+        let names: Vec<&str> = v.iter().map(|x| x.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "base",
+                "common",
+                "common-norm",
+                "svc",
+                "svc-norm",
+                "svc-cap0",
+                "svc-capt500",
+                "svc-norm-cap300"
+            ]
+        );
+        assert_eq!(v[6].svc, Some(Svc { kind: SvcKind::Svc, norm: false, cap: Some(SvcCap::PerType(500)) }));
+        assert_eq!(v[7].svc, Some(Svc { kind: SvcKind::Svc, norm: true, cap: Some(SvcCap::Team(300)) }));
+        assert!(v[1].taste.is_none() && v[1].fam.is_none() && !v[1].is_base() && v[3].chain.is_none());
+        for bad in [
+            vec!["base", "norm"],
+            vec!["base", "cap:500"],
+            vec!["base", "capt:500"],
+            vec!["base", "common+cap:5"],
+            vec!["base", "svc+cap:5+capt:5"],
+            vec!["base", "svc+fam:1"],
+            vec!["base", "svc+rc:0.5"],
+            vec!["base", "common+svc"],
+            vec!["base", "svc+svc"],
+            vec!["base", "svc+norm+norm"],
+            vec!["base", "svc+n:2"],
+            vec!["base", "svc+cap:x"],
+            vec!["svc"],
+            vec!["common", "base"],
+            vec!["base", "svc", "svc"],
+            vec!["base", "svc+norm", "svc+norm"],
+        ] {
+            assert!(parse(&bad).is_err(), "{bad:?} aurait dû être refusée");
+        }
     }
 
     fn chain_of(v: &Variant) -> (String, u8, u8, Dims) {
