@@ -40,6 +40,12 @@ pub struct Shape {
     pub vertices: u32,
     pub vertices_10: u32,
     pub vertices_legacy: u32,
+    /// Détour jusqu'au point le plus éloigné : `far_pos / r_over_d` (abscisse de ce point sur sa distance à vol
+    /// d'oiseau du départ) ; `None` si `r_over_d` vaut 0. Sonde du goût, §12.4.
+    pub detour_far: Option<f64>,
+    /// `l_poly / P`, `P` le périmètre du polygone **fermé** des points gardés par la règle de `vertices_10` (départ,
+    /// sommets, arrivée, puis retour au départ) ; `None` si `P` vaut 0. Sonde du goût, §12.4.
+    pub sinuosity_10: Option<f64>,
 }
 
 /// Mesure la forme de `pts` (au moins deux points ; sinon tout vaut 0).
@@ -54,6 +60,8 @@ pub fn shape(pts: &[Pt]) -> Shape {
             vertices: 0,
             vertices_10: 0,
             vertices_legacy: 0,
+            detour_far: None,
+            sinuosity_10: None,
         };
     }
     let cum = cumulative(pts);
@@ -67,6 +75,14 @@ pub fn shape(pts: &[Pt]) -> Shape {
         }
     }
     let a = gauss_area(pts).abs();
+    let kept = vertex_indices(pts, 0.10);
+    let perimeter = if kept.len() >= 2 {
+        let ring: Vec<Pt> = kept.iter().map(|&i| pts[i]).collect();
+        length(&ring) + dist(ring[ring.len() - 1], ring[0])
+    } else {
+        // Aucun sommet au-delà de la tolérance : le polygone se réduit au segment départ-arrivée, aller et retour.
+        2.0 * dist(pts[0], pts[pts.len() - 1])
+    };
     Shape {
         l_poly: l,
         r_over_d: rmax / l,
@@ -75,6 +91,8 @@ pub fn shape(pts: &[Pt]) -> Shape {
         vertices: vertices(pts, 0.05),
         vertices_10: vertices(pts, 0.10),
         vertices_legacy: vertices_legacy(pts, 0.05),
+        detour_far: (rmax > 0.0).then(|| cum[at] / l / (rmax / l)),
+        sinuosity_10: (perimeter > 0.0).then(|| l / perimeter),
     }
 }
 
@@ -156,9 +174,15 @@ fn douglas_peucker(
 /// Aller-retour = 1, triangle = 2, quadrilatère partant d'un coin = 3 ; cercle = 3 ; lentille = 1 + un par côté
 /// dont la flèche dépasse `tol`.
 pub fn vertices(pts: &[Pt], tol_share: f64) -> u32 {
+    (vertex_indices(pts, tol_share).len() as u32).saturating_sub(2)
+}
+
+/// Les indices gardés par la règle de [`vertices`] (le départ, les sommets, l'arrivée), triés ; vide si la règle ne
+/// garde rien (moins de trois points, ou point le plus éloigné sous la tolérance). `vertices = len − 2`.
+pub fn vertex_indices(pts: &[Pt], tol_share: f64) -> Vec<usize> {
     let n = pts.len();
     if n < 3 {
-        return 0;
+        return Vec::new();
     }
     let tol = tol_share * length(pts);
     let o = pts[0];
@@ -171,12 +195,11 @@ pub fn vertices(pts: &[Pt], tol_share: f64) -> u32 {
         }
     }
     if rmax < tol || f == 0 {
-        return 0;
+        return Vec::new();
     }
     let mut seeds = vec![0, f, n - 1];
     seeds.dedup();
-    let keep = douglas_peucker(pts, &seeds, tol, dist_to_segment);
-    (keep.len() as u32).saturating_sub(2)
+    douglas_peucker(pts, &seeds, tol, dist_to_segment).into_iter().collect()
 }
 
 /// La règle de `shapes.py` (`dp`) portée exactement : corde `p[0] → p[n − 1]`, distance à la **droite** (au point si
@@ -507,6 +530,46 @@ mod tests {
         close(s.compactness, 1.0, 5e-3);
         close(s.far_pos, 0.5, 5e-3);
         assert_eq!((s.vertices, s.vertices_10), (3, 3));
+    }
+
+    #[test]
+    fn detour_far_and_sinuosity_on_the_reference_shapes() {
+        let ab = shape(&dense(&[[0.0, 0.0], [0.0, 8_000.0], [0.0, 0.0]]));
+        close(ab.detour_far.unwrap(), 1.0, 1e-9);
+        close(ab.sinuosity_10.unwrap(), 1.0, 1e-9);
+        // Cercle : far_pos 1/2 sur r/D 1/π ; l'aire inscrite est un carré (3 sommets) de périmètre 4 √2 r.
+        let c = shape(&circle(5_000.0));
+        close(c.detour_far.unwrap(), std::f64::consts::PI / 2.0, 1e-2);
+        assert_eq!(c.vertices_10, 3);
+        close(c.sinuosity_10.unwrap(), 2.0 * std::f64::consts::PI / (4.0 * 2f64.sqrt()), 1e-2);
+        let tri = shape(&dense(&[[0.0, 0.0], [8_000.0, 0.0], [4_000.0, 6_000.0], [0.0, 0.0]]));
+        close(tri.detour_far.unwrap(), 1.0, 1e-9);
+        close(tri.sinuosity_10.unwrap(), 1.0, 1e-9);
+        // Dégénéré : rien ne bouge, rien à rendre.
+        let dot = shape(&[[0.0, 0.0], [0.0, 0.0]]);
+        assert_eq!((dot.detour_far, dot.sinuosity_10), (None, None));
+    }
+
+    #[test]
+    fn the_kept_indices_are_the_vertices_plus_two() {
+        let a = 5_000.0;
+        let shapes = [
+            circle(5_000.0),
+            dense(&[[0.0, 0.0], [0.0, 8_000.0], [0.0, 0.0]]),
+            dense(&[[0.0, 0.0], [8_000.0, 0.0], [4_000.0, 6_000.0], [0.0, 0.0]]),
+            dense(&[[0.0, 0.0], [a, 0.0], [a, a], [0.0, a], [0.0, 0.0]]),
+            lens(10_000.0, 300.0),
+            lens(10_000.0, 1_500.0),
+            dense(&[[0.0, 0.0], [0.0, 8_000.0], [0.0, -1.0]]),
+            vec![[0.0, 0.0], [1.0, 0.0]],
+        ];
+        for p in &shapes {
+            for tol in [0.05, 0.10] {
+                let idx = vertex_indices(p, tol);
+                assert!(idx.windows(2).all(|w| w[0] < w[1]));
+                assert_eq!(idx.len().saturating_sub(2) as u32, vertices(p, tol));
+            }
+        }
     }
 
     #[test]

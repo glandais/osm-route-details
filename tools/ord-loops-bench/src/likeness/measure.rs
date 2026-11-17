@@ -2,10 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ord_graph::attrs::{Access, Attrs, HighwayClass};
+use ord_graph::attrs::{Access, Attrs};
 use ord_graph::mmap::MappedGraph;
 use ord_graph_match::agg::{coverage_threshold, union_coverage, Cov};
-use ord_loops::is_greenway;
 use serde::Serialize;
 
 use super::shape;
@@ -18,6 +17,8 @@ pub struct Measures {
     pub d_km: f64,
     pub r_over_d: f64,
     pub far_pos: f64,
+    /// Détour jusqu'au point lointain : `far_pos / r_over_d` (sonde du goût, §12.4).
+    pub detour_far: Option<f64>,
     pub compactness: f64,
     /// La définition figée (5 % de D, ancrée au point le plus éloigné, distance au segment).
     pub vertices: u32,
@@ -26,6 +27,8 @@ pub struct Measures {
     /// La règle de `shapes.py` sur la même polyligne appariée.
     pub vertices_legacy: u32,
     pub turns_per_10km: f64,
+    /// `l_poly` sur le périmètre du polygone fermé des points gardés à 10 % de D (sonde du goût, §12.4).
+    pub sinuosity_10: Option<f64>,
     pub shared_share: f64,
     /// Croisements du contrôleur ; `None` pour une marche réelle non continue.
     pub crossings: Option<u32>,
@@ -41,33 +44,25 @@ pub struct Measures {
     pub gap_share: f64,
 }
 
-/// Classe de voie (§3.2), dans l'ordre : voie cyclable ou verte (`Cycleway` ou `is_greenway`, la définition du
-/// moteur) → 4 ; `Primary | Secondary | Trunk | Motorway` → 0 (grande route ; `Motorway`, fermée au vélo, n'y arrive
-/// que par une trace réelle) ; `Tertiary` → 1 ; `Unclassified | Road` → 2 (petite route) ; `Residential |
-/// LivingStreet | Service` → 3 (rue) ; tout le reste et classe absente → 5 (chemin). Les `_link` suivent leur classe.
+/// Classe de voie (§3.2) : la définition est celle du moteur, `ord_loops::taste_way`.
 pub fn way_class(a: Attrs) -> usize {
-    use HighwayClass::*;
-    if a.class() == Some(Cycleway) || is_greenway(a) {
-        return 4;
-    }
-    match a.class() {
-        Some(Primary | Secondary | Trunk | Motorway) => 0,
-        Some(Tertiary) => 1,
-        Some(Unclassified | Road) => 2,
-        Some(Residential | LivingStreet | Service) => 3,
-        _ => 5,
-    }
+    ord_loops::taste_way(a)
 }
 
-/// Groupe de revêtement : `surface() == 0` → 1 (présumé) ; sinon non revêtu → 2 ; sinon 0.
+/// Groupe de revêtement : la définition est celle du moteur, `ord_loops::taste_surface`.
 pub fn surface_group(a: Attrs) -> usize {
-    if a.surface() == 0 {
-        1
-    } else if a.is_unpaved() {
-        2
-    } else {
-        0
+    ord_loops::taste_surface(a)
+}
+
+/// Longueur parcourue par classe de goût (`ord_loops::taste_class`), en mètres, trous exclus : `Σ leg_m` des jambes
+/// de la marche (sonde du goût, §12.2).
+#[allow(dead_code)] // lue par la phase 7 du banc (commits suivants de la sonde)
+pub fn class_lengths(gf: &MappedGraph, walk: &Walk, t: &Trace) -> [f64; ord_loops::TASTE_CLASSES] {
+    let mut out = [0.0; ord_loops::TASTE_CLASSES];
+    for (l, &m) in walk.legs.iter().zip(&t.leg_m) {
+        out[ord_loops::taste_class(gf.edge(l.edge).attrs)] += m;
     }
+    out
 }
 
 /// Degré du nœud `n` : les ids d'arête distincts du CSR de sa cellule (les sens ouverts au vélo), plus `e_in` et
@@ -159,11 +154,13 @@ pub fn measure(gf: &MappedGraph, walk: &Walk, t: &Trace, crossings: Option<u32>)
         d_km: t.d_graph / 1000.0,
         r_over_d: s.r_over_d,
         far_pos: s.far_pos,
+        detour_far: s.detour_far,
         compactness: s.compactness,
         vertices: s.vertices,
         vertices_10: s.vertices_10,
         vertices_legacy: s.vertices_legacy,
         turns_per_10km: if t.l_poly > 0.0 { f64::from(turns) / (t.l_poly / 10_000.0) } else { 0.0 },
+        sinuosity_10: s.sinuosity_10,
         shared_share: shared_share(gf, walk, t.d_graph),
         crossings,
         way: way.map(norm),
@@ -221,6 +218,12 @@ mod tests {
         let cyc = len_m(&gf, edge_between(&gf, id(1, 0), id(1, 1)).0);
         assert!((m.way[4] - cyc / t.d_graph).abs() < 1e-9, "{:?}", m.way);
         assert!((m.way.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+        // Longueurs par classe de goût : le carré fait 1 200 m, dont la cycleway ; la somme est celle des jambes.
+        let cl = class_lengths(&gf, &w, &t);
+        assert!((cl.iter().sum::<f64>() - t.leg_m.iter().sum::<f64>()).abs() < 1e-9);
+        let cyc_class = ord_loops::taste_class(gf.edge(edge_between(&gf, id(1, 0), id(1, 1)).0).attrs);
+        assert!((cl[cyc_class] - cyc).abs() < 1e-9, "{cl:?}");
+        assert_eq!(ord_loops::taste_way(gf.edge(edge_between(&gf, id(1, 0), id(1, 1)).0).attrs), 4);
         assert!((m.surface.iter().sum::<f64>() - 1.0).abs() < 1e-9);
         // Trois nœuds intérieurs de la marche ; (0,1) et (1,0) sont de degré 3, (1,1) de degré 4 : trois virages droits.
         assert!((m.turns_per_10km - 3.0 / (t.l_poly / 10_000.0)).abs() < 1e-6, "{}", m.turns_per_10km);

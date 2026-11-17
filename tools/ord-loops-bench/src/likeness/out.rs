@@ -65,7 +65,7 @@ pub struct Report {
 
 /// Les mesures comparées, dans l'ordre (§11.5).
 pub type Getter = fn(&Measures) -> Option<f64>;
-pub const MEASURES: [(&str, Getter); 20] = [
+pub const MEASURES: [(&str, Getter); 22] = [
     ("r_over_d", |m| Some(m.r_over_d)),
     ("far_pos", |m| Some(m.far_pos)),
     ("compactness", |m| Some(m.compactness)),
@@ -73,6 +73,8 @@ pub const MEASURES: [(&str, Getter); 20] = [
     ("vertices_10", |m| Some(f64::from(m.vertices_10))),
     ("vertices_legacy", |m| Some(f64::from(m.vertices_legacy))),
     ("turns_per_10km", |m| Some(m.turns_per_10km)),
+    ("detour_far", |m| m.detour_far),
+    ("sinuosity_10", |m| m.sinuosity_10),
     ("shared_share", |m| Some(m.shared_share)),
     ("crossings", |m| m.crossings.map(f64::from)),
     ("way_major", |m| Some(m.way[0])),
