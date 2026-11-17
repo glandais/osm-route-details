@@ -17,6 +17,14 @@ use super::shape::{self, Pt};
 const SNAP_M: f64 = 2.0;
 /// Écart de deux points au plus pour un `Touch`, m.
 const TOUCH_M: f64 = 5.0;
+/// Distance au nœud commun, le long de chaque arête, en deçà de laquelle deux appariements voisins sont raccordés à ce
+/// nœud (voir `Walk::bridge_at_nodes`), m : deux recalages de 8 m au plus de part et d'autre d'un point de l'export.
+const BRIDGE_M: f64 = 25.0;
+
+/// Longueur du graphe d'une arête, m.
+fn len_of(gf: &MappedGraph, edge: u32) -> f64 {
+    f64::from(gf.edge(edge).len_dm) / 10.0
+}
 
 /// Une arête de base parcourue sur la portion `[lo, hi]` ⊂ `[0, 1]` de sa longueur (paramètre `a → b`), dans le sens
 /// `b → a` si `reverse`.
@@ -201,8 +209,49 @@ impl Walk {
                 })
             })
             .collect();
+        let mut legs = legs;
+        Self::bridge_at_nodes(gf, &mut legs);
         let joins = Self::classify_joins(gf, &legs);
         Walk { legs, joins }
+    }
+
+    /// Passage par un nœud que les bouts de deux appariements voisins ont manqué : la géométrie `k` de l'export finit
+    /// en un point `P`, la géométrie `k + 1` y reprend, et chacune projette `P` sur **son** arête (recalage d'un bout
+    /// jusqu'à `EDGE_SNAP_M` = 8 m, sur un nœud seulement à 1,5 m). Quand les deux arêtes ont une extrémité commune `n`
+    /// et que la sortie de l'une et l'entrée de l'autre sont toutes deux à `BRIDGE_M` ou moins de `n` le long de leur
+    /// arête, la trace est passée par `n` (deux arêtes distinctes ne se rejoignent qu'à leurs nœuds) : les deux bouts
+    /// sont prolongés jusqu'à `n`. Sans cette règle, les jonctions entre deux appariements retenus tombent souvent à
+    /// quelques mètres du carrefour, presque aucune marche réelle n'est continue et les virages à ces carrefours sont
+    /// perdus, alors que le généré passe toujours par les nœuds : virages et croisements ne seraient pas comparés de
+    /// la même façon.
+    fn bridge_at_nodes(gf: &MappedGraph, legs: &mut [Leg]) {
+        for i in 1..legs.len() {
+            let (x, y) = (legs[i - 1], legs[i]);
+            if x.edge == y.edge {
+                continue;
+            }
+            let (xa, xb) = gf.edge_ends(x.edge);
+            let (ya, yb) = gf.edge_ends(y.edge);
+            let (lx, ly) = (len_of(gf, x.edge), len_of(gf, y.edge));
+            // Nœud du côté de la sortie de `x` et distance de la sortie à ce nœud, le long de l'arête ; de même pour
+            // l'entrée de `y`.
+            let (nx, dx) = if x.reverse { (xa, x.lo * lx) } else { (xb, (1.0 - x.hi) * lx) };
+            let (ny, dy) = if y.reverse { (yb, (1.0 - y.hi) * ly) } else { (ya, y.lo * ly) };
+            if nx != ny || dx > BRIDGE_M || dy > BRIDGE_M {
+                continue;
+            }
+            // Prolonger ne vide jamais une jambe.
+            if x.reverse {
+                legs[i - 1].lo = 0.0;
+            } else {
+                legs[i - 1].hi = 1.0;
+            }
+            if y.reverse {
+                legs[i].hi = 1.0;
+            } else {
+                legs[i].lo = 0.0;
+            }
+        }
     }
 
     fn classify_joins(gf: &MappedGraph, legs: &[Leg]) -> Vec<Join> {
@@ -415,6 +464,33 @@ mod tests {
         let t = w.trace(&gf);
         assert!((t.holes_m - t.max_hole_m).abs() < 1e-9 && t.holes_m > 250.0);
         assert!((t.d_graph - (t.leg_m.iter().sum::<f64>() + t.holes_m)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_matches_that_stop_short_of_their_common_node_are_joined_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let gf = graph(dir.path());
+        // (0,0) → (0,1) puis (0,1) → (1,1) : la première géométrie s'arrête 6 m avant le carrefour, la seconde
+        // reprend 4 m après (deux recalages d'un même point de l'export) ; puis la même chose à 40 m, laissée telle
+        // quelle.
+        let (e1, r1) = edge_between(&gf, id(0, 0), id(0, 1));
+        let (e2, r2) = edge_between(&gf, id(0, 1), id(1, 1));
+        let (l1, l2) = (len_m(&gf, e1) as f32, len_m(&gf, e2) as f32);
+        let near = [piece(&gf, e1, r1, 0.0, l1 - 6.0), piece(&gf, e2, r2, 4.0, l2)];
+        let w = Walk::from_pieces(&gf, &near);
+        assert!(w.is_continuous(), "{:?}", w.joins);
+        assert_eq!(
+            (w.legs[0].exit(), w.legs[1].entry()),
+            (if r1 { 0.0 } else { 1.0 }, if r2 { 1.0 } else { 0.0 })
+        );
+        let far = [piece(&gf, e1, r1, 0.0, l1 - 40.0), piece(&gf, e2, r2, 4.0, l2)];
+        let w = Walk::from_pieces(&gf, &far);
+        assert!(matches!(w.joins[..], [Join::Hole(_)]), "{:?}", w.joins);
+        // Deux arêtes sans nœud commun ne sont jamais raccordées, même proches de leurs bouts.
+        let (e3, r3) = edge_between(&gf, id(1, 1), id(1, 2));
+        let l3 = len_m(&gf, e3) as f32;
+        let apart = [piece(&gf, e1, r1, 0.0, l1 - 3.0), piece(&gf, e3, r3, 3.0, l3)];
+        assert!(!Walk::from_pieces(&gf, &apart).is_continuous());
     }
 
     #[test]
