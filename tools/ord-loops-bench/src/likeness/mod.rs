@@ -7,6 +7,7 @@
 //! part ailleurs ; les équipes y sont lettrées, une boucle y est désignée par `(lettre, i)`, et seuls des agrégats et
 //! des empreintes en sortent.
 
+pub mod compare;
 pub mod export;
 #[cfg(test)]
 mod fixture;
@@ -455,6 +456,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     overlay_checks.sort_by(|x, y| x.team.cmp(&y.team));
     let vertex_histograms = vertex_histograms(&loops, &raw, &reals);
     let mut rc_inputs: Option<RcInputs> = None;
+    let mut done: Vec<compare::Done> = Vec::new();
     std::fs::create_dir_all(&paths.out)?;
     for v in &variants {
         wins.take_team_counters();
@@ -546,17 +548,39 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             v.name,
             report.fingerprint
         );
-        if v.is_base() {
-            let same = report.fingerprint == BASE_4A_FINGERPRINT;
-            if a.at_4a_defaults() {
-                eprintln!("« `base` = 4a : {BASE_4A_FINGERPRINT} » : {}", if same { "oui" } else { "NON" });
-                anyhow::ensure!(
-                    same || legacy,
-                    "l'empreinte de `base` n'est pas celle du 4a ({BASE_4A_FINGERPRINT}) : le crochet du goût n'est pas \
-                     neutre, ou le banc a changé ; chercher, ne pas lire la suite"
-                );
-            }
+        let same = report.fingerprint == BASE_4A_FINGERPRINT;
+        if let Some(meta) = &report.variant {
+            // Gardé pour la comparaison (et pour `rc`, déjà tiré).
+            done.push(compare::Done {
+                variant: v.clone(),
+                meta: meta.clone(),
+                fingerprint: report.fingerprint.clone(),
+                loops: report.loops,
+            });
         }
+        if v.is_base() && a.at_4a_defaults() {
+            eprintln!("« `base` = 4a : {BASE_4A_FINGERPRINT} » : {}", if same { "oui" } else { "NON" });
+            anyhow::ensure!(
+                same || legacy,
+                "l'empreinte de `base` n'est pas celle du 4a ({BASE_4A_FINGERPRINT}) : le crochet du goût n'est pas \
+                 neutre, ou le banc a changé ; chercher, ne pas lire la suite"
+            );
+        }
+    }
+    if !legacy {
+        let dirty = crate::git(&["status", "--porcelain"]).is_some_and(|s| !s.is_empty());
+        let conds = compare::Conditions {
+            commit: format!(
+                "{}{}",
+                crate::git(&["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
+                if dirty { " (arbre modifié)" } else { "" }
+            ),
+            cursors: a.cursors.clone(),
+            params: tp.clone(),
+            at_4a_defaults: a.at_4a_defaults(),
+            base_4a_fingerprint: BASE_4A_FINGERPRINT.to_string(),
+        };
+        compare::write(&paths.out, &a.label, &conds, &done)?;
     }
     Ok(())
 }
