@@ -41,8 +41,9 @@ mod tests_window;
 
 pub use cache::{CacheStats, WindowCache};
 pub use cost::{
-    common_gen_dm_per_loop, common_loops, common_source, is_greenway, multiplier_table, taste_class,
-    taste_surface, taste_way, taste_weight, RideType, Taste, COMMON_USE_NORMALIZED, TASTE_CLASSES,
+    common_gen_dm_per_loop, common_loops, common_source, common_step_gen_dm, common_step_loops,
+    common_step_real_dm, is_greenway, multiplier_table, taste_class, taste_surface, taste_way, taste_weight,
+    RideType, Taste, COMMON_USE_NORMALIZED, TASTE_CLASSES,
 };
 pub use engine::{Engine, EngineError, Params};
 pub use generate::{

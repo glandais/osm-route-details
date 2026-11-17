@@ -233,6 +233,22 @@ pub fn common_loops() -> [u32; 3] {
     crate::taste_common::COMMON_LOOPS
 }
 
+/// Mètres du réel, en décimètres, que joue chacun des trois pas de la chaîne commune, par pas, type et classe, toutes
+/// équipes réunies : la cible du mélange « sonde » d'un profil d'équipe (`ord-graph-match`, `profile::learn::Mix`).
+pub fn common_step_real_dm() -> &'static [[[u32; TASTE_CLASSES]; 3]; 3] {
+    &crate::taste_common::COMMON_STEP_REAL_DM
+}
+
+/// Mètres générés, comme [`common_step_real_dm`].
+pub fn common_step_gen_dm() -> &'static [[[u32; TASTE_CLASSES]; 3]; 3] {
+    &crate::taste_common::COMMON_STEP_GEN_DM
+}
+
+/// Boucles comptées par pas et par type pour [`common_step_real_dm`].
+pub fn common_step_loops() -> [[u32; 3]; 3] {
+    crate::taste_common::COMMON_STEP_LOOPS
+}
+
 /// D'où vient la table commune (provenance, sans donnée privée).
 pub fn common_source() -> &'static str {
     crate::taste_common::COMMON_SOURCE
@@ -408,6 +424,21 @@ mod tests {
         assert!(r[0].iter().any(|&x| x > 0) && r[1].iter().any(|&x| x > 0));
         let loops = common_loops();
         assert!(loops[0] >= 50 && loops[1] >= 50 && !common_source().is_empty());
+        // Les pas de la chaîne commune : le pas 3 joue la table du pas 2, le pas 1 la neutre ; mêmes boucles à peu près.
+        let (real, gen, sl) = (common_step_real_dm(), common_step_gen_dm(), common_step_loops());
+        for k in 0..3 {
+            assert!(sl[k][0] >= 50 && sl[k][1] >= 50, "{sl:?}");
+            for t in 0..2 {
+                assert!(real[k][t].iter().any(|&x| x > 0) && gen[k][t].iter().any(|&x| x > 0));
+            }
+        }
+        // `R` de la table commune = les mètres générés par boucle du dernier pas joué (sous `C`), de même ordre de grandeur
+        // que ceux du pas 3 (sous la table du pas 2) : pas le même nombre, mais jamais deux ordres d'écart.
+        let (rr, g3): (f64, f64) = (
+            r[0].iter().map(|&x| f64::from(x) / 10.0).sum::<f64>(),
+            gen[2][0].iter().map(|&x| f64::from(x) / 10.0).sum::<f64>() / f64::from(sl[2][0]),
+        );
+        assert!(rr / g3 > 0.5 && rr / g3 < 2.0, "{rr} {g3}");
     }
 
     const RAW_HASH: u64 = 0x8f43a55dab78eda4;

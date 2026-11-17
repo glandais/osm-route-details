@@ -25,6 +25,13 @@ pub struct TasteCommonArgs {
     /// Rapport de `base`, jouée à table neutre (les mètres générés d'un type neutralisé).
     #[arg(long)]
     pub base: PathBuf,
+    /// Rapport de `rc05-p1` (les mètres que joue le pas 2 de la chaîne commune), avec `--step3` : les mètres des pas du
+    /// mélange de la sonde (`generator.profile.mix = sonde`). Sans les deux, ces constantes sont écrites à zéro.
+    #[arg(long, requires = "step3")]
+    pub step2: Option<PathBuf>,
+    /// Rapport de `rc05-p2` (les mètres que joue le pas 3).
+    #[arg(long, requires = "step2")]
+    pub step3: Option<PathBuf>,
     /// `taste_xxh3` attendu du rapport recalé : refus s'il diffère (le rejeu n'est plus celui de la campagne 2).
     #[arg(long)]
     pub expect_xxh3: String,
@@ -53,6 +60,7 @@ struct Table {
 #[derive(Deserialize)]
 struct TypeMeters {
     ride: String,
+    real_m: Vec<f64>,
     gen_m: Vec<f64>,
     loops: u32,
 }
@@ -116,6 +124,54 @@ pub struct Exported {
     pub q8n: [[u16; TASTE_CLASSES]; 3],
     pub gen_dm: [[u32; TASTE_CLASSES]; 3],
     pub loops: [u32; 3],
+    /// Mètres toutes équipes réunies des trois pas de la chaîne commune, en décimètres : les entrées du pas `k` sont les
+    /// mètres que joue sa table de départ (`base`, `rc05-p1`, `rc05-p2`). `None` : constantes à zéro.
+    pub steps: Option<StepsExport>,
+}
+
+/// Les mètres des trois pas : `[pas][type][classe]`.
+#[derive(Debug, PartialEq)]
+pub struct StepsExport {
+    pub real_dm: [[[u32; TASTE_CLASSES]; 3]; 3],
+    pub gen_dm: [[[u32; TASTE_CLASSES]; 3]; 3],
+    pub loops: [[u32; 3]; 3],
+}
+
+fn dm(m: f64) -> Result<u32> {
+    let v = (m * 10.0).round();
+    ensure!(v >= 0.0 && v <= f64::from(u32::MAX), "mètres hors de la plage d'un `u32` en décimètres : {m}");
+    Ok(v as u32)
+}
+
+/// Les mètres des trois pas : `base` (pas 1), `p1` (pas 2), `p2` (pas 3). Refuse un rapport qui n'est pas la bonne variante.
+fn export_steps(base: &Report, p1: &Report, p2: &Report) -> Result<StepsExport> {
+    ensure!(
+        p1.variant.name.ends_with("-p1") && p2.variant.name.ends_with("-p2"),
+        "`--step2` doit être le rapport du pas 1 de la chaîne (`…-p1`) et `--step3` celui du pas 2 (`…-p2`) : reçu `{}` et `{}`",
+        p1.variant.name,
+        p2.variant.name
+    );
+    let mut out = StepsExport {
+        real_dm: [[[0; TASTE_CLASSES]; 3]; 3],
+        gen_dm: [[[0; TASTE_CLASSES]; 3]; 3],
+        loops: [[0; 3]; 3],
+    };
+    for (k, r) in [base, p1, p2].into_iter().enumerate() {
+        for (ty, ride) in RIDES.iter().enumerate() {
+            let m = meters_of(r, ride)?;
+            ensure!(
+                m.real_m.len() == TASTE_CLASSES && m.gen_m.len() == TASTE_CLASSES,
+                "mètres de {ride} mal formés (rapport `{}`)",
+                r.variant.name
+            );
+            out.loops[k][ty] = m.loops;
+            for c in 0..TASTE_CLASSES {
+                out.real_dm[k][ty][c] = dm(m.real_m[c])?;
+                out.gen_dm[k][ty][c] = dm(m.gen_m[c])?;
+            }
+        }
+    }
+    Ok(out)
 }
 
 fn export(r: &Report, base: &Report, min_loops: u32, bound: f64) -> Result<Exported> {
@@ -124,6 +180,7 @@ fn export(r: &Report, base: &Report, min_loops: u32, bound: f64) -> Result<Expor
         q8n: [[256; TASTE_CLASSES]; 3],
         gen_dm: [[0; TASTE_CLASSES]; 3],
         loops: [0; 3],
+        steps: None,
     };
     for (ty, ride) in RIDES.iter().enumerate() {
         let (m, t) = (meters_of(r, ride)?, table_of(r, ride)?);
@@ -156,6 +213,24 @@ fn table_text(name: &str, doc: &str, t: &[[u16; TASTE_CLASSES]; 3]) -> String {
         for chunk in row.chunks(12) {
             let v: Vec<String> = chunk.iter().map(u16::to_string).collect();
             let _ = writeln!(s, "        {},", v.join(", "));
+        }
+        s.push_str("    ],\n");
+    }
+    s.push_str("];\n");
+    s
+}
+
+fn steps_text(name: &str, v: &[[[u32; TASTE_CLASSES]; 3]; 3]) -> String {
+    let mut s = format!("pub const {name}: [[[u32; TASTE_CLASSES]; 3]; 3] = [\n");
+    for step in v {
+        s.push_str("    [\n");
+        for row in step {
+            s.push_str("        [\n");
+            for chunk in row.chunks(8) {
+                let c: Vec<String> = chunk.iter().map(u32::to_string).collect();
+                let _ = writeln!(s, "            {},", c.join(", "));
+            }
+            s.push_str("        ],\n");
         }
         s.push_str("    ],\n");
     }
@@ -196,6 +271,18 @@ fn render(e: &Exported, provenance: &str) -> String {
     }
     s.push_str("];\n\n/// Boucles comptées par type pour `COMMON_GEN_DM_PER_LOOP`.\n");
     let _ = writeln!(s, "pub const COMMON_LOOPS: [u32; 3] = {:?};\n", e.loops);
+    let zero = StepsExport {
+        real_dm: [[[0; TASTE_CLASSES]; 3]; 3],
+        gen_dm: [[[0; TASTE_CLASSES]; 3]; 3],
+        loops: [[0; 3]; 3],
+    };
+    let st = e.steps.as_ref().unwrap_or(&zero);
+    s.push_str("\n/// Mètres du réel par pas de la chaîne commune (le pas `k` lit ceux que joue sa table de départ), par type et par\n/// classe, en décimètres, toutes équipes réunies : la cible du mélange de la sonde (`generator.profile.mix`).\n");
+    s.push_str(&steps_text("COMMON_STEP_REAL_DM", &st.real_dm));
+    s.push_str("\n/// Mètres générés, comme `COMMON_STEP_REAL_DM`.\n");
+    s.push_str(&steps_text("COMMON_STEP_GEN_DM", &st.gen_dm));
+    s.push_str("\n/// Boucles comptées par pas et par type.\n");
+    let _ = writeln!(s, "pub const COMMON_STEP_LOOPS: [[u32; 3]; 3] = {:?};\n", st.loops);
     s.push_str("/// D'où vient la table (étiquette de la campagne, variante, empreintes).\n");
     let _ = writeln!(s, "pub const COMMON_SOURCE: &str = {provenance:?};");
     s
@@ -218,7 +305,10 @@ pub fn run(a: &TasteCommonArgs) -> Result<()> {
     if base.variant.name != "base" {
         bail!("`--base` doit être le rapport de `base` (reçu : {})", base.variant.name);
     }
-    let e = export(&r, &base, a.min_loops, a.bound)?;
+    let mut e = export(&r, &base, a.min_loops, a.bound)?;
+    if let (Some(p1), Some(p2)) = (&a.step2, &a.step3) {
+        e.steps = Some(export_steps(&base, &read_report(p1)?, &read_report(p2)?)?);
+    }
     let meta = |k: &str| r.meta.iter().find(|(n, _)| n == k).map_or("?", |(_, v)| v.as_str()).to_string();
     let provenance = format!(
         "Variante : {} (empreinte de résultat {}, taste_xxh3 {}), rejouée sans les {:.0} % de boucles mises à l'écart ;\nappris sur les boucles restantes, toutes équipes réunies, deux curseurs.\nTypes neutralisés (moins de {} boucles) : {}.\nBoucles comptées : {:?}.\nBanc : commit {}, le {}.",
@@ -237,7 +327,11 @@ pub fn run(a: &TasteCommonArgs) -> Result<()> {
         e.loops,
         meta("commit"),
         meta("date"),
-    );
+    ) + if e.steps.is_some() {
+        "\nPas du mélange de la sonde : mètres de `base`, `rc05-p1` et `rc05-p2`, toutes équipes réunies."
+    } else {
+        ""
+    };
     std::fs::write(&a.out, render(&e, &provenance)).with_context(|| a.out.display().to_string())?;
     eprintln!(
         "table commune écrite : {} (taste_xxh3 {}, tables {})",
@@ -262,7 +356,12 @@ mod tests {
     }
 
     fn meters(ride: &str, loops: u32, gen: f64) -> TypeMeters {
-        TypeMeters { ride: ride.into(), gen_m: vec![gen; TASTE_CLASSES], loops }
+        TypeMeters {
+            ride: ride.into(),
+            real_m: vec![gen / 2.0; TASTE_CLASSES],
+            gen_m: vec![gen; TASTE_CLASSES],
+            loops,
+        }
     }
 
     fn report(name: &str, q: [u16; 3], loops: [u32; 3], gen: f64) -> Report {
@@ -297,6 +396,31 @@ mod tests {
     }
 
     #[test]
+    fn the_steps_read_the_meters_each_step_plays_in_decimetres_and_refuse_a_wrong_report() {
+        let base = report("base", [256; 3], [10, 20, 3], 1_000.0);
+        let p1 = report("rc05-p1", [256; 3], [11, 21, 3], 2_000.0);
+        let p2 = report("rc05-p2", [256; 3], [12, 22, 3], 3_000.5);
+        let st = export_steps(&base, &p1, &p2).unwrap();
+        assert_eq!(st.loops, [[10, 20, 3], [11, 21, 3], [12, 22, 3]]);
+        assert_eq!((st.gen_dm[0][0][0], st.gen_dm[1][1][5], st.gen_dm[2][2][71]), (10_000, 20_000, 30_005));
+        assert_eq!((st.real_dm[0][0][0], st.real_dm[2][0][3]), (5_000, 15_003));
+        // Les rapports dans le désordre : refusés.
+        assert!(export_steps(&base, &p2, &p1).is_err());
+        let text = render(
+            &Exported {
+                q8: [[256; TASTE_CLASSES]; 3],
+                q8n: [[256; TASTE_CLASSES]; 3],
+                gen_dm: [[7; TASTE_CLASSES]; 3],
+                loops: [1, 2, 3],
+                steps: Some(st),
+            },
+            "x",
+        );
+        assert!(text.contains("COMMON_STEP_LOOPS: [[u32; 3]; 3] = [[10, 20, 3], [11, 21, 3], [12, 22, 3]];"));
+        assert!(text.contains("30005"));
+    }
+
+    #[test]
     fn normalisation_is_bounded_and_idempotent_without_weights() {
         let mut q = [256u16; TASTE_CLASSES];
         q[0] = 1_024;
@@ -328,6 +452,7 @@ mod tests {
             q8n: [[256; TASTE_CLASSES]; 3],
             gen_dm: [[7; TASTE_CLASSES]; 3],
             loops: [1, 2, 3],
+            steps: None,
         };
         let text = render(&e, "ligne un\nligne deux");
         for k in [
@@ -335,6 +460,9 @@ mod tests {
             "COMMON_Q8_NORMALIZED:",
             "COMMON_GEN_DM_PER_LOOP:",
             "COMMON_LOOPS:",
+            "COMMON_STEP_REAL_DM:",
+            "COMMON_STEP_GEN_DM:",
+            "COMMON_STEP_LOOPS:",
             "COMMON_SOURCE:",
         ] {
             assert!(text.contains(k), "{k}");
