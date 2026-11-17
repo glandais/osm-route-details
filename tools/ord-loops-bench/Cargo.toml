@@ -19,6 +19,7 @@ ord-graph-match.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 flate2.workspace = true
+memmap2.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 serde.workspace = true

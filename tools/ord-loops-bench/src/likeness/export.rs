@@ -182,13 +182,15 @@ fn hash_file(path: &Path) -> Result<u64> {
 }
 
 /// `raw_legacy` : `shapes.py` en entier, trace par trace, sur les géométries brutes (tous types, toutes traces
-/// lisibles, exclues comprises : `shapes.py` ne filtre pas).
-pub fn raw_legacy(ing: &Ingest) -> Vec<super::shape::RawRow> {
+/// lisibles, exclues comprises : `shapes.py` ne filtre pas). Aligné sur `Ingest::tracks`.
+pub fn raw_legacy(ing: &Ingest) -> Vec<Option<super::shape::RawRow>> {
     use ord_graph_match::geo::decode_polyline6;
     ing.tracks
         .par_iter()
-        .filter(|t| t.readable)
-        .filter_map(|t| {
+        .map(|t| {
+            if !t.readable {
+                return None;
+            }
             let mut pts: Vec<[f64; 2]> = Vec::new();
             let mut tot = 0.0f64;
             for e in &t.edges {

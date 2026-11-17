@@ -1456,6 +1456,7 @@ dependencies = [
  "anyhow",
  "clap",
  "flate2",
+ "memmap2 0.9.12",
  "ord-graph",
  "ord-graph-match",
  "ord-loops",
