@@ -27,6 +27,7 @@ pub mod crypto;
 pub mod cursor;
 mod deposit;
 mod generate;
+mod profile;
 pub mod routes;
 pub mod store;
 #[cfg(test)]
@@ -193,6 +194,10 @@ pub struct Ready {
     gen_slots: Arc<Semaphore>,
     gen_waiting: AtomicUsize,
     deposit_slots: Arc<Semaphore>,
+    /// Phases de profil de goût en cours (3b), tous environnements : une seule par défaut.
+    profile_slots: Arc<Semaphore>,
+    /// La table commune et les réglages d'apprentissage ; `None` : profils désactivés.
+    profile: Option<store::ProfileSettings>,
     hooks: Arc<TestHooks>,
     /// Le service s'arrête : les attentes de fond (construction des données d'une équipe après un dépôt) s'interrompent.
     stopping: AtomicBool,
@@ -418,8 +423,30 @@ impl Generator {
         // Le budget de mémoire compte les équipes résidentes que le stockage lui déclare ; elles ont leurs propres plafonds
         // (nombre, octets) et aucune réservation ne les évince.
         let windows = Arc::new(windows::WindowManager::new(cfg.memory_budget_mb * 1_000_000));
+        // Le profil de goût (3b) : la table commune du moteur et les réglages d'apprentissage. `retain.max_km` est la distance
+        // maximale servie : les boucles plus longues ne servent à rien (le service ne les génère pas) et leur fenêtre peut
+        // dépasser le budget de mémoire. Le crochet de test abaisse `min_km` pour les graphes synthétiques.
+        let profile = cfg.profile.enabled.then(|| {
+            use ord_graph_match::profile::collect::Cap;
+            use ord_graph_match::profile::learn::{Common, LearnParams};
+            let mut learn = LearnParams {
+                cap: if cfg.profile.per_type {
+                    Cap::PerType(cfg.profile.max_loops)
+                } else {
+                    Cap::Team(cfg.profile.max_loops)
+                },
+                ..LearnParams::default()
+            };
+            learn.retain.max_km = Some(cfg.distance_m_max / 1000.0);
+            let milli = hooks.profile_min_km_milli.load(std::sync::atomic::Ordering::Relaxed);
+            if milli > 0 {
+                learn.retain.min_km = milli as f64 / 1000.0;
+            }
+            store::ProfileSettings { common: Common::engine(learn.normalize), learn }
+        });
         let store = store::Store::new(
             store::StoreConfig {
+                profile: profile.clone(),
                 dir: cfg.overlay_dir.clone(),
                 ttl: Duration::from_secs(cfg.overlay_ttl_days * 86_400),
                 stale_grace: Duration::from_secs(cfg.stale_grace_h * 3_600),
@@ -509,6 +536,8 @@ impl Generator {
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),
                 gen_waiting: AtomicUsize::new(0),
                 deposit_slots: Arc::new(Semaphore::new(cfg.deposit.max_concurrent)),
+                profile_slots: Arc::new(Semaphore::new(cfg.profile.max_concurrent)),
+                profile,
                 hooks,
                 stopping: AtomicBool::new(false),
                 graph_id: gid,
@@ -571,6 +600,27 @@ impl Generator {
     #[doc(hidden)]
     pub fn hooks(&self) -> Option<Arc<TestHooks>> {
         self.ready().map(|r| Arc::clone(&r.hooks))
+    }
+
+    /// Distance maximale servie (km) et marge des fenêtres (m) : de quoi rejouer un dépôt avec le moteur du service.
+    #[doc(hidden)]
+    pub fn test_limits(&self) -> Option<(f64, f64)> {
+        self.ready().map(|r| (r.cfg.distance_m_max / 1000.0, r.cfg.window_margin_m))
+    }
+
+    /// Empreinte (xxh3, 16 hexadécimaux) des trois tables du profil de goût d'une équipe et ses pas finis ; `None` sans
+    /// profil lisible. Pour les tests de déterminisme et d'équivalence : les tables ne sortent jamais par l'API.
+    #[doc(hidden)]
+    pub fn test_profile_fingerprint(&self, key: &str, team: &str) -> Option<(String, u8)> {
+        let r = self.ready()?;
+        let k = crypto::decode_key(key)?;
+        match r.store.read_profile(&crypto::Credentials::derive(&k, team)) {
+            store::ProfileRead::Present(t, m, _) => {
+                let bytes: Vec<u8> = t.q8.iter().flatten().flat_map(|q| q.to_le_bytes()).collect();
+                Some((format!("{:016x}", xxh3_64(&bytes)), m.steps))
+            }
+            _ => None,
+        }
     }
 
     /// Une place de calcul, comme la prend une génération (tests de la file d'attente).

@@ -14,6 +14,8 @@ use http_body_util::BodyExt;
 use ord_graph::overlay::{encode, OverlayMeta};
 use ord_graph_match::agg::{params_hash, CAUSES};
 use ord_graph_match::doc::{parse_document, type_code, TYPES};
+use ord_graph_match::profile::collect::LearnSet;
+use ord_graph_match::profile::collect::LoopCollector;
 use ord_graph_match::{CellIndex, Deposit, Near, SegIndex};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -79,6 +81,9 @@ pub struct DepositReportV1 {
     pub km: DepositKm,
     /// Bytes of the stored file.
     pub stored_bytes: u64,
+    /// The taste profile phase (3b); absent when profiles are disabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<super::profile::DepositProfileV1>,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -115,11 +120,22 @@ struct Worker {
     digest: Option<String>,
     /// Fin du budget du dépôt : le fil s'arrête de lui-même, même si le client est encore là.
     deadline: Instant,
+    /// La place de dépôt : rendue à la fin de l'appariement, avant la phase de profil (qui a la sienne). Le verrou de
+    /// l'équipe, lui, reste tenu jusqu'à la réponse.
+    permit: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+/// Ce que l'appariement rend.
+struct Matched {
+    edges: Vec<u32>,
+    counts: Vec<u16>,
+    stats: ord_graph_match::DepositStats,
+    learn: Option<LearnSet>,
 }
 
 impl Worker {
-    /// Consomme les lignes jusqu'à `Finish`, puis écrit. `Err(None)` : le client est parti, rien n'est écrit.
-    fn run(self, mut rx: mpsc::Receiver<Msg>) -> Result<DepositReportV1, Option<Problem>> {
+    /// Consomme les lignes jusqu'à `Finish`, apparie et agrège : l'index et le dépôt sont lâchés avant de rendre.
+    fn matching(&self, mut rx: mpsc::Receiver<Msg>) -> Result<Matched, Option<Problem>> {
         let r = &self.ready;
         let gf = r.engine.base();
         let cell;
@@ -131,7 +147,17 @@ impl Worker {
             full = SegIndex::build(gf);
             &full
         };
-        let mut dep = Deposit::new(gf, idx, &r.poly, r.cfg.deposit.memo_entries);
+        // Les boucles d'apprentissage d'un profil de goût (3b) : retenues au passage de l'appariement, jamais relues.
+        let mut dep = match &r.profile {
+            Some(p) => Deposit::with_collector(
+                gf,
+                idx,
+                &r.poly,
+                r.cfg.deposit.memo_entries,
+                LoopCollector::new(p.learn.retain, p.learn.cap),
+            ),
+            None => Deposit::new(gf, idx, &r.poly, r.cfg.deposit.memo_entries),
+        };
         let mut n = 0u64; // numéro de ligne, à partir de 1
         let mut tracks = 0u64;
         let mut end: Option<u64> = None;
@@ -182,7 +208,19 @@ impl Worker {
         if Instant::now() >= self.deadline {
             return Err(Some(over_budget()));
         }
-        let (edges, counts, stats) = dep.finish();
+        let (edges, counts, stats, learn) = dep.finish_learn();
+        Ok(Matched { edges, counts, stats, learn })
+    }
+
+    /// Apparie, puis écrit la surcouche et, s'il y a lieu, le profil de goût.
+    fn run(mut self, rx: mpsc::Receiver<Msg>) -> Result<DepositReportV1, Option<Problem>> {
+        let r = Arc::clone(&self.ready);
+        let gf = r.engine.base();
+        let Matched { edges, counts, stats, learn } = self.matching(rx)?;
+        let over_budget = || Problem::new(ProblemCode::Timeout, "deposit budget exceeded");
+        // L'appariement est fini : la place de dépôt est rendue. La phase de profil, longue, n'y reste pas (l'autre
+        // environnement y déposerait à la même heure).
+        drop(self.permit.take());
         let now = unix_now();
         let meta = FileMeta {
             deposited_at: now,
@@ -209,15 +247,22 @@ impl Worker {
         if Instant::now() >= self.deadline {
             return Err(Some(over_budget()));
         }
-        let stored = r.store.commit(&self.creds, &meta, &ordo).map_err(|e| match e {
-            StoreError::Quota => {
-                Some(Problem::new(ProblemCode::InsufficientStorage, "storage quota reached"))
-            }
-            StoreError::Io => {
-                tracing::error!(ns8 = self.creds.ns8(), "overlay write failed");
-                Some(Problem::internal())
-            }
-        })?;
+        // Le profil de goût : un échec ou un dépassement ne fait jamais échouer le dépôt.
+        let phase = r.profile_phase(learn, &ordo, self.deadline);
+        if Instant::now() >= self.deadline {
+            return Err(Some(over_budget()));
+        }
+        let profile_bytes = phase.as_ref().and_then(|p| p.bytes.as_deref());
+        let stored =
+            r.store.commit_with_profile(&self.creds, &meta, &ordo, profile_bytes).map_err(|e| match e {
+                StoreError::Quota => {
+                    Some(Problem::new(ProblemCode::InsufficientStorage, "storage quota reached"))
+                }
+                StoreError::Io => {
+                    tracing::error!(ns8 = self.creds.ns8(), "overlay write failed");
+                    Some(Problem::internal())
+                }
+            })?;
         let mut unmatched = serde_json::Map::new();
         for (name, km) in CAUSES.iter().zip(stats.km_unmatched) {
             unmatched.insert((*name).to_string(), serde_json::json!(r3(km)));
@@ -254,6 +299,7 @@ impl Worker {
                 unmatched,
             },
             stored_bytes: stored,
+            profile: phase.map(|p| p.report),
         })
     }
 }
@@ -368,12 +414,11 @@ impl Ready {
         let (tx, rx) = mpsc::channel::<Msg>(1);
         let deadline = started + Duration::from_secs(self.cfg.deposit.budget_s);
         let warm_creds = Arc::clone(&creds);
-        let worker = Worker { ready: Arc::clone(self), creds, digest, deadline };
-        // Le verrou de l'équipe et la place de dépôt vivent autant que le fil : un client qui part ne les rend pas
-        // avant que l'écriture en cours soit finie.
+        let worker = Worker { ready: Arc::clone(self), creds, digest, deadline, permit: Some(permit) };
+        // Le verrou de l'équipe vit autant que le fil, la place de dépôt jusqu'à la fin de l'appariement : un client qui
+        // part ne les rend pas avant que l'écriture en cours soit finie.
         let mut join = tokio::task::spawn_blocking(move || {
             let _guard = guard;
-            let _permit = permit;
             worker.run(rx)
         });
 

@@ -110,6 +110,16 @@ pub enum CoverageV1 {
     Partial,
 }
 
+/// The taste a generation was served with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TasteV1 {
+    /// The team's own profile, learned when its overlay was deposited.
+    Team,
+    /// The common table of the engine (no team, or a team without a usable profile).
+    Common,
+}
+
 /// The team overlay a generation used.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct OverlayInfoV1 {
@@ -155,6 +165,8 @@ pub struct GenerateResponseV1 {
     pub coverage: CoverageV1,
     /// The overlay the routes were measured against; null when none was used.
     pub overlay: Option<OverlayInfoV1>,
+    /// The taste of the weights: `team` when the team has a taste profile, `common` otherwise.
+    pub taste: TasteV1,
     /// Routes the engine produced and the independent checker refused (never returned).
     pub dropped: u32,
     pub routes: Vec<RouteV1>,
@@ -166,7 +178,7 @@ pub struct GenerateResponseV1 {
 pub enum OverlayStateV1 {
     Absent,
     Ready,
-    /// Built for another graph or by another matcher: deposit it again.
+    /// Built for another graph or by another matcher, or without a usable taste profile: deposit it again.
     Stale,
 }
 
@@ -175,6 +187,31 @@ pub enum OverlayStateV1 {
 pub enum StaleReasonV1 {
     Graph,
     Matcher,
+    /// No usable taste profile (absent, or learned with other settings): a new deposit learns it. Generations are
+    /// served meanwhile, with the common table.
+    Profile,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileStateV1 {
+    Present,
+    Absent,
+    Incompatible,
+}
+
+/// The taste profile of a team, learned when its overlay was deposited.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct ProfileStatusV1 {
+    pub state: ProfileStateV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub learned_at: Option<String>,
+    /// Steps of learning finished (0 to 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steps: Option<u8>,
+    /// Loops it was learned from, all ride types.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loops: Option<u32>,
 }
 
 /// Status of a team overlay. Deposit again when `state` is not `ready`, when `source_digest` differs from the
@@ -195,6 +232,9 @@ pub struct OverlayStatusV1 {
     pub edges: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub team_km: Option<f64>,
+    /// The taste profile; absent when there is no overlay or profiles are disabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<ProfileStatusV1>,
 }
 
 fn header_error(name: &str, message: &str) -> Problem {
@@ -331,6 +371,9 @@ impl super::store::Status {
             OverlayState::Stale(StaleReason::Matcher) => {
                 (OverlayStateV1::Stale, Some(StaleReasonV1::Matcher))
             }
+            OverlayState::Stale(StaleReason::Profile) => {
+                (OverlayStateV1::Stale, Some(StaleReasonV1::Profile))
+            }
         };
         let at = self.meta.as_ref().map(|m| m.deposited_at).or(self.file_time);
         OverlayStatusV1 {
@@ -342,6 +385,16 @@ impl super::store::Status {
             source_digest: self.meta.as_ref().and_then(|m| m.source_digest.clone()),
             edges: self.meta.as_ref().map(|m| m.edges),
             team_km: self.meta.as_ref().map(|m| m.team_km),
+            profile: self.profile.as_ref().map(|p| ProfileStatusV1 {
+                state: match p.state {
+                    super::store::ProfileState::Present => ProfileStateV1::Present,
+                    super::store::ProfileState::Absent => ProfileStateV1::Absent,
+                    super::store::ProfileState::Incompatible => ProfileStateV1::Incompatible,
+                },
+                learned_at: p.learned_at.map(iso8601),
+                steps: p.steps,
+                loops: p.loops,
+            }),
         }
     }
 }

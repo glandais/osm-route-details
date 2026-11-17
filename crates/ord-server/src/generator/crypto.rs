@@ -17,6 +17,9 @@ pub const TEAM_MAX_LEN: usize = 64;
 
 /// Magie et version du fichier chiffré.
 pub const MAGIC: &[u8; 8] = b"ORDOENC1";
+/// Magie du fichier de profil de goût (`.ordp.enc`, 3b) : même clé, même enveloppe, autre domaine. La magie entre dans les
+/// données associées : un profil ne s'ouvre pas comme surcouche, ni l'inverse.
+pub const MAGIC_PROFILE: &[u8; 8] = b"ORDPENC1";
 const VERSION: u8 = 1;
 const TAG_LEN: usize = 16;
 
@@ -74,9 +77,9 @@ impl Credentials {
         &self.ns[..8]
     }
 
-    fn aad(&self, graph_id: &str) -> Vec<u8> {
+    fn aad(&self, magic: &[u8; 8], graph_id: &str) -> Vec<u8> {
         let mut aad = Vec::with_capacity(8 + graph_id.len() + self.ns.len() + self.team.len() + 3);
-        aad.extend_from_slice(MAGIC);
+        aad.extend_from_slice(magic);
         for part in [graph_id, &self.ns, &self.team] {
             aad.push(0);
             aad.extend_from_slice(part.as_bytes());
@@ -87,18 +90,23 @@ impl Credentials {
     /// `magie ‖ version ‖ nonce ‖ chiffré+étiquette`. Les données associées lient le fichier à son graphe, à son
     /// espace et à son équipe : un fichier déplacé ne se déchiffre pas.
     pub fn seal(&self, graph_id: &str, plain: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        self.seal_with(MAGIC, graph_id, plain)
+    }
+
+    /// Comme [`Credentials::seal`], sous la magie donnée (`MAGIC` : une surcouche, `MAGIC_PROFILE` : un profil).
+    pub fn seal_with(&self, magic: &[u8; 8], graph_id: &str, plain: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce = [0u8; NONCE_LEN];
         SystemRandom::new().fill(&mut nonce).map_err(|_| CryptoError::Random)?;
         let mut body = plain.to_vec();
         self.enc
             .seal_in_place_append_tag(
                 Nonce::assume_unique_for_key(nonce),
-                Aad::from(self.aad(graph_id)),
+                Aad::from(self.aad(magic, graph_id)),
                 &mut body,
             )
             .map_err(|_| CryptoError::Seal)?;
-        let mut out = Vec::with_capacity(MAGIC.len() + 1 + NONCE_LEN + body.len());
-        out.extend_from_slice(MAGIC);
+        let mut out = Vec::with_capacity(magic.len() + 1 + NONCE_LEN + body.len());
+        out.extend_from_slice(magic);
         out.push(VERSION);
         out.extend_from_slice(&nonce);
         out.extend_from_slice(&body);
@@ -107,16 +115,25 @@ impl Credentials {
 
     /// Déchiffre ; toute altération, tout autre graphe, espace, équipe ou clé donne [`CryptoError::Open`].
     pub fn open(&self, graph_id: &str, file: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        let head = MAGIC.len() + 1 + NONCE_LEN;
-        if file.len() < head + TAG_LEN || &file[..MAGIC.len()] != MAGIC || file[MAGIC.len()] != VERSION {
+        self.open_with(MAGIC, graph_id, file)
+    }
+
+    /// Comme [`Credentials::open`], sous la magie donnée.
+    pub fn open_with(&self, magic: &[u8; 8], graph_id: &str, file: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        let head = magic.len() + 1 + NONCE_LEN;
+        if file.len() < head + TAG_LEN || &file[..magic.len()] != magic || file[magic.len()] != VERSION {
             return Err(CryptoError::Open);
         }
         let mut nonce = [0u8; NONCE_LEN];
-        nonce.copy_from_slice(&file[MAGIC.len() + 1..head]);
+        nonce.copy_from_slice(&file[magic.len() + 1..head]);
         let mut body = file[head..].to_vec();
         let plain = self
             .enc
-            .open_in_place(Nonce::assume_unique_for_key(nonce), Aad::from(self.aad(graph_id)), &mut body)
+            .open_in_place(
+                Nonce::assume_unique_for_key(nonce),
+                Aad::from(self.aad(magic, graph_id)),
+                &mut body,
+            )
             .map_err(|_| CryptoError::Open)?;
         let n = plain.len();
         body.truncate(n);
@@ -259,5 +276,26 @@ mod tests {
         for bad in ["", "../x", "a/b", "a.b", "a b", &"x".repeat(65), "é"] {
             assert!(!valid_team_ref(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_profile_sealed_under_its_own_magic_does_not_open_as_an_overlay_and_the_other_way_round() {
+        let c = Credentials::derive(&key(1), "team");
+        let (plain, graph) = (b"tables".as_slice(), "g1");
+        let profile = c.seal_with(MAGIC_PROFILE, graph, plain).unwrap();
+        let overlay = c.seal(graph, plain).unwrap();
+        assert_eq!(&profile[..8], MAGIC_PROFILE);
+        assert_eq!(&overlay[..8], MAGIC, "l'enveloppe d'une surcouche est inchangée");
+        assert_eq!(c.open_with(MAGIC_PROFILE, graph, &profile).unwrap(), plain);
+        assert_eq!(c.open(graph, &overlay).unwrap(), plain);
+        assert_eq!(c.open(graph, &profile), Err(CryptoError::Open));
+        assert_eq!(c.open_with(MAGIC_PROFILE, graph, &overlay), Err(CryptoError::Open));
+        // Même avec la magie réécrite à la main : la magie est dans les données associées.
+        let mut forged = profile.clone();
+        forged[..8].copy_from_slice(MAGIC);
+        assert_eq!(c.open(graph, &forged), Err(CryptoError::Open));
+        // Un profil ne se déplace pas : autre équipe, autre graphe.
+        assert!(Credentials::derive(&key(1), "other").open_with(MAGIC_PROFILE, graph, &profile).is_err());
+        assert!(c.open_with(MAGIC_PROFILE, "g2", &profile).is_err());
     }
 }

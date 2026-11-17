@@ -11,7 +11,9 @@
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use ord_loops::{CacheStats, Engine, TeamData, Window, WindowCache, WindowPlan, WindowTeam, Workspace};
+use ord_loops::{
+    CacheStats, Engine, Taste, TeamData, Window, WindowCache, WindowPlan, WindowTeam, Workspace,
+};
 
 /// Octets d'espace de travail par chaîne de fenêtre : la réservation d'une génération. La note du lot 6 comptait 118 o
 /// (§9) ; la sonde `window_probe` relève 142 à 146 o (les listes `settled` et `reached` grossissent), d'où 150.
@@ -40,6 +42,15 @@ impl Inner {
     fn pool_bytes(&self) -> usize {
         self.pool.iter().map(Workspace::bytes).sum()
     }
+}
+
+/// L'équipe d'une demande de fenêtre : le numéro de sa construction (la clé de ses agrégats), ses données, et son profil de
+/// goût (3b) s'il y en a un : sans profil, la table commune du moteur sert de poids de base.
+#[derive(Clone, Copy, Debug)]
+pub struct TeamRef<'a> {
+    pub serial: u64,
+    pub data: &'a TeamData,
+    pub taste: Option<&'a Taste>,
 }
 
 /// Ce qu'une génération tient : la fenêtre, les agrégats de l'équipe, et la réservation de son espace de travail.
@@ -195,7 +206,7 @@ impl WindowManager {
         &self,
         engine: &Engine<B>,
         plan: &WindowPlan,
-        team: Option<(u64, &TeamData)>,
+        team: Option<TeamRef<'_>>,
         deadline: Instant,
         stop: &mut dyn FnMut() -> bool,
     ) -> Result<Held, AcquireError> {
@@ -247,19 +258,19 @@ impl WindowManager {
         // le permet (sinon servis sans être gardés).
         let wt = match team {
             None => None,
-            Some((serial, data)) => {
+            Some(TeamRef { serial, data, taste }) => {
                 let cached = lock(&self.inner).cache.team(&win, serial);
                 Some(match cached {
                     Some(wt) => wt,
                     None => {
                         // Réservé avant d'être construit : un agrégat servi sans être gardé reste compté.
-                        let est = WindowTeam::estimate_bytes(&win, false);
+                        let est = WindowTeam::estimate_bytes(&win, taste.is_some());
                         let mut g = lock(&self.inner);
                         while !self.reserve_in(&mut g, est) {
                             g = self.wait(g, deadline, stop, true)?;
                         }
                         drop(g);
-                        let wt = WindowTeam::build(engine, &win, data);
+                        let wt = WindowTeam::build_with_taste(engine, &win, data, taste);
                         let mut g = lock(&self.inner);
                         g.cache.release(est);
                         let r = if g.cache.make_room(wt.bytes()) {
@@ -331,6 +342,16 @@ impl WindowManager {
     pub fn release_team(&self, bytes: usize, serial: u64) {
         let mut g = lock(&self.inner);
         g.cache.release_external(bytes);
+        g.cache.drop_team(serial);
+        self.publish(&mut g);
+        drop(g);
+        self.cv.notify_all();
+    }
+
+    /// Retire les agrégats d'une équipe de toutes les fenêtres (la table jouée n'a plus de raison d'être : un pas
+    /// d'apprentissage fini).
+    pub fn drop_team(&self, serial: u64) {
+        let mut g = lock(&self.inner);
         g.cache.drop_team(serial);
         self.publish(&mut g);
         drop(g);

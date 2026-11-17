@@ -14,14 +14,19 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ord_graph::format::GraphIdentity;
 use ord_graph::overlay::Overlay;
-use ord_loops::{Engine, TeamData};
+use ord_graph_match::profile::format::{decode as decode_profile, Incompatible, ProfileMeta};
+use ord_loops::{Engine, Taste, TeamData};
 use ord_loops_check::{Config as CheckConfig, GraphIndex, TeamCheck};
 
 use serde::{Deserialize, Serialize};
 
-use super::crypto::Credentials;
+use super::crypto::{Credentials, MAGIC_PROFILE};
 
 pub const FILE_EXT: &str = "ordo.enc";
+/// Fichier du profil de goût d'une équipe (3b), à côté de sa surcouche. Deux conditions de nommage, tenues par un test,
+/// le mettent hors d'atteinte de la purge d'une 1.9.x (§14.9) : le temporaire contient `.tmp-` et ne finit pas par
+/// `.ordo.enc` ; le nom définitif ne contient pas `.tmp-`.
+pub const PROFILE_EXT: &str = "ordp.enc";
 const TMP_MARK: &str = ".tmp-";
 /// Un `.tmp` plus ancien que cela est un reste d'écriture interrompue.
 const TMP_MAX_AGE: Duration = Duration::from_secs(3600);
@@ -47,6 +52,15 @@ pub struct StoreConfig {
     /// Plafonds des équipes résidentes (§20.6) : en nombre et en octets, sur les seules entrées inactives.
     pub team_cache_entries: usize,
     pub team_cache_bytes: usize,
+    /// Profils de goût (3b) : `None`, ils sont désactivés (ni écrits, ni lus).
+    pub profile: Option<ProfileSettings>,
+}
+
+/// Ce qui fait un profil compatible : la table commune et les réglages d'apprentissage du moteur qui lit.
+#[derive(Clone, Debug)]
+pub struct ProfileSettings {
+    pub common: ord_graph_match::profile::learn::Common,
+    pub learn: ord_graph_match::profile::learn::LearnParams,
 }
 
 /// Crochets des tests : jamais activés en production.
@@ -61,6 +75,11 @@ pub struct TestHooks {
     pub fail_dir_sync: AtomicBool,
     /// Constructions de `TeamData` faites (une par équipe et par fichier, jamais deux en parallèle).
     pub team_builds: std::sync::atomic::AtomicU64,
+    /// Distance minimale d'une boucle d'apprentissage, en millièmes de km (0 : le défaut de 5 km) : les graphes
+    /// synthétiques des tests n'ont pas de boucle de 5 km. Lu à la construction du générateur.
+    pub profile_min_km_milli: std::sync::atomic::AtomicU64,
+    /// La phase de profil attend tant que ce drapeau est levé (une phase retenue, pour tester les places).
+    pub profile_hold: AtomicBool,
 }
 
 /// Métadonnées d'une surcouche, dans la partie chiffrée du fichier.
@@ -84,6 +103,33 @@ pub enum StaleReason {
     Graph,
     /// Déposée par un autre appariement.
     Matcher,
+    /// Pas de profil de goût utilisable (absent, ou appris autrement) : à redéposer pour l'apprendre. **Jamais rendue
+    /// par `Store::ready`** : un profil absent ne bloque aucune génération, la table commune sert.
+    Profile,
+}
+
+/// Le profil de goût d'une équipe, tel que le statut le décrit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProfileState {
+    Present,
+    Absent,
+    Incompatible,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProfileInfo {
+    pub state: ProfileState,
+    pub learned_at: Option<i64>,
+    pub steps: Option<u8>,
+    pub loops: Option<u32>,
+}
+
+/// Ce que la lecture du fichier de profil rend.
+#[derive(Debug)]
+pub enum ProfileRead {
+    Present(Box<Taste>, ProfileMeta, FileId),
+    Absent,
+    Incompatible(Incompatible),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +143,8 @@ pub enum State {
 #[derive(Clone, Debug)]
 pub struct Status {
     pub state: State,
+    /// Le profil de goût, quand la surcouche existe et que les profils sont actifs.
+    pub profile: Option<ProfileInfo>,
     pub meta: Option<FileMeta>,
     /// Date du fichier quand ses métadonnées ne sont pas lisibles (autre graphe).
     pub file_time: Option<i64>,
@@ -104,7 +152,7 @@ pub struct Status {
 
 /// Empreinte d'un fichier : un remplacement atomique change l'inode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FileId {
+pub struct FileId {
     ino: u64,
     mtime_ns: u128,
     len: u64,
@@ -196,9 +244,59 @@ fn evict_over_caps<K, V: Resident>(
     removed
 }
 
+/// `TeamData` et `TeamCheck` d'une surcouche, construits en parallèle (le temps est celui de la plus longue : pages
+/// froides, une grosse équipe passait 8 s en série). La mémoire transitoire des **deux** constructions est réservée dans
+/// le budget du générateur (`reserve`), ou la demande attend, puis 503 ; elle est rendue avant le retour : l'appelant
+/// compte ce qui reste (`hold_team`). Partagée par la lecture d'une équipe et la phase de profil d'un dépôt (3b).
+pub(crate) fn build_team_pair<B: AsRef<[u8]> + Sync>(
+    engine: &Engine<B>,
+    gi: &GraphIndex,
+    overlay: &Overlay,
+    reserve: Reserve<'_>,
+) -> Result<(TeamData, TeamCheck), ReadyError> {
+    let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
+    let check_cfg = CheckConfig::default();
+    let plan = TeamData::plan_build(engine, overlay).map_err(|_| stale())?;
+    let check_plan = TeamCheck::plan(engine.base(), overlay, &check_cfg);
+    let guard = reserve(plan.estimated_bytes + check_plan.estimated_bytes)?;
+    let (team, check) = std::thread::scope(|sc| {
+        let check =
+            sc.spawn(|| TeamCheck::build_planned(engine.base(), gi, overlay, &check_cfg, &check_plan));
+        let team = TeamData::build_planned(engine, overlay, &plan);
+        (team, check.join())
+    });
+    let check = check.unwrap_or_else(|e| std::panic::resume_unwind(e));
+    let (team, check) = match (team, check) {
+        (Ok(t), Ok(c)) => (t, c),
+        (Err(ord_loops::EngineError::TeamZoneEscape), _) | (_, Err(_)) => {
+            metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
+            tracing::warn!("team build left the neighbourhood of the team network even widened");
+            return Err(ReadyError::Failed);
+        }
+        (Err(_), _) => return Err(stale()),
+    };
+    if team.zone_retried() || check.zone_retried() {
+        metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
+        tracing::warn!("team build retried with wider hot cells");
+    }
+    // La mémoire transitoire est rendue avant de compter ce qui reste : sinon l'entrée neuve serait comptée avec sa
+    // propre construction et chasserait des équipes pour rien.
+    drop(guard);
+    Ok((team, check))
+}
+
+/// Numéro d'une construction d'équipe : la clé de ses agrégats dans les fenêtres en cache.
+pub(crate) fn next_serial() -> u64 {
+    NEXT_SERIAL.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Une équipe prête : surcouche et données du moteur.
 pub struct Entry {
     id: FileId,
+    /// Le profil de goût de l'équipe (3b) ; `None` : la table commune sert. Il suit le fichier de profil : un profil
+    /// remplacé recharge l'entrée.
+    pub profile: Option<Taste>,
+    profile_id: Option<FileId>,
     /// Numéro unique de cette construction : la clé de ses agrégats dans les fenêtres en cache.
     pub serial: u64,
     pub meta: FileMeta,
@@ -231,6 +329,8 @@ pub enum StoreError {
 /// Ce qu'une purge a retiré.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PurgeReport {
+    pub profile_ttl: u64,
+    pub profile_orphan: u64,
     pub ttl: u64,
     pub stale_graph: u64,
     pub tmp: u64,
@@ -352,6 +452,35 @@ impl Store {
         self.graph_dir().join(&c.ns).join(format!("{}.{FILE_EXT}", c.team))
     }
 
+    fn profile_path(&self, c: &Credentials) -> PathBuf {
+        self.graph_dir().join(&c.ns).join(format!("{}.{PROFILE_EXT}", c.team))
+    }
+
+    /// Les profils sont-ils actifs (`generator.profile.enabled`) ?
+    pub fn profiles_enabled(&self) -> bool {
+        self.cfg.profile.is_some()
+    }
+
+    /// Lit le fichier de profil : jamais d'effacement à la lecture (un format plus récent peut venir d'une autre
+    /// instance pendant un retour arrière) ; un déchiffrement qui échoue est `Incompatible(Format)`.
+    pub fn read_profile(&self, c: &Credentials) -> ProfileRead {
+        let Some(settings) = &self.cfg.profile else { return ProfileRead::Absent };
+        let path = self.profile_path(c);
+        let Ok(mut f) = std::fs::File::open(&path) else { return ProfileRead::Absent };
+        let Some(id) = f.metadata().ok().map(|m| file_id(&m)) else { return ProfileRead::Absent };
+        let mut raw = Vec::with_capacity(usize::try_from(id.len).unwrap_or(0));
+        if f.read_to_end(&mut raw).is_err() {
+            return ProfileRead::Absent;
+        }
+        let Ok(plain) = c.open_with(MAGIC_PROFILE, &self.graph_id, &raw) else {
+            return ProfileRead::Incompatible(Incompatible::Format);
+        };
+        match decode_profile(&plain, &settings.common, &settings.learn) {
+            Ok((meta, taste)) => ProfileRead::Present(Box::new(taste), meta, id),
+            Err(e) => ProfileRead::Incompatible(e),
+        }
+    }
+
     /// Les dossiers `graph-*` du volume.
     fn graph_dirs(&self) -> Vec<PathBuf> {
         let Ok(rd) = std::fs::read_dir(&self.cfg.dir) else { return Vec::new() };
@@ -421,18 +550,58 @@ impl Store {
             .max()
     }
 
-    /// État de l'équipe sans construire ses données (`GET`).
+    /// État de l'équipe sans construire ses données (`GET`). Les raisons `graph` et `matcher` priment sur `profile`.
     pub fn status(&self, c: &Credentials) -> Status {
         match self.read_current(c) {
             Some((_, meta, _)) if meta.matcher_hash == self.matcher_hash_hex() => {
-                Status { state: State::Ready, meta: Some(meta), file_time: None }
+                if !self.profiles_enabled() {
+                    return Status { state: State::Ready, profile: None, meta: Some(meta), file_time: None };
+                }
+                let (state, info) = match self.read_profile(c) {
+                    ProfileRead::Present(_, pm, _) => (
+                        State::Ready,
+                        ProfileInfo {
+                            state: ProfileState::Present,
+                            learned_at: Some(pm.learned_at),
+                            steps: Some(pm.steps),
+                            loops: Some(pm.loops.iter().sum()),
+                        },
+                    ),
+                    ProfileRead::Absent => (
+                        State::Stale(StaleReason::Profile),
+                        ProfileInfo {
+                            state: ProfileState::Absent,
+                            learned_at: None,
+                            steps: None,
+                            loops: None,
+                        },
+                    ),
+                    ProfileRead::Incompatible(_) => (
+                        State::Stale(StaleReason::Profile),
+                        ProfileInfo {
+                            state: ProfileState::Incompatible,
+                            learned_at: None,
+                            steps: None,
+                            loops: None,
+                        },
+                    ),
+                };
+                Status { state, profile: Some(info), meta: Some(meta), file_time: None }
             }
-            Some((_, meta, _)) => {
-                Status { state: State::Stale(StaleReason::Matcher), meta: Some(meta), file_time: None }
-            }
+            Some((_, meta, _)) => Status {
+                state: State::Stale(StaleReason::Matcher),
+                profile: None,
+                meta: Some(meta),
+                file_time: None,
+            },
             None => match self.stale_elsewhere(c) {
-                Some(t) => Status { state: State::Stale(StaleReason::Graph), meta: None, file_time: Some(t) },
-                None => Status { state: State::Absent, meta: None, file_time: None },
+                Some(t) => Status {
+                    state: State::Stale(StaleReason::Graph),
+                    profile: None,
+                    meta: None,
+                    file_time: Some(t),
+                },
+                None => Status { state: State::Absent, profile: None, meta: None, file_time: None },
             },
         }
     }
@@ -464,12 +633,25 @@ impl Store {
         result
     }
 
+    /// Empreinte du fichier de profil d'une équipe ; `None` s'il n'existe pas.
+    fn profile_file_id(&self, key: &CacheKey) -> Option<FileId> {
+        let p = self.graph_dir().join(&key.0).join(format!("{}.{PROFILE_EXT}", key.1));
+        std::fs::metadata(p).ok().map(|m| file_id(&m))
+    }
+
     /// L'entrée du cache si elle correspond au fichier présent ; la marque comme la plus récemment utilisée.
     fn cached(&self, key: &CacheKey, path: &Path) -> Option<Arc<Entry>> {
         let entry = lock(&self.cache).iter().find(|(k, _)| k == key).map(|(_, e)| Arc::clone(e))?;
         let md = std::fs::metadata(path).ok()?;
         if entry.id != file_id(&md) {
             return None;
+        }
+        // Un profil remplacé (ou apparu, ou disparu) recharge l'entrée ; sans profils actifs, on ne regarde pas.
+        if self.profiles_enabled() {
+            let pid = self.profile_file_id(key);
+            if entry.profile_id != pid {
+                return None;
+            }
         }
         let mut cache = lock(&self.cache);
         if let Some(i) = cache.iter().position(|(k, _)| k == key) {
@@ -504,47 +686,31 @@ impl Store {
         if meta.matcher_hash != self.matcher_hash_hex() {
             return Err(ReadyError::State(State::Stale(StaleReason::Matcher)));
         }
-        self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
-        let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
-        let check_cfg = CheckConfig::default();
-        let plan = TeamData::plan_build(engine, &overlay).map_err(|_| stale())?;
-        let check_plan = TeamCheck::plan(engine.base(), &overlay, &check_cfg);
-        // La construction tient de la mémoire transitoire (fenêtres de la zone de l'équipe, incidence du contrôleur) :
-        // celle des **deux** constructions, qui tournent en parallèle, est réservée dans le budget du générateur, ou
-        // la demande attend, puis 503.
-        let guard = reserve(plan.estimated_bytes + check_plan.estimated_bytes)?;
-        // Les deux constructions ne dépendent que de la surcouche : en parallèle, le temps est celui de la plus longue
-        // (pages froides, une grosse équipe passait 8 s en série).
-        let (team, check) = std::thread::scope(|sc| {
-            let check =
-                sc.spawn(|| TeamCheck::build_planned(engine.base(), gi, &overlay, &check_cfg, &check_plan));
-            let team = TeamData::build_planned(engine, &overlay, &plan);
-            (team, check.join())
-        });
-        let check = check.unwrap_or_else(|e| std::panic::resume_unwind(e));
-        let (team, check) = match (team, check) {
-            (Ok(t), Ok(c)) => (t, c),
-            (Err(ord_loops::EngineError::TeamZoneEscape), _) | (_, Err(_)) => {
-                metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
-                tracing::warn!("team build left the neighbourhood of the team network even widened");
-                return Err(ReadyError::Failed);
-            }
-            (Err(_), _) => return Err(stale()),
+        // Le profil de goût, s'il y en a un d'utilisable : sinon la table commune sert (jamais une erreur ici).
+        let (profile, profile_id) = match self.read_profile(c) {
+            ProfileRead::Present(t, _, id) => (Some(*t), Some(id)),
+            _ => (None, self.profile_file_id(&key).filter(|_| self.profiles_enabled())),
         };
-        if team.zone_retried() || check.zone_retried() {
-            metrics::counter!("ord_generator_team_build_escapes_total").increment(1);
-            tracing::warn!("team build retried with wider hot cells");
-        }
-        // La mémoire transitoire est rendue avant de compter ce qui reste : sinon l'entrée neuve serait comptée avec sa
-        // propre construction et chasserait des équipes pour rien.
-        drop(guard);
+        self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
+        let (team, check) = build_team_pair(engine, gi, &overlay, reserve)?;
         let serial = NEXT_SERIAL.fetch_add(1, Ordering::Relaxed);
         let bytes = std::mem::size_of::<Entry>() + overlay.bytes() + team.bytes() + check.bytes();
         // Comptée d'abord (le budget libère la réserve d'espaces de travail puis des fenêtres inactives, jamais une
         // autre équipe), cachée ensuite ; le ticket rend les octets quand l'entrée tombe.
         self.memory.hold_team(bytes);
         let ticket = TeamTicket { bytes, serial, memory: Arc::clone(&self.memory) };
-        let entry = Arc::new(Entry { id, serial, meta, overlay, team, check, bytes, _ticket: ticket });
+        let entry = Arc::new(Entry {
+            id,
+            profile,
+            profile_id,
+            serial,
+            meta,
+            overlay,
+            team,
+            check,
+            bytes,
+            _ticket: ticket,
+        });
         let removed = {
             let mut cache = lock(&self.cache);
             let mut removed: Vec<Arc<Entry>> = Vec::new();
@@ -571,21 +737,66 @@ impl Store {
     /// `rename`, l'ancienne surcouche sert ; en cas d'échec, le temporaire est effacé et rien d'autre ne change.
     /// L'appelant tient le verrou de l'équipe.
     pub fn commit(&self, c: &Credentials, meta: &FileMeta, ordo: &[u8]) -> Result<u64, StoreError> {
+        self.commit_with_profile(c, meta, ordo, None)
+    }
+
+    /// Comme [`Store::commit`], avec le profil de goût en clair (`profile`, octets de `profile::format::encode`), scellé
+    /// sous `ORDPENC1`. Ordre : le profil d'abord (temporaire, `fsync`, `rename`), puis la surcouche ; si la surcouche
+    /// échoue, le nouveau profil sert avec l'ancienne surcouche et l'erreur remonte. Les octets du profil comptent dans
+    /// le quota de l'espace, pas dans le nombre de surcouches. Rend les octets de la surcouche scellée.
+    pub fn commit_with_profile(
+        &self,
+        c: &Credentials,
+        meta: &FileMeta,
+        ordo: &[u8],
+        profile: Option<&[u8]>,
+    ) -> Result<u64, StoreError> {
         let meta_json = serde_json::to_vec(meta).map_err(|_| StoreError::Io)?;
         let mut plain = Vec::with_capacity(4 + meta_json.len() + ordo.len());
         plain.extend_from_slice(&u32::try_from(meta_json.len()).map_err(|_| StoreError::Io)?.to_le_bytes());
         plain.extend_from_slice(&meta_json);
         plain.extend_from_slice(ordo);
         let sealed = c.seal(&self.graph_id, &plain).map_err(|_| StoreError::Io)?;
+        let sealed_profile = match profile {
+            Some(p) => Some(c.seal_with(MAGIC_PROFILE, &self.graph_id, p).map_err(|_| StoreError::Io)?),
+            None => None,
+        };
 
         let ns_dir = self.graph_dir().join(&c.ns);
         let final_path = self.file_path(c);
+        let profile_path = self.profile_path(c);
         let existing = std::fs::metadata(&final_path).ok();
-        self.check_quota(c, &ns_dir, existing.as_ref().map(std::fs::Metadata::len), sealed.len() as u64)?;
+        let existing_profile = std::fs::metadata(&profile_path).ok().map(|m| m.len());
+        // Les octets remplacés : la surcouche, et le profil seulement si un nouveau est écrit.
+        let replacing_bytes = existing.as_ref().map(std::fs::Metadata::len).unwrap_or(0)
+            + if sealed_profile.is_some() { existing_profile.unwrap_or(0) } else { 0 };
+        let new_bytes = sealed.len() as u64 + sealed_profile.as_ref().map_or(0, |p| p.len() as u64);
+        self.check_quota(
+            c,
+            &ns_dir,
+            existing.as_ref().map(|_| replacing_bytes),
+            new_bytes,
+            existing.is_some(),
+        )?;
         std::fs::create_dir_all(&ns_dir).map_err(|_| StoreError::Io)?;
         let mut random = [0u8; 8];
         ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut random)
             .map_err(|_| StoreError::Io)?;
+        // Le profil d'abord. Son temporaire contient `.tmp-` et ne finit pas par `.ordo.enc` : une purge d'une 1.9.x le
+        // retire s'il traîne (300 s au démarrage, 1 h ensuite), jamais le définitif.
+        if let Some(sp) = &sealed_profile {
+            let ptmp = ns_dir.join(format!("{}.ordp{TMP_MARK}{}", c.team, hex8(&random)));
+            let written = (|| -> std::io::Result<()> {
+                let mut f = std::fs::OpenOptions::new().create_new(true).write(true).open(&ptmp)?;
+                f.write_all(sp)?;
+                f.sync_all()?;
+                std::fs::rename(&ptmp, &profile_path)
+            })();
+            if written.is_err() {
+                let _ = std::fs::remove_file(&ptmp);
+                return Err(StoreError::Io);
+            }
+        }
         let tmp = ns_dir.join(format!("{}{TMP_MARK}{}", c.team, hex8(&random)));
         let written = (|| -> std::io::Result<()> {
             let mut f = std::fs::OpenOptions::new().create_new(true).write(true).open(&tmp)?;
@@ -598,6 +809,8 @@ impl Store {
         })();
         if written.is_err() {
             let _ = std::fs::remove_file(&tmp);
+            // Le nouveau profil reste (il est écrit) ; l'ancienne surcouche sert encore. Le cache est à rafraîchir.
+            self.forget(|k| k.0 == c.ns && k.1 == c.team);
             return Err(StoreError::Io);
         }
         // Le `rename` est le point de validation : la nouvelle surcouche sert déjà. Un échec du `fsync` du dossier
@@ -618,6 +831,7 @@ impl Store {
         ns_dir: &Path,
         replacing: Option<u64>,
         new_len: u64,
+        has_overlay: bool,
     ) -> Result<(), StoreError> {
         let graph_dir = self.graph_dir();
         if !ns_dir.exists() {
@@ -632,7 +846,7 @@ impl Store {
                 return Err(StoreError::Quota);
             }
         }
-        if replacing.is_none() {
+        if !has_overlay {
             let n = std::fs::read_dir(ns_dir).map_or(0, |rd| {
                 rd.filter_map(Result::ok).filter(|e| is_overlay_name(&e.file_name())).count()
             });
@@ -643,7 +857,7 @@ impl Store {
         // Octets de **cet** espace seulement : la décision ne dépend jamais de ce que les autres stockent.
         let used: u64 = std::fs::read_dir(ns_dir).map_or(0, |rd| {
             rd.filter_map(Result::ok)
-                .filter(|e| is_overlay_name(&e.file_name()))
+                .filter(|e| is_overlay_name(&e.file_name()) || is_profile_name(&e.file_name()))
                 .filter_map(|e| e.metadata().ok())
                 .map(|m| m.len())
                 .sum()
@@ -658,8 +872,10 @@ impl Store {
     /// Un nouvel espace ou une nouvelle équipe tiendrait-il ? Contrôle préalable, avant de lire un corps de 700 Mo.
     pub fn precheck_quota(&self, c: &Credentials) -> Result<(), StoreError> {
         let ns_dir = self.graph_dir().join(&c.ns);
-        let replacing = std::fs::metadata(self.file_path(c)).ok().map(|m| m.len());
-        self.check_quota(c, &ns_dir, replacing, 0)
+        let overlay = std::fs::metadata(self.file_path(c)).ok().map(|m| m.len());
+        // Un dépôt remplace aussi le profil : ses octets sont libérés d'avance (contrôle conservateur).
+        let profile = std::fs::metadata(self.profile_path(c)).ok().map_or(0, |m| m.len());
+        self.check_quota(c, &ns_dir, overlay.map(|o| o + profile), 0, overlay.is_some())
     }
 
     // --- Suppression -------------------------------------------------------------------------------------------
@@ -668,6 +884,7 @@ impl Store {
     pub fn delete(&self, c: &Credentials) {
         for d in self.graph_dirs() {
             let _ = std::fs::remove_file(d.join(&c.ns).join(format!("{}.{FILE_EXT}", c.team)));
+            let _ = std::fs::remove_file(d.join(&c.ns).join(format!("{}.{PROFILE_EXT}", c.team)));
         }
         self.forget(|k| k.0 == c.ns && k.1 == c.team);
         self.update_gauge();
@@ -710,7 +927,16 @@ impl Store {
     }
 
     pub fn update_gauge(&self) {
-        metrics::gauge!("ord_overlays_stored").set(self.count() as f64);
+        let files = self.walk_overlays();
+        let overlays = files.iter().filter(|(p, _, _)| p.file_name().is_some_and(is_overlay_name)).count();
+        let profiles = files.iter().filter(|(p, _, _)| p.file_name().is_some_and(is_profile_name)).count();
+        metrics::gauge!("ord_overlays_stored").set(overlays as f64);
+        metrics::gauge!("ord_profiles_stored").set(profiles as f64);
+    }
+
+    /// Nombre de profils stockés (jauge `ord_profiles_stored`).
+    pub fn profile_count(&self) -> usize {
+        self.walk_overlays().iter().filter(|(p, _, _)| p.file_name().is_some_and(is_profile_name)).count()
     }
 
     /// Purge à l'instant `now` ; `startup` : les temporaires de plus de quelques minutes partent (jamais l'écriture en cours de l'autre instance).
@@ -731,7 +957,10 @@ impl Store {
                 };
                 if old && std::fs::remove_dir_all(&g).is_ok() {
                     r.stale_graph += files.iter().filter(|(p, _)| is_overlay_path(p)).count() as u64;
-                    r.tmp += files.iter().filter(|(p, _)| !is_overlay_path(p)).count() as u64;
+                    // Les profils d'un autre graphe partent avec lui (c'est voulu) ; comptés à part des temporaires.
+                    r.profile_ttl += files.iter().filter(|(p, _)| is_profile_path(p)).count() as u64;
+                    r.tmp += files.iter().filter(|(p, _)| !is_overlay_path(p) && !is_profile_path(p)).count()
+                        as u64;
                 }
                 continue;
             }
@@ -743,7 +972,18 @@ impl Store {
                 for f in std::fs::read_dir(&ns_path).into_iter().flatten().filter_map(Result::ok) {
                     let name = f.file_name();
                     let Some(t) = f.metadata().ok().and_then(|m| m.modified().ok()) else { continue };
-                    if is_tmp_name(&name) {
+                    if is_profile_name(&name) {
+                        // Un profil part au TTL, ou orphelin (sans surcouche voisine) depuis plus d'une heure : reste
+                        // d'une suppression par une 1.9.x, ou d'un premier dépôt dont la surcouche n'a pas pu s'écrire.
+                        let team =
+                            name.to_string_lossy().trim_end_matches(&format!(".{PROFILE_EXT}")).to_string();
+                        let orphan = !ns_path.join(format!("{team}.{FILE_EXT}")).exists();
+                        if age(t) > self.cfg.ttl && std::fs::remove_file(f.path()).is_ok() {
+                            r.profile_ttl += 1;
+                        } else if orphan && age(t) > TMP_MAX_AGE && std::fs::remove_file(f.path()).is_ok() {
+                            r.profile_orphan += 1;
+                        }
+                    } else if is_tmp_name(&name) {
                         if age(t) > if startup { TMP_STARTUP_AGE } else { TMP_MAX_AGE }
                             && std::fs::remove_file(f.path()).is_ok()
                         {
@@ -762,15 +1002,22 @@ impl Store {
                 }
             }
         }
-        for (reason, n) in
-            [("ttl", r.ttl), ("stale_graph", r.stale_graph), ("tmp", r.tmp), ("empty", r.empty)]
-        {
+        for (reason, n) in [
+            ("ttl", r.ttl),
+            ("stale_graph", r.stale_graph),
+            ("tmp", r.tmp),
+            ("empty", r.empty),
+            ("profile_ttl", r.profile_ttl),
+            ("profile_orphan", r.profile_orphan),
+        ] {
             if n > 0 {
                 metrics::counter!("ord_overlay_purged_total", "reason" => reason).increment(n);
             }
         }
         if r != PurgeReport::default() {
             tracing::info!(
+                profile_ttl = r.profile_ttl,
+                profile_orphan = r.profile_orphan,
                 ttl = r.ttl,
                 stale_graph = r.stale_graph,
                 tmp = r.tmp,
@@ -800,8 +1047,18 @@ fn is_overlay_name(n: &std::ffi::OsStr) -> bool {
     n.ends_with(&format!(".{FILE_EXT}")) && !n.contains(TMP_MARK)
 }
 
+/// Un profil de goût : finit par `.ordp.enc` et ne contient pas `.tmp-`. Ne reconnaît ni une surcouche ni un temporaire.
+fn is_profile_name(n: &std::ffi::OsStr) -> bool {
+    let n = n.to_string_lossy();
+    n.ends_with(&format!(".{PROFILE_EXT}")) && !n.contains(TMP_MARK)
+}
+
 fn is_overlay_path(p: &Path) -> bool {
     p.file_name().is_some_and(is_overlay_name)
+}
+
+fn is_profile_path(p: &Path) -> bool {
+    p.file_name().is_some_and(is_profile_name)
 }
 
 /// Fichiers sous un dossier `graph-*` (deux niveaux) avec leur date.
@@ -851,6 +1108,7 @@ mod tests {
                 allowed_namespaces: Vec::new(),
                 team_cache_entries: 2,
                 team_cache_bytes: usize::MAX,
+                profile: None,
             },
             "g1".into(),
             identity(),
@@ -927,6 +1185,7 @@ mod tests {
                     allowed_namespaces: Vec::new(),
                     team_cache_entries: entries,
                     team_cache_bytes: bytes,
+                    profile: None,
                 },
                 "g1".into(),
                 engine.base().graph_identity(),
@@ -1221,5 +1480,283 @@ mod tests {
         let r = s.purge(SystemTime::now() + Duration::from_secs(600), true);
         assert_eq!((r.tmp, fresh.exists()), (1, false));
         assert_eq!(s.status(&c).state, State::Ready, "la surcouche, elle, reste");
+    }
+
+    // --- Profils de goût (3b) ---------------------------------------------------------------------------------------
+
+    use ord_graph_match::profile::format::{encode as encode_profile, hex16, ProfileMeta, FORMAT};
+    use ord_graph_match::profile::learn::{Common, LearnParams};
+
+    fn settings() -> ProfileSettings {
+        let learn = LearnParams::default();
+        ProfileSettings { common: Common::engine(learn.normalize), learn }
+    }
+
+    fn store_with_profiles(dir: &Path, matcher: u64) -> Arc<Store> {
+        let s = store(dir, matcher, 1 << 20);
+        // Le même magasin, profils actifs : on le reconstruit avec la configuration voulue.
+        drop(s);
+        Store::new(
+            StoreConfig {
+                dir: dir.to_path_buf(),
+                ttl: Duration::from_secs(14 * 86_400),
+                stale_grace: Duration::from_secs(48 * 3600),
+                max_namespaces: 4,
+                max_overlays_per_namespace: 4,
+                max_namespace_bytes: 1 << 20,
+                allowed_namespaces: Vec::new(),
+                team_cache_entries: 2,
+                team_cache_bytes: usize::MAX,
+                profile: Some(settings()),
+            },
+            "g1".into(),
+            identity(),
+            matcher,
+            Arc::new(TestHooks::default()),
+            Arc::new(NoMemory),
+        )
+    }
+
+    fn profile_bytes(tweak: impl FnOnce(&mut ProfileMeta, &mut ord_loops::Taste)) -> Vec<u8> {
+        let st = settings();
+        let mut meta = ProfileMeta {
+            format: FORMAT,
+            learned_at: 1_700_000_100,
+            overlay_deposited_at: 1_700_000_000,
+            common: hex16(st.common.hash()),
+            learn: hex16(st.learn.hash()),
+            engine: "1.10.0".into(),
+            steps: 3,
+            loops: [4, 2, 0],
+            pairs: [8, 4, 0],
+            normalized: st.learn.normalize,
+        };
+        let mut taste = ord_loops::Taste::neutral();
+        taste.q8[0][3] = 400;
+        tweak(&mut meta, &mut taste);
+        encode_profile(&meta, &taste)
+    }
+
+    fn profile_file(dir: &Path, c: &Credentials) -> PathBuf {
+        dir.join("graph-g1").join(&c.ns).join(format!("{}.{PROFILE_EXT}", c.team))
+    }
+
+    fn overlay_file(dir: &Path, c: &Credentials) -> PathBuf {
+        dir.join("graph-g1").join(&c.ns).join(format!("{}.{FILE_EXT}", c.team))
+    }
+
+    #[test]
+    fn a_committed_profile_is_read_back_and_makes_the_state_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let (c, s) = (creds(1, "t"), store_with_profiles(dir.path(), 1));
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&profile_bytes(|_, _| {}))).unwrap();
+        match s.read_profile(&c) {
+            ProfileRead::Present(t, m, _) => {
+                assert_eq!((t.q8[0][3], t.q8[1][3], m.steps, m.loops), (400, 256, 3, [4, 2, 0]));
+            }
+            other => panic!("{other:?}"),
+        }
+        let st = s.status(&c);
+        assert_eq!(st.state, State::Ready);
+        let p = st.profile.unwrap();
+        assert_eq!((p.state, p.steps, p.loops), (ProfileState::Present, Some(3), Some(6)));
+    }
+
+    #[test]
+    fn an_absent_or_incompatible_profile_is_stale_with_the_reason_profile_and_the_file_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let (c, s) = (creds(1, "t"), store_with_profiles(dir.path(), 1));
+        // Surcouche seule (le dépôt d'une 1.9.x, ou le premier démarrage de 1.10) : `stale` raison `profile`.
+        s.commit(&c, &meta(1), &ordo()).unwrap();
+        let st = s.status(&c);
+        assert_eq!(st.state, State::Stale(StaleReason::Profile));
+        assert_eq!(st.profile.unwrap().state, ProfileState::Absent);
+        // Un format plus récent : `incompatible`, le fichier est gardé.
+        let newer = profile_bytes(|m, _| m.format = 2);
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&newer)).unwrap();
+        let st = s.status(&c);
+        assert_eq!(st.state, State::Stale(StaleReason::Profile));
+        assert_eq!(st.profile.unwrap().state, ProfileState::Incompatible);
+        assert!(profile_file(dir.path(), &c).exists(), "jamais effacé à la lecture");
+        // D'autres réglages d'apprentissage : lisible, mais appris autrement.
+        let other = profile_bytes(|m, _| m.learn = hex16(1));
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&other)).unwrap();
+        assert!(matches!(s.read_profile(&c), ProfileRead::Incompatible(Incompatible::Settings)));
+        assert!(profile_file(dir.path(), &c).exists());
+        // Un fichier qui ne se déchiffre pas : `Format`, gardé.
+        std::fs::write(profile_file(dir.path(), &c), b"not a profile").unwrap();
+        assert!(matches!(s.read_profile(&c), ProfileRead::Incompatible(Incompatible::Format)));
+        assert!(profile_file(dir.path(), &c).exists());
+    }
+
+    #[test]
+    fn disabled_profiles_leave_the_state_ready_and_another_matcher_or_graph_outranks_the_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = creds(1, "t");
+        let off = store(dir.path(), 1, 1 << 20);
+        off.commit(&c, &meta(1), &ordo()).unwrap();
+        assert_eq!(off.status(&c).state, State::Ready);
+        assert!(off.status(&c).profile.is_none());
+        assert!(matches!(off.read_profile(&c), ProfileRead::Absent));
+        // Un autre appariement : `matcher` prime sur l'absence de profil.
+        let on = store_with_profiles(dir.path(), 2);
+        assert_eq!(on.status(&c).state, State::Stale(StaleReason::Matcher));
+        // Une surcouche d'un autre graphe, avec son profil : `graph`.
+        let other = dir.path().join("graph-old").join(&c.ns);
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join(format!("{}.{FILE_EXT}", c.team)), b"x").unwrap();
+        std::fs::write(other.join(format!("{}.{PROFILE_EXT}", c.team)), b"x").unwrap();
+        let fresh = tempfile::tempdir().unwrap();
+        let on2 = store_with_profiles(fresh.path(), 1);
+        std::fs::create_dir_all(fresh.path().join("graph-old").join(&c.ns)).unwrap();
+        std::fs::write(
+            fresh.path().join("graph-old").join(&c.ns).join(format!("{}.{FILE_EXT}", c.team)),
+            b"x",
+        )
+        .unwrap();
+        assert_eq!(on2.status(&c).state, State::Stale(StaleReason::Graph));
+    }
+
+    #[test]
+    fn a_failed_overlay_write_keeps_the_new_profile_and_the_old_overlay() {
+        let dir = tempfile::tempdir().unwrap();
+        let hooks = Arc::new(TestHooks::default());
+        let s = Store::new(
+            StoreConfig {
+                dir: dir.path().to_path_buf(),
+                ttl: Duration::from_secs(14 * 86_400),
+                stale_grace: Duration::from_secs(48 * 3600),
+                max_namespaces: 4,
+                max_overlays_per_namespace: 4,
+                max_namespace_bytes: 1 << 20,
+                allowed_namespaces: Vec::new(),
+                team_cache_entries: 2,
+                team_cache_bytes: usize::MAX,
+                profile: Some(settings()),
+            },
+            "g1".into(),
+            identity(),
+            1,
+            Arc::clone(&hooks),
+            Arc::new(NoMemory),
+        );
+        let c = creds(1, "t");
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&profile_bytes(|_, _| {}))).unwrap();
+        let old_overlay = std::fs::read(overlay_file(dir.path(), &c)).unwrap();
+        hooks.fail_commit.store(true, Ordering::Relaxed);
+        let r = s.commit_with_profile(&c, &meta(1), &ordo(), Some(&profile_bytes(|_, t| t.q8[0][3] = 300)));
+        assert!(matches!(r, Err(StoreError::Io)));
+        assert_eq!(std::fs::read(overlay_file(dir.path(), &c)).unwrap(), old_overlay);
+        match s.read_profile(&c) {
+            ProfileRead::Present(t, _, _) => {
+                assert_eq!(t.q8[0][3], 300, "le profil neuf est écrit avant la surcouche")
+            }
+            other => panic!("{other:?}"),
+        }
+        let ns = dir.path().join("graph-g1").join(&c.ns);
+        assert!(
+            std::fs::read_dir(ns).unwrap().filter_map(Result::ok).all(|e| !is_tmp_name(&e.file_name())),
+            "aucun temporaire ne reste"
+        );
+    }
+
+    #[test]
+    fn profile_purge_follows_the_ttl_and_removes_orphans_after_an_hour_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b) = (creds(1, "a"), creds(1, "b"));
+        let s = store_with_profiles(dir.path(), 1);
+        for c in [&a, &b] {
+            s.commit_with_profile(c, &meta(1), &ordo(), Some(&profile_bytes(|_, _| {}))).unwrap();
+        }
+        let age = |p: &Path, secs: u64| {
+            let t = SystemTime::now() - Duration::from_secs(secs);
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(t).unwrap();
+        };
+        // Orphelin récent (30 min) : gardé ; orphelin d'une heure et plus : retiré.
+        std::fs::remove_file(overlay_file(dir.path(), &a)).unwrap();
+        age(&profile_file(dir.path(), &a), 1800);
+        let r = s.purge(SystemTime::now(), false);
+        assert_eq!((r.profile_orphan, r.profile_ttl), (0, 0));
+        assert!(profile_file(dir.path(), &a).exists());
+        age(&profile_file(dir.path(), &a), 7200);
+        let r = s.purge(SystemTime::now(), false);
+        assert_eq!(r.profile_orphan, 1);
+        assert!(!profile_file(dir.path(), &a).exists());
+        // Au TTL : surcouche et profil partent chacun pour sa raison.
+        age(&overlay_file(dir.path(), &b), 15 * 86_400);
+        age(&profile_file(dir.path(), &b), 15 * 86_400);
+        let r = s.purge(SystemTime::now(), false);
+        assert_eq!((r.ttl, r.profile_ttl), (1, 1));
+        // Un temporaire de profil part à son âge, comme les autres.
+        let ns = dir.path().join("graph-g1").join(&b.ns);
+        std::fs::create_dir_all(&ns).unwrap();
+        let tmp = ns.join(format!("x.ordp{TMP_MARK}ab"));
+        std::fs::write(&tmp, b"x").unwrap();
+        age(&tmp, 7200);
+        assert_eq!(s.purge(SystemTime::now(), false).tmp, 1);
+        assert!(!tmp.exists());
+    }
+
+    /// Les deux règles de purge d'une 1.9.2, recopiées telles quelles (`develop`) : aucune ne reconnaît un profil, et
+    /// la seconde ne reconnaît pas son temporaire. C'est ce qui rend le déploiement roulant sûr (§14.9).
+    #[test]
+    fn the_192_purge_rules_never_touch_a_profile_file() {
+        fn is_tmp_name_192(n: &str) -> bool {
+            n.contains(".tmp-")
+        }
+        fn is_overlay_name_192(n: &str) -> bool {
+            n.ends_with(".ordo.enc") && !n.contains(".tmp-")
+        }
+        let team = "a".repeat(64);
+        let profile = format!("{team}.{PROFILE_EXT}");
+        let profile_tmp = format!("{team}.ordp{TMP_MARK}0123456789abcdef");
+        assert!(
+            !is_tmp_name_192(&profile) && !is_overlay_name_192(&profile),
+            "le profil définitif est hors d'atteinte"
+        );
+        assert!(
+            is_tmp_name_192(&profile_tmp) && !is_overlay_name_192(&profile_tmp),
+            "son temporaire est ramassé, jamais pris pour une surcouche"
+        );
+        // Les noms de 1.10 : le profil est un profil, le temporaire n'en est pas un, aucun n'est une surcouche.
+        assert!(is_profile_name(std::ffi::OsStr::new(&profile)));
+        assert!(!is_profile_name(std::ffi::OsStr::new(&profile_tmp)));
+        assert!(!is_overlay_name(std::ffi::OsStr::new(&profile)));
+    }
+
+    #[test]
+    fn delete_removes_both_files_and_the_quota_counts_the_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let (c, s) = (creds(1, "t"), store_with_profiles(dir.path(), 1));
+        let one = ordo().len() as u64;
+        s.commit_with_profile(&c, &meta(1), &ordo(), Some(&profile_bytes(|_, _| {}))).unwrap();
+        assert_eq!(s.profile_count(), 1);
+        assert_eq!(s.count(), 1, "le nombre de surcouches ne compte pas les profils");
+        s.delete(&c);
+        assert!(!profile_file(dir.path(), &c).exists() && !overlay_file(dir.path(), &c).exists());
+        // Le quota d'un espace compte les octets du profil : une surcouche seule tient, avec son profil non.
+        let tight = tempfile::tempdir().unwrap();
+        let t = Store::new(
+            StoreConfig {
+                dir: tight.path().to_path_buf(),
+                ttl: Duration::from_secs(14 * 86_400),
+                stale_grace: Duration::from_secs(48 * 3600),
+                max_namespaces: 4,
+                max_overlays_per_namespace: 4,
+                max_namespace_bytes: one + 300,
+                allowed_namespaces: Vec::new(),
+                team_cache_entries: 2,
+                team_cache_bytes: usize::MAX,
+                profile: Some(settings()),
+            },
+            "g1".into(),
+            identity(),
+            1,
+            Arc::new(TestHooks::default()),
+            Arc::new(NoMemory),
+        );
+        assert!(t.commit(&c, &meta(1), &ordo()).is_ok());
+        let with = t.commit_with_profile(&creds(1, "u"), &meta(1), &ordo(), Some(&profile_bytes(|_, _| {})));
+        assert!(matches!(with, Err(StoreError::Quota)), "{with:?}");
     }
 }

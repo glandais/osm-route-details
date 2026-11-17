@@ -17,9 +17,9 @@ use ord_loops_check::{Checker, Config};
 
 use super::crypto::Credentials;
 use super::cursor::Applied;
-use super::routes::{CoverageV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1};
+use super::routes::{CoverageV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1, TasteV1};
 use super::store::{Entry, ReadyError, StaleReason, State};
-use super::windows::AcquireError;
+use super::windows::{AcquireError, TeamRef};
 use super::Ready;
 use crate::problem::{
     CoverageSource, GenerationReason, OverlayProblemState, Problem, ProblemCode, ProblemDetails,
@@ -60,6 +60,8 @@ struct Computed {
     routes: Vec<RouteV1>,
     dropped: u32,
     overlay: Option<OverlayInfoV1>,
+    /// Le goût servi : celui de l'équipe (profil appris) ou la table commune.
+    taste: TasteV1,
 }
 
 fn band(distance_m: f64) -> &'static str {
@@ -145,13 +147,13 @@ fn r1(x: f64) -> f64 {
 }
 
 impl Ready {
-    fn take_workspace(&self) -> Workspace {
+    pub(super) fn take_workspace(&self) -> Workspace {
         self.windows.take_workspace()
     }
 
     /// Rend un espace de travail à la réserve du gestionnaire : un trop gros est libéré (§9), ceux gardés comptent dans
     /// le budget et s'évincent en premier.
-    fn give_workspace(&self, ws: Workspace) {
+    pub(super) fn give_workspace(&self, ws: Workspace) {
         self.windows.give_workspace(ws, self.cfg.workspace_keep_mb * 1_000_000, self.cfg.max_concurrent);
     }
 
@@ -169,7 +171,7 @@ impl Ready {
         let mut extra_m = 0.0;
         for attempt in 0..2 {
             let plan = self.engine.plan_with(req, self.cfg.window_radius_step_m, extra_m);
-            let team = entry.map(|e| (e.serial, &e.team));
+            let team = entry.map(|e| TeamRef { serial: e.serial, data: &e.team, taste: e.profile.as_ref() });
             let held = match self.windows.acquire(&self.engine, &plan, team, deadline, stop) {
                 Ok(h) => h,
                 Err(AcquireError::Stopped) => {
@@ -304,6 +306,7 @@ impl Ready {
             lambda: input.applied.lambda,
             coverage: if inside { CoverageV1::Inside } else { CoverageV1::Partial },
             overlay: computed.overlay,
+            taste: computed.taste,
             dropped: computed.dropped,
             routes: computed.routes,
         })
@@ -339,7 +342,11 @@ impl Ready {
                 Err(ReadyError::State(state)) if need_team => {
                     return Err(overlay_required(match state {
                         State::Stale(StaleReason::Graph | StaleReason::Matcher) => OverlayProblemState::Stale,
-                        State::Absent | State::Ready => OverlayProblemState::Absent,
+                        // Jamais rendu par `Store::ready` : un profil absent ne bloque aucune génération (la table
+                        // commune sert). Écrit pour l'exhaustivité ; un test le tient.
+                        State::Stale(StaleReason::Profile) | State::Absent | State::Ready => {
+                            OverlayProblemState::Absent
+                        }
                     }));
                 }
                 Err(ReadyError::State(_)) => None,
@@ -400,6 +407,11 @@ impl Ready {
         Ok(Computed {
             routes,
             dropped,
+            taste: if entry.as_ref().is_some_and(|e| e.profile.is_some()) {
+                TasteV1::Team
+            } else {
+                TasteV1::Common
+            },
             overlay: entry.map(|e| OverlayInfoV1 { deposited_at: super::iso8601(e.meta.deposited_at) }),
         })
     }

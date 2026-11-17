@@ -51,6 +51,16 @@ impl World {
         self.send(put_digest(key, team, digest, team_deposit())).await
     }
 
+    /// Les fichiers de surcouche du stockage (`.ordo.enc`) : les profils de goût (`.ordp.enc`, 3b) sont comptés à part.
+    fn overlays(&self) -> Vec<String> {
+        tree(&self.store_dir()).into_iter().filter(|f| f.ends_with(".ordo.enc")).collect()
+    }
+
+    /// Les fichiers de profil de goût du stockage.
+    fn profiles(&self) -> Vec<String> {
+        tree(&self.store_dir()).into_iter().filter(|f| f.ends_with(".ordp.enc")).collect()
+    }
+
     async fn state_of(&self, key: &str, team: &str) -> Value {
         let r = self.send(status(key, team)).await;
         assert_eq!(r.status, StatusCode::OK, "{}", r.text);
@@ -128,8 +138,13 @@ async fn identifiers_cannot_escape_the_storage_directory() {
     }
     // Un dépôt valide ne crée que des noms hexadécimaux : `graph-<hex>/<32 hex>/<64 hex>.ordo.enc`.
     assert_eq!(w.deposit(&k, "team_1-OK", "d").await.status, StatusCode::OK);
-    let files = tree(&w.store_dir());
+    let files = w.overlays();
     assert_eq!(files.len(), 1, "{files:?}");
+    // Le profil de goût (3b) porte le même nom hexadécimal, avec son extension : rien d'autre n'est créé.
+    let profiles = w.profiles();
+    assert_eq!(profiles.len(), 1, "{profiles:?}");
+    assert_eq!(profiles[0].trim_end_matches(".ordp.enc"), files[0].trim_end_matches(".ordo.enc"));
+    assert_eq!(tree(&w.store_dir()).len(), 2);
     let parts: Vec<&str> = files[0].split('/').collect();
     assert_eq!(parts.len(), 3);
     let hex = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_hexdigit());
@@ -213,7 +228,15 @@ async fn a_failed_or_interrupted_deposit_leaves_the_previous_overlay_serving() {
     let r = w.send(put_digest(&k, team, "d2", team_deposit())).await;
     assert_problem(&r, StatusCode::INTERNAL_SERVER_ERROR, "internal");
     hooks.fail_commit.store(false, std::sync::atomic::Ordering::Relaxed);
-    assert_untouched("disque plein").await;
+    // Le profil de goût (3b) s'écrit **avant** la surcouche : le dépôt échoue, l'ancienne surcouche sert, et le profil
+    // neuf (appris sur les traces du dépôt raté) l'accompagne ; seule la date de son apprentissage change.
+    let mut after = w.state_of(&k, team).await;
+    assert_eq!(after["source_digest"], "d1");
+    after["profile"]["learned_at"] = before["profile"]["learned_at"].clone();
+    assert_eq!(after, before, "disque plein : état");
+    assert_eq!(tree(&w.store_dir()), files_before, "disque plein : fichiers (aucun temporaire)");
+    let r = w.send(generate(Some(&k), Some(team), &generate_body(0.5))).await;
+    assert_eq!(r.status, StatusCode::OK, "disque plein : génération {}", r.text);
     // Après la purge, toujours aucun temporaire ni fichier en trop.
     w.state.generator().purge_at(SystemTime::now()).unwrap();
     assert_eq!(tree(&w.store_dir()), files_before);
@@ -287,7 +310,7 @@ async fn overlays_survive_a_restart_and_a_new_graph_makes_them_stale_then_purges
     let hooked = state2.generator();
     let early = hooked.purge_at(SystemTime::now() + Duration::from_secs(3600)).unwrap();
     assert_eq!(early.stale_graph, 0);
-    assert_eq!(tree(&w.store_dir()).len(), 1);
+    assert_eq!(tree(&w.store_dir()).len(), 2, "la surcouche et son profil");
     let late = hooked.purge_at(SystemTime::now() + Duration::from_secs(49 * 3600)).unwrap();
     assert_eq!(late.stale_graph, 1);
     assert!(tree(&w.store_dir()).is_empty(), "{:?}", tree(&w.store_dir()));
@@ -327,11 +350,12 @@ async fn files_are_encrypted_bound_to_their_name_and_tampering_reads_as_absent()
     let k = key(1);
     assert_eq!(w.deposit(&k, "team-secret-a", "d1").await.status, StatusCode::OK);
     assert_eq!(w.deposit(&k, "team-secret-b", "d2").await.status, StatusCode::OK);
-    let files = tree(&w.store_dir());
+    let files = w.overlays();
     assert_eq!(files.len(), 2);
-    for f in &files {
+    for f in files.iter().chain(&w.profiles()) {
         let bytes = std::fs::read(w.store_dir().join(f)).unwrap();
-        assert_eq!(&bytes[..8], b"ORDOENC1");
+        // Une surcouche et un profil ont chacun leur magie (3b).
+        assert_eq!(&bytes[..8], if f.ends_with(".ordo.enc") { b"ORDOENC1" } else { b"ORDPENC1" });
         let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
         assert!(!has(b"ORDOVRL1"), "la magie de la surcouche en clair");
         assert!(!has(b"team-secret"), "la référence d'équipe en clair");
@@ -349,11 +373,11 @@ async fn files_are_encrypted_bound_to_their_name_and_tampering_reads_as_absent()
     };
     assert_eq!(states.iter().filter(|s| *s == "absent").count(), 1, "{states:?}");
     assert_eq!(states.iter().filter(|s| *s == "ready").count(), 1, "{states:?}");
-    assert_eq!(tree(&w.store_dir()).len(), 1, "le fichier corrompu est effacé");
+    assert_eq!(w.overlays().len(), 1, "le fichier corrompu est effacé");
     // Fichiers échangés : chacun ne se déchiffre que sous son propre nom.
     assert_eq!(w.deposit(&k, "team-secret-a", "d1").await.status, StatusCode::OK);
     assert_eq!(w.deposit(&k, "team-secret-b", "d2").await.status, StatusCode::OK);
-    let files = tree(&w.store_dir());
+    let files = w.overlays();
     assert_eq!(files.len(), 2);
     let (pa, pb) = (w.store_dir().join(&files[0]), w.store_dir().join(&files[1]));
     let (ba, bb) = (std::fs::read(&pa).unwrap(), std::fs::read(&pb).unwrap());
@@ -575,7 +599,7 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     // Capacités : ce qui est couvert, avec ses limites.
     let c = w.send(get("/v1/capabilities")).await.json();
     let g = &c["generator"];
-    assert_eq!(c["api_version"], "1.9");
+    assert_eq!(c["api_version"], "1.10");
     assert_eq!(g["enabled"], true);
     assert!(g["graph"]["data_date"].as_str().unwrap().ends_with("Z"));
     assert!(g["graph"]["id"].as_str().unwrap().len() == 16);
@@ -671,7 +695,7 @@ async fn a_stored_overlay_of_the_graph_is_not_the_one_of_the_contract_version_al
     let names: Vec<&str> =
         put["parameters"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ord-Namespace-Key", "Ord-Team", "Ord-Source-Digest"]);
-    assert_eq!(doc["info"]["version"], "1.9");
+    assert_eq!(doc["info"]["version"], "1.10");
 }
 
 // --- Revue : file, budget, équité, quotas -----------------------------------------------------------------------------

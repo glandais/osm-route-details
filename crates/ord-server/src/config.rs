@@ -371,6 +371,8 @@ pub struct GeneratorConfig {
     pub purge_interval_s: u64,
     pub storage: GeneratorStorageConfig,
     pub deposit: GeneratorDepositConfig,
+    /// Profil de goût d'équipe appris au dépôt (lot 4, 3b).
+    pub profile: GeneratorProfileConfig,
 }
 
 impl Default for GeneratorConfig {
@@ -398,6 +400,7 @@ impl Default for GeneratorConfig {
             purge_interval_s: 3_600,
             storage: GeneratorStorageConfig::default(),
             deposit: GeneratorDepositConfig::default(),
+            profile: GeneratorProfileConfig::default(),
         }
     }
 }
@@ -461,6 +464,31 @@ impl Default for GeneratorDepositConfig {
             memo_entries: 400_000,
             index_cache_mb: 128,
         }
+    }
+}
+
+/// Le profil de goût d'une équipe, appris au dépôt en rejouant le moteur sur ses boucles (3b, §14.7.2). La
+/// normalisation n'est pas un réglage : elle va avec la table commune du moteur.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeneratorProfileConfig {
+    /// `false` : ni collecteur, ni profil écrit, ni lu ; l'état n'est jamais `stale` pour la raison `profile`.
+    pub enabled: bool,
+    /// Fils du joueur (1 à 16).
+    pub threads: usize,
+    /// Phases de profil en cours dans tout le service, tous environnements confondus.
+    pub max_concurrent: usize,
+    /// Budget de la phase, secondes : sous celui du dépôt.
+    pub budget_s: u64,
+    /// Plafond des boucles d'apprentissage.
+    pub max_loops: usize,
+    /// Le plafond s'applique par type (ROAD, GRAVEL, MTB) au lieu de par équipe.
+    pub per_type: bool,
+}
+
+impl Default for GeneratorProfileConfig {
+    fn default() -> Self {
+        Self { enabled: true, threads: 4, max_concurrent: 1, budget_s: 720, max_loops: 500, per_type: false }
     }
 }
 
@@ -626,6 +654,16 @@ impl Config {
         if d.max_document_bytes == 0 || d.max_body_bytes == 0 || d.max_tracks == 0 || d.index_cache_mb == 0 {
             return invalid("generator.deposit", "size bounds must be positive");
         }
+        let p = &g.profile;
+        if !(1..=16).contains(&p.threads) || p.max_concurrent == 0 || p.max_loops == 0 || p.budget_s == 0 {
+            return invalid(
+                "generator.profile",
+                "threads must be between 1 and 16, and concurrency, budget and max_loops positive",
+            );
+        }
+        if p.budget_s >= d.budget_s {
+            return invalid("generator.profile", "the profile budget must be under the deposit budget");
+        }
         let st = &g.storage;
         if st.max_namespaces == 0
             || st.max_overlays_per_namespace == 0
@@ -733,6 +771,38 @@ mod tests {
             jail.set_env("ORD_GENERATOR__MEMORY_BUDGET_MB", "600");
             jail.set_env("ORD_GENERATOR__WINDOW_RADIUS_STEP_M", "0");
             assert!(Config::load(None).is_err(), "pas nul");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn profile_settings_are_validated_and_overridable() {
+        let mut config = Config::default();
+        assert_eq!(config.generator.profile.threads, 4);
+        assert_eq!((config.generator.profile.budget_s, config.generator.profile.max_loops), (720, 500));
+        assert!(config.generator.profile.enabled && !config.generator.profile.per_type);
+        for bad in [
+            |c: &mut Config| c.generator.profile.threads = 0,
+            |c: &mut Config| c.generator.profile.threads = 17,
+            |c: &mut Config| c.generator.profile.max_concurrent = 0,
+            |c: &mut Config| c.generator.profile.max_loops = 0,
+            |c: &mut Config| c.generator.profile.budget_s = 0,
+            // Le profil se fait sous le budget du dépôt, jamais au-delà.
+            |c: &mut Config| c.generator.profile.budget_s = 900,
+        ] {
+            let mut c = config.clone();
+            bad(&mut c);
+            assert!(c.validate().is_err());
+        }
+        config.generator.profile.threads = 16;
+        assert!(config.validate().is_ok());
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__PROFILE__THREADS", "2");
+            jail.set_env("ORD_GENERATOR__PROFILE__PER_TYPE", "true");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!((c.generator.profile.threads, c.generator.profile.per_type), (2, true));
+            jail.set_env("ORD_GENERATOR__PROFILE__THREAD", "2");
+            assert!(Config::load(None).is_err(), "clé inconnue refusée");
             Ok(())
         });
     }

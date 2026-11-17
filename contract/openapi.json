@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.9"
+    "version": "1.10"
   },
   "paths": {
     "/health/live": {
@@ -1230,6 +1230,45 @@
           }
         }
       },
+      "DepositProfileV1": {
+        "type": "object",
+        "description": "What the taste profile phase of a deposit did. Absent from the report when profiles are disabled.",
+        "required": [
+          "outcome",
+          "steps",
+          "loops",
+          "plays",
+          "seconds"
+        ],
+        "properties": {
+          "loops": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Loops the profile was learned from, all ride types.",
+            "minimum": 0
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ProfileOutcome"
+          },
+          "plays": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Generations played to learn it.",
+            "minimum": 0
+          },
+          "seconds": {
+            "type": "number",
+            "format": "double",
+            "description": "Duration of the phase, slot wait included, in seconds."
+          },
+          "steps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Steps finished (0 to 3).",
+            "minimum": 0
+          }
+        }
+      },
       "DepositReportV1": {
         "type": "object",
         "description": "Deposit report.",
@@ -1264,6 +1303,17 @@
           },
           "km": {
             "$ref": "#/components/schemas/DepositKm"
+          },
+          "profile": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DepositProfileV1",
+                "description": "The taste profile phase (3b); absent when profiles are disabled."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_digest": {
             "type": [
@@ -2001,6 +2051,7 @@
           "graph_id",
           "mode",
           "coverage",
+          "taste",
           "dropped",
           "routes"
         ],
@@ -2044,6 +2095,10 @@
             "items": {
               "$ref": "#/components/schemas/RouteV1"
             }
+          },
+          "taste": {
+            "$ref": "#/components/schemas/TasteV1",
+            "description": "The taste of the weights: `team` when the team has a taste profile, `common` otherwise."
           }
         }
       },
@@ -2678,6 +2733,17 @@
           "graph_id": {
             "type": "string"
           },
+          "profile": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProfileStatusV1",
+                "description": "The taste profile; absent when there is no overlay or profiles are disabled."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_digest": {
             "type": [
               "string",
@@ -2914,6 +2980,60 @@
           "full",
           "fast"
         ]
+      },
+      "ProfileOutcome": {
+        "type": "string",
+        "description": "How the taste profile of a deposit ended.",
+        "enum": [
+          "learned",
+          "partial",
+          "empty",
+          "skipped"
+        ]
+      },
+      "ProfileStateV1": {
+        "type": "string",
+        "enum": [
+          "present",
+          "absent",
+          "incompatible"
+        ]
+      },
+      "ProfileStatusV1": {
+        "type": "object",
+        "description": "The taste profile of a team, learned when its overlay was deposited.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "learned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "loops": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Loops it was learned from, all ride types.",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/components/schemas/ProfileStateV1"
+          },
+          "steps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Steps of learning finished (0 to 3).",
+            "minimum": 0
+          }
+        }
       },
       "ProfileV1": {
         "type": "object",
@@ -3450,7 +3570,8 @@
         "type": "string",
         "enum": [
           "graph",
-          "matcher"
+          "matcher",
+          "profile"
         ]
       },
       "StatusV1": {
@@ -3798,6 +3919,14 @@
             "$ref": "#/components/schemas/SurfaceSourceV1"
           }
         }
+      },
+      "TasteV1": {
+        "type": "string",
+        "description": "The taste a generation was served with.",
+        "enum": [
+          "team",
+          "common"
+        ]
       },
       "TerrainOrigin": {
         "type": "string",
