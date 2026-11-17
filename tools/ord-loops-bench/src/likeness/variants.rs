@@ -5,6 +5,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use ord_loops::{Mode, Request, RideType};
 use serde::Serialize;
 
+use super::chain::ChainOwnerStep;
 use super::taste::{TasteParams, TasteTable};
 
 /// D'où vient la table de goût d'une variante.
@@ -36,6 +37,15 @@ impl TasteSource {
 pub enum Dims {
     D72,
     Me,
+}
+
+impl Dims {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::D72 => "72",
+            Self::Me => "me",
+        }
+    }
 }
 
 /// La place d'une variante dans une chaîne de recalé itéré (§13.5) : `rc:0.5+n:3` donne trois variantes
@@ -226,6 +236,47 @@ pub struct TeamWindowCounters {
     pub max_bytes: u64,
 }
 
+/// La chaîne dont une variante est un pas, telle que le rapport la décrit (§13.6).
+#[derive(Clone, Debug, Serialize)]
+pub struct ChainMeta {
+    pub stem: String,
+    pub step: u8,
+    pub steps: u8,
+    /// `base` au pas 1, sinon le nom de la variante du pas précédent.
+    pub learned_from: String,
+    /// `72` ou `me`.
+    pub dims: String,
+    pub team_n0: f64,
+    pub mult_bound: f64,
+    pub diag: Vec<ChainOwnerStep>,
+}
+
+/// L'écart L1 des parts de classes (réel contre généré) que les parcours d'une variante laissent, pour un propriétaire
+/// de table et un type : `général` (ou `commun` pour `rt`, sur toutes équipes) ou une lettre.
+#[derive(Clone, Debug, Serialize)]
+pub struct OwnerGap {
+    pub owner: String,
+    pub ty: String,
+    pub l1: f64,
+}
+
+/// Ce qu'une équipe a coûté à jouer une variante (§13.6) : lettre et agrégats seulement.
+#[derive(Clone, Debug, Serialize)]
+pub struct TeamTime {
+    pub team: String,
+    pub loops: usize,
+    /// Jeux sur la surcouche complète (les générations d'un profil d'équipe appris au dépôt) et leur temps cumulé, s
+    /// (`PlayRec::ms` : acquisition des fenêtres et appel du moteur).
+    pub plays_full: usize,
+    pub cpu_s_full: f64,
+    /// `(curseur, s)` : le temps cumulé des jeux `full` à chaque curseur.
+    pub cpu_s_full_by_cursor: Vec<(f64, f64)>,
+    /// `build_team` des deux surcouches, s.
+    pub build_s: f64,
+    /// L'équipe entière (constructions et jeux des deux surcouches), s.
+    pub wall_s: f64,
+}
+
 /// Ce que chaque variante écrit sur elle-même (le rapport de la variante).
 #[derive(Clone, Debug, Serialize)]
 pub struct VariantMeta {
@@ -243,6 +294,10 @@ pub struct VariantMeta {
     pub team_windows: TeamWindowCounters,
     pub secs: f64,
     pub peak_anon_mb: f64,
+    /// `Some` pour `rc` et `rt`.
+    pub chain: Option<ChainMeta>,
+    pub l1_after: Vec<OwnerGap>,
+    pub team_times: Vec<TeamTime>,
 }
 
 #[cfg(test)]

@@ -94,6 +94,12 @@ pub struct Conditions {
     /// Le banc tourne aux réglages du 4a : l'empreinte de `base` est comparable à celle du relevé.
     pub at_4a_defaults: bool,
     pub base_4a_fingerprint: String,
+    /// Part des boucles mises à l'écart, par équipe.
+    pub holdout_share: f64,
+    /// Contrôle « pas 1 = `rc05` » (§13.6) : `None` s'il ne s'applique pas (réglages hors 4a ou pas de chaîne `rc05`).
+    pub step1_check: Option<bool>,
+    /// Hors des réglages du 4a, banc complet : les `S_base` « toutes » se comparent à ceux du 4a (§13.6).
+    pub all_check_applies: bool,
 }
 
 // --- Mesures pures ---------------------------------------------------------------------------------------------------

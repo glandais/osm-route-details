@@ -35,10 +35,11 @@ use ord_loops::{Params, Taste, TeamData, Workspace};
 use ord_loops_check::{Checker, Config, GraphIndex, TeamCheck, TypeIndex};
 use rayon::prelude::*;
 
+use self::chain::{ChainState, ClassMeters, StepOut};
 use self::measure::Measures;
 use self::play::Eng;
 use self::taste::{ClassSums, TasteParams, TasteTable};
-use self::variants::{TasteSource, Variant, VariantMeta};
+use self::variants::{ChainMeta, TasteSource, TeamTime, Variant, VariantMeta};
 use crate::windows::AnonSampler;
 use ord_loops::Engine;
 
@@ -154,6 +155,11 @@ pub struct LikenessArgs {
 /// variante `base` la redonne, bit pour bit, aux défauts.
 pub const BASE_4A_FINGERPRINT: &str = "55c3b065dc085f42";
 
+/// Le premier pas d'une chaîne `rc` à γ = 0,5, 72 cases, sans familiarité, doit redonner `rc05` de la première sonde
+/// (relevé `ord-loops-lot4-sonde.md`, §2), bit pour bit, aux réglages du 4a : empreinte de résultat et `taste_xxh3`.
+pub const RC05_FINGERPRINT: &str = "ebb20ed148f75185";
+pub const RC05_TASTE_XXH3: &str = "4002e232ea272c83";
+
 impl LikenessArgs {
     pub fn taste_params(&self) -> TasteParams {
         TasteParams {
@@ -165,6 +171,11 @@ impl LikenessArgs {
             team_n0: self.taste_team_n0,
             mult_bound: self.taste_mult_bound,
         }
+    }
+
+    /// Les réglages du goût aux défauts du 4a (`m`, `bound`, `min_km`) : ceux du relevé de la première sonde.
+    pub fn taste_at_4a_defaults(&self) -> bool {
+        self.taste_m == 0.5 && self.taste_bound == 3.0 && self.taste_min_km == 200.0
     }
 
     /// Les réglages du 4a : le seul cas où l'empreinte de `base` est comparable à celle du relevé.
@@ -280,10 +291,6 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     }
     // La sonde du goût : refus avant toute phase lourde. Sans `--variants`, une passe `base` et les sorties du 4a.
     let listed = variants::parse_variants(&a.variants)?;
-    anyhow::ensure!(
-        listed.iter().all(|v| !matches!(v.taste, Some((TasteSource::RecalTeam, _)))),
-        "`rt` n'est pas encore branché (commit suivant)"
-    );
     let legacy = listed.is_empty();
     let variants = if legacy { vec![Variant::base()] } else { listed };
     let tp = a.taste_params();
@@ -470,13 +477,34 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     }
     overlay_checks.sort_by(|x, y| x.team.cmp(&y.team));
     let vertex_histograms = vertex_histograms(&loops, &raw, &reals);
-    let mut rc_inputs: Option<RcInputs> = None;
+    // Les chaînes de recalé (§13.6) : les mètres de `base`, ceux du pas précédent, l'état de la chaîne en cours.
+    let mut base_meters: Option<ClassMeters> = None;
+    let mut prev_meters: Option<ClassMeters> = None;
+    let mut chain: Option<ChainState> = None;
+    let mut last_name = String::new();
+    let mut step1_check: Option<bool> = None;
     let mut done: Vec<compare::Done> = Vec::new();
     std::fs::create_dir_all(&paths.out)?;
     for v in &variants {
         wins.take_team_counters();
         let w0 = wins.counters();
-        let run = bench.play_variant(v, rc_inputs.as_ref(), &mut workspaces)?;
+        // Un pas de chaîne : la table se corrige d'après les jeux de `base` (pas 1) ou du pas précédent.
+        let mut step: Option<StepOut> = None;
+        let mut learned_from = String::new();
+        if let (Some(c), Some((src, gamma))) = (&v.chain, v.taste) {
+            if c.step == 1 {
+                chain = Some(ChainState::new(c.dims, gamma));
+                learned_from = "base".to_string();
+            } else {
+                learned_from = last_name.clone();
+            }
+            let inputs = if c.step == 1 { base_meters.as_ref() } else { prev_meters.as_ref() }
+                .ok_or_else(|| anyhow!("`{}` a besoin des jeux de `{learned_from}`", v.name))?;
+            let st = chain.as_mut().ok_or_else(|| anyhow!("chaîne `{}` sans état", c.stem))?;
+            step = Some(st.step(src, inputs, &order, &letter_of, &tp));
+            prev_meters = None;
+        }
+        let run = bench.play_variant(v, step.as_ref(), &mut workspaces)?;
         ph.end(&if legacy { "jeux".to_string() } else { format!("variante {}", v.name) });
         let team_windows = wins.take_team_counters();
         let w1 = wins.counters();
@@ -486,9 +514,20 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             overflow: w1.overflow - w0.overflow,
             escapes: w1.escapes - w0.escapes,
         };
-        if v.is_base() && rc_inputs.is_none() {
-            rc_inputs = Some(RcInputs::of(&loops, &held, &real_class_m, &run.plays));
+        // Les mètres de cette variante : ce que le pas suivant apprend, et l'écart que ses parcours laissent.
+        let meters = ClassMeters::of(&loops, &held, &real_class_m, &run.plays, ing.teams.len());
+        let pooled_name =
+            if matches!(v.taste, Some((TasteSource::RecalTeam, _))) { "commun" } else { "général" };
+        let l1_after = chain::l1_gaps(&meters, &order, &letter_of, pooled_name);
+        let chain_diag = step.map(|s| s.diag).unwrap_or_default();
+        let team_times = run.team_times;
+        match &v.chain {
+            Some(c) if c.step < c.steps => prev_meters = Some(meters),
+            Some(_) => chain = None,
+            None if v.is_base() && base_meters.is_none() => base_meters = Some(meters),
+            None => {}
         }
+        last_name = v.name.clone();
 
         // 9. Les sorties de la variante.
         let mut plays = run.plays;
@@ -532,6 +571,18 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             team_windows,
             secs: last.as_ref().map_or(0.0, |p| p.secs),
             peak_anon_mb: last.as_ref().map_or(0.0, |p| p.peak_anon_mb),
+            chain: v.chain.as_ref().map(|c| ChainMeta {
+                stem: c.stem.clone(),
+                step: c.step,
+                steps: c.steps,
+                learned_from: learned_from.clone(),
+                dims: c.dims.code().to_string(),
+                team_n0: tp.team_n0,
+                mult_bound: tp.mult_bound,
+                diag: chain_diag,
+            }),
+            l1_after,
+            team_times,
         });
         let mut meta =
             meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
@@ -574,6 +625,21 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
                 loops: report.loops,
             });
         }
+        // « Pas 1 = `rc05` » : la chaîne commune à 72 cases, γ = 0,5, sans familiarité, aux réglages du 4a.
+        if matches!(v.name.as_str(), "rc05" | "rc05-p1") && a.at_4a_defaults() && a.taste_at_4a_defaults() {
+            let taste = report.variant.as_ref().map_or("", |m| m.taste_xxh3.as_str());
+            let ok = report.fingerprint == RC05_FINGERPRINT && taste == RC05_TASTE_XXH3;
+            eprintln!(
+                "« pas 1 = `rc05` ({RC05_FINGERPRINT}, {RC05_TASTE_XXH3}) » : {}",
+                if ok { "oui" } else { "NON" }
+            );
+            step1_check = Some(ok);
+            anyhow::ensure!(
+                ok,
+                "le pas 1 n'est pas `rc05` ({} · {taste}) : chercher, ne pas lire la suite",
+                report.fingerprint
+            );
+        }
         if v.is_base() && a.at_4a_defaults() {
             eprintln!("« `base` = 4a : {BASE_4A_FINGERPRINT} » : {}", if same { "oui" } else { "NON" });
             anyhow::ensure!(
@@ -595,40 +661,18 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             params: tp.clone(),
             at_4a_defaults: a.at_4a_defaults(),
             base_4a_fingerprint: BASE_4A_FINGERPRINT.to_string(),
+            holdout_share: a.holdout_share,
+            step1_check,
+            all_check_applies: !a.at_4a_defaults()
+                && a.cursors == [0.25, 1.0]
+                && a.limit.is_none()
+                && a.max_km.is_none()
+                && a.teams.is_empty()
+                && !a.no_holdout,
         };
         compare::write(&paths.out, &a.label, &conds, &done)?;
     }
     Ok(())
-}
-
-/// Ce que `rc` lit de `base` : par type, les mètres par classe du réel et ceux du **premier** parcours de `base` (mêmes
-/// boucles non mises à l'écart, surcouche complète, tous les curseurs, jeux `OK`).
-struct RcInputs {
-    num: [Vec<f64>; 3],
-    den: [Vec<f64>; 3],
-}
-
-impl RcInputs {
-    fn of(
-        loops: &[export::Loop],
-        held: &std::collections::HashSet<usize>,
-        real_class_m: &[[f64; ord_loops::TASTE_CLASSES]],
-        plays: &[Vec<play::PlayRec>],
-    ) -> Self {
-        let z = || vec![0.0; ord_loops::TASTE_CLASSES];
-        let (mut num, mut den) = ([z(), z(), z()], [z(), z(), z()]);
-        for (i, l) in loops.iter().enumerate().filter(|(i, _)| !held.contains(i)) {
-            let ty = usize::from(l.ty).min(2);
-            for p in plays[i].iter().filter(|p| p.overlay == "full" && p.outcome == "OK") {
-                let Some(fc) = &p.first_class_m else { continue };
-                for c in 0..ord_loops::TASTE_CLASSES {
-                    num[ty][c] += real_class_m[i][c];
-                    den[ty][c] += fc[c];
-                }
-            }
-        }
-        Self { num, den }
-    }
 }
 
 /// Tout ce que le jeu d'une variante lit.
@@ -654,6 +698,7 @@ struct Bench<'a> {
 struct VariantRun {
     plays: Vec<Vec<play::PlayRec>>,
     tables: Vec<TasteTable>,
+    team_times: Vec<TeamTime>,
 }
 
 impl Bench<'_> {
@@ -665,7 +710,7 @@ impl Bench<'_> {
     fn play_variant(
         &self,
         v: &Variant,
-        rc: Option<&RcInputs>,
+        step: Option<&StepOut>,
         workspaces: &mut [Workspace],
     ) -> Result<VariantRun> {
         let (a, gf) = (self.args, self.gf);
@@ -685,18 +730,28 @@ impl Bench<'_> {
                 tables.extend(tbl);
                 fixed = (tf, tg);
             }
-            Some((TasteSource::Recal, gamma)) => {
-                let rc = rc.ok_or_else(|| anyhow!("`rc` a besoin des jeux de `base`"))?;
-                let (t, tbl) = taste::learn("recalé", "full", &rc.num, &rc.den, 1_000.0, gamma, self.params);
-                tables.extend(tbl);
-                fixed = (t.clone(), t);
+            // Recalé (`rc`) : la table commune du pas, la même pour toutes les équipes et les deux surcouches.
+            Some((TasteSource::Recal, _)) => {
+                let out = step.ok_or_else(|| anyhow!("`rc` a besoin d'un pas de chaîne"))?;
+                tables.extend(out.tables.iter().cloned());
+                fixed = (out.general.clone(), out.general.clone());
+            }
+            // Recalé par équipe (`rt`) : une table par équipe, les mêmes pour les deux surcouches.
+            Some((TasteSource::RecalTeam, _)) => {
+                let out = step.ok_or_else(|| anyhow!("`rt` a besoin d'un pas de chaîne"))?;
+                tables.extend(out.tables.iter().cloned());
             }
             _ => {}
         }
         let mut plays: Vec<Vec<play::PlayRec>> = self.loops.iter().map(|_| Vec::new()).collect();
+        let mut team_times: Vec<TeamTime> = Vec::new();
         for &t in self.order {
             let mine: Vec<usize> = (0..self.loops.len()).filter(|&i| self.loops[i].team == t).collect();
             let tt = std::time::Instant::now();
+            // Temps de l'équipe (§13.6) : constructions des deux surcouches, et jeux `full` (cumul des `PlayRec::ms`).
+            let mut build_s = 0.0;
+            let mut full_ms: Vec<(f64, f64)> = a.cursors.iter().map(|&c| (c, 0.0)).collect();
+            let mut plays_full = 0usize;
             let tasks_of = |ids: &[usize]| -> Result<Vec<play::Task>> {
                 let mut tasks: Vec<play::Task> = Vec::new();
                 for &i in ids {
@@ -737,6 +792,7 @@ impl Bench<'_> {
                         tables.extend(tbl);
                         taste
                     }
+                    Some((TasteSource::RecalTeam, _)) => step.and_then(|o| o.team.get(&t)).cloned().flatten(),
                     Some(_) => {
                         if label == "full" {
                             fixed.0.clone()
@@ -746,8 +802,10 @@ impl Bench<'_> {
                     }
                     None => None,
                 };
+                let tb = std::time::Instant::now();
                 let (team, team_check) =
                     build_team(self.engine, self.graph_index, overlay, &self.letter_of[t])?;
+                build_s += tb.elapsed().as_secs_f64();
                 let checker = Checker::with_tables(
                     gf,
                     Some(overlay),
@@ -765,19 +823,30 @@ impl Bench<'_> {
                 };
                 let tasks = tasks_of(ids)?;
                 for (k, rec) in play::run_tasks(self.ctx, &env, &tasks, label, workspaces) {
+                    if label == "full" {
+                        plays_full += 1;
+                        if let Some(slot) = full_ms.iter_mut().find(|(c, _)| *c == rec.cursor) {
+                            slot.1 += rec.ms;
+                        }
+                    }
                     plays[tasks[k].loop_idx].push(rec);
                 }
                 self.ctx.wins.drop_team(env.key);
             }
-            eprintln!(
-                "{} : équipe {} : {} boucles, {:.1} s",
-                v.name,
-                self.letter_of[t],
-                mine.len(),
-                tt.elapsed().as_secs_f64()
-            );
+            let wall_s = tt.elapsed().as_secs_f64();
+            eprintln!("{} : équipe {} : {} boucles, {wall_s:.1} s", v.name, self.letter_of[t], mine.len());
+            let by_cursor: Vec<(f64, f64)> = full_ms.iter().map(|&(c, ms)| (c, ms / 1_000.0)).collect();
+            team_times.push(TeamTime {
+                team: self.letter_of[t].clone(),
+                loops: mine.len(),
+                plays_full,
+                cpu_s_full: by_cursor.iter().map(|x| x.1).sum(),
+                cpu_s_full_by_cursor: by_cursor,
+                build_s,
+                wall_s,
+            });
         }
-        Ok(VariantRun { plays, tables })
+        Ok(VariantRun { plays, tables, team_times })
     }
 }
 

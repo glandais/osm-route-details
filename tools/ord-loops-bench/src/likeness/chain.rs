@@ -4,17 +4,16 @@
 //! Tout en `f64`, dans un ordre de sommes fixé (séquentiel, sans `rayon`) : quelques milliers de boucles sur 72 cases.
 //! Seules les `q8` entières entrent dans le moteur. Aucune coordonnée ni id : des mètres et des parts par classe.
 
-// Provisoire : le banc ne joue pas encore les chaînes (retiré au commit qui les branche).
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 
 use ord_loops::{Taste, TASTE_CLASSES};
 use serde::Serialize;
 
+use super::export::Loop;
+use super::play::PlayRec;
 use super::taste::{ratio_table, shares, TasteParams, TasteTable, TYPES};
 pub use super::variants::Dims;
-use super::variants::TasteSource;
+use super::variants::{OwnerGap, TasteSource};
 
 /// Dans l'intervalle `]-DEAD_ZONE, DEAD_ZONE[`, une correction n'a pas de signe (§13.2.2, étape 2).
 const DEAD_ZONE: f64 = 0.02;
@@ -47,6 +46,73 @@ impl Default for Meters {
 pub struct ClassMeters {
     pub pooled: Meters,
     pub team: Vec<Meters>,
+}
+
+impl ClassMeters {
+    /// Les mètres d'une variante jouée. Une paire (boucle, curseur) compte si la boucle n'est **pas** mise à l'écart,
+    /// si le jeu est sur la surcouche `full`, d'issue `OK`, avec `first_class_m`. `pooled` est calculé exactement comme
+    /// l'ancien `RcInputs::of` (mêmes conditions, même ordre d'addition : boucles dans l'ordre de `loops`, jeux dans
+    /// l'ordre de `plays`), pour que le pas 1 redonne `rc05` au bit près.
+    pub fn of(
+        loops: &[Loop],
+        held: &std::collections::HashSet<usize>,
+        real_class_m: &[[f64; TASTE_CLASSES]],
+        plays: &[Vec<PlayRec>],
+        n_teams: usize,
+    ) -> Self {
+        let keys: Vec<(usize, u8)> = loops.iter().map(|l| (l.team, l.ty)).collect();
+        Self::of_keys(&keys, held, real_class_m, plays, n_teams)
+    }
+
+    /// [`ClassMeters::of`] sur les seuls `(équipe, type)` des boucles : tout ce qu'elle lit d'une boucle.
+    fn of_keys(
+        keys: &[(usize, u8)],
+        held: &std::collections::HashSet<usize>,
+        real_class_m: &[[f64; TASTE_CLASSES]],
+        plays: &[Vec<PlayRec>],
+        n_teams: usize,
+    ) -> Self {
+        let mut pooled = Meters::default();
+        let mut team: Vec<Meters> = (0..n_teams).map(|_| Meters::default()).collect();
+        for (i, &(t, ty)) in keys.iter().enumerate().filter(|(i, _)| !held.contains(i)) {
+            let ty = usize::from(ty).min(2);
+            let mut counted = false;
+            for p in plays[i].iter().filter(|p| p.overlay == "full" && p.outcome == "OK") {
+                let Some(fc) = &p.first_class_m else { continue };
+                for c in 0..TASTE_CLASSES {
+                    pooled.real[ty][c] += real_class_m[i][c];
+                    pooled.gen[ty][c] += fc[c];
+                    team[t].real[ty][c] += real_class_m[i][c];
+                    team[t].gen[ty][c] += fc[c];
+                }
+                pooled.pairs[ty] += 1;
+                team[t].pairs[ty] += 1;
+                counted = true;
+            }
+            if counted {
+                pooled.loops[ty] += 1;
+                team[t].loops[ty] += 1;
+            }
+        }
+        Self { pooled, team }
+    }
+}
+
+/// L'écart L1 que les parcours d'une variante laissent, par propriétaire (`pooled_name` pour toutes équipes, puis les
+/// équipes de `order`) et par type ayant au moins une paire comptée.
+pub fn l1_gaps(m: &ClassMeters, order: &[usize], letter_of: &[String], pooled_name: &str) -> Vec<OwnerGap> {
+    let gap = |x: &Meters, ty: usize| -> f64 {
+        shares(&x.real[ty]).iter().zip(shares(&x.gen[ty])).map(|(a, b)| (a - b).abs()).sum()
+    };
+    let mut out = Vec::new();
+    for (name, x) in std::iter::once((pooled_name, &m.pooled))
+        .chain(order.iter().map(|&t| (letter_of[t].as_str(), &m.team[t])))
+    {
+        for ty in (0..3).filter(|&ty| x.pairs[ty] > 0) {
+            out.push(OwnerGap { owner: name.to_string(), ty: TYPES[ty].0.to_string(), l1: gap(x, ty) });
+        }
+    }
+    out
 }
 
 // --- État d'un propriétaire de table ----------------------------------------------------------------------------------
@@ -876,5 +942,102 @@ mod tests {
         u[1] = -0.3;
         assert_eq!(step_me(&mut ps, &u, 4.0), 1);
         assert_eq!((ps.gamma[1], ps.gamma[7], ps.gamma[0]), (0.25, 0.5, 0.5));
+    }
+
+    /// L'ancien `RcInputs::of` du §12, gardé ici comme référence : `pooled` doit lui être égal au bit près.
+    fn rc_inputs_reference(
+        keys: &[(usize, u8)],
+        held: &std::collections::HashSet<usize>,
+        real_class_m: &[[f64; TASTE_CLASSES]],
+        plays: &[Vec<PlayRec>],
+    ) -> ([Vec<f64>; 3], [Vec<f64>; 3]) {
+        let z = || vec![0.0; TASTE_CLASSES];
+        let (mut num, mut den) = ([z(), z(), z()], [z(), z(), z()]);
+        for (i, &(_, ty)) in keys.iter().enumerate().filter(|(i, _)| !held.contains(i)) {
+            let ty = usize::from(ty).min(2);
+            for p in plays[i].iter().filter(|p| p.overlay == "full" && p.outcome == "OK") {
+                let Some(fc) = &p.first_class_m else { continue };
+                for c in 0..TASTE_CLASSES {
+                    num[ty][c] += real_class_m[i][c];
+                    den[ty][c] += fc[c];
+                }
+            }
+        }
+        (num, den)
+    }
+
+    fn play(cursor: f64, overlay: &str, outcome: &str, fc: Option<Vec<f64>>) -> PlayRec {
+        PlayRec {
+            cursor,
+            overlay: overlay.to_string(),
+            outcome: outcome.to_string(),
+            n_routes: 1,
+            n_kept: 1,
+            dropped: Default::default(),
+            ms: 1.0,
+            routes: Vec::new(),
+            best_shape: None,
+            best_recovered: None,
+            first_class_m: fc,
+        }
+    }
+
+    #[test]
+    fn class_meters_match_the_old_rc_inputs_bit_for_bit_and_skip_what_must_be_skipped() {
+        // 6 boucles : équipes 0, 1, 0, 2, 1, 0 ; types ROAD, GRAVEL, ROAD, ROAD, GRAVEL, MTB (3 → 2 par `min`).
+        let keys: Vec<(usize, u8)> = vec![(0, 0), (1, 1), (0, 0), (2, 0), (1, 1), (0, 3)];
+        let held: std::collections::HashSet<usize> = [2].into_iter().collect();
+        let real: Vec<[f64; TASTE_CLASSES]> = (0..6)
+            .map(|i| {
+                let v = lcg(60 + i, TASTE_CLASSES, 0.0, 5_000.0);
+                let mut a = [0.0; TASTE_CLASSES];
+                a.copy_from_slice(&v);
+                a
+            })
+            .collect();
+        let fc = |seed: u64| Some(lcg(seed, TASTE_CLASSES, 0.0, 5_000.0));
+        let plays: Vec<Vec<PlayRec>> = vec![
+            vec![play(0.25, "full", "OK", fc(1)), play(1.0, "full", "OK", fc(2))],
+            vec![play(0.25, "full", "OK", fc(3)), play(1.0, "full", "NO_ROUTES", None)],
+            // La boucle mise à l'écart : jamais comptée, quels que soient ses jeux.
+            vec![play(0.25, "full", "OK", fc(4)), play(0.25, "holdout", "OK", fc(5))],
+            // Un jeu « écart » n'y compte pas, un jeu `OK` sans classes non plus.
+            vec![play(0.25, "holdout", "OK", fc(6)), play(1.0, "full", "OK", None)],
+            vec![play(0.25, "full", "OK", fc(7)), play(1.0, "full", "OK", fc(8))],
+            vec![play(0.25, "full", "OK", fc(9))],
+        ];
+        let m = ClassMeters::of_keys(&keys, &held, &real, &plays, 3);
+        let (num, den) = rc_inputs_reference(&keys, &held, &real, &plays);
+        for ty in 0..3 {
+            for c in 0..TASTE_CLASSES {
+                assert_eq!(m.pooled.real[ty][c].to_bits(), num[ty][c].to_bits());
+                assert_eq!(m.pooled.gen[ty][c].to_bits(), den[ty][c].to_bits());
+            }
+        }
+        // La somme des équipes égale `pooled` à 1e-9 relatif.
+        for ty in 0..3 {
+            for c in 0..TASTE_CLASSES {
+                let sr: f64 = m.team.iter().map(|t| t.real[ty][c]).sum();
+                let sg: f64 = m.team.iter().map(|t| t.gen[ty][c]).sum();
+                near(sr, m.pooled.real[ty][c], 1e-9 * m.pooled.real[ty][c].max(1.0));
+                near(sg, m.pooled.gen[ty][c], 1e-9 * m.pooled.gen[ty][c].max(1.0));
+            }
+        }
+        // Boucles et paires : la boucle 1 n'a qu'un jeu compté ; la 2 (écart) et la 3 (jeu « écart », jeu sans classes)
+        // n'en ont aucun.
+        assert_eq!(m.pooled.loops, [1, 2, 1]);
+        assert_eq!(m.pooled.pairs, [2, 3, 1]);
+        assert_eq!(m.team[0].loops, [1, 0, 1]);
+        assert_eq!(m.team[1].pairs, [0, 3, 0]);
+        assert_eq!(m.team[2].loops, [0, 0, 0]);
+        assert!(m.team[2].real[0].iter().all(|&x| x == 0.0));
+        // Les écarts L1 : un propriétaire par type ayant des paires.
+        let gaps = l1_gaps(&m, &[0, 1], &["A".to_string(), "B".to_string(), "C".to_string()], "général");
+        assert_eq!(gaps.iter().filter(|g| g.owner == "général").count(), 3);
+        assert_eq!(gaps.iter().filter(|g| g.owner == "A").count(), 2);
+        assert!(gaps.iter().all(|g| (0.0..=2.0).contains(&g.l1)));
+        // Parts égales : écart nul.
+        let eq = one_team(&[1.0; 72], &[3.0; 72]);
+        assert!(l1_gaps(&eq, &[0], &["A".to_string()], "commun")[0].l1.abs() < 1e-12);
     }
 }
