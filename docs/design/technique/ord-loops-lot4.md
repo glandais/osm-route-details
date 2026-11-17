@@ -945,3 +945,440 @@ Ce que le codage et la relecture ont changé à la spécification ci-dessus ; d�
 - **§11.13, étalonnage** : la sortie de `shapes.py` se compare tronquée au nombre de lignes de
   `<label>-calibration.txt` (la ligne « unpaved share » n'est pas portée).
 - **§11.9, mémoire** : pic anonyme de 14,2 Go à la campagne France (estimé ~12 Go) ; durée 231 s.
+
+---
+
+## 12. Sonde du goût : spécification
+
+Écrit le 17 novembre 2026, après le relevé du 4a (`ord-loops-lot4-mesures.md` §4, §7.1, §12) et la décision 7 du §9.1,
+à la lecture de `ord-loops` (`cost.rs`, `search.rs` : `Weighter`, `team.rs` : `WindowTeam`, `window.rs`, `generate.rs`),
+de `ord-server/src/generator/cursor.rs` et du banc (`tools/ord-loops-bench/src/likeness/`). Cette section **suffit au
+codeur** : ce qu'elle ne dit pas est laissé à son jugement, à condition de tenir le §12.1 (moteur neutre par défaut) et
+de ne toucher ni au service (`ord-server`), ni au contrôleur (`ord-loops-check`).
+
+**Question posée** : un goût appris par classe de voie, appliqué **à toutes les arêtes de la vue** (arêtes d'équipe
+comprises), aux deux curseurs, réduit-il de moitié au moins les écarts de classes entre parcours générés et réels
+(critère de la décision 7 pour lancer le 4b complet) ? Et la familiarité au-dessus de 0,5, qui ne demande aucun code
+moteur, en fait-elle autant ? Rien n'est stocké au dépôt, rien ne change au service.
+
+### 12.0 Ce que la lecture a établi
+
+1. **Un seul point d'entrée des poids** : `Weighter` (`search.rs`). `chain(c)` lit `w_osm[c]` (poids sans équipe de la
+   chaîne, calculé à la construction de la fenêtre, `window.rs` étape 5) et, s'il y a une équipe, le `ChainTeam`
+   `{a, b, z, strict}` de `WindowTeam` (sommes des poids sans équipe des arêtes d'équipe et comblées) :
+   `λ·(w − a − b) + M[z]·a + b`. `edge(e)` refait la même chose pour une arête de base (morceaux partiels du départ et
+   de l'arrivée, `make_anchor`). Les arbres, l'A\* (heuristique = arbre retour, calculé avec le même `Weighter`) et
+   l'accroche (`w.chain(c) != INF`) ne lisent rien d'autre. La longueur (`Tree::meters`, choix du demi-tour, tolérance)
+   est tenue à part des poids.
+2. **`Weighter::new` ignore l'équipe en découverte** (`(Mode::Discovery, _) => None`) : ni λ, ni `M[z]`. La familiarité
+   n'a donc **aucun effet** au curseur 1 ; la variante `fam` y joue « équipe d'abord à λ = 1 » (§12.3).
+3. **`Window` est partagée par toutes les équipes** (cache du service et du banc) ; **`WindowTeam` est déjà propre à une
+   équipe et à une fenêtre**. Un goût d'équipe y a sa place naturelle : la fenêtre ne change pas, la relaxation non
+   plus (elle lit toujours un `u32` par chaîne), seuls les agrégats d'équipe portent des poids au goût. C'est aussi la
+   forme que prendrait le 4b au service (§3.2 : « 12 → 16 octets par chaîne et par type »).
+4. **Poids entiers** : `edge_weight = ⌈len_dm × K / 64⌉`. Un multiplicateur en 256es appliqué **dans** le même arrondi,
+   `⌈len_dm × K × q / (64 × 256)⌉`, rend **exactement** `edge_weight` pour `q = 256` (⌈256x / 16 384⌉ = ⌈x / 64⌉) :
+   la neutralité est arithmétique, pas approchée.
+5. **Les coûts de virage sont absolus** (`TURN_COST_MAX` = 2 000, en décimètres pondérés) : un goût qui baisse les poids
+   d'une classe rend les virages relativement plus chers sur elle. Effet du second ordre, accepté, signalé au relevé.
+6. Le changement de mode au curseur 1 de `fam` (découverte → équipe d'abord) change aussi la graine des secteurs
+   (`generate::fingerprint` lit le mode) et active le terme d'équipe de la note de choix et le filtre `min_share` :
+   `fam` au curseur 1 se compare **en distribution**, pas parcours à parcours.
+7. Le §3.2 réservait le goût aux arêtes non roulées : **remplacé pour la sonde** par la décision 7 du §9.1 (toutes les
+   arêtes de la vue). Les sections précédentes ne sont pas réécrites.
+
+### 12.1 Le crochet moteur (`crates/ord-loops`)
+
+**Optionnel et neutre par défaut** : sans goût, aucune ligne exécutée ne change de résultat ; avec un goût neutre
+(256 partout), les poids sont identiques au bit près. Entiers seulement (règle de `multiplier_table` : même résultat
+natif et WASM). Aucune nouvelle dépendance, aucun changement de version.
+
+**`cost.rs`** (ajouts) :
+
+```rust
+/// Nombre de classes de goût : 6 voies × 3 revêtements × balisé × destination (§3.2).
+pub const TASTE_CLASSES: usize = 72;
+
+/// Voie (§3.2), dans cet ordre : `Cycleway` ou `is_greenway` → 4 (voie cyclable ou verte) ;
+/// `Primary | Secondary | Trunk | Motorway` → 0 (grande route) ; `Tertiary` → 1 ; `Unclassified | Road` → 2 (petite
+/// route) ; `Residential | LivingStreet | Service` → 3 (rue) ; tout le reste et classe absente → 5 (chemin).
+pub fn taste_way(a: Attrs) -> usize;      // le corps actuel de `likeness::measure::way_class`, déplacé tel quel
+/// `surface() == 0` → 1 (présumé) ; sinon `is_unpaved()` → 2 (non revêtu connu) ; sinon 0 (revêtu connu).
+pub fn taste_surface(a: Attrs) -> usize;  // le corps actuel de `likeness::measure::surface_group`
+/// `((voie × 3 + revêtement) × 2 + balisé) × 2 + destination`, balisé = `routes() != 0`,
+/// destination = `access() == Access::Destination`. Pure, dans [0, 72).
+pub fn taste_class(a: Attrs) -> usize;
+
+/// Goût par classe : multiplicateur du poids d'une arête de base, en 256es, par type (`RideType::index()`) et par
+/// classe de goût. 256 = neutre.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Taste {
+    pub q8: [[u16; TASTE_CLASSES]; 3],
+}
+impl Taste {
+    pub fn neutral() -> Self;            // 256 partout
+    pub fn is_neutral(&self) -> bool;    // 256 partout, les trois types
+}
+
+/// Poids d'une arête de base au goût : `⌈len_dm × K × q8[classe] / (64 × 256)⌉`, borné à `u32::MAX / 8` comme
+/// `edge_weight`. Avec 256 partout, rend exactement `edge_weight` (§12.0, point 4).
+pub fn taste_weight(ride: RideType, a: Attrs, len_dm: u32, q8: &[u16; TASTE_CLASSES]) -> u32;
+```
+
+(Le produit tient en `u64` : `len_dm` < 2³², `K` ≤ 1 000, `q8` < 2¹⁶.) `Taste` ne dérive pas `Default` (tableaux de
+plus de 32 éléments) : `neutral()` en tient lieu.
+
+**`team.rs`, `WindowTeam`** :
+
+```rust
+pub struct WindowTeam {
+    per: [Vec<ChainTeam>; 3],
+    /// Sonde du goût (§12) : poids sans équipe de chaque chaîne **au goût**, par type ; vide = pas de goût.
+    w_taste: [Vec<u32>; 3],
+    taste: Option<Box<Taste>>,
+}
+
+impl WindowTeam {
+    /// Inchangée pour l'appelant : `build_with_taste(e, win, team, None)`.
+    pub fn build<B: AsRef<[u8]>>(e: &Engine<B>, win: &Window, team: &TeamData) -> Self;
+    /// Avec `Some(taste)`, pour **chaque** type servi par la vue (même si sa table est neutre : les tests y passent
+    /// par l'arithmétique), le poids de chaque lien est `taste_weight(ride, attrs, len, &taste.q8[ride])` :
+    /// `w_taste[ride][c]` = Σ sur tous les liens (borné à `u32::MAX / 8` comme `w_osm`), et `a`, `b`, `z` de
+    /// `ChainTeam` sont faits des **mêmes** poids au goût. Avec `None`, exactement le calcul d'aujourd'hui.
+    pub fn build_with_taste<B: AsRef<[u8]>>(e: &Engine<B>, win: &Window, team: &TeamData, taste: Option<&Taste>) -> Self;
+    /// `(poids au goût des chaînes, table du type)` si un goût a été donné.
+    pub(crate) fn taste_of(&self, ride: RideType) -> Option<(&[u32], &[u16; TASTE_CLASSES])>;
+}
+```
+
+`bytes()` compte aussi `w_taste` ; `estimate_bytes` ne change pas (le service ne passe jamais de goût). Avec un goût,
+la construction lit `attrs_len` de **tous** les liens (aujourd'hui : ceux d'équipe ou comblés seulement) : c'est son
+seul surcoût de temps, mesuré par le banc (§12.5).
+
+**`search.rs`, `Weighter`** : un champ `taste: Option<&'a [u16; TASTE_CLASSES]>`, et dans `new` :
+
+```rust
+// Indépendant du mode : le goût s'applique aussi en découverte dès qu'il y a une surcouche (décision 1 du §9.1).
+let taste = team.and_then(|t| t.win.taste_of(ride));
+w_osm: taste.map_or(&v.w_osm[ride.index()][..], |(w, _)| w),
+taste: taste.map(|(_, q)| q),
+```
+
+`chain` ne change pas (`w − a − b` reste cohérent : les trois sommes sont faites des mêmes poids par arête). Dans `edge`,
+`let w = match self.taste { None => cost::edge_weight(..), Some(q) => cost::taste_weight(.., q) };`, le reste
+inchangé. En strict, le goût s'applique aussi mécaniquement (sans objet au banc, qui ne joue pas le strict).
+
+**`lib.rs`** : `pub use cost::{is_greenway, multiplier_table, taste_class, taste_surface, taste_way, taste_weight,
+RideType, Taste, TASTE_CLASSES};`.
+
+**Comment le goût traverse les fenêtres précalculées** : ni la `Window` (ses `w_osm` restent ceux d'OSM, partagés par
+toutes les équipes et toutes les variantes, le cache n'est pas touché), ni la relaxation (toujours un `u32` lu par
+chaîne). Le goût n'existe que dans `WindowTeam`, déjà construite par (fenêtre, équipe) : au banc, par (fenêtre, équipe,
+surcouche, variante). Coût : 4 octets par chaîne et par type servi en plus des 12 de `ChainTeam` (vue `road` : un type ;
+vue `gravel` : deux, `Gravel` et `Mtb`), et une passe sur tous les liens de la fenêtre à la construction.
+
+**Neutralité, prouvée par** (§12.8) : les tests et fixtures existants **inchangés** (aucune re-bénédiction, jamais
+`ORD_LOOPS_BLESS`) ; la référence figée `window_reference.txt` rejouée avec `build_with_taste(Some(&Taste::neutral()))`
+(140 requêtes, deux zooms, les trois modes) ; et, à l'échelle, l'empreinte de la variante `base` du banc égale à celle
+du 4a, `55c3b065dc085f42` (§12.7).
+
+### 12.2 Les tables de goût, au banc (`likeness/taste.rs`, nouveau)
+
+Tout le calcul est dans le banc, en `f64` à partir de **sommes entières** (l'ordre des sommes n'a donc aucun effet) ;
+seule la table finale, en entiers, entre dans le moteur.
+
+**Paramètres** (`TasteParams`, arguments du §12.3) : `m` = 0,5 (lissage) ; `bound` = 3 (g dans [1/3, 3]) ;
+`min_km` = 200 (seuil en km-passages, ou en km de traces pour `rc`) ; `cell_m` = 500 (trame) ; `corridor_cells` = 2
+(dilatation).
+
+**Membre d'une vue** (`ViewEdges`) : un bit par arête de base et par vue (`header().edges` = 23,5 M arêtes : 2,9 Mo par
+vue), posé en parcourant toutes les chaînes de chaque fichier de vue (`view_chain(c)` pour `c` dans
+`0..header().edges` du fichier de vue, `link & !DIR_BIT`). Les fichiers de vue sont rouverts par `MappedGraph::open_mmap`
+(le moteur garde les siens privés). Construit une fois, lâché après les sommes.
+
+**Trame** : case `(lat_e7.div_euclid(LAT), lon_e7.div_euclid(LON))`, `LAT = round(cell_m × 10⁷ / 111 320)` (44 916
+pour 500 m), `LON = round(LAT / cos 46,5°)` (65 251 : une case de 540 m de large à 42° N, 457 m à 51° N) ; clé
+`u64` = `(x as u32) << 32 | (y as u32)`, ensembles `FxHashSet`.
+
+**Sommes d'une surcouche** (`class_sums(gf, &ViewEdges, &Overlay, &TasteParams) -> ClassSums`), pour chaque type
+`t` ∈ {Road, Gravel, Mtb} de nom `ROAD`, `GRAVEL`, `MTB` dans `o.meta.types` (absent : sommes nulles ; `MIXED` ignoré,
+l'export n'en a pas, §11.0 point 7), vue `vi(t)` = `RideType::view_index()` :
+
+- `passages_t(e) = c[2i] + c[2i + 1]` (les deux sens), `i` = indice du type dans la surcouche ;
+- **roulé** `ridden[t][classe(e)] += len_dm(e) × passages_t(e)` pour chaque arête de la surcouche avec
+  `passages_t > 0` **et** dans la vue `vi(t)` (`u64`, dm × passages) ;
+- **couloir** de `t` : les cases de la polyligne (`node_pos(a)`, `geometry(e)`, `node_pos(b)`) de chaque arête avec
+  `passages_t > 0` (dans la vue ou non), densifiée à un point tous les `cell_m / 2` au plus sur chaque segment
+  (interpolation linéaire en E7, longueur de segment équirectangulaire), puis dilatées de `corridor_cells` dans les deux
+  axes (carré 5 × 5) : le « 1 km » du §3.2 vaut 1 à 1,5 km selon la position dans la case ;
+- **disponible** `avail[t][classe(e)] += len_dm(e)` pour chaque arête de base `e` de la vue `vi(t)` dont la case de
+  `node_pos(a)` **ou** de `node_pos(b)` est dans le couloir de `t` (une arête roulée est donc toujours disponible).
+
+Un seul passage sur les 23,5 M arêtes de base par surcouche traite les trois types ; `rayon` par paquets de 2¹⁶ arêtes,
+réduction par addition des tableaux (entiers : résultat indépendant du découpage). `ClassSums { ridden: [Vec<u64>; 3],
+avail: [Vec<u64>; 3] }` (72 cases chacun ; `Vec` parce que `serde` ne sérialise pas les tableaux de plus de 32), avec
+`add(&mut self, &Self)` pour la mise en commun.
+
+**Table d'un type** (`ratio_table(num: &[f64], den: &[f64], num_km: f64, gamma: f64, p: &TasteParams) -> (Vec<u16>,
+Vec<f64>)`, pure, rend `q8` et `g`) :
+- si `num_km < min_km` ou `Σ den = 0` ou `Σ num = 0` : neutre (256 partout, g = 1) ;
+- `p_n(c) = num(c) / Σ num`, `p_d(c) = den(c) / Σ den` ;
+- `p_d(c) = 0` → g = 1 ; sinon `g(c) = (p_n(c) + m · p_d(c)) / ((1 + m) · p_d(c))`, borné à `[1 / bound, bound]` (une
+  classe disponible jamais prise tend vers m / (1 + m) = 1/3) ;
+- `q8(c) = round(256 × g(c)^(−γ))` borné à [1, 65 535].
+
+**Trois sources de table** (et une `Taste` par source = les trois types ; une `Taste` entièrement neutre n'est **pas**
+passée au moteur : `None`) :
+
+| Source | `num` | `den` | `num_km` | Tables |
+|---|---|---|---|---|
+| **équipe** (`ge`) | `ridden` de la surcouche de l'équipe | `avail` de la même | Σ ridden / 10 000 | une par équipe et par surcouche jouée (complète, « écart ») |
+| **générale** (`gg`) | Σ des `ridden` de toutes les équipes jouées | Σ des `avail` | idem | une pour les jeux sur surcouches complètes (sommes des complètes) ; une pour les jeux « écart » (chaque équipe y apporte sa surcouche « écart » si elle en a une, sa complète sinon) |
+| **recalée** (`rc`) | longueurs **réelles** par classe des boucles retenues **non mises à l'écart** du type | longueurs par classe du **premier parcours de `base`**, mêmes boucles, surcouche complète, tous les curseurs joués, jeux `OK` | Σ num / 1 000 (km de traces) | une seule, pour les deux surcouches |
+
+`rc` n'est pas un goût d'équipe : c'est le réglage de `K` par type qui viserait directement l'écart mesuré (le dépôt ne
+pourrait pas le calculer, il demande des générations). Il borne ce qu'un multiplicateur par classe **peut** faire : si
+`rc` ne divise pas les écarts par deux, aucun goût par classe ne le fera, et la cause est ailleurs (forme du chemin,
+classes trop grossières) ; si `rc` y arrive et pas `ge` / `gg`, c'est l'estimateur « roulé contre disponible » qui
+manque, pas le levier.
+
+**Longueurs par classe d'une marche** (`measure::class_lengths(gf, &Walk, &Trace) -> [f64; TASTE_CLASSES]`) :
+`Σ leg_m` par `taste_class(attrs(leg.edge))` (trous exclus) ; pour le réel en phase 7 (une fois par boucle), pour le
+**premier** parcours gardé de chaque jeu (champ `#[serde(skip)] first_class_m: Option<Vec<f64>>` de `PlayRec`).
+
+`measure::way_class` et `measure::surface_group` deviennent des appels à `ord_loops::taste_way` / `taste_surface` : une
+seule définition, celle du moteur.
+
+### 12.3 Variantes, ligne de commande, déroulé
+
+**Un argument de plus à `likeness`** (pas de sous-commande nouvelle) :
+
+| Argument | Défaut | Rôle |
+|---|---|---|
+| `--variants` | aucune | liste séparée par des virgules ; absente : le banc du 4a **à l'identique** (une passe `base`, sorties `<label>-report.json` et `<label>-summary.md`) |
+| `--taste-m`, `--taste-bound`, `--taste-min-km` | `0.5`, `3`, `200` | §12.2 |
+| `--taste-cell-m`, `--taste-corridor-cells` | `500`, `2` | §12.2 |
+
+**Syntaxe d'une variante** : `base`, ou des composants joints par `+` : `fam:<f>` (familiarité, f ∈ [0, 1]),
+`ge:<γ>` (goût d'équipe), `gg:<γ>` (goût général), `rc:<γ>` (goût recalé), γ ∈ ]0, 4]. Au plus un composant de goût et
+un `fam`. Nom (fichiers, tableaux) : `fam` + centièmes sur trois chiffres, `ge` / `gg` / `rc` + dixièmes sur deux
+chiffres, joints par `-` : `fam:0.75` → `fam075`, `ge:1+fam:1` → `ge10-fam100`. Refus (avant toute phase lourde) :
+composant inconnu, nombre illisible ou hors bornes, deux goûts, nom en double, `rc` sans `base` **plus tôt** dans la
+liste.
+
+```rust
+pub enum TasteSource { Team, General, Recal }
+pub struct Variant { pub name: String, pub fam: Option<f32>, pub taste: Option<(TasteSource, f64 /* γ */)> }
+pub fn parse_variants(s: &[String]) -> Result<Vec<Variant>>;
+```
+
+**Requête d'une variante** : celle du 4a (`play::request_of`), puis `fam` : en équipe d'abord, `familiarity = f` ; en
+découverte (curseur 1), `mode = TeamFirst`, `off_team_cost_q8 = 256` (λ = 1) et `familiarity = f` (§12.0, points 2 et
+6) ; le strict n'est pas touché. Le goût ne change pas la requête : il passe par `WindowTeam`.
+
+**Campagne de la sonde** (variantes jouées dans l'ordre, une à la fois, dans le même processus) :
+
+| Variante | Ce qu'elle mesure |
+|---|---|
+| `base` | le moteur d'aujourd'hui ; empreinte = celle du 4a |
+| `fam:0.75`, `fam:1` | la familiarité seule, sans code moteur (`M[z]` pondère les arêtes d'équipe par leurs passages) |
+| `ge:0.5`, `ge:1` | le goût **par équipe** (4b complet) |
+| `gg:0.5`, `gg:1` | le goût **général** par type (un réglage de `K` appris) ; A pèse 85 % des km : il diffère de `ge` surtout pour B |
+| `rc:1` | le réglage de `K` qui vise l'écart mesuré : la borne du levier « multiplicateur par classe » |
+
+Puis, **seulement si la lecture le justifie**, une seconde campagne de combinaisons (`base` en tête, pour la comparaison
+et le contrôle d'empreinte), par exemple `base,ge:1+fam:1,ge:2` : la syntaxe le permet sans code.
+
+**Déroulé** (`likeness::run` ; phases 1 à 7 du §11.9 inchangées, sauf ajouts) :
+- **7** : en plus, `real_class_m[i] = class_lengths(...)` de chaque boucle retenue (en mémoire, non sérialisé).
+- **7 bis, « goût : sommes par classe »** (si une variante a `ge` ou `gg`) : `ViewEdges`, puis `class_sums` de chaque
+  surcouche complète et de chaque surcouche « écart » ; `ViewEdges` lâché.
+- **8, par variante, dans l'ordre de la liste** : si `rc`, ajuster la table sur les jeux de `base` (§12.2) ; puis équipe
+  par équipe dans l'ordre des lettres, exactement le §11.9 (8) — `build_team`, jeux sur la surcouche complète, puis
+  jeux des boucles mises à l'écart sur la surcouche « écart » — avec la `Taste` de la variante pour cette équipe et
+  cette surcouche (`None` si neutre ou sans goût) et les requêtes adaptées par `fam`. `TeamEnv` gagne
+  `taste: Option<&Taste>` ; `SharedWindows::acquire` et `acquire_wide` la reçoivent et appellent
+  `WindowTeam::build_with_taste`. Clés d'équipe du cache `2t` / `2t + 1` comme au 4a, `drop_team` après chaque
+  (équipe, surcouche) : aucun agrégat d'une variante n'est lu par la suivante. Les `Window` restent en cache d'une
+  variante à l'autre. À la fin de la variante : ses sorties (§12.5) sont écrites, ses `LoopRec` gardés pour la
+  comparaison (et pour `rc`).
+- **9** : la comparaison (§12.5, §12.6).
+
+Les `TeamData` et `TeamCheck` sont reconstruits à chaque variante comme au 4a (quelques secondes par équipe) plutôt que
+gardés : la mémoire reste celle du 4a.
+
+### 12.4 Mesures ajoutées à `Measures`
+
+Pour la forme du chemin (relevé §4.3 et §12 : « l'écart de forme est d'abord un écart de chemin ») :
+- **`detour_far: Option<f64>`** = `far_pos / r_over_d` (abscisse du point le plus éloigné sur sa distance à vol
+  d'oiseau ; `None` si `r_over_d = 0`). Réel 1,41 à 1,72, généré 1,25 à 1,28 au 4a [calculé sur le JSON].
+- **`sinuosity_10: Option<f64>`** = `l_poly / P`, `P` = périmètre du polygone **fermé** des points gardés par la règle
+  de `vertices_10` (départ, sommets, arrivée, puis retour au départ) ; `None` si `P = 0`. Demande
+  `shape::vertex_indices(pts, tol_share) -> Vec<usize>` (les indices gardés, triés) dont `vertices` devient
+  `len − 2` : même règle, aucun compte ne change.
+
+Ajoutées à `MEASURES` après `turns_per_10km` (les tableaux du résumé les prennent d'elles-mêmes). L'empreinte de résultat
+ne lit aucune mesure : elle ne change pas.
+
+### 12.5 Sorties
+
+Sous `G/lot4/` seulement ; lettres et agrégats seulement, jamais un départ, une coordonnée, un id.
+
+**Par variante `v`** : `<label>-<v>-report.json` et `<label>-<v>-summary.md`, le rapport et le résumé du 4a
+(`out::Report`, `out::summary`), plus un champ `variant` :
+
+```rust
+struct VariantMeta {
+    name: String, fam: Option<f32>, taste: Option<String> /* "ge" | "gg" | "rc" */, gamma: Option<f64>,
+    params: TasteParams,
+    /// Tables jouées : (lettre ou "général" ou "recalé", "full" | "holdout", type) -> q8 (72) et g (72).
+    tables: Vec<TasteTable>,
+    taste_xxh3: String,          // xxh3 de toutes les q8, dans l'ordre (lettre, surcouche, type, classe), petit-boutiste
+    team_windows: TeamWindowCounters, // constructions de WindowTeam : nombre, ms totales, plus gros (octets)
+    secs: f64, peak_anon_mb: f64,
+}
+```
+
+`TeamWindowCounters` est tenu par `SharedWindows` (`AtomicU64` : constructions, nanosecondes, maximum de `bytes()`).
+Le résumé de la variante commence par ces lignes, puis le résumé du 4a tel quel (empreinte de résultat de la variante en
+section 12).
+
+**Comparaison** : `<label>-compare.json` (les nombres des tableaux ci-dessous, et les `ClassSums` agrégées en parts :
+par source et par type, `p_n`, `p_d`, `g`, `q8` des 72 classes) et `<label>-compare.md` :
+
+1. Conditions : commit, variantes et paramètres, `taste_xxh3`, empreinte de résultat de chaque variante, et le
+   contrôle **« `base` = 4a : `55c3b065dc085f42` »** (oui / non) quand le banc tourne aux défauts.
+2. Les tables apprises, par type (ROAD, GRAVEL) et par source (A, B, générale, recalée ; surcouches complètes) : une
+   ligne par **voie** (6), par **revêtement** (3) et pour **balisé** (agrégation des 72 classes : Σ `p_n`, Σ `p_d`, et
+   le multiplicateur moyen `Σ p_d · q8 / 256 / Σ p_d`).
+3. **Le critère** (§12.6), une table par lecture : lignes = (type, curseur), colonnes = `S` de `base` puis, par
+   variante, `S` et `S / S_base` (en gras si ≤ 0,5).
+4. Les écarts nommés du relevé : ROAD `way_major`, `way_cycle` ; GRAVEL `way_path`, `surf_unpaved`, `way_tertiary` :
+   P50 réel, P50 de chaque variante, W1 / IQR de chaque variante, lecture « toutes ».
+5. Par équipe, A et B séparément : le tableau 3 restreint à l'équipe (lectures « toutes » et « écart » ; B « écart »
+   marqué indicatif, < 30 boucles par type).
+6. Forme : `r_over_d`, `compactness`, `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km`, `vertices_10` : P50
+   réel, P50 et W1 / IQR par variante, par type et curseur, lecture « toutes ».
+7. Service : par variante et curseur, part `OK` et issues par code, ms P50 / P90 (toutes D, et D ≥ 100 km), P50 de
+   `team_share`, P10 / P90 de `length_over_target`, constructions de `WindowTeam` ; les **signaux** du §12.6.
+8. Lecture, écrite comme des faits, sans décision : pour chaque variante, le nombre de groupes (2 types × 2 curseurs ×
+   lectures « toutes » et « écart ») où `S / S_base ≤ 0,5`, et ses signaux de service.
+
+### 12.6 Lectures et critères
+
+**Trois lectures** (le goût est appris sur les traces mêmes qu'on mesure ; seule la deuxième en est exempte) :
+- **« toutes »** : jeux sur la surcouche complète, toutes les boucles retenues (tables apprises sur la surcouche
+  complète ; `rc` sur les 90 % non mis à l'écart, donc dans l'échantillon à 90 %) ;
+- **« écart »**, la lecture honnête : les boucles mises à l'écart (286 : A 241, B 40, C 3, D 2), jouées sur la surcouche
+  « écart » de leur équipe, avec les tables apprises **sans elles** (`ge` : surcouche « écart » ; `gg` : sommes
+  « écart » ; `rc` : ajusté hors d'elles) ;
+- **« écart, dans l'échantillon »** : les mêmes boucles, jeux sur la surcouche complète ; l'écart avec la précédente
+  mesure la fuite de l'apprentissage.
+
+**Groupes** : type ROAD et GRAVEL (le VTT, 4 boucles, reste dans les résumés par variante), curseur 0,25 et 1, toutes
+équipes puis A et B. Premier parcours gardé, jeux `OK` (comme au 4a). **Normalisation fixe** : W1 divisée par l'IQR
+du réel **de toutes les boucles retenues du type** (le dénominateur du 4a), la même pour toutes les lectures, équipes
+et variantes (écrire `w1_over(real, gen, iqr)` ; `wasserstein1_normalised` prend l'IQR de son propre échantillon, ce
+qui rendrait les petits groupes incomparables).
+
+**Écart de classes d'un groupe** : `S = moyenne des W1 / IQR` sur
+- ROAD : `way_major`, `way_tertiary`, `way_minor`, `way_street`, `way_cycle`, `surf_paved`, `surf_presumed`, `marked`
+  (8 ; `way_path` et `surf_unpaved` exclus : IQR réel 0,008 et 0,002, §4.1 du relevé) ;
+- GRAVEL : les mêmes plus `way_path` et `surf_unpaved` (10).
+
+Au 4a, lecture « toutes » : **S = 0,614 (ROAD, 0,25), 0,722 (ROAD, 1), 0,735 (GRAVEL, 0,25), 0,680 (GRAVEL, 1)**
+[calculé sur le §4.1 du relevé] ; la `base` de la sonde doit les redonner à un millième près.
+
+**Critère du 4b** (décision 7) : `S(v) / S(base) ≤ 0,5` dans le même groupe et la même lecture ; il se lit d'abord sur
+« écart » et « toutes », types × curseurs. **Signaux de service** (une variante ne doit pas dégrader le service) : part
+`OK` en baisse de plus d'un point contre `base` au même curseur ; une `PANIC` ou un `WINDOW_ESCAPE` ; ms P50 au-delà de
+1,25 × `base` ou P90 au-delà de 1,5 × `base` (indicatif : machine pleine). **Forme** : rapportée, sans seuil ; on
+regarde surtout `detour_far` et `r_over_d` en GRAVEL (relevé §12 : « en GRAVEL, le goût est le levier de r / D »).
+
+### 12.7 Temps, mémoire, ordre des campagnes
+
+**[estimé]** sur le relevé du 4a (231 s, dont 210 s de jeux à 16 fils ; pic anonyme 14,2 Go) :
+- phases communes : ~1 min comme au 4a, plus `ViewEdges` (~10 s, 6 Mo) et 13 passages de `class_sums` (9 surcouches
+  complètes, 4 « écart » ; ~1 à 2 s chacun sur 16 fils) ;
+- par variante : 3,5 à 4 min de jeux (`base`, `fam`), 4 à 6 min avec un goût (constructions de `WindowTeam` sur tous
+  les liens, et des arbres qui peuvent s'étendre autrement) ; `build_team` refait par variante : ~10 à 20 s ;
+- **campagne de 8 variantes : 35 à 50 min** ;
+- mémoire : celle du 4a (cache de fenêtres sous `--budget-mb` 6 000, partagé entre variantes), plus `w_taste` (4 octets
+  par chaîne et par type, une équipe à la fois) et les `LoopRec` gardés (~0,1 à 0,15 Go par variante) : **pic ~15 à
+  16 Go**, sous les 30 Go. Une seule campagne à la fois, jamais deux processus.
+
+**Ordre**, binaire `--release` (`cargo build --release -p ord-loops-bench`, `B=./target/release/ord-loops-bench`) :
+1. Essai court : `$B likeness --teams C --limit 5 --variants base,fam:1,ge:1,gg:1,rc:1 --label sonde-essai` (tables
+   non neutres pour C en ROAD, sorties et comparaison lisibles).
+2. Déterminisme : `$B likeness --teams B --variants base,ge:1,gg:1,rc:1 --threads 1 --label sonde-det1`, puis
+   `--threads 16 --label sonde-det16` : mêmes empreintes de résultat **et** mêmes `taste_xxh3`, variante par variante.
+3. Campagne : `$B likeness --label sonde --variants base,fam:0.75,fam:1,ge:0.5,ge:1,gg:0.5,gg:1,rc:1`. **Arrêt** si
+   l'empreinte de `base` n'est pas `55c3b065dc085f42` (le crochet ne serait pas neutre, ou le banc aurait changé) :
+   chercher, ne pas lire la suite.
+4. Seulement si la lecture le justifie : une seconde campagne de combinaisons (§12.3), `--label sonde2`.
+5. Relevé (§12.9).
+
+### 12.8 Tests (synthétiques, aucune donnée de production)
+
+**`ord-loops`** :
+1. `taste_class` : 72 valeurs distinctes atteintes par une grille d'attributs synthétiques (`Attrs` composés comme dans
+   les tests existants), toujours < 72 ; cas : `primary` revêtu non balisé → (0, 0, 0, 0) ; `cycleway` → voie 4 ;
+   `path` + `bicycle=designated` → voie 4 (`is_greenway`) ; `path` sans désignation → 5 ; `track` sans `surface` →
+   (5, 1) ; `access=destination` → bit destination ; `_link` suit sa classe.
+2. `taste_weight` avec 256 partout **égal** à `edge_weight` pour les trois types, toutes les classes de voie, avec et
+   sans `surface`, accès `yes` / `destination`, et des longueurs 1, 7, 999, 10⁶ dm et proche du plafond ; avec 512,
+   égal à `⌈2 × len × K / 64⌉` ; avec 85, jamais nul pour une longueur non nulle.
+3. `WindowTeam::build_with_taste(Some(&Taste::neutral()))` contre `build` sur la grille `grid(5, 300.0)` et la surcouche
+   du test `weights_are_monotone_in_lambda_…` : mêmes `ChainTeam` (a, b, z, strict) chaîne par chaîne, `w_taste` égal
+   à `win.v.w_osm` pour chaque type servi.
+4. **Neutralité de bout en bout** : `assert_matches_reference` avec un exécutant qui construit la fenêtre entière
+   (`full_window`) et `WindowTeam::build_with_taste(e, &win, t, Some(&Taste::neutral()))` : la fixture
+   `window_reference.txt` passe **sans** re-bénédiction (les trois modes y sont, la découverte avec équipe comprise).
+5. Effet : une `Taste` où la classe de la rue roulée vaut 512 → `Weighter::chain` de cette chaîne double (à l'arrondi
+   près, valeur exacte calculée dans le test) **en découverte** (où l'équipe est ignorée sans goût) comme en équipe
+   d'abord à f = 0,5 ; la chaîne hors équipe d'une autre classe ne bouge pas ; sans goût, `Discovery` rend toujours
+   `w_osm`.
+6. Les tests existants, dont `multiplier_table_is_exact_and_golden`, la référence plate et les tests de fenêtres,
+   **inchangés**.
+
+**`ord-loops-bench`** (`taste.rs`, `measure.rs`, `shape.rs`, `mod.rs`) :
+7. `ratio_table` : parts égales → 256 partout ; une classe disponible jamais roulée → g = 1/3, `q8` = 768 à γ = 1,
+   443 à γ = 0,5 ; une classe roulée deux fois sa part (valeur attendue calculée dans le test) ; borne 3 → `q8` = 85 à
+   γ = 1 ; `p_d = 0` → 256 ; `num_km` sous le seuil → 256 partout.
+8. `class_sums` sur un petit `MemSource` (comme `likeness/fixture.rs`) : une grille de `residential`, une `cycleway`,
+   une `primary` à 3 km ; surcouche roulant deux rues (passages 1 et 3) → `ridden` = Σ len × passages par classe
+   exactement ; la `primary` lointaine absente de `avail`, une rue à 300 m présente ; une arête hors vue jamais comptée ;
+   même résultat avec `rayon` sur 1 fil et sur 4.
+9. Mise en commun : `add` de deux `ClassSums` = sommes case à case ; la table générale de deux équipes égales = la
+   table de l'une.
+10. `parse_variants` : noms (`fam075`, `ge05`, `ge10-fam100`) ; refus listés au §12.3.
+11. Requête de `fam` : curseur 0,25 → `TeamFirst`, q8 640, f ; curseur 1 → `TeamFirst`, q8 256, f ; curseur 0 inchangé.
+12. `detour_far` et `sinuosity_10` : aller-retour → 1 et 1 ; cercle → π / 2 et 2π / 4√2 ≈ 1,111 (carré inscrit : `vertices_10` = 3) ; triangle du §11.11 → 1 et 1 ;
+    `vertex_indices(...).len() − 2 == vertices(...)` sur les formes du §11.11.
+13. Comparaison : `S` et `S / S_base` sur des échantillons synthétiques (écart divisé par deux → 0,5 exactement à un
+    décalage moitié) ; `w1_over` avec un IQR fixe.
+
+### 12.9 Commits
+
+Chacun passe `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings` et `cargo test -p ord-loops
+-p ord-loops-bench` (`ord-loops` en entier à chaque commit qui le touche).
+
+1. `feat(loops): goût par classe, crochet optionnel et neutre par défaut (sonde du lot 4)` — `cost.rs`, `team.rs`,
+   `search.rs`, `lib.rs`, tests 1 à 6.
+2. `feat(bench): likeness, détour jusqu'au point lointain et sinuosité` — §12.4, `way_class` / `surface_group` vers
+   le moteur, `class_lengths`, test 12.
+3. `feat(bench): likeness, tables de goût par équipe, générale et recalée` — `taste.rs`, tests 7 à 9.
+4. `feat(bench): likeness --variants, la sonde du goût` — variantes, déroulé du §12.3, sorties par variante, tests 10
+   et 11.
+5. `feat(bench): likeness, comparaison des variantes` — `<label>-compare.{md,json}`, test 13.
+6. Campagnes (§12.7), puis `docs(ord-loops): relevé de la sonde du goût (lot 4)` : nouveau relevé
+   `docs/design/technique/ord-loops-lot4-sonde.md` (style de `ord-loops-lot4-mesures.md`, marques de l'en-tête :
+   conditions et commandes, tables apprises, critère par lecture, par équipe, forme, service, ce que la sonde décide
+   pour le 4b selon la décision 7), et un §12.11 « Écarts du codage » ajouté ici. Équipes lettrées et agrégats
+   seulement.
+
+### 12.10 Ce que la sonde ne fait pas
+
+Rien au dépôt ni au service (`ord-server`, contrat, version : inchangés) ; rien au contrôleur ; pas de stockage de
+profil ; pas de formes ni de destinations (4c, 4d) ; pas de nouveau réglage de `K` dans le moteur (si `rc` gagne, le
+réglage se décidera après le relevé) ; pas de pente ni de trafic (décision 2 : à revoir après la sonde, au relevé).
