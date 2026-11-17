@@ -21,7 +21,7 @@ use utoipa::ToSchema;
 
 use super::cursor;
 use super::store::{build_team_pair, next_serial, ReadyError};
-use super::windows::{AcquireError, TeamRef};
+use super::windows::{AcquireError, TeamRef, WindowManager};
 use super::Ready;
 
 /// Pas de réveil des attentes de place (le même que celui des fenêtres).
@@ -133,7 +133,17 @@ impl ServicePlayer<'_> {
                     extra_m = r.engine.longest_chain_m(vi) + 10_000.0;
                 }
                 Ok(Err(_)) => return Ok(None),
-                Ok(Ok(g)) => return Ok(first_kept_class_meters(r.engine.base(), checker, req, &g)),
+                Ok(Ok(g)) => {
+                    // Le contrôleur et la marche du parcours gardé tournent aussi sous `catch_unwind` : une panique ici
+                    // ferait tomber tout le dépôt (le fil du joueur est joint par `expect`), surcouche comprise.
+                    let kept = catch_unwind(AssertUnwindSafe(|| {
+                        first_kept_class_meters(r.engine.base(), checker, req, &g)
+                    }));
+                    return Ok(kept.unwrap_or_else(|_| {
+                        metrics::counter!("ord_profile_play_panics_total").increment(1);
+                        None
+                    }));
+                }
             }
         }
         Ok(None)
@@ -279,7 +289,15 @@ impl Ready {
         while self.hooks.profile_hold.load(Ordering::Relaxed) && !self.stopping.load(Ordering::Relaxed) {
             std::thread::sleep(POLL);
         }
-        let result = self.learn_in_slot(&set, overlay_bytes, settings, deadline);
+        // Un échec du profil ne fait jamais échouer un dépôt : une panique de la phase (construction des données de
+        // l'équipe, joueur) devient `skipped`, la surcouche est écrite quand même.
+        let result =
+            catch_unwind(AssertUnwindSafe(|| self.learn_in_slot(&set, overlay_bytes, settings, deadline)))
+                .unwrap_or_else(|_| {
+                    metrics::counter!("ord_profile_play_panics_total").increment(1);
+                    tracing::error!("taste profile phase panicked: no profile written");
+                    None
+                });
         drop(permit);
         let Some(learned) = result else { return Some(finish(ProfileOutcome::Skipped, None, None)) };
         if learned.steps_done == 0 {
@@ -331,6 +349,12 @@ impl Ready {
         let held_bytes = overlay.bytes() + team.bytes() + check.bytes();
         let held_serial = next_serial();
         self.windows.hold_team(held_bytes);
+        // Rendue à la chute de la garde, même sur une panique du joueur : sinon le budget de mémoire perdrait ces octets
+        // pour toute la vie du service.
+        let _held = HeldTeam { windows: &self.windows, bytes: held_bytes, serial: held_serial };
+        if self.hooks.profile_panic.load(Ordering::Relaxed) {
+            panic!("panique de la phase de profil (crochet de test)");
+        }
         let player = ServicePlayer {
             ready: self,
             team: &team,
@@ -348,8 +372,19 @@ impl Ready {
                 (a.mode, a.familiarity, a.off_team_cost_q8)
             })
             .collect();
-        let learned = learn(set, &cursors, &player, &settings.common, &settings.learn);
-        self.windows.release_team(held_bytes, held_serial);
-        Some(learned)
+        Some(learn(set, &cursors, &player, &settings.common, &settings.learn))
+    }
+}
+
+/// Les octets de la nouvelle surcouche tenus le temps de la phase de profil, rendus au budget à la chute.
+struct HeldTeam<'a> {
+    windows: &'a WindowManager,
+    bytes: usize,
+    serial: u64,
+}
+
+impl Drop for HeldTeam<'_> {
+    fn drop(&mut self) {
+        self.windows.release_team(self.bytes, self.serial);
     }
 }

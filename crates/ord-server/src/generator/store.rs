@@ -80,6 +80,8 @@ pub struct TestHooks {
     pub profile_min_km_milli: std::sync::atomic::AtomicU64,
     /// La phase de profil attend tant que ce drapeau est levé (une phase retenue, pour tester les places).
     pub profile_hold: AtomicBool,
+    /// La phase de profil panique une fois les données de la nouvelle surcouche comptées dans le budget.
+    pub profile_panic: AtomicBool,
 }
 
 /// Métadonnées d'une surcouche, dans la partie chiffrée du fichier.

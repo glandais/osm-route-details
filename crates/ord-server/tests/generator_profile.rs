@@ -354,6 +354,33 @@ async fn a_profile_phase_held_open_does_not_block_the_deposit_slot_of_another_en
 }
 
 #[tokio::test]
+async fn a_panic_in_the_profile_phase_still_writes_the_overlay_and_gives_its_memory_back() {
+    let w = World::new();
+    let k = key(1);
+    let g = w.state.generator();
+    let hooks = g.hooks().expect("prêt");
+    hooks.profile_panic.store(true, Ordering::Relaxed);
+    let r = w.send(put_digest(&k, "team-a", "d1", loops_deposit(&RINGS))).await;
+    hooks.profile_panic.store(false, Ordering::Relaxed);
+    // Un échec du profil ne fait jamais échouer le dépôt (§14.7.4) : 200, profil `skipped`, surcouche écrite.
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    assert_eq!(r.json()["profile"]["outcome"], "skipped");
+    let st = w.status(&k, "team-a").await;
+    assert_eq!(st["source_digest"], "d1");
+    assert_eq!((st["state"].as_str(), st["stale_reason"].as_str()), (Some("stale"), Some("profile")));
+    // Les octets de la nouvelle surcouche tenus par la phase sont rendus au budget : une fois l'équipe supprimée (son
+    // entrée résidente avec elle), plus rien n'est compté.
+    let gen = w.send(generate_in_team(&k, "team-a", 0.25)).await;
+    assert_eq!(gen.status, StatusCode::OK, "{}", gen.text);
+    assert_eq!(w.send(delete(&k, "team-a")).await.status, StatusCode::NO_CONTENT);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while g.test_team_bytes() != Some(0) && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(g.test_team_bytes(), Some(0), "octets de la phase de profil jamais rendus");
+}
+
+#[tokio::test]
 async fn deleting_a_team_removes_its_profile_with_its_overlay() {
     let w = World::new();
     let k = key(1);

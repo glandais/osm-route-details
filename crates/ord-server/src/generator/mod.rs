@@ -608,6 +608,12 @@ impl Generator {
         self.ready().map(|r| (r.cfg.distance_m_max / 1000.0, r.cfg.window_margin_m))
     }
 
+    /// Octets des équipes résidentes comptés dans le budget de mémoire (tests : une phase de profil rend les siens).
+    #[doc(hidden)]
+    pub fn test_team_bytes(&self) -> Option<usize> {
+        self.ready().map(|r| r.windows.team_bytes())
+    }
+
     /// Empreinte (xxh3, 16 hexadécimaux) des trois tables du profil de goût d'une équipe et ses pas finis ; `None` sans
     /// profil lisible. Pour les tests de déterminisme et d'équivalence : les tables ne sortent jamais par l'API.
     #[doc(hidden)]

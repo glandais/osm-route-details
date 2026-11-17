@@ -348,6 +348,12 @@ impl WindowManager {
         self.cv.notify_all();
     }
 
+    /// Octets des équipes résidentes comptés dans le budget (tests).
+    #[doc(hidden)]
+    pub fn team_bytes(&self) -> usize {
+        lock(&self.inner).cache.external()
+    }
+
     /// Retire les agrégats d'une équipe de toutes les fenêtres (la table jouée n'a plus de raison d'être : un pas
     /// d'apprentissage fini).
     pub fn drop_team(&self, serial: u64) {
