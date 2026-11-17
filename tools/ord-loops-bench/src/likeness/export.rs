@@ -206,3 +206,219 @@ pub fn raw_legacy(ing: &Ingest) -> Vec<super::shape::RawRow> {
         })
         .collect()
 }
+
+// --- Appariement et retenue -------------------------------------------------------------------------------------
+
+use ord_graph::mmap::MappedGraph;
+use ord_graph::util::Poly;
+use ord_graph_match::agg::{verdict, Verdict};
+use ord_graph_match::index::SegIndex;
+use ord_graph_match::job::{match_job, Job};
+use ord_graph_match::matcher::Piece;
+use serde::Serialize;
+
+use super::walk::{Trace, Walk};
+
+/// Apparie chaque clé distincte, en parallèle (`match_job` est pure : même résultat que la mémoïsation du dépôt).
+pub fn match_keys(gf: &MappedGraph, seg: &SegIndex, poly: &Poly, ing: &Ingest) -> Vec<Job> {
+    ing.keys.par_iter().map(|(g, trv)| match_job(gf, seg, poly, g, *trv)).collect()
+}
+
+/// Ce que le dépôt voit d'une trace : mètres annoncés, retenus, hors région, et la suite appariée dans l'ordre.
+#[derive(Debug, Default)]
+pub struct TrackMatch {
+    pub total_m: f64,
+    pub matched_m: f64,
+    pub outside_m: f64,
+    pub pieces: Vec<Piece>,
+}
+
+impl TrackMatch {
+    /// Part appariée, au sens du dépôt, trace par trace.
+    pub fn matched_share(&self) -> f64 {
+        if self.total_m > 0.0 {
+            self.matched_m / self.total_m
+        } else {
+            0.0
+        }
+    }
+}
+
+/// La suite appariée d'une trace : pour chaque arête, `trv` annoncé (repli sur la longueur de la géométrie) ;
+/// `Counted` ajoute ses morceaux dans l'ordre, `Outside` et `Fail` n'ajoutent rien (un trou).
+pub fn track_match(jobs: &[Job], t: &ExportTrack) -> TrackMatch {
+    let mut m = TrackMatch::default();
+    for e in &t.edges {
+        let job = &jobs[e.key as usize];
+        let trv = f64::from(if e.trv.is_nan() { job.glen } else { e.trv });
+        m.total_m += trv;
+        match verdict(e.wk, job) {
+            Verdict::Counted(chain) => {
+                m.matched_m += trv;
+                m.pieces.extend_from_slice(&chain.pieces);
+            }
+            Verdict::Outside => m.outside_m += trv,
+            Verdict::Fail { .. } => {}
+        }
+    }
+    m
+}
+
+/// Pourquoi une trace n'est pas retenue, dans l'ordre où c'est jugé.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    Excluded,
+    Unreadable,
+    Type,
+    Matched,
+    Empty,
+    Hole,
+    Short,
+    NotLoop,
+    Long,
+}
+
+/// Les décomptes d'une équipe (aucun id).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct RetentionCounts {
+    pub rows: usize,
+    pub excluded: usize,
+    pub unreadable: usize,
+    pub type_refused: usize,
+    pub matched_share_below: usize,
+    pub empty: usize,
+    pub hole_too_long: usize,
+    pub below_min_km: usize,
+    pub not_a_loop: usize,
+    pub above_max_km: usize,
+    pub retained: usize,
+    /// Après `--limit`.
+    pub kept: usize,
+    /// Boucles retenues dont la marche est continue (toutes jonctions au même nœud).
+    pub contiguous: usize,
+    pub holdout: usize,
+}
+
+/// Une boucle réelle retenue.
+#[derive(Debug)]
+pub struct Loop {
+    pub team: usize,
+    /// Rang parmi les boucles retenues de l'équipe, dans l'ordre de l'export.
+    pub i: u32,
+    /// Indice dans `Ingest::tracks`.
+    pub track: usize,
+    pub id_hash: u64,
+    pub ty: u8,
+    pub walk: Walk,
+    pub trace: Trace,
+    pub matched_share: f64,
+}
+
+/// Paramètres de retenue.
+#[derive(Clone, Copy, Debug)]
+pub struct RetainParams {
+    pub min_matched: f64,
+    pub max_hole_m: f64,
+    pub min_km: f64,
+    pub max_km: Option<f64>,
+    pub loop_gap: f64,
+}
+
+/// Juge une trace (§11.3) : la boucle retenue (sans rang) ou la cause du refus.
+pub fn judge(
+    gf: &MappedGraph,
+    ing: &Ingest,
+    jobs: &[Job],
+    idx: usize,
+    p: &RetainParams,
+) -> Result<Loop, Refusal> {
+    let t = &ing.tracks[idx];
+    if t.excluded {
+        return Err(Refusal::Excluded);
+    }
+    if !t.readable {
+        return Err(Refusal::Unreadable);
+    }
+    if t.ty > 2 {
+        return Err(Refusal::Type);
+    }
+    let m = track_match(jobs, t);
+    if m.matched_share() < p.min_matched {
+        return Err(Refusal::Matched);
+    }
+    if m.pieces.is_empty() {
+        return Err(Refusal::Empty);
+    }
+    let walk = Walk::from_pieces(gf, &m.pieces);
+    if walk.legs.is_empty() {
+        return Err(Refusal::Empty);
+    }
+    let trace = walk.trace(gf);
+    if trace.max_hole_m > p.max_hole_m {
+        return Err(Refusal::Hole);
+    }
+    if trace.d_graph < p.min_km * 1000.0 {
+        return Err(Refusal::Short);
+    }
+    let gap = super::shape::dist(trace.pts[0], trace.pts[trace.pts.len() - 1]);
+    if gap >= p.loop_gap * trace.l_poly {
+        return Err(Refusal::NotLoop);
+    }
+    if p.max_km.is_some_and(|k| trace.d_graph > k * 1000.0) {
+        return Err(Refusal::Long);
+    }
+    Ok(Loop {
+        team: t.team,
+        i: 0,
+        track: idx,
+        id_hash: t.id_hash,
+        ty: t.ty,
+        walk,
+        trace,
+        matched_share: m.matched_share(),
+    })
+}
+
+/// Retient les boucles de toutes les traces, en parallèle, puis range par équipe dans l'ordre de l'export et applique
+/// `--limit`. Rend les boucles et, par équipe (indice de `Ingest::teams`), leurs décomptes.
+pub fn retain(
+    gf: &MappedGraph,
+    ing: &Ingest,
+    jobs: &[Job],
+    p: &RetainParams,
+    limit: Option<usize>,
+) -> (Vec<Loop>, Vec<RetentionCounts>) {
+    let judged: Vec<Result<Loop, Refusal>> =
+        (0..ing.tracks.len()).into_par_iter().map(|i| judge(gf, ing, jobs, i, p)).collect();
+    let mut counts = vec![RetentionCounts::default(); ing.teams.len()];
+    let mut loops: Vec<Loop> = Vec::new();
+    let mut next = vec![0u32; ing.teams.len()];
+    for (idx, j) in judged.into_iter().enumerate() {
+        let team = ing.tracks[idx].team;
+        let c = &mut counts[team];
+        c.rows += 1;
+        match j {
+            Err(Refusal::Excluded) => c.excluded += 1,
+            Err(Refusal::Unreadable) => c.unreadable += 1,
+            Err(Refusal::Type) => c.type_refused += 1,
+            Err(Refusal::Matched) => c.matched_share_below += 1,
+            Err(Refusal::Empty) => c.empty += 1,
+            Err(Refusal::Hole) => c.hole_too_long += 1,
+            Err(Refusal::Short) => c.below_min_km += 1,
+            Err(Refusal::NotLoop) => c.not_a_loop += 1,
+            Err(Refusal::Long) => c.above_max_km += 1,
+            Ok(mut l) => {
+                c.retained += 1;
+                if limit.is_some_and(|n| next[team] as usize >= n) {
+                    continue;
+                }
+                l.i = next[team];
+                next[team] += 1;
+                c.kept += 1;
+                c.contiguous += usize::from(l.walk.is_continuous());
+                loops.push(l);
+            }
+        }
+    }
+    (loops, counts)
+}

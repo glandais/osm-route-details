@@ -11,7 +11,11 @@
 #![allow(dead_code)]
 
 pub mod export;
+#[cfg(test)]
+mod fixture;
+pub mod measure;
 pub mod shape;
+pub mod walk;
 
 use std::path::PathBuf;
 
