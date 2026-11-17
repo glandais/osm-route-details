@@ -1947,16 +1947,41 @@ au premier lancement de la campagne 1 (arrêt automatique si le pas 1 n'est pas 
     curseur » prend le premier curseur de `--cursors` (0,25 par défaut).
 12. **Commit 1** : `rt` y était refusé à l'exécution (message « pas encore branché »), levé au commit 3.
 
-**Commandes des campagnes** (inchangées, §13.8 ; `B=./target/release/ord-loops-bench`, depuis le dépôt, une campagne à la
-fois) :
+**Relecture** (17 novembre, relecteur indépendant, avant les campagnes) :
+
+13. **Surapprentissage, lu à surcouche égale.** La « fuite » du §13.4 (« écart, dans l'échantillon » − « écart ») compare
+    deux surcouches pour les mêmes boucles : elle mesure ce que leurs propres traces apportent à la surcouche complète, et
+    rien du surapprentissage des tables, qui n'apprennent jamais sur ces boucles. Le §13.11 point 3 se lit donc sur une
+    lecture nouvelle, **« apprentissage »** (boucles non mises à l'écart, surcouche complète) : surapprentissage =
+    `S/S_base` « écart, dans l'échantillon » − « apprentissage », même surcouche, même table, nul à `p0` par
+    construction, positif quand les boucles qui n'ont pas servi se lisent moins bien. Rapporté au §3 bis (toutes
+    équipes, A, B) et au §8 bis (plus forte valeur) ; la fuite de la surcouche reste rapportée à côté. Les lignes par
+    équipe du critère portent les quatre lectures (le tableau 5 en montre toujours deux). **Bruit** : à la fumée (B et C,
+    5 boucles mises à l'écart par équipe) ces différences vont de −0,4 à +0,5 : seule la lecture toutes équipes de la
+    campagne (241 puis 712 boucles mises à l'écart) est lisible ; pour B (~35 ROAD à 25 %), indicatif.
+14. **Contrôle « `S_base` toutes »** : il s'appliquait dès que les réglages sortaient du 4a, curseurs, limite et équipes
+    exceptés (un autre `--seed` ou `--min-km` l'aurait fait échouer à tort). Il ne s'applique plus que si seules
+    `--holdout-share` et `--holdout-min-loops` diffèrent (`at_4a_defaults_but_holdout_share`).
+15. **Essai court et déterminisme sur une seule équipe** : `rt` y est dégénéré (point 6), le mélange par équipe n'y est
+    donc pas exercé. Les commandes ci-dessous jouent deux équipes (B et C) ; vu à la relecture, B et C, 20 boucles chacune,
+    25 % à l'écart, `base,rc:0.5+n:2,rt:0.5+n:2,rt:0.5+dim:me+n:2` : `rt` diffère de `rc` dès le pas 1, 2 min 09 à 16 fils,
+    RSS 15,1 Go, aucune panique.
+16. **Non corrigé, à savoir** : en effets principaux, le mélange par équipe se fait paramètre par paramètre (§13.2.4) sur
+    deux ajustements dont la jauge est fixée séparément (marges centrées sur les poids de l'équipe, et sur ceux de
+    l'ensemble). Quand les poids d'équipe d'une voie et d'un revêtement diffèrent, la somme mélangée dépend de cette
+    convention (de `(w_voie − w_revêtement) × décalage de jauge`) ; négligeable quand l'équipe génère au rythme de
+    l'ensemble (A), à garder en tête pour B et les petites équipes.
+
+**Commandes des campagnes** (§13.8, essai court et déterminisme sur deux équipes, point 15 ;
+`B=./target/release/ord-loops-bench`, depuis le dépôt, une campagne à la fois) :
 
 ```
 cargo build --release -p ord-loops-bench
 # 1. essai court
-$B likeness --teams C --limit 5 --variants base,rc:0.5+n:2,rt:0.5+n:2,famroad:1+rt:0.5+dim:me+n:2 --label recal-essai
-# 2. déterminisme (~15 min à 1 fil)
-$B likeness --teams B --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 1 --label recal-det1
-$B likeness --teams B --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 16 --label recal-det16
+$B likeness --teams B,C --limit 5 --variants base,rc:0.5+n:2,rt:0.5+n:2,famroad:1+rt:0.5+dim:me+n:2 --label recal-essai
+# 2. déterminisme (deux équipes : le mélange de `rt` y est exercé ; ~20 à 30 min à 1 fil, estimé)
+$B likeness --teams B,C --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 1 --label recal-det1
+$B likeness --teams B,C --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 16 --label recal-det16
 # 3. campagne 1
 $B likeness --label recal-general --variants base,rc:0.5+n:3,rc:0.5+dim:me+n:3
 # 4. forme X = me ou 72 (règle du §13.8.4), puis campagne 2 (X = me : +dim:me ; X = 72 : rien)
