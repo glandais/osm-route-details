@@ -1440,3 +1440,464 @@ fait autrement que le §12, ou en plus :
     `full`, `gg` en a six). Les `q8` d'une table ne sont pas normalisées (`Σ p_d · q8 / 256` n'est pas 1 : sur B en
     GRAVEL, la plupart des classes passent au-dessus de 1) : le goût change aussi l'échelle des poids contre le coût
     absolu des virages (§12.0, point 5), à lire au relevé.
+
+---
+
+## 13. Seconde sonde du goût : spécification
+
+Écrit le 17 novembre 2026, après le relevé de la première sonde ([`ord-loops-lot4-sonde.md`](ord-loops-lot4-sonde.md)) et
+la décision 2 du §9.2, à la lecture du code de la première sonde (`ord-loops` : `cost.rs`, `team.rs`, `search.rs` ; banc :
+`likeness/{mod,taste,variants,compare,play}.rs`) et des journaux privés de ses campagnes. Cette section **suffit au
+codeur** : ce qu'elle ne dit pas est laissé à son jugement, à condition de tenir le §13.12. Les sections précédentes ne
+sont pas réécrites.
+
+**Questions posées** (décision 2 du §9.2), au banc seulement :
+1. Un **recalé itéré** (2 à 3 pas, chaque pas appris contre les parcours du pas précédent) fait-il passer le GRAVEL sous
+   `S / S_base ≤ 0,5`, et à quel pas ?
+2. Un **recalé par équipe** (longueurs de l'équipe seule, repli vers la table commune sous un seuil) garde-t-il B juste
+   en ROAD et fait-il au moins aussi bien que la table commune pour A ? Sinon : table générale par type.
+3. Que coûterait un profil par équipe **appris au dépôt** (il faut regénérer ses boucles à chaque pas) ?
+4. Le service tient-il : ms P50 dans +25 % de `base`, part `OK` à moins d'un point ?
+
+Chaque question se lit en **« toutes »** et en **« écart »** (la lecture honnête : table apprise sans les boucles mises
+à l'écart, mesurée sur elles), §13.4.
+
+**Rien au moteur** : le crochet du §12.1 suffit (une `Taste` commune ou par équipe passe déjà par
+`WindowTeam::build_with_taste`). `crates/ord-loops`, `crates/ord-server`, le contrôleur et le contrat ne changent pas ;
+l'empreinte de `base` reste `55c3b065dc085f42` (arrêt automatique déjà en place, §12.11 point 7).
+
+### 13.0 Ce que la lecture a établi
+
+1. **Le recalé du §12 est un pas unique.** `RcInputs::of` (`likeness/mod.rs`) somme, par type, les mètres par classe du
+   réel et du premier parcours de `base` (boucles non mises à l'écart, surcouche complète, jeux `OK`, chaque boucle une
+   fois par curseur `OK`) ; `taste::learn` → `ratio_table` → `q8 = round(256 · g^−γ)`. Le lissage `m = 0,5` fait de `g` un
+   rapport **déjà amorti** : `g = (r + m) / (1 + m)` avec `r = p_n / p_d`. Le pas effectif sur le logarithme du poids est
+   `−γ · ln((r + 0,5) / 1,5)`, soit 0,5 à 0,75 fois `−γ · ln r` selon `r`.
+2. `PlayRec::first_class_m` est rempli pour le premier parcours de **tout** jeu (§12.11 point 5) : apprendre sur
+   n'importe quelle variante jouée ne demande rien à `play.rs` ni au moteur. Les `LoopRec` d'une variante restent en
+   mémoire jusqu'à la comparaison (`compare::Done`), `first_class_m` compris (seulement `#[serde(skip)]`).
+3. Une `Taste` par équipe passe déjà au moteur (`ge`), une `Taste` commune aussi (`gg`, `rc`) : le recalé par équipe n'est
+   qu'une autre source de tables, la clé de cache d'équipe (`2t`, `2t + 1`) et `drop_team` ne changent pas.
+4. **Gains du premier pas** [calculé sur les P50 du §4.3 du relevé] : `gain = 1 − ln(réel / rc05) / ln(réel / base)` ;
+   1 = le pas atteint la cible, > 1 la dépasse ; l'erreur (en logarithme) est multipliée par `1 − gain` à chaque pas si la
+   réponse reste la même.
+
+   | classe | réel | base | rc05 | gain à γ = 0,5 |
+   |---|---:|---:|---:|---:|
+   | ROAD grande route | 0,244 | 0,104 | 0,411 | **1,61** |
+   | ROAD petite route | 0,140 | 0,265 | 0,118 | 1,27 |
+   | ROAD balisé | 0,163 | 0,249 | 0,174 | 0,85 |
+   | ROAD voie cyclable | 0,033 | 0,157 | 0,057 | 0,65 |
+   | GRAVEL tertiaire | 0,085 | 0,225 | 0,103 | 0,80 |
+   | GRAVEL non revêtu | 0,253 | 0,099 | 0,166 | 0,55 |
+   | GRAVEL chemin | 0,447 | 0,166 | 0,276 | 0,51 |
+   | GRAVEL petite route | 0,097 | 0,188 | 0,134 | 0,51 |
+   | GRAVEL revêtu | 0,400 | 0,570 | 0,502 | 0,36 |
+
+5. **Conséquences pour le pas** [calculé, en supposant la réponse constante d'un pas à l'autre et les classes
+   indépendantes, ce qui n'est vrai qu'en première approximation] :
+   - à γ = 0,5, `|1 − gain| ≤ 0,64` partout : l'itération **converge** ; trois pas laissent 4 % de l'erreur initiale aux
+     cyclables ROAD, 13 % aux chemins GRAVEL, 26 % au revêtu GRAVEL (le plus lent), et 23 % aux grandes routes ROAD, qui
+     oscillent (gain 1,61 : signe alterné) ;
+   - γ = 1 double les gains : grandes routes ROAD 3,2, `|1 − 3,2| > 1`, **divergence** — c'est ce que `rc10` montre
+     (0,585 contre 0,244) ;
+   - γ = 0,25 laisserait 40 % de l'erreur des chemins GRAVEL après trois pas (gain 0,26) : le GRAVEL ne passerait pas ;
+   - **un amortissement par classe** quand le signe de la correction s'inverse (le pas est divisé par deux) ramène les
+     grandes routes ROAD à un gain de 0,8 dès le deuxième pas : 2 % de l'erreur initiale après trois pas au lieu de 23 %,
+     sans ralentir les classes qui convergent par en dessous. Retenu (§13.2).
+6. **`S` ne voit que des marges** : voie (6), revêtement (3), balisé ; jamais le bit destination, jamais un croisement
+   (« chemin balisé » contre « chemin » et « balisé »). Sur 72 cases par type, les cases rares (grande route non
+   revêtue, destination…) ont des rapports bruités, que la borne `[1/3, 3]` arrête à chaque pas mais que trois pas
+   cumuleraient jusqu'à 3^1,5 ≈ 5,2. Une case pas du tout générée au pas précédent (`p_d = 0`) reste neutre à jamais : la
+   table à 72 cases ne peut pas y amener un parcours. D'où une seconde forme de table, en **effets principaux** (§13.2.3),
+   jouée à côté de la table à 72 cases.
+7. **Mise à l'écart** : `holdout::select` prend, équipe par équipe, les premières boucles par rang d'empreinte d'id de
+   trace : l'écart à 25 % **contient** celui à 10 %. À 10 % : A 241, B 40 (14 ROAD, 26 GRAVEL : lecture honnête
+   indicative), C 3, D 2 ; à 25 % [calculé] : A 602, B 100 (~35 ROAD, ~65 GRAVEL), C 7, D 3, soit 712, et 7 134 jeux par
+   variante au lieu de 6 282 (+14 %). La lecture « toutes » (surcouche complète, toutes les boucles) ne dépend pas de la
+   part mise à l'écart : `S_base` « toutes » reste 0,614 · 0,721 · 0,735 · 0,680 quelle qu'elle soit.
+8. **Temps par équipe** (journaux privés de la première sonde, 16 fils sur 8 cœurs, machine pleine) : `base`, A 2 406
+   boucles en 162 s, B 397 boucles en 11 s, constructions d'équipe et jeux « écart » compris ; soit ~0,49 s-fil par appel
+   pour A et ~0,20 pour B [calculé]. `PlayRec::ms` couvre l'acquisition des fenêtres et l'appel du moteur.
+
+### 13.1 Choix proposés au propriétaire
+
+Les défauts de cette spécification sont les propositions ci-dessous ; une réponse différente ne change qu'un défaut ou
+la liste des variantes du §13.8, pas le code.
+
+| # | Question | Ce qui est en jeu | Proposé |
+|---|---|---|---|
+| 1 | **Table à 72 cases ou en effets principaux ?** Joue-t-on les deux en campagne 1 ? | `S` ne mesure que voie, revêtement, balisé (§13.0 point 6). Les effets principaux (11 paramètres par type) visent exactement ce que `S` mesure, sans artefact de case rare, et touchent aussi les cases jamais générées ; ils ne peuvent pas apprendre un croisement. Coût : 3 variantes de plus, ~13 min. | Les deux ; la campagne 2 prend la forme gagnante par la règle du §13.8. |
+| 2 | **Part mise à l'écart de la campagne 2 : 10 % ou 25 % ?** | À 10 %, la lecture honnête de B tient sur 14 boucles ROAD et 26 GRAVEL ; à 25 %, ~35 et ~65. Les tables sont alors apprises sur 75 % des boucles (A ~1 800, B ~300). Les contrôles d'empreinte du 4a ne s'appliquent plus (ils sont faits en campagne 1) ; « toutes » ne change pas ; +14 % de jeux. | 25 %. |
+| 3 | **Seuil de repli d'une équipe vers la table commune, `n0`** | Poids de l'équipe ≈ N / (N + n0), N = ses boucles d'apprentissage du type. À n0 = 25 : B ROAD ~0,81, B GRAVEL ~0,89, A 0,94 à 0,98, C ≤ 0,44, D ≤ 0,24 [calculé, 25 % à l'écart, répartition par type estimée sur la lecture « écart » de la première sonde]. À 50 (le seuil des formes, décision 6 du §9.1) : B ROAD 0,68, B garderait un tiers de la correction de A qui l'éloigne (`rc05` double son `S` ROAD). L'écart-type d'un log-rapport de classe est de l'ordre de 1 / √N : 0,2 à N = 25. | n0 = 25 boucles. |
+| 4 | **Familiarité dans les chaînes : ROAD au curseur 0,25 seulement ?** | `fam:1` de la première sonde touchait aussi le GRAVEL (il le gâte : 0,61 à 0,65 contre 0,54 à 0,57) et le curseur 1 (il y supprime la découverte). Une table apprise sur les jeux d'une chaîne apprend contre le générateur de la chaîne : avec une familiarité partout, elle apprendrait contre un service qui n'existera pas. | `famroad:1` (1 en ROAD en équipe d'abord, 0,5 ailleurs : la configuration visée par la décision 3 du §9.2). |
+| 5 | **Budget du dépôt de nuit pour un profil par équipe** | Trois pas = trois générations de toutes les boucles de l'équipe aux deux curseurs [estimé, §13.0 point 8] : A ~2 h-fil (~30 min sur 4 fils, ~7 min sur 16), B ~8 min-fil (~2 min sur 4 fils). Allègements possibles, non mesurés : un seul curseur (÷ 2), au plus 500 boucles par équipe (÷ 5 pour A), recalcul hebdomadaire. | « Tenable » = au plus 30 min sur 4 fils pour la plus grosse équipe ; le banc donne les temps mesurés (§13.7). |
+| 6 | **Normaliser les tables** (échelle des poids contre le coût absolu des virages, §12.0 point 5) ? | Normaliser casserait le contrôle « pas 1 = `rc05` » (§13.8) et mêlerait deux effets dans la même sonde. Le multiplicateur moyen est rapporté à chaque pas. | Non ; rapporté ; décidé au 3b. |
+| 7 | **Nombre de pas** | 3 suffit au calcul du §13.0 point 5 ; un 4ᵉ pas coûte ~4,5 min par chaîne. La syntaxe admet jusqu'à 5. | 3. |
+
+### 13.2 Le pas itéré (`likeness/chain.rs`, nouveau)
+
+Tout en `f64`, dans un ordre de sommes fixé (séquentiel, boucles dans l'ordre de `loops`), sans `rayon` : quelques
+milliers de boucles × 72 cases, négligeable. Seules les `q8` entières entrent dans le moteur.
+
+#### 13.2.1 Entrées d'un pas : `ClassMeters`
+
+```rust
+/// Mètres par classe d'apprentissage, par type (`RideType::index()`, `usize::from(l.ty).min(2)` comme `RcInputs`).
+pub struct Meters {
+    pub real: [Vec<f64>; 3],   // 72 chacun
+    pub gen: [Vec<f64>; 3],
+    /// Boucles comptées (au moins une paire comptée) et paires (boucle, curseur) comptées.
+    pub loops: [u32; 3],
+    pub pairs: [u32; 3],
+}
+pub struct ClassMeters {
+    /// Toutes équipes : calculé **exactement** comme `RcInputs::of` du §12 (mêmes conditions, même ordre d'addition :
+    /// boucles dans l'ordre de `loops`, curseurs dans l'ordre des jeux, `num[ty][c] += real_class_m[i][c]` puis
+    /// `den[ty][c] += fc[c]`), pour que le pas 1 redonne `rc05` au bit près.
+    pub pooled: Meters,
+    /// Par équipe, indice `t` de `loops[i].team`, même passe.
+    pub team: Vec<Meters>,
+}
+impl ClassMeters {
+    pub fn of(loops: &[export::Loop], held: &HashSet<usize>, real_class_m: &[[f64; 72]], plays: &[Vec<PlayRec>],
+              n_teams: usize) -> Self;
+}
+```
+
+Une paire compte si la boucle n'est **pas** mise à l'écart, le jeu est sur la surcouche `full`, d'issue `OK`, avec
+`first_class_m`. `RcInputs` disparaît : `rc` passe par les chaînes (§13.5). `ClassMeters::of` est calculé sur les jeux
+d'une variante **avant** qu'ils ne partent dans les `LoopRec`.
+
+#### 13.2.2 Table à 72 cases (`dim:72`, défaut)
+
+État d'un propriétaire de table (la table commune, ou une équipe), par type :
+
+```rust
+pub struct ParamState {
+    /// Multiplicateur cumulé du poids, par classe (72) ; 1 au départ.
+    pub mult: Vec<f64>,
+    /// γ courant par paramètre (72 ici, 11 en effets principaux) ; γ de la chaîne au départ.
+    pub gamma: Vec<f64>,
+    /// Dernier signe non nul de la correction, par paramètre : −1, 0, +1.
+    pub sign: Vec<i8>,
+}
+```
+
+Un pas, pour un type, depuis `num = real`, `den = gen` :
+1. `g = ratio_table(num, den, Σ num / 1 000, γ, p).1` — la fonction du §12.2 telle quelle (lissage `m`, borne
+   `[1/bound, bound]` par pas, neutre sous `min_km`, `g = 1` si `p_d = 0`) ; ses `q8` sont ignorées.
+2. Pour chaque classe `c`, `u = ln g[c]` ; `s = 0` si `|u| < 0,02`, sinon le signe de `u`. Si `s ≠ 0`, `sign[c] ≠ 0` et
+   `s ≠ sign[c]` : `gamma[c] /= 2`. Si `s ≠ 0` : `sign[c] = s`.
+3. `mult[c] = (mult[c] * g[c].powf(-gamma[c])).clamp(1.0 / B, B)`, `B = --taste-mult-bound` (défaut 4). Écrire
+   l'expression **ainsi** : au pas 1, `mult = 1.0` et `gamma = γ` rendent `1.0 * g.powf(-γ)`, les bits de `ratio_table` ;
+   la borne cumulée ne touche pas un premier pas (`g^−0,5 ∈ [0,58 ; 1,73]`).
+4. `q8[c] = (256.0 * mult[c]).round().clamp(1.0, 65_535.0) as u16`.
+
+Point fixe : réel = généré ⇒ `g = 1`, `u = 0`, rien ne bouge.
+
+#### 13.2.3 Effets principaux (`dim:me`)
+
+Onze paramètres par type : voie `a[w]` (6, `w = c / 12`), revêtement `b[s]` (3, `s = (c / 4) % 3`), balisé `β[k]`
+(2, `k = (c / 2) % 2`) ; le bit destination est ignoré (les deux cases qui ne diffèrent que par lui ont toujours le même
+multiplicateur). Mêmes axes que `compare::class_rows`.
+
+```rust
+pub struct MainEffects { pub a: [f64; 6], pub b: [f64; 3], pub beta: [f64; 2] }
+/// Moindres carrés pondérés de `ln g` sur `a[w] + b[s] + β[k]`, par relaxation (Gauss-Seidel).
+pub fn fit_main_effects(ln_g: &[f64], w: &[f64], bound: f64) -> MainEffects;
+```
+
+- Cible `ℓ[c] = ln g[c]` (le `g` de l'étape 1 du §13.2.2), poids `ω[c] = p_n[c] + p_d[c]` ; `ω[c] = 0` si `p_d[c] = 0`.
+- Départ à 0 ; au plus 200 balayages, arrêt quand la plus grande variation est < 1e-12 ; un balayage met à jour dans
+  l'ordre `a[0..6]`, `b[0..3]`, `β[0..2]` : `a[w] = Σ_{c ∈ w} ω (ℓ − b[s(c)] − β[k(c)]) / Σ_{c ∈ w} ω` (0 si la somme des
+  poids est nulle), de même pour `b` et `β`.
+- Jauge : `b̄ = Σ_s Ω_s b[s] / Σ_s Ω_s` (`Ω_s` = poids de la marge), `b[s] −= b̄`, `a[w] += b̄` pour tout `w` ; de même
+  pour `β` ; si `Σ Ω = 0`, rien.
+- Chaque coefficient est borné à `[−ln bound, ln bound]`.
+
+Un pas : `u` = le coefficient de chaque paramètre ; signe et γ comme au §13.2.2 (étape 2), **par paramètre** (11) ;
+puis pour chaque classe `mult[c] = (mult[c] * (−(γ_a[w]·a[w] + γ_b[s]·b[s] + γ_β[k]·β[k])).exp()).clamp(1/B, B)` et
+`q8` comme au §13.2.2. Le pas 1 de `me` ne redonne **pas** `rc05` (autre table).
+
+#### 13.2.4 Recalé par équipe (`rt`)
+
+Un propriétaire par équipe jouée (`order`), plus la table commune comme cible de repli. Pour une équipe `t` et un type,
+avec `T` = `team[t]`, `P` = `pooled` des **mêmes** jeux (ceux du pas précédent de la chaîne `rt`, où chaque équipe a
+joué sa propre table) :
+- `g_T = ratio_table(T.real, T.gen, Σ T.real / 1 000, γ, p')`, `p'` = `p` avec `min_km = 0` (le repli tient lieu de
+  seuil) ; `g_P = ratio_table(P.real, P.gen, Σ P.real / 1 000, γ, p)` ;
+- poids de l'équipe, par classe : `w[c] = G_T[c] / (G_T[c] + n0 · G_P[c] / N_P)`, `G` = mètres générés, `N_P` =
+  `P.loops[type]`, `n0 = --taste-team-n0` (défaut 25) ; `w[c] = 0` si le dénominateur est nul. Si l'équipe génère la
+  classe au même rythme par boucle que l'ensemble, `w = N_T / (N_T + n0)` : la forme « n / (n + n0) » demandée, rendue
+  adaptative par classe (une classe que l'équipe génère peu suit la table commune) ;
+- `ln ĝ[c] = w[c] · ln g_T[c] + (1 − w[c]) · ln g_P[c]` ; puis signe, γ, `mult` et `q8` comme au §13.2.2 avec `ĝ`, sur
+  l'état de l'équipe.
+
+En effets principaux (`rt` + `dim:me`) : `fit_main_effects` sur l'équipe (poids `ω` de l'équipe) et sur l'ensemble ;
+mélange **par paramètre**, `w` = même formule avec les mètres générés de la marge (`G_T,niveau`, `G_P,niveau`) ; puis le pas
+du §13.2.3 sur l'état de l'équipe.
+
+Au pas 1 (tout le monde à 1), `g_P` est le `g` de `rc05` : une équipe sans donnée d'un type (`w = 0`) reçoit **exactement**
+les `q8` de `rc05` pour ce type. Aux pas suivants, `g_P` est l'erreur moyenne restante des tables d'équipe : une équipe
+sans donnée suit la chaîne commune. La table commune de `rt` n'est **pas jouée** : elle ne sert que de cible.
+
+#### 13.2.5 Diagnostics d'un pas
+
+Par propriétaire (`général`, `commun` pour la cible de `rt`, ou la lettre) et par type, dans `ChainOwnerStep` :
+`loops`, `pairs`, `weight` (`rt` : `N_T / (N_T + n0)`), `l1_gap = Σ_c |p_n[c] − p_d[c]|` des entrées du pas (l'écart que
+le pas corrige), `mean_mult = Σ_c p_d[c] · mult[c]` (dérive d'échelle, question 6), `halved` (paramètres dont γ a été
+divisé à ce pas), `gamma_min`, `at_bound` (classes à `1/B` ou `B`).
+
+### 13.3 L'état d'une chaîne
+
+```rust
+pub enum Dims { D72, Me }
+pub enum Owner { General, Team(usize) }
+pub struct ChainState { pub dims: Dims, pub gamma0: f64, pub owners: BTreeMap<Owner, [ParamState; 3]> }
+pub struct StepOut {
+    pub general: Option<Taste>,                  // rc
+    pub team: BTreeMap<usize, Option<Taste>>,    // rt
+    pub tables: Vec<TasteTable>,
+    pub diag: Vec<ChainOwnerStep>,
+}
+impl ChainState {
+    pub fn new(dims: Dims, gamma0: f64) -> Self;
+    /// Un pas : `rc` met à jour `General` depuis `m.pooled` ; `rt` met à jour chaque équipe de `order` (et rend aussi
+    /// la cible `commun` dans `diag`, jamais dans `tables`).
+    pub fn step(&mut self, src: TasteSource, m: &ClassMeters, order: &[usize], letter_of: &[String],
+                p: &TasteParams) -> StepOut;
+}
+```
+
+`TasteParams` gagne `team_n0: f64` (25) et `mult_bound: f64` (4), arguments `--taste-team-n0` et `--taste-mult-bound`.
+Une `Taste` entièrement neutre n'est jamais passée au moteur (`None`, §12.11 point 2).
+
+**Tables sorties** (`VariantMeta::tables`, donc `taste_xxh3`) : `rc` en 72 cases → source `recalé` ; `rc` en effets
+principaux → `recalé-me` ; `rt` → la lettre de chaque équipe jouée ; surcouche `full` ; `pn` = parts réelles, `pd` =
+parts générées des entrées du pas, `g` = le `g` (ou `ĝ`, ou `exp(a + b + β)`) du pas, `q8` = **cumulées**. Une table par
+type (trois). Ainsi `rc:0.5` seul redonne la même liste de tables que la première sonde, et la même `taste_xxh3`.
+
+### 13.4 Lecture honnête
+
+- **Apprentissage** : seulement les boucles **non** mises à l'écart, jouées sur la surcouche complète (§13.2.1), à chaque
+  pas. Aucun jeu d'une boucle mise à l'écart n'entre jamais dans une table.
+- **Mesure** : les trois lectures du §12.6, inchangées (« toutes », « écart », « écart, dans l'échantillon »), à chaque
+  pas. Les boucles mises à l'écart sont jouées sur la surcouche « écart » de leur équipe avec la table de la variante (la
+  même pour les deux surcouches, comme `rc`).
+- **Fuite restante, connue** : les jeux d'apprentissage se font sur la surcouche complète, qui contient les traces mises
+  à l'écart (en équipe d'abord, elles influencent les parcours des autres boucles). Mesurée faible à un pas (§4.2 du
+  relevé : ≤ 0,05) ; l'écart « écart, dans l'échantillon » − « écart » est rapporté **à chaque pas** pour voir s'il
+  grandit avec l'itération. L'éviter demanderait de jouer aussi les boucles non mises à l'écart sur la surcouche « écart »
+  (temps doublé) : écarté.
+- **Groupes** : toutes équipes, puis A et B, types ROAD et GRAVEL, curseurs 0,25 et 1 ; groupes de moins de 30 boucles
+  marqués indicatifs (B « écart » à 10 % : 14 et 26).
+
+### 13.5 Variantes : syntaxe et dépendances (`likeness/variants.rs`)
+
+**Composants nouveaux** (joints par `+` aux existants) :
+
+| Composant | Rôle | Nom |
+|---|---|---|
+| `rt:<γ>` | recalé **par équipe** (§13.2.4), γ ∈ ]0, 4] | `rt` + dixièmes : `rt05` |
+| `n:<k>` | chaîne de `k` pas, entier de 1 à 5 ; seulement avec `rc` ou `rt` | suffixe `-p1` … `-pk`, un par variante |
+| `dim:<72\|me>` | forme de la table ; seulement avec `rc` ou `rt` ; défaut `72` | `me` ajoute `-me` après le goût ; `72` n'ajoute rien |
+| `famroad:<f>` | familiarité `f` pour les requêtes ROAD en équipe d'abord seulement ; découverte, strict et GRAVEL intacts | `famroad` + centièmes : `famroad100` |
+
+**Expansion** : `rc:0.5+n:3` donne, **à sa place dans la liste**, trois variantes consécutives `rc05-p1`, `rc05-p2`,
+`rc05-p3`. Le nom est fait des composants dans l'ordre donné joints par `-` (règle du §12.3), `n` n'y figurant pas, puis
+`-p<k>` : `famroad:1+rt:0.5+dim:me+n:3` → `famroad100-rt05-me-p1` … `-p3`. **`rc:<γ>` sans `n`** reste une variante
+unique nommée `rc05` (chaîne d'un pas, sans suffixe) : la première sonde se rejoue telle quelle.
+
+```rust
+pub enum TasteSource { Team, General, Recal, RecalTeam }      // code "rt" pour RecalTeam
+pub struct Chain { pub stem: String, pub step: u8, pub steps: u8, pub dims: Dims }
+pub struct Variant {
+    pub name: String,
+    pub fam: Option<f32>,
+    /// `famroad` : la familiarité ne touche que ROAD en équipe d'abord.
+    pub fam_road_only: bool,
+    pub taste: Option<(TasteSource, f64)>,
+    /// `Some` pour `rc` et `rt` (`rc` seul : `steps = 1`, nom sans suffixe).
+    pub chain: Option<Chain>,
+}
+```
+
+`is_base()` : ni familiarité ni goût. `adapt_request(req, fam, road_only)` : avec `road_only`, `familiarity = f` si
+`req.ride_type == RideType::Road && req.mode == Mode::TeamFirst`, sinon la requête n'est pas touchée.
+
+**Dépendances** : le pas 1 d'une chaîne apprend sur la **dernière `base` jouée avant elle** (requise plus tôt dans la
+liste, comme `rc` aujourd'hui), quelle que soit la familiarité de la chaîne (`famroad100-rc05-p1` apprend sur `base`,
+comme `fam100-rc05`) ; le pas `k ≥ 2` apprend sur les jeux du pas `k − 1` **de la même chaîne**, joué juste avant lui.
+L'expansion garantit l'ordre ; on ne peut pas entrelacer deux chaînes.
+
+**Refus** (avant toute phase lourde, en plus de ceux du §12.3) : `n` ou `dim` sans `rc` / `rt` ; `n` non entier ou hors
+de [1, 5] ; `dim` autre que `72` ou `me` ; `fam` et `famroad` ensemble ; deux `n` ou deux `dim` ; `rt` sans `base` plus
+tôt ; nom en double **après** expansion (`rc:0.5+n:1` et `rc:0.5+dim:72+n:1` donnent tous deux `rc05-p1`).
+
+### 13.6 Déroulé (`likeness/mod.rs`)
+
+Phases 1 à 7 inchangées ; 7 bis seulement si une variante a `ge` ou `gg` (aucune dans les campagnes du §13.8). En 8 :
+
+- `rc_inputs` est remplacé par `base_meters: Option<ClassMeters>` (calculé après le premier `base`, gardé toute la
+  campagne), `prev_meters: Option<ClassMeters>` (calculé après chaque pas qui a un successeur, lâché quand celui-ci a
+  appris) et `chain: Option<ChainState>` (créé au pas 1, lâché après le dernier pas).
+- Avant de jouer une variante de chaîne : `inputs` = `base_meters` au pas 1, `prev_meters` sinon ;
+  `out = chain.step(...)`. `play_variant` reçoit `out` : `rc` → la `Taste` commune pour toutes les équipes et les deux
+  surcouches ; `rt` → `out.team[t]` pour l'équipe `t`, les deux surcouches ; `out.tables` → `VariantRun::tables`.
+- Après chaque variante (base comprise) : `ClassMeters::of(...)` sur ses jeux, pour `prev_meters` et pour un diagnostic
+  `l1_after` (par propriétaire et type : l'écart L1 que **ses** parcours laissent ; pour la table commune, sur `pooled`).
+- **Temps par équipe** : `play_variant` mesure, par équipe, `build_s` (`build_team` des deux surcouches), `wall_s`
+  (l'équipe entière, comme le message actuel), et, sur les jeux `full` seulement, `plays_full` et `cpu_s_full`
+  (Σ `PlayRec::ms` / 1 000).
+- **Contrôle « pas 1 = `rc05` »** : si `a.at_4a_defaults()`, si `m`, `bound` et `min_km` sont aux défauts et si la
+  variante est `rc05` ou `rc05-p1` (`rc`, 72 cases, γ = 0,5, sans familiarité), sa `taste_xxh3` doit être
+  `4002e232ea272c83` et son empreinte de résultat `ebb20ed148f75185` (relevé, §2) ; sinon, comme pour `base` : sorties
+  écrites, message, **arrêt** (« le pas 1 n'est pas `rc05` : chercher, ne pas lire la suite »). Constantes à côté de
+  `BASE_4A_FINGERPRINT`.
+- **Contrôle « toutes »** (hors défauts du 4a, campagne 2) : la comparaison imprime les `S_base` « toutes » et les
+  compare à 0,614 · 0,721 · 0,735 · 0,680 à un millième près (oui / non) ; pas d'arrêt.
+
+`VariantMeta` gagne : `fam_road_only: bool`, `chain: Option<ChainMeta>` (`stem`, `step`, `steps`, `learned_from`,
+`dims`, `team_n0`, `mult_bound`, `diag: Vec<ChainOwnerStep>`), `l1_after: Vec<OwnerGap>`, `team_times:
+Vec<TeamTime>` (`team` lettre, `loops`, `plays_full`, `cpu_s_full`, `cpu_s_full_by_cursor: Vec<(f64, f64)>`,
+`build_s`, `wall_s`). Lettres et agrégats seulement.
+
+### 13.7 Sorties (`likeness/compare.rs`)
+
+Les sorties par variante et la comparaison du §12.5 restent (elles prennent les nouvelles variantes d'elles-mêmes).
+Ajouts à `<label>-compare.{md,json}` :
+
+1. **Conditions** : en plus, `team_n0`, `mult_bound`, la part mise à l'écart, et les deux contrôles du §13.6.
+2. **§3 bis, chaînes pas à pas** — une table par chaîne (`stem`) et par lecture (« toutes », « écart », « écart, dans
+   l'échantillon ») ; toutes équipes :
+
+   | pas | appris sur | ROAD 0,25 | ROAD 1 | GRAVEL 0,25 | GRAVEL 1 | groupes ≤ 0,5 |
+   |---|---|---:|---:|---:|---:|---:|
+   | p0 | — | 1,00 | 1,00 | 1,00 | 1,00 | 0 |
+   | p1 | base | `S/S_base` | … | | | |
+
+   La ligne `p0` est `base`. Sous la table : par pas, la fuite (« écart, dans l'échantillon » − « écart ») par groupe.
+3. **§5 bis, par équipe et par pas** : même table pour A et B, lectures « toutes » et « écart », effectif de boucles en
+   tête de colonne, indicatif sous 30.
+4. **§3 ter, diagnostics** : par chaîne et par pas, une ligne par propriétaire (`général` ; pour `rt` : `commun`, A, B,
+   puis « autres » = somme des autres lettres) et type : boucles, poids, `l1_gap` (avant), `l1_after` (après),
+   `mean_mult`, `halved`, `gamma_min`, `at_bound`. Puis les multiplicateurs **cumulés** agrégés (6 voies, 3 revêtements,
+   balisé ; le tableau 2 actuel, une colonne par pas).
+5. **§7, service** : colonne `× base` du P50 en plus, au même curseur ; signaux du §12.6 inchangés (P50 > 1,25 × base,
+   P90 > 1,5 × base, part `OK` en baisse de plus d'un point, `PANIC`, `WINDOW_ESCAPE`).
+6. **§9, coût d'un profil par équipe** [estimé] — pour chaque chaîne `rt`, par équipe (A, B, « autres ») : les
+   générations nécessaires à `n` pas sont `base`, p1, …, p(n−1) ; pour chacune `plays_full`, `cpu_s_full`, `wall_s`,
+   `build_s` ; puis le total des `cpu_s_full` et le temps estimé sur 1, 4, 8 et 16 fils (`total / fils`) ; enfin le même
+   calcul sur les seuls jeux du curseur 0,25 (l'allègement « un seul curseur » de la question 5). Avertissement imprimé : mesuré à
+   16 fils sur 8 cœurs, machine pleine ; un cœur dédié est plus rapide, non mesuré.
+7. **§8, lecture** (faits, sans décision) : par chaîne, le premier pas où chaque groupe GRAVEL et ROAD passe sous 0,5
+   (« toutes » et « écart »), ou « jamais » ; pour A et B, `rt` contre `rc` du même pas et de la même forme ; les signaux
+   de service par pas ; la plus grande fuite par chaîne ; `mean_mult` le plus éloigné de 1.
+
+JSON : `chains: Vec<ChainSummary { stem, source, dims, fam, steps: Vec<String> }>`, `team_cost: Vec<TeamCostRow>` ;
+les `S` par pas se lisent dans `criterion` (lignes déjà par variante).
+
+### 13.8 Campagnes, ordre, temps et mémoire
+
+Binaire `--release`, `B=./target/release/ord-loops-bench`, sorties sous `~/.cache/osm-route-details/graph/lot4/`
+seulement. **Une campagne à la fois**, jamais deux processus. Les labels `sonde` et `sonde2` sont pris (première sonde).
+
+1. **Essai court** : `$B likeness --teams C --limit 5 --variants base,rc:0.5+n:2,rt:0.5+n:2,famroad:1+rt:0.5+dim:me+n:2
+   --label recal-essai` : sorties et comparaison lisibles, aucune panique.
+2. **Déterminisme** : `$B likeness --teams B --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 1 --label recal-det1`
+   puis `--threads 16 --label recal-det16` : mêmes empreintes de résultat et mêmes `taste_xxh3`, variante par variante
+   (~15 min à 1 fil).
+3. **Campagne 1, `recal-general`** (réglages du 4a, mise à l'écart 10 %) :
+   `$B likeness --label recal-general --variants base,rc:0.5+n:3,rc:0.5+dim:me+n:3`
+   - 7 variantes : `base`, `rc05-p1..p3`, `rc05-me-p1..p3` ;
+   - **arrêts automatiques** : `base` ≠ `55c3b065dc085f42` ; `rc05-p1` ≠ (`ebb20ed148f75185`, `4002e232ea272c83`) ;
+   - [estimé] ~1 min de phases communes, `base` ~205 s, pas de chaîne 210 à 260 s (`rc05` 213 s, `rc10` 241 s) : **26 à
+     32 min** ; mémoire de la première sonde : pic anonyme ~16 à 17 Go, RSS < 20 Go.
+4. **Choix de la forme pour la campagne 2** (règle, sauf avis contraire du propriétaire) : `X = me` si, au pas 3 en
+   lecture « écart », `rc05-me-p3` fait au plus 0,03 de plus que `rc05-p3` dans **chacun** des 4 groupes toutes équipes
+   (moins de paramètres, aucun artefact de case rare) ; sinon `X = 72`. On note `+dim:X` (omis pour 72).
+5. **Campagne 2, `recal-equipe`** (mise à l'écart 25 %, question 2) :
+   `$B likeness --label recal-equipe --holdout-share 0.25 --variants base,rc:0.5+dim:X+n:3,rt:0.5+dim:X+n:3,famroad:1+rc:0.5+dim:X+n:3,famroad:1+rt:0.5+dim:X+n:3`
+   - 13 variantes, dans cet ordre : `base`, la chaîne commune, la chaîne par équipe, puis les deux avec `famroad` ;
+   - la chaîne commune y est rejouée parce que l'écart à 25 % change les tables et les boucles mesurées : `rt` ne se
+     compare qu'à `rc` de la même campagne ;
+   - contrôle « toutes » (§13.6), pas d'arrêt ;
+   - [estimé] +14 % de jeux ; 235 à 310 s par variante (`fam100-rc05` : 242 s à 10 %) : **50 à 70 min** ; `LoopRec`
+     gardés ~0,15 Go par variante : pic anonyme ~17,5 à 18 Go, RSS ≤ 21 Go, sous les 30 Go.
+6. **Relevé** (§13.10, commit 5).
+
+### 13.9 Tests (synthétiques, aucune donnée de production)
+
+`ord-loops-bench` seulement (`ord-loops` n'est pas touché ; ses tests ne changent pas) :
+
+1. `parse_variants` : `rc:0.5+n:3` → `rc05-p1`, `rc05-p2`, `rc05-p3` consécutifs, chaîne `(stem rc05, k, 3, D72)` ;
+   `rc:0.5` → `rc05`, chaîne d'un pas ; `famroad:1+rt:0.5+dim:me+n:2` → `famroad100-rt05-me-p1`, `-p2` ; `dim:72` sans
+   effet sur le nom ; refus du §13.5 un par un (`n:3` seul, `ge:0.5+n:2`, `n:0`, `n:6`, `n:1.5`, `dim:36`,
+   `fam:1+famroad:1`, `rt:0.5` sans `base` plus tôt, `base,rc:0.5+n:1,rc:0.5+dim:72+n:1`).
+2. `adapt_request` avec `famroad` : ROAD au curseur 0,25 → `TeamFirst`, q8 640, f ; ROAD au curseur 1 → `Discovery`
+   inchangé ; GRAVEL au curseur 0,25 → familiarité inchangée ; strict inchangé.
+3. Pas à 72 cases : (a) depuis `mult = 1`, les `q8` du pas sont **égales** à celles de `ratio_table` pour trois jeux de
+   vecteurs et γ ∈ {0,5 ; 1} (à γ = 1,5, avec `mult_bound` = 10 pour que la borne cumulée ne morde pas) ; (b) réel = généré → `mult`, `gamma`, `sign` inchangés ; (c) une classe dont la
+   correction change de signe voit son γ divisé par deux, et elle seule ; une correction sous 0,02 ne compte pas comme
+   changement de signe ; (d) avec des entrées extrêmes répétées 5 fois, `mult` reste dans `[1/4, 4]` et `at_bound` les
+   compte.
+4. **Convergence sur un générateur jouet** : `gen[c] ∝ avail[c] · mult[c]^(−ε[c])`, ε = 3,2 pour une classe et 1 pour
+   les autres, réel fixé ; trois pas à γ = 0,5 : `l1_gap` après le pas 3 inférieur à la moitié de l'initial, γ de la classe
+   élastique divisé par deux au pas 2 et pas celui des autres (valeurs exactes calculées dans le test).
+5. Recalé par équipe : (a) une équipe sans donnée d'un type reçoit **exactement** les `q8` de la table commune du même
+   pas ; (b) une équipe au même rythme par boucle que l'ensemble a `w = N_T / (N_T + n0)` (valeur exacte) ; (c) avec
+   `n0 = 0`, ses `q8` sont celles de sa propre table.
+6. Effets principaux : (a) une cible exactement additive (`ℓ = a + b + β` donnés, tous les poids > 0) est retrouvée à
+   1e-9 près (valeurs ajustées) ; (b) deux cases qui ne diffèrent que par le bit destination ont le même `mult` ; (c) un
+   niveau sans poids garde 0 ; (d) après jauge, `Σ Ω_s b[s] = 0` et `Σ Ω_k β[k] = 0` ; (e) coefficients bornés à
+   `ln bound`.
+7. `ClassMeters::of` : `pooled` égal **au bit près** à l'ancien `RcInputs::of` (gardé dans le test comme référence) sur
+   des jeux synthétiques ; la somme des `team` égale `pooled` à 1e-9 relatif ; une boucle mise à l'écart, un jeu
+   `holdout` ou un jeu non `OK` n'y comptent jamais.
+8. Comparaison : sur une liste synthétique de `Done` (une `base`, une chaîne de trois pas), la table pas à pas
+   (ordre, `p0` = 1,00, premier pas sous 0,5), et le coût d'un profil (générations `base`, p1, p2 ; total et divisions
+   par fils exacts).
+
+### 13.10 Commits
+
+Chacun passe `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings` et `cargo test -p ord-loops-bench`.
+Fin de message : une ligne vide puis la ligne `Co-Authored-By` du modèle qui code.
+
+1. `feat(bench): likeness, chaînes de recalé dans --variants (n, dim, rt, famroad)` — `variants.rs`, arguments
+   `--taste-team-n0` et `--taste-mult-bound`, tests 1 et 2.
+2. `feat(bench): likeness, pas du recalé itéré, par équipe et en effets principaux` — `chain.rs` (pur : `ParamState`,
+   pas à 72 cases, `fit_main_effects`, pas en effets principaux, mélange par équipe, diagnostics), tests 3 à 6.
+3. `feat(bench): likeness, chaînes jouées pas à pas` — `ClassMeters`, `ChainState` dans `run` et `play_variant`, `rc`
+   par les chaînes, contrôle « pas 1 = `rc05` », temps par équipe, champs de `VariantMeta`, test 7.
+4. `feat(bench): likeness, comparaison pas à pas et coût d'un profil par équipe` — `compare.rs` (§13.7), test 8.
+5. Campagnes du §13.8, puis `docs(ord-loops): relevé du recalé itéré et par équipe (lot 4)` : nouveau relevé
+   `docs/design/technique/ord-loops-lot4-recal.md` (style et marques de `ord-loops-lot4-sonde.md` : conditions et
+   commandes, contrôles, tables par pas, critère par lecture et par pas, A et B, diagnostics, forme, service, coût d'un
+   profil, ce que la sonde décide au regard des questions du §13), et un §13.13 « Écarts du codage » ajouté ici. Équipes
+   lettrées et agrégats seulement : ni départ, ni coordonnée, ni id de trace ou d'équipe.
+
+### 13.11 Ce que le relevé tranche, et comment
+
+Écrit comme des faits ; la décision revient au propriétaire.
+
+1. **GRAVEL** : le premier pas où les deux groupes GRAVEL passent sous 0,5 en « écart » **et** en « toutes », par
+   chaîne ; « jamais » sinon. Si aucun pas n'y arrive, dire ce qui reste (chemins, non revêtu : P50 et W1 / IQR) et si
+   `l1_after` stagne (plancher du levier « multiplicateur par classe ») ou décroît encore (un pas de plus servirait).
+2. **Par équipe** : `rt` contre `rc`, même pas, même forme, campagne 2. Les faits à donner : B ROAD (« toutes » et
+   « écart », deux curseurs) — `rt` sous 1,0 (B ne perd plus) et l'écart à `rc` ; A — `rt − rc` en « écart ». Lecture
+   proposée : profil par équipe défendable si B ROAD passe sous 1,0 avec `rt` aux deux curseurs et deux lectures, pendant
+   que `rc` reste au-dessus de 1,2, sans que A perde plus de 0,03 ; sinon, **table générale par type**.
+3. **Surapprentissage** : la fuite par pas (« écart, dans l'échantillon » − « écart ») ; au-delà de 0,10 au pas 3, la
+   chaîne surapprend : préférer un pas plus tôt ou les effets principaux.
+4. **Coût** : le §9 de la comparaison, rapporté au budget de la question 5.
+5. **Service** : par pas, P50 contre 1,25 × `base`, part `OK` à moins d'un point, `PANIC` et `WINDOW_ESCAPE` ; et la
+   dérive `mean_mult` (au-delà de 1 ± 0,10 : à normaliser au 3b).
+
+### 13.12 Ce que la seconde sonde ne fait pas
+
+Rien au moteur (`crates/ord-loops` inchangé, empreinte de `base` `55c3b065dc085f42`), au service (`ord-server`), au
+contrôleur, au contrat, à la version ; rien au dépôt ; pas de nouvelle dépendance. Pas de goût `ge` / `gg` (abandonnés,
+décision 1 du §9.2) ; pas de table par curseur (une table par type sert les deux curseurs, comme le moteur l'appliquera) ;
+pas de normalisation (question 6) ; pas de jeu des boucles d'apprentissage sur la surcouche « écart » (§13.4) ; pas de
+pente ni de trafic.
