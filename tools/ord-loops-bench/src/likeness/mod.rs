@@ -120,7 +120,9 @@ pub struct LikenessArgs {
     #[arg(long)]
     pub calibrate_only: bool,
     /// Sonde du goût (§12 de la note) : variantes jouées l'une après l'autre, séparées par des virgules — `base`, ou
-    /// des composants joints par `+` : `fam:<f>`, `ge:<γ>` (goût d'équipe), `gg:<γ>` (général), `rc:<γ>` (recalé).
+    /// des composants joints par `+` : `fam:<f>`, `famroad:<f>` (familiarité en ROAD, équipe d'abord, seulement), `ge:<γ>` (goût
+    /// d'équipe), `gg:<γ>` (général), `rc:<γ>` (recalé), `rt:<γ>` (recalé par équipe), `n:<k>` (chaîne de `k` pas, avec
+    /// `rc` ou `rt`), `dim:<72|me>` (forme de la table recalée).
     /// Absent : le banc du 4a à l'identique (une passe `base`, sorties `<label>-report.json` et `<label>-summary.md`).
     #[arg(long, value_delimiter = ',')]
     pub variants: Vec<String>,
@@ -139,6 +141,12 @@ pub struct LikenessArgs {
     /// Goût : dilatation du couloir, en cases.
     #[arg(long, default_value_t = 2)]
     pub taste_corridor_cells: u32,
+    /// Recalé par équipe (`rt`) : seuil de repli `n0`, une équipe pèse `N / (N + n0)` dans sa propre table.
+    #[arg(long, default_value_t = 25.0)]
+    pub taste_team_n0: f64,
+    /// Recalé itéré : le multiplicateur cumulé d'une classe est borné à `[1 / b, b]`.
+    #[arg(long, default_value_t = 4.0)]
+    pub taste_mult_bound: f64,
 }
 
 /// L'empreinte de résultat de `base` au 4a (relevé `ord-loops-lot4-mesures.md`) : le crochet du goût est neutre si la
@@ -153,6 +161,8 @@ impl LikenessArgs {
             min_km: self.taste_min_km,
             cell_m: self.taste_cell_m,
             corridor_cells: self.taste_corridor_cells,
+            team_n0: self.taste_team_n0,
+            mult_bound: self.taste_mult_bound,
         }
     }
 
@@ -269,6 +279,10 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     }
     // La sonde du goût : refus avant toute phase lourde. Sans `--variants`, une passe `base` et les sorties du 4a.
     let listed = variants::parse_variants(&a.variants)?;
+    anyhow::ensure!(
+        listed.iter().all(|v| !matches!(v.taste, Some((TasteSource::RecalTeam, _)))),
+        "`rt` n'est pas encore branché (commit suivant)"
+    );
     let legacy = listed.is_empty();
     let variants = if legacy { vec![Variant::base()] } else { listed };
     let tp = a.taste_params();
@@ -508,6 +522,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         let variant = (!legacy).then(|| VariantMeta {
             name: v.name.clone(),
             fam: v.fam,
+            fam_road_only: v.fam_road_only,
             taste: v.taste.map(|(s, _)| s.code().to_string()),
             gamma: v.taste.map(|(_, g)| g),
             params: tp.clone(),
@@ -685,8 +700,11 @@ impl Bench<'_> {
                 let mut tasks: Vec<play::Task> = Vec::new();
                 for &i in ids {
                     for &c in &a.cursors {
-                        let req =
-                            variants::adapt_request(play::request_of(gf, &self.loops[i], c, a.seed)?, v.fam);
+                        let req = variants::adapt_request(
+                            play::request_of(gf, &self.loops[i], c, a.seed)?,
+                            v.fam,
+                            v.fam_road_only,
+                        );
                         tasks.push(play::Task {
                             loop_idx: i,
                             cursor: c,

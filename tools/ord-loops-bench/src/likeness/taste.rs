@@ -32,11 +32,24 @@ pub struct TasteParams {
     pub cell_m: f64,
     /// Dilatation du couloir, en cases, dans les deux axes.
     pub corridor_cells: u32,
+    /// Recalé par équipe (§13.2.4) : une équipe pèse `N / (N + team_n0)` dans sa propre table, `N` étant ses boucles
+    /// d'apprentissage du type.
+    pub team_n0: f64,
+    /// Recalé itéré (§13.2.2) : le multiplicateur **cumulé** d'une classe est borné à `[1 / mult_bound, mult_bound]`.
+    pub mult_bound: f64,
 }
 
 impl Default for TasteParams {
     fn default() -> Self {
-        Self { m: 0.5, bound: 3.0, min_km: 200.0, cell_m: 500.0, corridor_cells: 2 }
+        Self {
+            m: 0.5,
+            bound: 3.0,
+            min_km: 200.0,
+            cell_m: 500.0,
+            corridor_cells: 2,
+            team_n0: 25.0,
+            mult_bound: 4.0,
+        }
     }
 }
 
