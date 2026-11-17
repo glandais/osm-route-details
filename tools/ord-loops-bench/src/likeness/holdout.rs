@@ -36,7 +36,8 @@ pub fn select(loops: &[Loop], share: f64, min_loops: usize) -> HashSet<usize> {
         }
         // Les empreintes sont distinctes ; à égalité (id en double), le rang dans l'équipe départage.
         v.sort_by_key(|&i| (loops[i].id_hash, loops[i].i));
-        let n = (share * v.len() as f64).ceil() as usize;
+        // `0,1 × 30` vaut 3,000 000 000 000 000 4 en flottant : sans la marge, `ceil` rendrait 4.
+        let n = (share * v.len() as f64 - 1e-9).ceil().max(0.0) as usize;
         out.extend(v.into_iter().take(n));
     }
     out
@@ -191,6 +192,11 @@ mod tests {
         let sel3 = select(&more, 0.10, 10);
         assert_eq!(held(&more, &sel3, 0), held(&loops, &sel, 0));
         assert_eq!(held(&more, &sel3, 1).len(), 2, "ceil(0,10 × 12) = 2");
+        // Un multiple exact de 10 : 0,1 × 30 et 0,1 × 70 dépassent l'entier d'un ulp en flottant.
+        for (n, want) in [(30, 3), (70, 7), (31, 4)] {
+            let loops: Vec<Loop> = (0..n).map(|i| lp(0, i, u64::from(i))).collect();
+            assert_eq!(select(&loops, 0.10, 10).len(), want, "ceil(0,10 × {n})");
+        }
     }
 
     #[test]
