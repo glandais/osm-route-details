@@ -2029,3 +2029,729 @@ $B likeness --label recal-general --variants base,rc:0.5+n:3,rc:0.5+dim:me+n:3
 # 4. forme X = me ou 72 (règle du §13.8.4), puis campagne 2 (X = me : +dim:me ; X = 72 : rien)
 $B likeness --label recal-equipe --holdout-share 0.25 --variants base,rc:0.5+dim:X+n:3,rt:0.5+dim:X+n:3,famroad:1+rc:0.5+dim:X+n:3,famroad:1+rt:0.5+dim:X+n:3
 ```
+
+## 14. 3b : spécification
+
+Écrit le 17 novembre 2026, après la seconde sonde ([`ord-loops-lot4-sonde2.md`](ord-loops-lot4-sonde2.md), §8 à §10.1) et
+les décisions du §9.4 (appliquées telles quelles), à la lecture de `crates/ord-loops` (`cost.rs`, `team.rs`, `search.rs`,
+`window.rs`, `engine.rs`, `cache.rs`, références figées), de `crates/ord-graph-match` (`deposit.rs`), de
+`crates/ord-server/src/generator` (`deposit.rs`, `store.rs`, `crypto.rs`, `windows.rs`, `generate.rs`, `routes.rs`,
+`cursor.rs`, `config.rs`), du banc (`likeness/{export,walk,play,holdout,taste,chain,variants,mod}.rs`), des rapports privés
+de la campagne `recal-equipe`, et du travail de nuit du backend de Pédalons (`RouteGeneratorOverlayJob`,
+`RouteGeneratorV1`, lus **sans** rien y changer). Cette section **suffit au codeur** : ce qu'elle ne dit pas est laissé à
+son jugement, à condition de tenir le §14.15. Les sections précédentes ne sont pas réécrites ; les erreurs factuelles
+qu'elles portent sont signalées au §14.0 (points 15 à 17).
+
+**Ce que livre le 3b** : (1) la **table commune** `C` (la table recalée commune à trois pas, `rc05-p3`, 72 cases × 3 types,
+en entiers) devient le poids de base du moteur, pour toutes les arêtes de la vue, aux deux curseurs, avec ou sans équipe ;
+(2) un **profil par équipe** appris à la fin de chaque dépôt en rejouant le moteur sur ses boucles, écrit à côté de la
+surcouche dans `<team>.ordp.enc` ; (3) sa **lecture** en service, avec repli sur `C` et l'état `stale` raison `profile` ;
+(4) le **banc** qui joue ce chemin du service avec le code du dépôt, tranche la normalisation et se compare à la seconde
+sonde ; (5) la **mesure mémoire** du service dans un conteneur de 3 Gio.
+
+### 14.0 Ce que la lecture a établi
+
+1. **Le crochet du goût n'existe que dans `WindowTeam`** (§12.1) : une requête sans équipe n'en a pas (`Weighter::new` :
+   `team.and_then(|t| t.win.taste_of(ride))`), ses poids sont les `Window::w_osm` de `cost::edge_weight`
+   (`window.rs`, étape 5). La table commune, qui doit valoir **aussi** sans équipe, ne peut donc pas passer par le crochet :
+   elle entre dans le **poids de base** du moteur (§14.3.2).
+2. **Trois lieux appellent `edge_weight`, et trois seulement** : `window.rs` (sommes `w_osm`), `team.rs`
+   (`WindowTeam::build_with_taste`, branche sans goût) et `search.rs` (`Weighter::edge`, morceaux du départ et de
+   l'arrivée). `TeamData`, les index, `reverse.rs` et le contrôleur ne lisent aucun poids ; aucune heuristique ne suppose un
+   minorant de `K` (l'A\* prend l'arbre retour) : des multiplicateurs sous 1 ne cassent aucune admissibilité. Seuls les
+   coûts de virage sont absolus (`TURN_COST_MAX`, §12.0 point 5).
+3. **Un goût passé au crochet remplace le poids de base, il ne s'y multiplie pas** : `taste_weight` =
+   `⌈len × K × q8 / 16 384⌉`, relatif à `K`. Un apprentissage qui passe toujours **sa** table au crochet (les chaînes du
+   banc, le dépôt du §14.5) ne dépend donc pas du poids de base du moteur : la même table rend les mêmes parcours sur le
+   moteur du banc (poids de base neutre) et sur celui du service (poids de base `C`). C'est ce qui permet au banc de jouer
+   le chemin du service sans second moteur ; c'est vérifié par le test 3 du §14.11.
+4. **Le dépôt est synchrone et sa place est partagée par tous les environnements** : un fil bloquant par dépôt, une place
+   (`deposit.max_concurrent` = 1), une file de 120 s puis 503 `Retry-After: 30`, un budget de 900 s. Le backend attend la
+   réponse jusqu'à 16 min (`overlay.deposit-timeout=PT16M`), refait un dépôt refusé pour charge trois fois puis **saute
+   l'équipe** jusqu'à la nuit suivante ; staging et production déposent à 02:10 UTC sur le même service. Une regénération
+   de plusieurs minutes **dans** la place de dépôt ferait sauter les équipes de l'autre environnement : elle se fait hors
+   de cette place (§14.7.1).
+5. **Le backend redépose** quand `state ≠ ready`, quand l'empreinte des traces change, ou quand l'échéance (TTL de 14 jours)
+   tombe dans les 7 jours : « à chaque dépôt » (décision 2 du §9.4) veut dire à chaque changement, ou une fois par semaine,
+   pas chaque nuit pour chaque équipe. Il lit `stale_reason` comme une chaîne libre et redépose sur **tout** `stale`, et ses
+   records portent `@JsonIgnoreProperties(ignoreUnknown = true)` : la raison `profile` et des champs nouveaux ne demandent
+   **aucun** changement de son code [lu dans le dépôt tribly].
+6. **Une ligne de dépôt ne porte ni identifiant ni date** (`TrackLine` : `type`, `excluded`, `network_edges`). Ni la graine
+   du banc (`id_hash ^ seed`) ni un tirage par empreinte d'id ou par récence ne sont possibles au dépôt : graine et tirage se
+   font sur une empreinte du **contenu** de la boucle appariée (§14.4.2), ce qui les rend indépendants de l'ordre des lignes.
+7. **Le « premier parcours » du banc** (`play::play_one`) est le premier parcours **gardé par le contrôleur indépendant**
+   (`TeamCheck` de la surcouche jouée), après une reprise en fenêtre élargie sur `WindowEscape`, **sans** budget de temps par
+   requête ; une paire (boucle, curseur) compte si ce parcours existe. Le dépôt fait de même (§14.5.3).
+8. **La purge d'une instance 1.9.x ne détruit pas un `.ordp.enc`** (`store.rs` de `develop`, 1.9.2) : dans le dossier du
+   graphe courant, elle n'efface que les noms qui **contiennent** `.tmp-` (après 1 h, 300 s au démarrage) et ceux qui
+   **finissent** par `.ordo.enc` sans `.tmp-` (après le TTL) ; un dossier d'espace n'est retiré que vide (`remove_dir`) ; un
+   dossier `graph-*` d'un autre graphe part en entier après la grâce de 48 h (profils compris, c'est voulu). `read_current`
+   n'efface que le chemin `.ordo.enc` d'une surcouche illisible ; `delete` aussi (le profil devient orphelin, ramassé par la
+   purge de 1.10, §14.9) ; `delete_namespace` retire tout. Quotas et jauge ne comptent que les `.ordo.enc`. **Aucune parade
+   n'est nécessaire**, à deux conditions tenues au §14.9 : le temporaire du profil contient `.tmp-` et ne finit pas par
+   `.ordo.enc`, le nom définitif ne contient pas `.tmp-`.
+9. **Chiffrement** : `seal` / `open` lient un fichier à `MAGIC ‖ graphe ‖ espace ‖ équipe` (données associées, `MAGIC` =
+   `ORDOENC1`). Un profil scellé avec une autre magie ne s'ouvre pas comme surcouche, ni l'inverse : séparation de domaine
+   sans nouvelle clé ni nouvelle dérivation.
+10. **La table `rc05-p3` de la campagne 2** (`recal-equipe`, 25 % à l'écart, `taste_xxh3` `66ee08d3eb9c910c`) a une table
+    MTB **non neutre** apprise sur 4 boucles, avec des classes aux deux bornes (64 et 1 024) ; la ROAD va de 64 à 494, la
+    GRAVEL de 64 à 1 024 [lu dans le rapport privé].
+11. **Les rapports du banc ne gardent pas les mètres générés par classe** (`PlayRec::first_class_m` est `#[serde(skip)]`,
+    `l1_after` n'est qu'un écart L1) : le terme `G_P / N_P` du poids de mélange (§13.2.4) n'est pas relisible. Il faut
+    rejouer la chaîne commune ; ce rejeu sert aussi de contrôle (empreintes connues, §14.3.1).
+12. **Le mélange du banc est contemporain** : la cible de repli de `rt` est l'erreur moyenne des **mêmes** jeux de toutes les
+    équipes (`g_P`), et chaque équipe part de `K` (multiplicateurs 1). Au dépôt une équipe est seule : sa cible doit être
+    figée (réserve du §9 du relevé). La forme retenue (§14.5.2) n'a pas été jouée ; le banc la mesure (§14.12).
+13. **Pas de `CHANGELOG`** dans le dépôt ; la version du paquet suit celle de l'API (`chore: version 1.8.0, calée sur l'API
+    1.8`) : espace de travail en 1.9.2, `API_VERSION` = `"1.9"`.
+14. **Plafond : 500 par équipe ou par type ?** La décision 1 du §9.4 dit « au plus 500 boucles **par équipe** », et c'est ce
+    que le §8.2 du relevé a mesuré (`--limit 500` sur A, deux types confondus) ; la commande du 3b dit « au plus 500 par
+    type ». **La décision du propriétaire est appliquée** (par équipe) ; le plafond par type est joué au banc pour éclairer
+    la question 2 du §14.1.
+15. *Correction du §3.5* : « Profil absent = moteur d'avant » est remplacé par la décision 1 du §9.4 (profil absent =
+    **table commune**). La vérification que le §3.5 demandait au codage est faite (point 8).
+16. *Correction du §6* : le 3b consomme l'api **1.10** (ajouts du §14.10) ; les ajouts du 4c et du 4d (`figures`, familles,
+    attracteurs) iront en **1.11**.
+17. *Correction du §3.5, mémoire du dépôt* : le profil ne s'accumule plus « trace par trace » (estimateur abandonné) ; il
+    garde au plus 500 boucles retenues (~1 Mo) pendant l'appariement, puis rejoue le moteur trois fois après la ligne de fin
+    (§14.7).
+
+**Coût attendu au dépôt** [calculé sur le §8.1 du relevé, 0,49 s-fil par jeu pour A, 0,20 pour B, 1,85 pour les petites
+équipes, banc à 16 fils sur 8 cœurs] : trois générations de 500 boucles × 2 curseurs pour A, soit 3 000 jeux, **~6,1 min
+sur 4 fils** ; B (397 boucles) ~2,0 min ; les sept petites (52 boucles) ~2,4 min en tout ; **~10,5 min par environnement et
+par nuit de redépôt complet**, deux fois si staging et production redéposent tout.
+
+### 14.1 Choix pris par défaut, à confirmer
+
+Chaque ligne est un choix que les décisions ne tranchent pas ; le défaut est le plus prudent, il est codé tel quel et
+signalé au relevé. Une réponse différente du propriétaire change un défaut, pas l'architecture.
+
+| # | Question | Défaut retenu | Ce qui change sinon |
+|---|---|---|---|
+| 1 | **Forme du mélange avec la table figée** | L'équipe **part de `C`** et chaque pas corrige par sa propre erreur, pondérée : `ĝ = g_T^w` (cible commune = point fixe, `g_P = 1`). Une équipe sans donnée garde `C` au bit près (§14.5.2). | Chaîne de l'équipe depuis `K` puis mélange final avec `C` : apprend contre des tables jamais servies, écartée. Le banc compare au `rt05-p3` contemporain. |
+| 2 | **Plafond par équipe ou par type** | 500 **par équipe** (décision 1 du §9.4), tirage par empreinte de contenu, types confondus. Variante `capt:500` jouée au banc. | Par type : ~×1,8 de temps pour A (~11 min sur 4 fils) [calculé], GRAVEL de A mieux appris. Réglage `generator.profile.per_type`. |
+| 3 | **Données de `C`** | `rc05-p3` **rejouée** aux réglages de la campagne 2 (25 % à l'écart : apprise sur 75 % des boucles), pour que la lecture « écart » du banc reste honnête ; **MTB neutre** (4 boucles, sous le seuil de 50). | Apprise sur 100 % (`--no-holdout`) pour la production : la lecture « écart » du banc voit alors des boucles de `C`. |
+| 4 | **Poids de l'équipe borné** | `w[c] = min(G_T / (G_T + n0 · R), N_T / (N_T + n0))` : jamais plus que la part que ses boucles lui donnent. | Formule nue du §13.2.4 : une classe que `C` ne génère jamais (`R = 0`) prendrait `w = 1` sur une seule boucle. |
+| 5 | **Normalisation** | Non, sauf si le banc la trouve meilleure sans rien perdre (règle du §14.12.4). | Normalisée d'office : jamais mesurée, change `C` et tous les profils. |
+| 6 | **Où se fait la regénération** | Après l'appariement, **hors** de la place de dépôt, dans une place de profil unique (`profile.max_concurrent` = 1), 4 fils, budget 720 s. | Dans la place de dépôt : l'autre environnement perd des équipes (point 4 du §14.0). Deux places : plus de CPU la nuit. |
+| 7 | **Budget dépassé** | La table des pas **finis** est écrite (1 ou 2 pas, signalé) ; aucun pas fini : l'ancien profil est gardé. La surcouche est toujours écrite. | Rien n'est écrit : nouvel essai la nuit suivante, si l'état le demande. |
+| 8 | **Profil incompatible** (format, `C` ou réglages d'apprentissage changés) | Table commune servie, `stale` raison `profile` ; jamais effacé à la lecture. | Profil ancien servi quand même jusqu'au prochain dépôt. |
+| 9 | **Champs d'API ajoutés** | `stale_reason: profile` ; `profile` dans l'état de la surcouche et dans le rapport de dépôt ; `taste` (`team` \| `common`) dans la réponse de génération. | Seulement `stale_reason: profile` (le strict nécessaire). |
+| 10 | **Changelog** | `CHANGELOG.md` créé à la racine, à partir de 1.10.0. | Une ligne dans cette note seulement. |
+| 11 | **Boucles de plus de 200 km** | Écartées de l'apprentissage (`max_km` = `generator.distance_m_max`, 200 km) : le service ne les sert pas, et leur fenêtre peut dépasser le budget mémoire. | Jouées comme au banc (fenêtres plus grandes que toute requête servie). |
+| 12 | **Banc, poids de base** | `--base-taste neutral` par défaut dans toutes les sous-commandes (les relevés passés se rejouent tels quels), `likeness` toujours neutre. | `common` par défaut : les campagnes du lot 2 et du lot 6 ne se comparent plus. |
+
+### 14.2 Où vit chaque morceau
+
+| Morceau | Où | |
+|---|---|---|
+| Table commune, constantes générées | `crates/ord-loops/src/taste_common.rs` ; `cost.rs` (`Taste::common`, `common_raw`, `common_normalized`) | nouveau |
+| Poids de base au goût | `ord-loops` : `engine.rs` (`Params::base_taste`, `Engine::base_weight`), `window.rs`, `team.rs`, `search.rs` | changé |
+| Marche, trace, géométrie plane, longueurs par classe | `ord-graph-match` : `walk.rs`, `plane.rs` (déplacés du banc) | déplacé |
+| Retenue et tirage des boucles d'apprentissage | `ord-graph-match` : `profile/collect.rs` ; collecteur facultatif dans `deposit.rs` | nouveau |
+| Apprentissage (pas, mélange, bornes, `q8`), joueur abstrait, joueur à plat de référence | `ord-graph-match` : `profile/learn.rs`, `profile/mod.rs` (`Player`, `FlatPlayer`) | nouveau |
+| Format en clair du profil | `ord-graph-match` : `profile/format.rs` | nouveau |
+| Joueur du service, phase de profil du dépôt | `ord-server` : `generator/profile.rs`, `generator/deposit.rs` | nouveau, changé |
+| Fichier chiffré, lecture, état, purge, quotas | `ord-server` : `generator/store.rs`, `generator/crypto.rs` | changé |
+| Agrégats d'équipe au goût, réponse | `ord-server` : `generator/windows.rs`, `generator/generate.rs`, `generator/routes.rs` | changé |
+| Réglages | `ord-server` : `config.rs` (`generator.profile`) | ajout |
+| Contrat, version | `ord-server/src/lib.rs` (`API_VERSION`), `Cargo.toml` (espace de travail), `contract/openapi.json`, `CHANGELOG.md` | changé |
+| Banc | `tools/ord-loops-bench` : sous-commande `taste-common`, `likeness/{variants,svc,compare_svc,mod,out}.rs` | nouveau, changé |
+
+`ord-graph-match` gagne deux dépendances **du workspace** (`ord-loops`, `ord-loops-check`, chemins), sans cycle
+(`ord-loops-check` → `ord-loops` → `ord-graph`) ; aucune dépendance hors workspace n'est ajoutée (cargo-deny inchangé).
+Aucun crate nouveau : le `Dockerfile`, qui recopie la liste des manifestes, ne change pas.
+
+### 14.3 La table commune
+
+#### 14.3.1 Production, au banc
+
+1. **Rapport** : `VariantMeta` gagne `class_meters: ClassMetersOut { pooled: Vec<TypeMeters> }` (trois entrées, ROAD, GRAVEL,
+   MTB), `TypeMeters { ride: String, real_m: Vec<f64>, gen_m: Vec<f64>, loops: u32, pairs: u32 }` : le `ClassMeters::of` de la
+   variante (déjà calculé pour `l1_after`), **toutes équipes réunies, jamais par équipe**. Un agrégat de 72 nombres par type.
+2. **Rejeu de la chaîne commune** (réglages de la campagne 2) :
+   `$B likeness --label lot4-3b-commune --holdout-share 0.25 --variants base,rc:0.5+n:3` (~18 min, RSS ~17 Gio). Contrôle
+   (affiché au résumé et **arrêt** du rejeu s'il échoue, comme le contrôle « `base` = 4a » : le banc aurait changé) :
+
+   | variante | empreinte | `taste_xxh3` |
+   |---|---|---|
+   | `base` | `4686c904975302e7` | `2d06800538d394c2` |
+   | `rc05-p1` | `a123cb82e6b36fc1` | `40c8278314911d91` |
+   | `rc05-p2` | `ad57882c3ed75c10` | `2f57dc10b00d143d` |
+   | `rc05-p3` | `2c563b8bbe8059ae` | `66ee08d3eb9c910c` |
+
+   Constantes `RECAL_EQUIPE_*` à côté de `BASE_4A_FINGERPRINT` ; le contrôle s'applique si les réglages sont ceux du 4a hormis
+   la part mise à l'écart (`at_4a_defaults_but_holdout_share`) et `holdout_share == 0.25`.
+3. **Export** : nouvelle sous-commande
+   `$B taste-common --report G/lot4/lot4-3b-commune-rc05-p3-report.json --base G/lot4/lot4-3b-commune-base-report.json
+   --expect-xxh3 66ee08d3eb9c910c --min-loops 50 --out crates/ord-loops/src/taste_common.rs` :
+   - `q8` : les trois tables `source = recalé`, `overlay = full` ; refus si leur `xxh3` (même calcul que `taste_xxh3`)
+     n'est pas `--expect-xxh3` ;
+   - un type dont `class_meters.pooled.loops < --min-loops` (MTB : 4) devient **neutre** (256 partout) et prend ses mètres
+     générés dans le rapport de `base` (jouée à table neutre) ;
+   - `R[t][c] = round(gen_m[c] / loops × 10)`, décimètres générés par boucle (les deux curseurs sommés, convention
+     `G_P / N_P` du §13.2.4), `u32` ;
+   - table normalisée : `M̄_t = Σ_c R[t][c] · q8[t][c] / Σ_c R[t][c]` (en 256es), `q8n[t][c] = clamp(round(256 ·
+     q8[t][c] / M̄_t), 64, 1 024)` ; inchangée si `Σ R = 0` ; c'est la fonction `profile::learn::normalize_q8` (§14.5.4),
+     la même que l'apprentissage ;
+   - fichier Rust écrit, **généré, à ne pas modifier à la main**, avec en tête la provenance (label, variante, empreinte,
+     `taste_xxh3`, part mise à l'écart 0,25, apprise sur les boucles non mises à l'écart, commit du banc, date ; aucune donnée
+     privée) :
+
+     ```rust
+     pub const COMMON_Q8: [[u16; TASTE_CLASSES]; 3];
+     pub const COMMON_Q8_NORMALIZED: [[u16; TASTE_CLASSES]; 3];
+     /// Décimètres générés par boucle sous `COMMON_Q8` (les deux curseurs), par type et par classe : le `R` du mélange.
+     pub const COMMON_GEN_DM_PER_LOOP: [[u32; TASTE_CLASSES]; 3];
+     pub const COMMON_LOOPS: [u32; 3];
+     pub const COMMON_SOURCE: &str;
+     ```
+4. C'est un agrégat de 72 nombres par type : il est commité.
+
+#### 14.3.2 Dans le moteur
+
+- `cost.rs` : `mod taste_common;` ; `Taste::common_raw()`, `Taste::common_normalized()`, et **`Taste::common()`** qui rend
+  l'une ou l'autre selon la constante `COMMON_USE_NORMALIZED: bool` (posée par la règle du §14.12.4, `false` jusque-là) ;
+  `pub fn common_gen_dm_per_loop() -> &'static [[u32; TASTE_CLASSES]; 3]`. Entiers seulement : même résultat natif et WASM.
+- `engine.rs` : `Params` gagne `pub base_taste: Taste`, défaut `Taste::common()`. `Engine::base_weight(&self, ride, a, len)
+  -> u32` = `cost::taste_weight(ride, a, len, &self.params.base_taste.q8[ride.index()])` (`#[inline]`). Avec
+  `Taste::neutral()`, c'est exactement `edge_weight` (§12.0 point 4).
+- Les trois appels du point 2 du §14.0 passent par `base_weight` : `window.rs` (`self.base_weight`), `team.rs` (branche
+  `None` de `build_with_taste` : `e.base_weight`), `search.rs` (`Weighter::edge`, branche `None` : `eng.base_weight`).
+  `cost::edge_weight` reste (référence des tests), le moteur ne l'appelle plus.
+- `WindowTeam::estimate_bytes(win, with_taste: bool)` : 4 octets de plus par chaîne et par type servi avec un goût ;
+  `bytes()` les comptait déjà.
+- Rien d'autre : format des fenêtres, cache, relaxation, contrôleur inchangés. En strict, le poids de base s'applique
+  mécaniquement (il ne change que les poids relatifs des arêtes d'équipe, pas le réseau strict).
+- Coût : `taste_class` par lien et par type à la construction d'une fenêtre ; temps de construction mesuré (§14.13 point 5).
+
+#### 14.3.3 Références figées et tests dorés, re-bénis en le disant
+
+- `tests/fixtures/window_reference.txt` est **renommée** `window_reference_192.txt` et rejouée par un test avec
+  `Params { base_taste: Taste::neutral(), ..scenario_params() }`, **sans** re-bénédiction : la preuve que le changement ne
+  fait rien d'autre que la table.
+- Un nouveau `window_reference.txt` est béni avec le défaut (`C`), `ORD_LOOPS_BLESS=1` ; le message du commit le dit, avec le
+  nombre de requêtes dont la sortie change.
+- `team_reference.txt` (`TeamData`) et `ord-loops-check/tests/fixtures/team_check_reference.txt` **ne doivent pas changer**
+  (aucun poids) : s'ils changent, c'est un défaut.
+- Les autres tests qui figent des poids ou des parcours (`ord-loops`, `ord-server`) : `base_taste: Taste::neutral()` quand le
+  test porte sur l'arithmétique ou la non-régression de 1.9.2, re-bénédiction quand il fige une sortie du service ; chacun
+  est nommé dans le message du commit.
+- Banc : `likeness` ouvre toujours le moteur à poids de base neutre (l'empreinte de `base` aux réglages du 4a reste
+  `55c3b065dc085f42`) ; les autres sous-commandes prennent `--base-taste neutral|common`, défaut `neutral`.
+
+### 14.4 Les boucles d'apprentissage au dépôt (`ord-graph-match`)
+
+#### 14.4.1 Code déplacé du banc (sans effet)
+
+- `likeness/walk.rs` entier (`Leg`, `Join`, `Walk`, `Trace`, `from_pieces`, `from_route`, `to_route`, `trace`, `start_latlon`,
+  `haversine_len`) → `ord_graph_match::walk` ; les fonctions planes qu'il utilise et celles de `bearing_of` (`Pt`, `dist`,
+  `length`, `cumulative`, `barycentre`, `heading_deg`) → `ord_graph_match::plane` ; `measure::class_lengths` →
+  `walk::class_lengths`. Le `shape.rs` du banc les réexporte (`pub use`) : rien d'autre ne change dans le banc.
+- `export::judge` est coupé en deux : la partie pure, sur `(ty, excluded, readable, total_m, matched_m, pieces)`, devient
+  `profile::collect::judge_pieces(gf, &RetainParams, …) -> Result<(Walk, Trace), Refusal>` (avec `Refusal` et
+  `RetainParams`) ; le `judge` du banc l'appelle.
+- `play::bearing_of` et le corps de `play::request_of` → `profile::collect::loop_request(start: (f64, f64), bearing,
+  distance_m, ty: u8, mode: Mode, familiarity: f32, off_team_cost_q8: u32, seed: u64) -> Request` ; le banc l'appelle avec
+  `id_hash ^ seed` et `cursor::apply`, comme aujourd'hui.
+- Contrôle : `$B likeness --teams C --limit 5 --label 3b-refacto` rend la même empreinte qu'au commit précédent ; les tests
+  de `walk.rs` partent avec le code et passent sans changement.
+
+#### 14.4.2 Le collecteur
+
+```rust
+pub struct RetainParams { pub min_matched: f64, pub max_hole_m: f64, pub min_km: f64, pub max_km: Option<f64>, pub loop_gap: f64 }
+// Défauts du banc : 0,95 ; 1 000 ; 5 ; None ; 0,05. Le service passe max_km = distance_m_max / 1 000 (200).
+pub enum Cap { Team(usize), PerType(usize), None }
+pub struct LearnLoop {
+    pub key: u64, pub ty: u8,
+    pub start: (f64, f64), pub bearing: Option<Bearing8>, pub distance_m: f64,
+    /// Mètres du réel par classe de goût (`walk::class_lengths`).
+    pub real_m: [f64; TASTE_CLASSES],
+}
+pub struct LoopCollector { /* params, cap, tas, décomptes */ }
+impl LoopCollector {
+    pub fn new(params: RetainParams, cap: Cap) -> Self;
+    pub fn offer(&mut self, gf: &MappedGraph, ty: u8, excluded: bool, readable: bool,
+                 total_m: f64, matched_m: f64, pieces: &[Piece]);
+    pub fn finish(self) -> LearnSet;
+}
+pub struct LearnSet { pub loops: Vec<LearnLoop> /* triées par (key, ty) */, pub counts: CollectCounts }
+```
+
+- **Retenue** : `judge_pieces`, dans l'ordre des refus du banc (exclue, illisible, type > 2, part appariée < 0,95, vide,
+  trou > 1 000 m, D < 5 km, pas une boucle, D > `max_km`). Une boucle retenue donne `key`, départ (`start_latlon`), cap
+  (`bearing_of`), `distance_m = max(round(d_graph / 1 000), 1) × 1 000`, `real_m` ; la marche et la trace sont lâchées.
+- **Empreinte** `key = xxh3_64` des octets : `b"ordp/loop/v1"`, `ty`, puis par jambe `edge` (`u32` LE), `reverse` (`u8`),
+  `lo.to_bits()`, `hi.to_bits()` (`u64` LE), puis par jonction une étiquette (0 nœud, 1 contact, 2 trou) et le nœud (`u32`)
+  ou `trou.to_bits()`. Deux boucles de même empreinte ont la même marche, donc la même requête et le même `real_m`.
+- **Tirage** : un tas max sur `(key, ty)` ; au-delà du plafond, la plus grande part. `Cap::Team(n)` : un tas ; `Cap::PerType(n)`
+  : un par type ; `Cap::None` : tout. Le résultat est **le même quel que soit l'ordre des lignes** (test 8 du §14.11) : ni
+  « les 500 premières », ni un hasard non reproductible.
+- **Dans `Deposit`** : `Deposit::with_collector(gf, idx, poly, memo, collector)` ; par trace, `add_edge` accumule `total_m`,
+  `matched_m` et `pieces` **exactement** comme `export::track_match` (`trv` NaN → `glen` ; `total_m += trv` pour toute arête ;
+  sur `Counted`, `matched_m += trv` et `pieces.extend(chain.pieces)`) ; `end_track` appelle `offer` puis vide ; `push_track`
+  et `push_matched` passent `excluded` et la lisibilité. `finish()` est inchangée ; `finish_learn(self) -> (Vec<u32>,
+  Vec<u16>, DepositStats, Option<LearnSet>)` rend aussi les boucles. Sans collecteur, les tableaux de surcouche sont les
+  mêmes octet pour octet (l'outil `ord-graph-overlay` ne change pas).
+- **Mémoire** : au plus 500 × ~700 o, plus la marche de la trace en cours.
+
+### 14.5 L'apprentissage (`ord_graph_match::profile::learn`)
+
+#### 14.5.1 Paramètres et table commune
+
+```rust
+pub struct LearnParams {
+    pub gamma: f64,        // 0,5
+    pub steps: u8,         // 3
+    pub m: f64,            // 0,5 (lissage de ratio_table)
+    pub step_bound: f64,   // 3 : g dans [1/3, 3] par pas
+    pub mult_bound: f64,   // 4 : multiplicateur cumulé dans [1/4, 4]
+    pub n0: f64,           // 25
+    pub sign_eps: f64,     // 0,02 : |ln ĝ| en deçà, pas de changement de signe
+    pub normalize: bool,   // COMMON_USE_NORMALIZED
+    pub cap: Cap,          // Team(500)
+    pub cursors: [u32; 2], // centièmes : 25 et 100
+    pub seed: u64,         // 20 261 117
+    pub retain: RetainParams,
+}
+impl LearnParams { pub fn hash(&self) -> u64; } // xxh3 d'un texte canonique "ordp/learn/v1;gamma=0.5;…" de tous les champs
+pub struct Common { pub q8: [[u16; TASTE_CLASSES]; 3], pub gen_dm_per_loop: [[u32; TASTE_CLASSES]; 3] }
+impl Common { pub fn engine(normalized: bool) -> Self; pub fn hash(&self) -> u64; } // xxh3 des q8 puis des R, petit-boutiste
+```
+
+#### 14.5.2 L'état et le pas
+
+État par type `t` : `mult[c] = C.q8[t][c] / 256` (exact en `f64`), `gamma[c] = γ`, `sign[c] = 0`. Table jouée au pas 1 :
+`C` elle-même, donc le service sans profil.
+
+**Pas `k` = 1 à `steps`** (le pas `k` joue la table `T_{k−1}`, `T_0 = C`, et rend `T_k` ; trois pas = trois générations, `C`,
+`T_1`, `T_2`, comme `base`, p1, p2 au §8.1 du relevé) :
+
+1. **Requêtes** : pour chaque boucle de `LearnSet` dans l'ordre (empreinte croissante), pour chaque curseur dans l'ordre,
+   `loop_request(…, cursor::apply(h), seed = key ^ p.seed)` ; les types sans boucle n'ont pas de requête.
+2. **Jeu** : `player.play_all(&reqs, &taste)` (§14.5.3).
+3. **Mètres**, dans le même ordre, par type : pour chaque paire dont le jeu rend des mètres, `real[c] += real_m[c]`,
+   `gen[c] += gen_m[c]`, `pairs += 1` ; une boucle avec au moins une paire compte dans `loops` (`N`).
+4. Pour chaque type de `N > 0` (sinon sa table reste celle du pas précédent, `C` au départ) :
+   - `g = ratio(real, gen)` : neutre (1 partout) si `Σ real ≤ 0` ou `Σ gen ≤ 0` ; sinon `p_n = real / Σ real`, `p_d = gen /
+     Σ gen`, `g = (p_n + m · p_d) / ((1 + m) · p_d)` borné à `[1 / step_bound, step_bound]`, `g = 1` si `p_d = 0` (la
+     `ratio_table` du banc à `min_km = 0`, même expression, même ordre d'opérations) ;
+   - `w[c] = 0` si `gen[c] ≤ 0` ; sinon `min(gen[c] / (gen[c] + n0 · R[c]), N / (N + n0))`, `R[c] =
+     C.gen_dm_per_loop[t][c] / 10` (mètres par boucle) ;
+   - `ĝ[c]` = 1 si `w ≤ 0` ; `g[c]` si `w ≥ 1` ; sinon `exp(w · ln g[c])` ;
+   - amortissement : `u = ln ĝ[c]` ; `s = 0` si `|u| < sign_eps`, sinon le signe de `u` ; si `s ≠ 0`, `sign[c] ≠ 0` et
+     `s ≠ sign[c]` : `gamma[c] /= 2` ; si `s ≠ 0` : `sign[c] = s` (le `ParamState::damp` du banc) ;
+   - `mult[c] = (mult[c] * ĝ[c].powf(-gamma[c])).clamp(1 / mult_bound, mult_bound)` ;
+   - si `normalize` : `M̄ = Σ_c gen[c] · mult[c] / Σ_c gen[c]` (rien si la somme est nulle), `mult[c] = (mult[c] /
+     M̄).clamp(1 / mult_bound, mult_bound)` ;
+   - `q8[c] = (256 · mult[c]).round().clamp(1, 65 535) as u16` (dans `[64, 1 024]` de fait).
+5. **Diagnostics** par type : `loops`, `pairs`, `N / (N + n0)`, `l1_gap = Σ |p_n − p_d|`, `mean_mult = Σ p_d · mult`,
+   paramètres dont γ a été divisé, γ minimal, classes à la borne.
+
+**Propriétés voulues** : une équipe sans donnée d'un type (`N = 0` ou `gen = 0`) garde `C` **au bit près** ; un ensemble vide
+rend `C` sans aucun jeu ; avec `C` neutre et `n0 = 0`, un pas est le `step72` du banc sur `ratio_table(min_km = 0)` (test 10c).
+
+```rust
+pub struct Learned { pub taste: Taste, pub steps_done: u8, pub loops: [u32; 3], pub pairs: [u32; 3],
+                     pub plays: u64, pub diag: Vec<StepDiag> }
+pub fn learn(set: &LearnSet, cursors: &[(Mode, f32, u32)], player: &dyn Player, common: &Common,
+             p: &LearnParams) -> Learned;
+```
+
+Les curseurs arrivent **déjà appliqués** (`ord-graph-match` ne dépend pas d'`ord-server` : l'appelant passe
+`cursor::apply(h)` pour `h` de `p.cursors`). **Partiel** : si `play_all` rend `Err(Stopped)` au pas `k`, le résultat est
+`T_{k−1}`, `steps_done = k − 1` ; `loops` et `pairs` sont ceux du dernier pas fini.
+
+#### 14.5.3 Le joueur
+
+```rust
+pub struct Stopped;
+pub trait Player: Sync {
+    /// Joue chaque requête avec `taste` passé au crochet (`WindowTeam::build_with_taste(…, Some(taste))`) sur la surcouche
+    /// du dépôt ; une `WindowEscape` est rejouée une fois en fenêtre élargie ; les parcours rendus passent au contrôleur
+    /// indépendant dans l'ordre du moteur ; rend les mètres par classe du premier gardé, `None` sinon. Pas de budget de
+    /// temps par requête. Le résultat `i` est celui de `reqs[i]`, quel que soit le nombre de fils.
+    fn play_all(&self, reqs: &[Request], taste: &Taste) -> Result<Vec<Option<[f64; TASTE_CLASSES]>>, Stopped>;
+}
+/// Le premier parcours gardé : `walk::class_lengths` de `Walk::from_route`. Partagé par tous les joueurs.
+pub fn first_kept_class_meters<B: AsRef<[u8]>>(gf: &MappedGraph, checker: &Checker<'_, B>, req: &Request,
+                                               g: &Generation) -> Option<[f64; TASTE_CLASSES]>;
+/// Joueur de référence : un fil, fenêtre entière par requête. Pour les tests du service et du banc.
+pub struct FlatPlayer<'a, B> { /* engine, TeamData, Checker */ }
+```
+
+Deux autres joueurs : `ServicePlayer` dans `ord-server` (§14.7.3) et `BenchPlayer` dans le banc (§14.12.2). Tous rendent les
+mêmes résultats que `FlatPlayer` (tests 23) : c'est ce qui fait du banc un juge du chemin du service.
+
+#### 14.5.4 Normalisation, déterminisme
+
+- `pub fn normalize_q8(q8: &[u16; TASTE_CLASSES], weights: &[f64; TASTE_CLASSES], bound: f64) -> [u16; TASTE_CLASSES]` : la
+  normalisation de `C` par l'outil d'export (poids `R`). Le pas normalise les `mult` en `f64` (étape 4), pas les `q8`.
+- Sommes séquentielles dans un ordre fixé, `f64` dans l'apprentissage seulement, `q8` entiers en sortie, parallélisme
+  seulement dans le joueur, à résultats indexés : **même binaire, même machine → mêmes octets, quel que soit le nombre de
+  fils**. D'une plateforme à l'autre, `ln`, `powf` et `exp` de la libm peuvent différer d'une unité du dernier rang : un `q8`
+  peut alors différer de 1, rarement. Accepté : le profil est calculé là où il est servi.
+
+### 14.6 Le fichier de profil
+
+**Nom** `<team>.ordp.enc`, à côté de `<team>.ordo.enc` (`graph-<id>/<ns>/`) ; temporaire `<team>.ordp.tmp-<16 hex>`.
+
+**En clair, format 1** (`ord_graph_match::profile::format`) :
+
+```
+u32 LE                longueur du JSON
+JSON                  ProfileMeta { format: 1, learned_at: i64, overlay_deposited_at: i64, common: "<16 hex>",
+                                    learn: "<16 hex>", engine: "1.10.0", steps: u8, loops: [u32; 3], pairs: [u32; 3],
+                                    normalized: bool }
+3 × 72 × u16 LE       q8 (ROAD, GRAVEL, MTB)
+```
+
+- **Lecture** : `Incompatible(Format)` si le JSON est illisible, `format ≠ 1`, la longueur des tables ≠ 432 octets ou un
+  `q8` nul ; `Incompatible(Settings)` si `common ≠ Common::engine(normalize).hash()`, si `learn ≠ LearnParams` courants (dont
+  le plafond du réglage) ou si `steps = 0` alors que `loops ≠ [0, 0, 0]` (jamais écrit, refusé quand même).
+- **Chiffrement** : `Credentials::seal_with(magic, graph_id, plain)` / `open_with`, avec `MAGIC_PROFILE = b"ORDPENC1"` ;
+  `seal` / `open` deviennent des appels avec `MAGIC` (`ORDOENC1`), octet pour octet comme aujourd'hui. Octet de version de
+  l'enveloppe : 1. Même clé, même nonce aléatoire.
+- **Taille** : ~0,7 Ko. Un format 2 (formes du 4c, destinations du 4d) montera `format` ; un format inconnu est
+  `Incompatible(Format)` : table commune et `stale` raison `profile` (§14.8), jamais effacé à la lecture.
+
+### 14.7 Le dépôt dans le service
+
+#### 14.7.1 Phases
+
+1. **Appariement**, comme aujourd'hui, dans la place de dépôt, avec `Deposit::with_collector(…, LoopCollector::new(retain,
+   cap))` si les profils sont actifs (`retain.max_km = distance_m_max / 1 000`).
+2. Après la ligne de fin : `finish_learn`, encodage `ordo`, `Overlay::decode_for(&ordo, identity)` ; l'index d'appariement
+   (`CellIndex` ou `SegIndex`) et la mémoïsation sont lâchés.
+3. **La place de dépôt est rendue** : le `OwnedSemaphorePermit` passe dans `Worker` et y est lâché ici. Le verrou de l'équipe
+   reste tenu jusqu'à la réponse (aucun second dépôt de l'équipe ; l'environnement ne peut toujours pas tenir deux places).
+4. **Phase de profil** (profils actifs et au moins une boucle retenue) :
+   - échéance = min(début de la phase + `profile.budget_s`, échéance du dépôt − 30 s) ;
+   - une place `profile_slots` (`profile.max_concurrent`) prise depuis le fil bloquant, attente bornée par l'échéance et
+     coupée par `stopping` (`Handle::block_on` sous `timeout`, ou `try_acquire` toutes les 50 ms) ; pas de place à
+     l'échéance : issue `skipped` ;
+   - `TeamData` et `TeamCheck` de la **nouvelle** surcouche, comme `ready_build` (réservation `reserve_build` des deux plans,
+     constructions en parallèle, réservation rendue), puis `hold_team(octets)` sous un numéro neuf, rendu en fin de phase ;
+     `TeamZoneEscape` : issue `skipped` ;
+   - `learn(…, &ServicePlayer, &Common::engine(normalize), &params)` ;
+   - les agrégats d'équipe au goût de chaque pas sont lâchés (`drop_team`).
+5. **Écritures** (§14.7.4), puis réponse.
+
+Ensemble vide (aucune boucle retenue : équipe hors région, que des allers simples…) : aucun jeu, profil = `C`, `steps = 0`,
+`loops = [0, 0, 0]`, écrit (l'état devient `ready`, le backend ne redépose pas pour rien).
+
+#### 14.7.2 Réglages `generator.profile`
+
+| Clé | Défaut | Rôle |
+|---|---|---|
+| `enabled` | `true` | `false` : ni collecteur, ni profil écrit, ni lu ; l'état n'est jamais `stale` raison `profile` |
+| `threads` | 4 | fils du joueur, de 1 à 16 |
+| `max_concurrent` | 1 | places de profil, tous environnements |
+| `budget_s` | 720 | budget de la phase, sous `deposit.budget_s` |
+| `max_loops` | 500 | plafond (dans `learn`) |
+| `per_type` | `false` | plafond par type au lieu de par équipe (dans `learn`) |
+
+Validation comme `deposit` (`config.rs`) ; variables `ORD_GENERATOR__PROFILE__*`. La normalisation n'est pas un réglage :
+elle va avec `C` (`COMMON_USE_NORMALIZED`).
+
+#### 14.7.3 Le joueur du service (`generator/profile.rs`)
+
+- `ServicePlayer { ready, team: &TeamData, check: &TeamCheck, threads, stop }` ; à chaque `play_all`, un numéro d'agrégat neuf
+  (`NEXT_SERIAL`) pour la table jouée, `threads` fils (`std::thread::scope`), un indice partagé (`AtomicUsize`), un
+  `Workspace` par fil (`take_workspace` / `give_workspace`), résultats rangés par indice.
+- Une requête : `engine.plan_with(req, window_radius_step_m, extra)` → `windows.acquire(engine, &plan, Some(TeamRef { serial,
+  data, taste: Some(taste) }), échéance, stop)` → `generate_in` ; `WindowEscape` : une reprise avec `extra =
+  longest_chain_m(vi) + 10 000` (la règle de `generate_windowed`) ; contrôleur construit comme dans `generate.rs`
+  (`Checker::with_tables`) → `first_kept_class_meters`.
+- `AcquireError::Overloaded` : le joueur **attend** et reprend jusqu'à l'échéance (le profil n'est pas une requête
+  d'utilisateur) ; échec du moteur : `None` ; panique : attrapée (`catch_unwind`, comme le banc), `None`, compteur
+  `ord_profile_play_panics_total` (attendu à 0).
+- Fin de `play_all` : `windows.drop_team(serial)` (nouvelle méthode de `WindowManager`, sur `WindowCache::drop_team`).
+- `stop` = `stopping` ou échéance dépassée : `Err(Stopped)`.
+
+#### 14.7.4 Écritures, ordre, échecs
+
+`Store::commit_with_profile(c, meta, ordo, profile: Option<&[u8]>)` (`commit` l'appelle avec `None`) :
+
+1. scelle la surcouche et, s'il y en a un, le profil (`MAGIC_PROFILE`) ;
+2. quota : surcouche comme aujourd'hui, **plus** les octets du profil (les octets d'un espace comptent désormais les
+   `.ordp.enc` ; le nombre de surcouches ne les compte pas) ;
+3. profil : temporaire, `fsync`, `rename` vers `<team>.ordp.enc` ;
+4. surcouche : temporaire, `fsync`, `rename` (le crochet `fail_commit` agit ici, après le profil) ;
+5. `fsync` du dossier, `forget`, jauges.
+
+| Issue du profil | Fichier écrit | Ancien profil |
+|---|---|---|
+| `learned` (3 pas) | oui | remplacé |
+| `partial` (1 ou 2 pas : budget, arrêt du service) | oui, `steps` < 3 | remplacé |
+| `empty` (aucune boucle) | oui (`C`, `steps = 0`) | remplacé |
+| `skipped` (aucun pas fini : pas de place, budget au pas 1, arrêt, échappement de construction) | non | gardé s'il existe |
+| profils désactivés | non | gardé, non lu |
+
+La surcouche est écrite dans **tous** les cas où elle l'est aujourd'hui : un échec du profil ne fait jamais échouer un dépôt.
+
+#### 14.7.5 Rapport, journaux, métriques
+
+- `DepositReportV1` gagne `profile: Option<DepositProfileV1>` (absent si désactivé) : `{ outcome: learned | partial | empty |
+  skipped, steps: u8, loops: u32, plays: u64, seconds: f64 }`.
+- Journal `info` (`ns8` seulement) : issue, pas, boucles par type, jeux, durées (attente de place, phase), et par pas et
+  par type `l1_gap` et `mean_mult` (agrégats). Jamais de coordonnée, de clé, de nom.
+- Métriques : `ord_profile_builds_total{outcome}`, `ord_profile_build_seconds`, `ord_profile_slot_wait_seconds`,
+  `ord_profile_plays_total`, `ord_profile_play_panics_total`, jauge `ord_profiles_stored`.
+
+#### 14.7.6 Mémoire
+
+Tout ce que la phase tient de gros passe par le budget unique (`memory_budget_mb`) : fenêtres, agrégats d'équipe au goût
+(`estimate_bytes(win, true)`), quatre espaces de travail de plus, `TeamData` et `TeamCheck` de la nouvelle surcouche
+(`reserve_build`, puis `hold_team`). Hors budget : l'ensemble d'apprentissage (≤ 1 Mo), les résultats (≤ 1 000 × 576 o) et
+les mètres. [estimé] Pic anonyme : celui du lot 6 à 4 clients (1,1 Go) plus ~0,1 Go ; mesuré au §14.13. Une phase de profil
+de jour (dépôt manuel par l'administration) peut prendre des places du budget aux générations et faire monter les 503 :
+accepté, signalé.
+
+### 14.8 Lecture en service, repli, état
+
+- `Entry` gagne `profile: Option<Taste>` et `profile_id: Option<FileId>` ; `cached()` compare l'empreinte de la surcouche
+  **et** celle du profil (absent compris) : un profil remplacé recharge l'entrée.
+- `ready_build`, après la surcouche : `read_profile(c) -> ProfileRead { Present(Taste, ProfileMeta), Absent,
+  Incompatible(Kind) }` (un déchiffrement qui échoue est `Incompatible(Format)`) ; `Present` → `Some`, sinon `None`. **Jamais**
+  d'effacement à la lecture (un format plus récent peut venir d'une autre instance pendant un retour arrière).
+- `WindowManager::acquire` reçoit `TeamRef { serial, data, taste: Option<&Taste> }` et construit
+  `WindowTeam::build_with_taste(engine, &win, data, taste)` ; la clé (fenêtre, numéro) reste juste (un profil par entrée).
+  Sans profil : `build` (poids de base `C`). Sans équipe : `w_osm` de la fenêtre (`C`).
+- `status(c)` : l'état de la surcouche d'abord, comme aujourd'hui ; s'il est `Ready` et que les profils sont actifs : profil
+  `Present` → `Ready`, sinon **`Stale(StaleReason::Profile)`**. Les raisons `graph` et `matcher` priment.
+- `ready()` **ne rend jamais** `Stale(Profile)` : un profil absent ne bloque aucune génération (pas de 409). Dans
+  `generate.rs`, le bras `StaleReason::Profile` est écrit pour l'exhaustivité, commenté « jamais rendu par `ready()` », et un
+  test le tient.
+- Contrat : `StaleReasonV1::Profile` (`"profile"`) ; `OverlayStatusV1.profile: Option<ProfileStatusV1 { state: present |
+  absent | incompatible, learned_at, steps, loops }>` (absent si la surcouche l'est ou si les profils sont désactivés) ;
+  `GenerateResponseV1.taste: common | team` (`team` si l'entrée de l'équipe porte un profil). Doc de `OverlayStateV1::Stale`
+  : « … or without a usable taste profile ».
+
+### 14.9 Purge, suppression, quotas, déploiement roulant
+
+Store de 1.10 :
+- `PROFILE_EXT = "ordp.enc"` ; `is_profile_name` : finit par `.ordp.enc` et ne contient pas `.tmp-` ; `is_overlay_name`
+  inchangé (ne reconnaît pas un profil).
+- **Purge du graphe courant** : temporaires et surcouches comme aujourd'hui (la règle des temporaires couvre ceux du
+  profil) ; un profil part s'il est plus vieux que le TTL, **ou** s'il n'a pas de `<team>.ordo.enc` voisin et date de plus de
+  `TMP_MAX_AGE` (1 h : orphelin d'une suppression par une 1.9.x, ou d'un premier dépôt dont la surcouche n'a pas pu s'écrire).
+  `PurgeReport` gagne `profile_ttl` et `profile_orphan` (raisons de `ord_overlay_purged_total`). Autres graphes : inchangé.
+- `delete(c)` retire les deux fichiers sous tous les graphes ; `delete_namespace` inchangé.
+- Quotas : octets d'un espace = surcouches + profils ; nombre de surcouches inchangé.
+
+| Pendant un déploiement roulant ou un retour arrière | Ce qui se passe |
+|---|---|
+| purge d'une 1.9.x (démarrage ou périodique) | profil gardé (point 8 du §14.0) ; temporaire d'un profil effacé seulement après 300 s ou 1 h (son écriture dure des millisecondes) |
+| génération par une 1.9.x | surcouche lue, profil ignoré : `K` brut, le temps du déploiement |
+| dépôt reçu par une 1.9.x | surcouche nouvelle, ancien profil gardé ; 1.10 le sert (taste de l'équipe, un peu ancien) et dit `ready` |
+| suppression par une 1.9.x | profil orphelin, retiré par la première purge de 1.10 après 1 h |
+| profil d'un format plus récent lu par 1.10 | `Incompatible(Format)` : `C`, `stale` raison `profile`, fichier gardé ; le redépôt de la nuit le réécrit en format 1 |
+| premier démarrage de 1.10 | toutes les surcouches `stale` raison `profile` : le backend redépose tout la nuit suivante (~10,5 min de profils par environnement [calculé]) ; les générations servent `C` d'ici là |
+
+**Conclusion** : aucune parade nécessaire ; les deux conditions du point 8 du §14.0 sont tenues par un test (15).
+
+### 14.10 Versions, contrat, changelog
+
+- Paquet 1.9.2 → **1.10.0** (espace de travail), `API_VERSION` `"1.9"` → **`"1.10"`**, calés comme jusqu'ici. Le moteur
+  change de comportement (poids de base `C`) : le message du commit et le changelog le disent.
+- Contrat : **ajouts seulement** (§14.7.5, §14.8) ; `contract/openapi.json` régénéré par le test `contract` existant ;
+  `/v1/capabilities` inchangé.
+- `CHANGELOG.md` à la racine, à partir de 1.10.0 (rubriques « Ajouté », « Changé », « Compatibilité » : déploiement roulant
+  sûr, backend inchangé, première nuit de redépôt complet ; une ligne renvoie aux notes pour les versions antérieures).
+
+### 14.11 Tests (synthétiques, aucune donnée de production)
+
+**`ord-loops`**
+1. Table commune : tous les `q8` dans `[64, 1 024]`, MTB neutre, empreintes figées de `COMMON_Q8` et `COMMON_Q8_NORMALIZED`,
+   `Taste::common()` égal à la table choisie par `COMMON_USE_NORMALIZED`.
+2. Poids de base neutre → `window_reference_192.txt` **sans** re-bénédiction ; défaut → `window_reference.txt` re-bénie.
+3. **Neutralité du chemin sans profil vis-à-vis de la table commune**, sur le scénario de référence (deux zooms, trois modes,
+   avec équipe) : (a) moteur `C` + `build(None)` ≡ moteur neutre + `build_with_taste(Some(&Taste::common()))` : mêmes
+   `ChainTeam`, `w_osm` = `w_taste` chaîne par chaîne, mêmes sorties (`Debug`) ; (b) moteur `C` + `build(None)` ≡ moteur `C`
+   + `build_with_taste(Some(&Taste::common()))` ; (c) sans équipe : `w_osm` d'une fenêtre du moteur `C` = Σ `taste_weight(C)`
+   de ses liens.
+4. `base_weight` à table neutre = `edge_weight` (toutes classes, longueurs du test 2 du §12.8).
+5. `estimate_bytes(win, true)` ≥ `bytes()` d'un `WindowTeam` construit avec un goût.
+6. `team_reference.txt` inchangée.
+
+**`ord-graph-match`**
+7. Les tests de `walk.rs` déplacés passent tels quels.
+8. Collecteur : chaque refus du banc sur des morceaux synthétiques ; `Cap::Team(n)` garde les `n` plus petites empreintes
+   quel que soit l'ordre d'arrivée (trois ordres mélangés → même `LearnSet`) ; `Cap::PerType` ; empreinte égale pour deux
+   marches égales, différente pour la marche inverse ; le tas ne dépasse jamais le plafond.
+9. `Deposit` avec collecteur : tableaux de surcouche identiques à ceux sans collecteur ; `push_track` et `push_matched`
+   rendent le même `LearnSet`.
+10. Apprentissage avec un joueur jouet (`gen ∝ disponible · mult^−ε`, comme le test 4 du §13.9) : (a) `w = 0` → `q8` = `C`
+    au bit près ; (b) ensemble vide → `C`, `steps_done = 0`, joueur jamais appelé ; (c) dans le banc (qui a `chain.rs`) :
+    `C` neutre, `n0 = 0`, un pas → les `q8` de `step72(ratio_table(min_km = 0))` ; (d) trois pas : `l1_gap` final sous la
+    moitié de l'initial, γ de la classe élastique divisé au pas 2 et pas les autres ; (e) `mult` toujours dans `[1/4, 4]` ;
+    (f) normalisé : `Σ gen · mult / Σ gen` = 1 à 1e-12 avant borne ; (g) joueur qui s'arrête au pas 2 → `steps_done = 1`,
+    table `T_1` ; (h) `R = 0` pour une classe → `w = N / (N + n0)`.
+11. Format : aller-retour en clair ; `format = 2` → `Incompatible(Format)` ; tables tronquées ; `q8` nul ; empreinte de `C` ou
+    de réglages différente → `Incompatible(Settings)`.
+12. `LearnParams::hash` change avec chaque champ ; `Common::hash` figée.
+
+**`ord-server`**
+13. Chiffrement : un profil scellé `ORDPENC1` ne s'ouvre pas comme surcouche, ni l'inverse ; les tests existants de
+    `seal` / `open` passent inchangés.
+14. Magasin : `commit_with_profile` puis `read_profile` → `Present`, mêmes `q8` ; `fail_commit` → profil nouveau, surcouche
+    ancienne, erreur de dépôt ; format inconnu → état `stale` raison `profile`, fichier gardé, génération à `C` ; profil
+    absent → `stale` raison `profile` ; désactivé → `ready` ; surcouche d'un autre graphe avec profil → `stale` raison
+    `graph`.
+15. Purge : profil au TTL ; orphelin de plus d'1 h retiré, de moins d'1 h gardé ; temporaire de profil retiré à son âge ;
+    **règles de 1.9.2 recopiées telles quelles dans le test** (`is_tmp_name`, `is_overlay_name` de `develop`) : aucune ne
+    reconnaît `<team>.ordp.enc`, la seconde ne reconnaît pas `<team>.ordp.tmp-…` ; `delete` retire les deux ; quota compte le
+    profil.
+16. Dépôt de bout en bout sur le graphe synthétique (`testkit`, `min_km` abaissé par un crochet de test caché) : profil
+    `learned`, 3 pas, fichier présent, état `ready`, génération `taste: team` ; aucune boucle → `empty`, `C`, `ready`.
+17. **Déterminisme** : le même dépôt avec `threads` 1 et 4 → mêmes `q8`, `loops`, `pairs` (le reste du JSON hors
+    `learned_at`).
+18. Budget minuscule → `partial` ou `skipped`, surcouche écrite, ancien profil gardé sur `skipped`.
+19. Place : une phase de profil retenue par un crochet de test n'empêche pas le dépôt d'un autre espace (pas de 503).
+20. Génération : équipe sans profil ≡ équipe dont le profil vaut `C` (mêmes parcours ; seul `taste` diffère).
+21. Contrat régénéré ; validation des réglages.
+
+**`ord-loops-bench`**
+22. `parse_variants` : `svc`, `common`, `norm`, `cap`, `capt` et leurs refus (§14.12.1).
+23. `BenchPlayer` ≡ `FlatPlayer` sur la fixture du banc ; `ServicePlayer` ≡ `FlatPlayer` sur le graphe synthétique du
+    service (test côté `ord-server`).
+24. Le test 10c.
+25. `taste-common` sur un rapport synthétique : refus d'empreinte, MTB neutralisé sous `--min-loops`, arrondi de `R`, table
+    normalisée, fichier qui compile (il est inclus par `ord-loops`).
+
+### 14.12 Le banc : chemin du service, normalisation, plafond
+
+#### 14.12.1 Variantes
+
+| Composant | Rôle | Nom |
+|---|---|---|
+| `common` | `C` (brute, ou normalisée avec `norm`) passée à toutes les équipes, deux surcouches | `common` |
+| `svc` | par équipe, le profil appris **par le code du dépôt** (§14.12.2), joué sur les deux surcouches | `svc` |
+| `norm` | avec `common` ou `svc` : `C` normalisée et pas normalisés | suffixe `-norm` |
+| `cap:<n>` | avec `svc` : plafond par équipe `n` (0 : aucun) ; défaut 500 | suffixe `-cap<n>` |
+| `capt:<n>` | avec `svc` : plafond par type `n` | suffixe `-capt<n>` |
+
+Refus (avant toute phase lourde) : `norm` sans `common` ni `svc` ; `cap` ou `capt` sans `svc` ; les deux ensemble ; `svc` ou
+`common` avec un autre goût, `fam` ou `famroad` ; noms en double. `base` reste requise plus tôt dans la liste (pour
+`S_base`).
+
+#### 14.12.2 Déroulé de `svc`
+
+Par équipe, dans l'ordre des lettres :
+1. **Dépôt d'apprentissage** : `holdout::build_overlay` avec un collecteur, sur les traces **non mises à l'écart** (la
+   surcouche « écart ») ; une équipe sans boucle mise à l'écart prend toutes ses traces (surcouche complète). Mêmes
+   `RetainParams` que le service (`max_km` 200).
+2. `TeamData` et contrôleur de cette surcouche (ceux que `build_team` fait déjà pour les jeux « écart »).
+3. `learn(set, cursors, &BenchPlayer { … }, &Common::engine(norm), &params)` : `BenchPlayer` joue par `SharedWindows` avec
+   une clé d'équipe neuve par pas (au-delà des `2t`, `2t + 1`), `drop_team` après chaque pas, `--threads` fils.
+4. Le profil sert aux jeux de l'équipe sur la surcouche complète (« toutes ») et sur la surcouche « écart » (« écart ») : la
+   structure de `rt` (une table par équipe pour les deux surcouches, apprise sans les boucles mises à l'écart), donc
+   comparable à `rt05-p3`. Différences connues : plafond, cible figée, surcouche d'apprentissage « écart » (plus honnête que
+   la complète de `rt`), D ≤ 200 km.
+
+`VariantMeta` gagne `svc: Option<SvcMeta>` : `common` et `learn` (empreintes), `cap`, `normalize`, et par équipe (lettre)
+boucles par type, `steps_done`, jeux, `learn_wall_s`, `learn_cpu_s` (Σ des ms des jeux), `est_4_threads_s` = `learn_cpu_s /
+4` [calculé], `l1_gap` et `mean_mult` par pas et par type. `taste_xxh3` couvre les tables `svc`.
+
+#### 14.12.3 Comparaison (`compare_svc.rs`, section « 3b » de `<label>-compare.{md,json}`)
+
+1. `S / S_base`, toutes équipes, groupes ROAD 0,25 · ROAD 1 · GRAVEL 0,25 · GRAVEL 1, lectures « toutes » et « écart » :
+   `rt05-p3`, `common`, `common-norm`, `svc`, `svc-norm`, `svc-cap0`, `svc-capt500`, et une ligne de rappel **seconde sonde**
+   (constantes) : `rt05-p3` toutes 0,244 · 0,195 · 0,371 · 0,259, écart 0,203 · 0,183 · 0,379 · 0,286 ; `rc05-p3` toutes
+   0,255 · 0,194 · 0,377 · 0,303.
+2. A et B, mêmes variantes, « toutes » et « écart » ; B ROAD en tête, rappel `rt05-p3` 0,80 · 0,93.
+3. Temps d'apprentissage par équipe ; estimation sur 4 fils contre le budget de 720 s.
+4. Service (§7 actuel) par variante ; `mean_mult` par type pour `C`, `C` normalisée et les profils de A et B.
+5. Lecture, en faits : la règle du §14.12.4 appliquée, et les points du §14.12.5.
+
+#### 14.12.4 Normalisation : la règle
+
+**Normalisée retenue** si, toutes équipes, lectures « toutes » et « écart », dans les 4 groupes, pour les deux paires
+(`common-norm` contre `common`, `svc-norm` contre `svc`) : `S / S_base` normalisée ≤ brute + 0,02 partout, **et** ≤ brute −
+0,02 dans au moins un groupe, **et** B ROAD (`svc-norm`, « toutes ») < 1,0 aux deux curseurs, **et** service pas pire (P50 ≤
+1,10 × brute à chaque curseur, part `OK` ≥ brute − 0,3 point, ni `PANIC` ni `WINDOW_ESCAPE`). **Sinon brute**, la
+configuration mesurée. Le codeur applique la règle, pose `COMMON_USE_NORMALIZED` en conséquence au commit 6 du §14.14 et
+l'écrit au relevé ; le propriétaire peut la renverser.
+
+#### 14.12.5 Lecture du chemin du service
+
+Faits à donner, avec les seuils proposés : (a) « toutes » et « écart », les 4 groupes ≤ 0,5 ; (b) B ROAD « toutes » < 1,0
+aux deux curseurs ; (c) `svc` ≤ `rt05-p3` (même campagne) + 0,05 par groupe en « toutes » (marge du plafond et de la cible
+figée) ; (d) A : `svc − common` ≤ +0,03 en ROAD (« toutes ») — le profil ne dégrade pas A contre la table commune ; (e)
+signaux de service du §12.6 contre `base`. Si (a) ou (b) échoue, le codage continue sur la branche (rien n'est déployé) et le
+relevé le dit en tête : la mise en service revient au propriétaire.
+
+### 14.13 Campagnes et mesure en conteneur
+
+**Banc** (`B=./target/release/ord-loops-bench`, une campagne à la fois, sorties sous
+`~/.cache/osm-route-details/graph/lot4/` seulement) :
+
+0. Après le commit 3 : `$B likeness --teams C --limit 5 --label 3b-refacto` (même empreinte qu'avant le déplacement).
+1. Après le commit 1 : la chaîne commune et l'export du §14.3.1.
+2. Essai : `$B likeness --teams B,C --limit 20 --holdout-share 0.25 --variants base,common,svc,svc+norm --label 3b-essai`.
+3. Déterminisme : `$B likeness --teams B,C --holdout-share 0.25 --variants base,svc --threads 1 --label 3b-det1`, puis
+   `--threads 16 --label 3b-det16` : mêmes empreintes et mêmes `taste_xxh3`.
+4. Campagne : `$B likeness --label lot4-3b --holdout-share 0.25
+   --variants base,rt:0.5+n:3,common,common+norm,svc,svc+norm,svc+cap:0,svc+capt:500` ; contrôles affichés (sans arrêt) :
+   `base` = `4686c904975302e7`, `rt05-p3` = `451651c82f8a4b92` / `3fc8e87f9b9fbfcf` (seconde sonde). [estimé] ~70 min, RSS ≤
+   21 Gio.
+5. Après le commit 6 : le banc région du lot 6 (`--compare --self-check --budget-mb 1000`) avec `--base-taste common` :
+   0 différence fenêtre contre graphe entier ; temps de construction des fenêtres contre `--base-taste neutral`.
+
+**Conteneur, 3 Gio** (après le commit 7 ; méthode des §9 et §10 de `ord-loops-lot6-mesures.md`) :
+- `docker build -t osm-route-details:lot4-3b .` (jamais poussée) ; et, depuis un `git worktree` de `develop`,
+  `osm-route-details:1.9.2-local`.
+- `docker run --memory=3g --memory-swap=3g`, ports sur `127.0.0.1`, fichiers France en lecture seule, volume nommé neuf,
+  `ORD_CACHE__OFFLINE=true`, IGN désactivé, réglages par défaut (profils : 4 fils) ; cache de pages évincé avant chaque
+  démarrage ; échantillons toutes les 0,5 s de `memory.current`, `memory.peak`, `anon` / `file` (`memory.stat`),
+  `memory.events`, `docker stats` toutes les 10 s ; sorties privées sous `G/lot4/3b-conteneur/`.
+- Séance : (1) **18 dépôts** (corps NDJSON privés de `G/lot3a/deposit/`, deux clés d'espace tirées au hasard par le script et
+  jamais écrites, les deux clés **en parallèle** comme staging et production à 02:10, `curl -T` avec `Expect: 100-continue`) :
+  statut, durée et `profile` de chaque rapport ; (2) les 18 états : `ready`, `profile.state = present` ; (3) générations : 54
+  réseaux en série, 114 à 4 clients (la séance du lot 6), `taste: team` ; (4) un dépôt de A pendant 4 clients de génération ;
+  (5) redémarrage : états `ready`, purge de démarrage, nombre de `.ordp.enc` du volume inchangé (compté par un conteneur
+  annexe, nombres seulement) ; (6) **compatibilité** : 1.9.2 sur le même volume, purge de démarrage puis périodique
+  (`ORD_GENERATOR__PURGE_INTERVAL_S=10`), nombre de `.ordp.enc` inchangé, générations servies ; retour en 1.10 : `ready` ;
+  (7) dépôt de A avec `docker update --cpus=4`.
+- Critères proposés : `oom` 0 et `memory.events max` 0 ; pic `anon` ≤ 2,4 Gio (80 % de 3 Gio) ; tous les dépôts en 200 ;
+  profil de A `learned` (3 pas) dans le budget par défaut ; pas plus d'un 503 par équipe pour l'autre clé (le backend en
+  refait trois) ; 1.9.2 garde tous les profils.
+- Relevé `docs/design/technique/ord-loops-lot4-3b-mesures.md` : lettres et agrégats seulement (correspondance `team-N` →
+  lettre lue dans le fichier privé des lettres).
+
+### 14.14 Commits
+
+Chacun passe `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings` et les tests des crates touchés ; avant
+le dernier, `cargo test --workspace`. Fin de message : une ligne vide, puis la ligne `Co-Authored-By` du modèle qui code.
+
+1. `feat(bench): likeness, mètres par classe au rapport et export de la table commune (lot 4, 3b)` — `class_meters`,
+   contrôles `RECAL_EQUIPE_*`, sous-commande `taste-common`, test 25. Puis campagne 1 du §14.13 et export.
+2. `feat(loops): table de goût commune figée, sans effet sur les poids (lot 4, 3b)` — `taste_common.rs` généré, `Taste::common*`,
+   `common_gen_dm_per_loop`, test 1.
+3. `refactor(graph-match): marche, trace et retenue des boucles partagées avec le banc` — §14.4.1, test 7, contrôle 0.
+4. `feat(graph-match): profil de goût par regénération, boucles du dépôt, apprentissage et format` — §14.4.2, §14.5, §14.6
+   (en clair), `FlatPlayer`, tests 8 à 12.
+5. `feat(bench): likeness, chemin du service (svc, common, norm, cap, capt) et comparaison du 3b` — §14.12, tests 10c, 22,
+   23 (banc). Puis campagnes 2 à 4 ; règle de la normalisation.
+6. `feat(loops): poids de base à la table commune (changement de comportement assumé, références re-bénies)` — §14.3.2,
+   §14.3.3, `COMMON_USE_NORMALIZED` posé par la règle, `--base-taste` du banc, tests 2 à 6 ; le message nomme chaque fixture
+   et chaque test re-béni. Puis le point 5 des campagnes.
+7. `feat(server): profil d'équipe appris au dépôt, fichier .ordp.enc, état stale « profile » (api 1.10, 1.10.0)` — §14.6 à
+   §14.10, `CHANGELOG.md`, contrat, tests 13 à 21 et 23 (service).
+8. Mesure en conteneur, puis `docs(ord-loops): relevé du 3b, chemin du service et mémoire en conteneur (lot 4)` — relevé
+   `ord-loops-lot4-3b-mesures.md` (style des relevés précédents, marques de l'en-tête), §14.16 « Écarts du codage » ajouté
+   ici, et le point 3 du §10 marqué fait.
+
+### 14.15 Ce que le 3b ne fait pas
+
+Rien au backend de Pédalons ; ni `params_hash` de l'appariement, ni format du graphe et des vues, ni contrôleur
+(`ord-loops-check`) ; pas de formes ni de destinations (4c, 4d) ; familiarité à 0,5 partout (décision 4 du §9.4) ; pas de
+table par curseur ; pas de saut de l'apprentissage quand l'empreinte des traces n'a pas changé (décision 2 du §9.4 : recalcul
+à chaque dépôt) ; aucune dépendance hors workspace ; **rien n'est poussé, aucune image publiée, aucun déploiement**, aucun
+accès à la production.
+
+### 14.16 Écarts du codage
+
+À écrire au commit 8.
