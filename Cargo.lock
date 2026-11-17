@@ -1464,6 +1464,7 @@ dependencies = [
  "ord-server",
  "rayon",
  "reqwest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",

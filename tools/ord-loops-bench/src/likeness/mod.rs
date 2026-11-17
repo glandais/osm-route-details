@@ -15,6 +15,8 @@ pub mod measure;
 pub mod out;
 pub mod play;
 pub mod shape;
+#[allow(dead_code)] // branché par `--variants` au commit suivant
+pub mod taste;
 pub mod walk;
 
 use std::path::PathBuf;
