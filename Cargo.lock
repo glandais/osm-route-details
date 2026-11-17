@@ -1455,10 +1455,13 @@ version = "1.9.2"
 dependencies = [
  "anyhow",
  "clap",
+ "flate2",
  "ord-graph",
+ "ord-graph-match",
  "ord-loops",
  "ord-loops-check",
  "ord-server",
+ "rayon",
  "reqwest",
  "serde",
  "serde_json",

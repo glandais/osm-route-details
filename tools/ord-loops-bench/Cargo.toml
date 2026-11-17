@@ -13,9 +13,13 @@ ord-loops = { path = "../../crates/ord-loops", features = ["reference"] }
 ord-loops-check = { path = "../../crates/ord-loops-check", features = ["reference"] }
 # La correspondance du curseur du service (lot 3a), pour jouer en processus exactement ce que le service applique.
 ord-server = { path = "../../crates/ord-server" }
+# Le banc de vraisemblance (lot 4, 4a) rejoue l'appariement et le dépôt de l'outil et du service.
+ord-graph-match.workspace = true
 
 anyhow.workspace = true
 clap.workspace = true
+flate2.workspace = true
+rayon.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

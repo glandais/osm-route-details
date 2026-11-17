@@ -10,6 +10,7 @@
 mod geojson;
 mod http;
 mod input;
+mod likeness;
 mod record;
 mod report;
 mod teams;
@@ -19,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context as _, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use ord_graph::format::GraphFile;
 use ord_graph::overlay::Overlay;
 use ord_graph::util::Poly;
@@ -32,11 +33,29 @@ use crate::record::{mode_name, Context, Inputs, JavaSide, Rec};
 use crate::report::{Autocheck, Meta, SummaryInput};
 use crate::windows::{memory_mb, quantiles, AnonSampler, Kind, Windows};
 
+/// La ligne de commande : sans sous-commande, le banc du lot 2 (rejeu des requêtes Java) ; `likeness`, le banc de
+/// vraisemblance du lot 4.
 #[derive(Debug, Parser)]
 #[command(
-    about = "Banc du moteur ord-loops : rejeu des requêtes Java, contrôle indépendant, rapport (lot 2)"
+    args_conflicts_with_subcommands = true,
+    about = "Banc du moteur ord-loops : rejeu des requêtes Java, contrôle indépendant, rapport (lot 2) ; banc de vraisemblance (lot 4)"
 )]
-struct Args {
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+    #[command(flatten)]
+    bench: BenchArgs,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Banc de vraisemblance du lot 4 (4a) : formes réelles contre générées, reconstruction.
+    Likeness(likeness::LikenessArgs),
+}
+
+/// Les arguments du banc du lot 2.
+#[derive(Debug, clap::Args)]
+struct BenchArgs {
     /// Graphe de base (défaut : le graphe de la région sous `~/.cache/osm-route-details/graph/`).
     #[arg(long)]
     graph: Option<PathBuf>,
@@ -233,7 +252,14 @@ impl GeoWant {
 }
 
 fn main() -> Result<()> {
-    let a = Args::parse();
+    let cli = Cli::parse();
+    match cli.command {
+        Some(Command::Likeness(a)) => likeness::run(&a),
+        None => run_bench(cli.bench),
+    }
+}
+
+fn run_bench(a: BenchArgs) -> Result<()> {
     let cache = home()?.join(".cache/osm-route-details/graph");
     let out = a.out.clone().unwrap_or_else(|| cache.join("lot2"));
     let graph_path = a.graph.clone().unwrap_or_else(|| cache.join("pays-de-la-loire-20261114-z11.ordg"));
@@ -784,4 +810,22 @@ fn main() -> Result<()> {
         return Err(anyhow!("{} requêtes dont le résultat diffère du moteur à plat", mismatches.len()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_former_call_still_parses_and_likeness_is_a_subcommand() {
+        let cli = Cli::try_parse_from(["ord-loops-bench", "--cursors", "0.25,1"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.bench.cursors, vec![0.25, 1.0]);
+        let cli = Cli::try_parse_from(["ord-loops-bench", "likeness", "--limit", "3"]).unwrap();
+        match cli.command {
+            Some(Command::Likeness(a)) => assert_eq!(a.limit, Some(3)),
+            None => panic!("sous-commande attendue"),
+        }
+        assert!(Cli::try_parse_from(["ord-loops-bench", "--cursors", "1", "likeness"]).is_err());
+    }
 }
