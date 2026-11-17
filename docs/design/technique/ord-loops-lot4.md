@@ -381,6 +381,31 @@ Synthétiques, comme les lots 2 et 3a (graphe `MemSource`, surcouches fabriquée
 3. **Familiarité** : reste à 0,5 au service pour l'instant ; réglée avec le goût retenu (meilleure combinaison mesurée :
    familiarité 1 + recalé γ 0,5, ROAD au curseur 0,25).
 
+### 9.3 Décisions avant les campagnes de la seconde sonde (2026-11-17, réponses au §13.1)
+
+1. **Déterminisme** : pas de passe complète (faite à petite échelle à la relecture, §13.13 point 15) ; essai court
+   seulement.
+2. **Relevé** : `docs/design/technique/ord-loops-lot4-sonde2.md` (et non `ord-loops-lot4-recal.md`, nom des §13.10 et
+   §13.13).
+3. **Forme de la table** : 72 cases et effets principaux joués en campagne 1 ; la campagne 2 prend les effets principaux
+   s'ils font au plus 0,03 de plus que 72 cases au pas 3 en lecture « écart » dans chacun des 4 groupes, sinon 72 cases
+   (règle du §13.8 point 4).
+4. **Pas** : 3 pas, γ = 0,5, amortissement au changement de signe, borne de pas `[1/3, 3]` ; pas de normalisation.
+5. **Campagne 2** : `--holdout-share 0.25` ; n0 = 25 ; mélange par équipe en effets principaux : option (a), accepté tel
+   quel, l'effet de jauge du §13.13 point 16 signalé au relevé ; `famroad:1`.
+6. **Critère GRAVEL** (`S / S_base ≤ 0,5`) lu sur la lecture « toutes » ; la lecture « écart » sert de contrôle de
+   surapprentissage (écart > 0,10 au pas 3 → préférer un pas plus tôt ou les effets principaux), sur la lecture toutes
+   équipes seulement. Un GRAVEL qui plafonne entre 0,50 et 0,55 est acceptable : on avance au 4c.
+7. **Profil par équipe** retenu si B ROAD passe sous 1,0 avec `rt` aux deux curseurs en lecture « toutes » (lecture
+   « écart » en appoint, indicative), pendant que `rc` reste au-dessus de 1,2, et si A ne perd pas plus de 0,03. Sinon :
+   table générale par type.
+8. **Budget du dépôt** pour un profil par équipe : au plus 30 min sur 4 fils pour la plus grosse équipe, allègements admis
+   (au plus 500 boucles par équipe, un seul curseur, recalcul hebdomadaire). Production : 12 cœurs partagés avec tous les
+   services, conteneur limité à 3 Gio. Coût calculé avec ces allègements sur les temps mesurés en campagne 2 ; l'effet
+   d'un plafond de 500 boucles sur la qualité est mesuré si le banc le permet sans code nouveau, sinon dit non mesuré.
+9. **Service** : critères inchangés (P50 par appel ≤ +25 % de `base`, part `OK` en baisse d'un point au plus, aucune
+   `PANIC` ni `WINDOW_ESCAPE`) ; un multiplicateur moyen hors de 1 ± 0,10 est signalé.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -1872,7 +1897,7 @@ Fin de message : une ligne vide puis la ligne `Co-Authored-By` du modèle qui co
    par les chaînes, contrôle « pas 1 = `rc05` », temps par équipe, champs de `VariantMeta`, test 7.
 4. `feat(bench): likeness, comparaison pas à pas et coût d'un profil par équipe` — `compare.rs` (§13.7), test 8.
 5. Campagnes du §13.8, puis `docs(ord-loops): relevé du recalé itéré et par équipe (lot 4)` : nouveau relevé
-   `docs/design/technique/ord-loops-lot4-recal.md` (style et marques de `ord-loops-lot4-sonde.md` : conditions et
+   `docs/design/technique/ord-loops-lot4-sonde2.md` (décision 2 du §9.3) (style et marques de `ord-loops-lot4-sonde.md` : conditions et
    commandes, contrôles, tables par pas, critère par lecture et par pas, A et B, diagnostics, forme, service, coût d'un
    profil, ce que la sonde décide au regard des questions du §13), et un §13.13 « Écarts du codage » ajouté ici. Équipes
    lettrées et agrégats seulement : ni départ, ni coordonnée, ni id de trace ou d'équipe.
@@ -1905,7 +1930,7 @@ pente ni de trafic.
 ### 13.13 Écarts du codage
 
 Écrits le 17 novembre 2026, au codage des commits 1 à 4 du §13.10 (branche `feat/ord-loops-lot4-sonde2`). Aucune campagne
-complète n'a été lancée : le commit 5 (campagnes du §13.8, relevé `ord-loops-lot4-recal.md`) reste à faire ; seuls un essai
+complète n'a été lancée : le commit 5 (campagnes du §13.8, relevé `ord-loops-lot4-sonde2.md`, décision 2 du §9.3) reste à faire ; seuls un essai
 de fumée (une à deux équipes, 5 à 40 boucles, sorties privées sous `~/.cache/osm-route-details/graph/lot4/smoke-sonde2/`) et
 un contrôle de déterminisme à petite échelle (équipe B, 20 boucles, 1 et 16 fils : mêmes empreintes de résultat et mêmes
 `taste_xxh3`, variante par variante, `rc` et `rt` en effets principaux compris) ont tourné. Ni le contrôle « pas 1 = `rc05` »
