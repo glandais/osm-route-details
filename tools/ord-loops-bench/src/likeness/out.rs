@@ -16,6 +16,9 @@ use super::shape::{median, quantiles5, wasserstein1, wasserstein1_normalised};
 
 pub const TYPE_NAMES: [&str; 3] = ["ROAD", "GRAVEL", "MTB"];
 
+/// Part des mètres d'une boucle mise à l'écart qu'une autre boucle de l'équipe doit prendre pour en être la jumelle.
+pub const TWIN_SHARE: f64 = 0.9;
+
 /// Une boucle réelle retenue et ses jeux. Désignée par `(team, i)`.
 #[derive(Clone, Debug, Serialize)]
 pub struct LoopRec {
@@ -26,6 +29,9 @@ pub struct LoopRec {
     pub matched_share: f64,
     pub contiguous: bool,
     pub holdout: bool,
+    /// Boucle mise à l'écart : la plus grande part de ses mètres (`E(R)`) qu'une **autre** boucle retenue de
+    /// l'équipe, restée dans la surcouche « écart », prend aussi (`holdout::twin_shares`). `None` sinon.
+    pub twin_share: Option<f64>,
     /// `|l_poly − d_graph| / d_graph` de la marche réelle.
     pub poly_vs_graph: f64,
     pub real: Measures,
@@ -420,7 +426,7 @@ pub fn summary(r: &Report) -> String {
     let _ = writeln!(s, "\n## 9. Reconstruction (boucles mises à l'écart)\n");
     let _ = writeln!(
         s,
-        "Chaque cellule : part agrégée (Σ mètres retrouvés / Σ mètres réels) / médiane par trace. « Hors échantillon » : surcouche sans la boucle ; « dans l'échantillon » : surcouche complète, mêmes boucles.\n"
+        "Chaque cellule : part agrégée (Σ mètres retrouvés / Σ mètres réels) / médiane par trace. « Hors échantillon » : surcouche sans la boucle ; « dans l'échantillon » : surcouche complète, mêmes boucles. « Jumelle » : une autre boucle retenue de l'équipe, restée dans la surcouche, prend au moins 90 % des mètres de la boucle mise à l'écart (sortie de groupe enregistrée deux fois, même parcours roulé deux fois) ; « sans les jumelles » : la part agrégée totale des autres.\n"
     );
     let teams: Vec<&String> = r.retention.keys().collect();
     for &c in cursors {
@@ -430,23 +436,29 @@ pub fn summary(r: &Report) -> String {
         ] {
             let _ = writeln!(
                 s,
-                "### Curseur {c}, {which}\n\n| équipe | à l'écart | `OK` | total | arêtes d'équipe | arêtes qu'aucune autre trace ne prend | part de nouveau dans la trace (médiane) | total, dans l'échantillon | nouveau, dans l'échantillon |\n|---|---:|---:|---|---|---|---:|---|---|"
+                "### Curseur {c}, {which}\n\n| équipe | à l'écart | `OK` | total | arêtes d'équipe | arêtes qu'aucune autre trace ne prend | part de nouveau dans la trace (médiane) | total, dans l'échantillon | nouveau, dans l'échantillon | jumelle ≥ 0,9 | total, sans les jumelles |\n|---|---:|---:|---|---|---|---:|---|---|---:|---|"
             );
             for t in &teams {
                 let held: Vec<&LoopRec> = r.loops.iter().filter(|l| &l.team == *t && l.holdout).collect();
                 if held.is_empty() {
-                    let _ = writeln!(s, "| {t} | 0 | | trop peu de boucles | | | | | |");
+                    let _ = writeln!(s, "| {t} | 0 | | trop peu de boucles | | | | | | | |");
                     continue;
                 }
                 let mut out_rs: Vec<Recovered> = Vec::new();
                 let mut in_rs: Vec<Recovered> = Vec::new();
+                let mut lone_rs: Vec<Recovered> = Vec::new();
                 let mut ok = 0;
+                let is_twin = |l: &LoopRec| l.twin_share.is_some_and(|x| x >= TWIN_SHARE);
+                let twins = held.iter().filter(|l| is_twin(l)).count();
                 for l in &held {
                     let ho = l.plays.iter().find(|p| p.overlay == "holdout" && p.cursor == c);
                     let full = play_of(l, c);
                     if let Some(g) = ho.filter(|p| p.outcome == "OK").and_then(pick) {
                         ok += 1;
                         out_rs.push(g.recovered);
+                        if !is_twin(l) {
+                            lone_rs.push(g.recovered);
+                        }
                         if let Some(f) = full.filter(|p| p.outcome == "OK").and_then(pick) {
                             in_rs.push(f.recovered);
                         }
@@ -454,7 +466,7 @@ pub fn summary(r: &Report) -> String {
                 }
                 let _ = writeln!(
                     s,
-                    "| {t} | {} | {ok} | {} | {} | {} | {} | {} | {} |",
+                    "| {t} | {} | {ok} | {} | {} | {} | {} | {} | {} | {twins} | {} |",
                     held.len(),
                     recon_stats(&out_rs, |r| (r.found_m, r.real_m), Recovered::total),
                     recon_stats(&out_rs, |r| (r.team_found_m, r.team_real_m), Recovered::team),
@@ -462,6 +474,7 @@ pub fn summary(r: &Report) -> String {
                     opt3(median(&out_rs.iter().filter_map(Recovered::fresh_real_share).collect::<Vec<_>>())),
                     recon_stats(&in_rs, |r| (r.found_m, r.real_m), Recovered::total),
                     recon_stats(&in_rs, |r| (r.fresh_found_m, r.fresh_real_m), Recovered::fresh),
+                    recon_stats(&lone_rs, |r| (r.found_m, r.real_m), Recovered::total),
                 );
             }
             s.push('\n');

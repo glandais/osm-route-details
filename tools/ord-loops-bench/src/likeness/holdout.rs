@@ -135,6 +135,39 @@ pub fn overlay_file(dir: &Path, team_id: u64) -> Option<std::path::PathBuf> {
     })
 }
 
+/// **Jumelles** d'une boucle mise à l'écart : la sortie de groupe enregistrée par plusieurs membres, ou le même
+/// parcours roulé deux fois, reste dans la surcouche « écart » par l'autre trace, et la reconstruction retrouve alors
+/// ce que l'équipe a déjà roulé, pas ce que le goût proposerait. Pour chaque boucle mise à l'écart : la plus grande
+/// part de ses mètres `E(R)` (arêtes comptées par le dépôt, chacune à sa longueur) que prend une autre boucle
+/// retenue de la même équipe **non** mise à l'écart ; `None` pour les autres boucles. Les traces non retenues (pas
+/// une boucle, part appariée trop faible) sont aussi dans la surcouche et n'y sont pas regardées : c'est un minorant.
+pub fn twin_shares(
+    gf: &MappedGraph,
+    loops: &[Loop],
+    held: &HashSet<usize>,
+    edges: &[std::collections::BTreeSet<u32>],
+) -> Vec<Option<f64>> {
+    use rayon::prelude::*;
+    let len = |e: &u32| f64::from(gf.edge(*e).len_dm) / 10.0;
+    (0..loops.len())
+        .into_par_iter()
+        .map(|h| {
+            if !held.contains(&h) {
+                return None;
+            }
+            let total: f64 = edges[h].iter().map(len).sum();
+            if total <= 0.0 {
+                return Some(0.0);
+            }
+            let best = (0..loops.len())
+                .filter(|&k| k != h && loops[k].team == loops[h].team && !held.contains(&k))
+                .map(|k| edges[h].intersection(&edges[k]).map(len).sum::<f64>())
+                .fold(0.0, f64::max);
+            Some(best / total)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,5 +238,32 @@ mod tests {
         assert!(select(&loops, 0.10, 10).is_empty());
         let loops: Vec<Loop> = (0..10).map(|i| lp(0, i, u64::from(i))).collect();
         assert_eq!(select(&loops, 0.10, 10).len(), 1);
+    }
+
+    #[test]
+    fn a_twin_is_another_kept_loop_of_the_team_that_takes_the_same_metres() {
+        use crate::likeness::fixture::{edge_between, graph, id};
+        let dir = tempfile::tempdir().unwrap();
+        let gf = graph(dir.path());
+        let e = |a: (i64, i64), b: (i64, i64)| edge_between(&gf, id(a.0, a.1), id(b.0, b.1)).0;
+        let (e1, e2, e3, e4) = (e((0, 0), (0, 1)), e((0, 1), (1, 1)), e((1, 1), (1, 0)), e((1, 0), (0, 0)));
+        let sets: Vec<std::collections::BTreeSet<u32>> = vec![
+            [e1, e2, e3, e4].into(), // 0 : à l'écart
+            [e1, e2, e3, e4].into(), // 1 : sa jumelle, dans la surcouche
+            [e1, e2].into(), // 2 : à l'écart, couverte à moitié par 0 et 1, mais 0 est à l'écart aussi
+            [e1, e2, e3, e4].into(), // 3 : même figure, autre équipe
+        ];
+        let loops = vec![lp(0, 0, 1), lp(0, 1, 2), lp(0, 2, 3), lp(1, 0, 4)];
+        let held: HashSet<usize> = [0, 2].into();
+        let tw = twin_shares(&gf, &loops, &held, &sets);
+        assert_eq!(tw[1], None);
+        assert_eq!(tw[3], None);
+        assert!((tw[0].unwrap() - 1.0).abs() < 1e-12);
+        assert!((tw[2].unwrap() - 1.0).abs() < 1e-12, "1 la prend entière");
+        // Sans la jumelle 1 : 2 n'est couverte que par une boucle à l'écart, qui ne compte pas.
+        let loops = vec![lp(0, 0, 1), lp(0, 2, 3)];
+        let sets = vec![sets[0].clone(), sets[2].clone()];
+        let tw = twin_shares(&gf, &loops, &[0, 1].into(), &sets);
+        assert_eq!(tw, vec![Some(0.0), Some(0.0)]);
     }
 }

@@ -331,6 +331,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         reals.iter().map(|(m, _)| [m.r_over_d, m.far_pos, m.compactness]).collect();
     let real_edges: Vec<std::collections::BTreeSet<u32>> =
         loops.par_iter().map(|l| measure::taken_edges(gf, &l.walk)).collect();
+    let twins = holdout::twin_shares(gf, &loops, &held, &real_edges);
     let mut iqr = [[1.0; 3]; 3];
     for (ty, row) in iqr.iter_mut().enumerate() {
         for (k, cell) in row.iter_mut().enumerate() {
@@ -424,6 +425,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             matched_share: l.matched_share,
             contiguous: l.walk.is_continuous(),
             holdout: held.contains(&i),
+            twin_share: twins[i],
             poly_vs_graph: if l.trace.d_graph > 0.0 {
                 (l.trace.l_poly - l.trace.d_graph).abs() / l.trace.d_graph
             } else {
