@@ -8,13 +8,15 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-default = ["pbf", "mmap"]
+default = ["pbf", "mmap", "external"]
 # Tris et décodage parallèles (rayon) ; inutile pour la cible WASM.
 parallel = ["dep:rayon"]
 # Lecture d'un extrait `.osm.pbf` (osmpbf).
 pbf = ["parallel", "dep:osmpbf"]
 # Ouverture du fichier par projection mémoire : le seul `unsafe` du crate (module `mmap`).
 mmap = ["dep:memmap2"]
+# Construction hors mémoire : tri externe et écriture en flux (fichiers temporaires).
+external = ["parallel"]
 
 [dependencies]
 rustc-hash.workspace = true

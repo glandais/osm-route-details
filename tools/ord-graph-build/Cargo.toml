@@ -8,7 +8,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
-ord-graph = { workspace = true, features = ["pbf", "mmap"] }
+ord-graph = { workspace = true, features = ["pbf", "mmap", "external"] }
 
 anyhow.workspace = true
 clap.workspace = true

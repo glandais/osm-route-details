@@ -21,6 +21,9 @@ fn build_views_then_measure_on_the_tiny_pbf() {
         zoom: 11,
         threads: None,
         report: Some(dir.path().join("build.json")),
+        external: false,
+        mem_budget_mb: 1024,
+        tmp_dir: None,
     })
     .expect("build");
     assert_eq!((report.ways_total, report.ways_kept, report.edges), (5, 3, 4));
@@ -96,6 +99,9 @@ fn attractors_end_to_end_on_the_tiny_pbf_and_refuse_another_extract() {
         zoom: 11,
         threads: None,
         report: None,
+        external: false,
+        mem_budget_mb: 1024,
+        tmp_dir: None,
     })
     .expect("build");
     views_cmd::run(&ViewsArgs {
@@ -157,4 +163,35 @@ fn attractors_end_to_end_on_the_tiny_pbf_and_refuse_another_extract() {
     let err = attractors_cmd::run(&args(other, Some(dir.path().join("refused")))).unwrap_err();
     assert!(err.to_string().contains("l'extrait n'est pas celui du graphe"), "{err}");
     assert!(!dir.path().join("refused").exists());
+}
+
+#[test]
+fn external_build_writes_the_same_graph() {
+    use ord_graph::format::GraphFile;
+    let run = |external: bool, dir: &std::path::Path| {
+        build_cmd::run(&BuildArgs {
+            pbf: mini_pbf(),
+            out_dir: Some(dir.to_path_buf()),
+            region: None,
+            zoom: 11,
+            threads: None,
+            report: Some(dir.join("build.json")),
+            external,
+            mem_budget_mb: 1,
+            tmp_dir: None,
+        })
+        .expect("build")
+    };
+    let (d1, d2) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (mem, ext) = (run(false, d1.path()), run(true, d2.path()));
+    assert_eq!(
+        (ext.ways_total, ext.ways_kept, ext.edges, ext.vertices),
+        (mem.ways_total, mem.ways_kept, mem.edges, mem.vertices)
+    );
+    assert!(ext.tmp_peak_bytes.is_some() && !ext.runs.is_empty());
+    let open = |p: &std::path::Path| GraphFile::open(std::fs::read(p).unwrap()).unwrap();
+    let (gm, ge) = (open(&mem.output), open(&ext.output));
+    assert_eq!(gm.section_digests(), ge.section_digests());
+    // Rien d'autre que le graphe et le rapport : le dossier temporaire est parti.
+    assert_eq!(std::fs::read_dir(d2.path()).unwrap().count(), 2);
 }

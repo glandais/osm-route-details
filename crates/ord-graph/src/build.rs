@@ -17,6 +17,8 @@ pub enum BuildError {
     NotSorted(String),
     #[error("trop gros pour le format : {0}")]
     TooBig(String),
+    #[error("fichier temporaire : {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Une way telle que la source la livre.
@@ -50,6 +52,9 @@ pub struct SourceMeta {
     pub xxh3: u64,
 }
 
+/// Reçoit un lot de nœuds `(id, décimicro-latitude, décimicro-longitude)` par id croissant.
+pub type NodeBatchFn<'a> = dyn FnMut(&[(i64, i32, i32)]) -> Result<(), BuildError> + 'a;
+
 pub trait OsmSource {
     fn meta(&self) -> SourceMeta;
     /// Passe 1 : toutes les ways, puis toutes les relations, par id croissant.
@@ -60,6 +65,15 @@ pub trait OsmSource {
     /// Comme `nodes`, avec les étiquettes du nœud (vides pour la plupart) : `f(id, lat, lon, étiquettes)`.
     /// Sert à l'extraction des attracteurs (lot 4d) ; la construction du graphe n'en a pas besoin.
     fn tagged_nodes(&mut self, f: &TaggedNodeFn<'_>) -> Result<(), BuildError>;
+    /// Passe 2 de la construction hors mémoire : les nœuds par **id croissant**, livrés par lots dans l'ordre.
+    /// Par défaut : tout `nodes`, trié, en un lot (sources en mémoire seulement).
+    fn nodes_sorted(&mut self, f: &mut NodeBatchFn<'_>) -> Result<(), BuildError> {
+        let all = std::sync::Mutex::new(Vec::new());
+        self.nodes(&|id, lat, lon| all.lock().expect("verrou des nœuds").push((id, lat, lon)))?;
+        let mut all = all.into_inner().expect("verrou des nœuds");
+        all.sort_unstable();
+        f(&all)
+    }
 }
 
 /// Reçoit un nœud et ses étiquettes (`OsmSource::tagged_nodes`).

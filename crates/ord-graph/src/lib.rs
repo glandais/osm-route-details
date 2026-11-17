@@ -8,6 +8,10 @@
 pub mod attract;
 pub mod attrs;
 pub mod build;
+#[cfg(feature = "external")]
+pub mod external;
+#[cfg(feature = "external")]
+pub mod extsort;
 pub mod format;
 pub mod grid;
 #[cfg(feature = "mmap")]

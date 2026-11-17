@@ -10,7 +10,12 @@ use osmpbf::{Blob, BlobReader, BlobType, PrimitiveBlock, RelMemberType};
 use rayon::prelude::*;
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::build::{BuildError, ElementSink, OsmRelation, OsmSource, OsmWay, SourceMeta, TaggedNodeFn};
+use crate::build::{
+    BuildError, ElementSink, NodeBatchFn, OsmRelation, OsmSource, OsmWay, SourceMeta, TaggedNodeFn,
+};
+
+/// Nœuds d'un blob, dans l'ordre, et « le blob contient déjà des ways ou des relations ».
+type DecodedNodes = (Vec<(i64, i32, i32)>, bool);
 
 #[derive(Debug)]
 pub struct PbfSource {
@@ -176,6 +181,37 @@ impl OsmSource for PbfSource {
                 Ok(())
             })?;
             Ok(!past_nodes.load(Ordering::Relaxed))
+        })
+    }
+
+    fn nodes_sorted(&mut self, f: &mut NodeBatchFn<'_>) -> Result<(), BuildError> {
+        self.batches(|batch| {
+            // Décodage en parallèle, livraison dans l'ordre du fichier : un lot par blob.
+            let decoded: Vec<DecodedNodes> = batch
+                .par_iter()
+                .map(|blob| -> Result<_, BuildError> {
+                    let block = blob.to_primitiveblock().map_err(err)?;
+                    let mut nodes = Vec::new();
+                    let mut past = false;
+                    for group in block.groups() {
+                        nodes.extend(
+                            group.dense_nodes().map(|n| (n.id(), n.decimicro_lat(), n.decimicro_lon())),
+                        );
+                        nodes.extend(group.nodes().map(|n| (n.id(), n.decimicro_lat(), n.decimicro_lon())));
+                        past |= group.ways().next().is_some() || group.relations().next().is_some();
+                    }
+                    Ok((nodes, past))
+                })
+                .collect::<Result<_, _>>()?;
+            let mut past_nodes = false;
+            for (nodes, past) in &decoded {
+                if !nodes.is_empty() {
+                    f(nodes)?;
+                }
+                past_nodes |= *past;
+            }
+            // Trié par type : une fois les ways atteintes, il ne reste plus de nœud.
+            Ok(!past_nodes)
         })
     }
 }

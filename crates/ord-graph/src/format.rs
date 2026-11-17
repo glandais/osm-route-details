@@ -887,6 +887,90 @@ fn node_cell_of(cells: &[crate::build::CellSpec], gid: u32) -> usize {
     cells.partition_point(|c| c.first_node <= gid) - 1
 }
 
+/// Géométrie d'une arête : nombre de points intérieurs, puis deltas zigzag depuis le nœud `a`.
+pub(crate) fn encode_geometry(geom: &mut Vec<u8>, a: (i32, i32), interior: &[(i32, i32)]) {
+    put_varint(geom, interior.len() as u32);
+    let (mut lat, mut lon) = a;
+    for &(la, lo) in interior {
+        put_varint(geom, zigzag(la.wrapping_sub(lat)));
+        put_varint(geom, zigzag(lo.wrapping_sub(lon)));
+        (lat, lon) = (la, lo);
+    }
+}
+
+/// Code le bloc de la cellule `ci`, l'écrit (aligné sur 4 Kio) et rend son entrée d'index, sans la géométrie
+/// (`geom_off`, `geom_len` à remplir). `cell_dir` : arêtes orientées `(source, cible, arête|sens)` de la cellule,
+/// triées ; `owned` : `(attrs, len_dm, décalage de géométrie dans la cellule)` des arêtes possédées.
+#[allow(clippy::too_many_arguments)]
+fn encode_block<W: Write>(
+    block: &mut Vec<u8>,
+    ci: usize,
+    cells: &[crate::build::CellSpec],
+    nodes: impl Iterator<Item = (i32, i32)>,
+    cell_dir: &[(u32, u32, u32)],
+    owned: &[(u64, u32, u32)],
+    first_edge: u32,
+    first_directed: u32,
+    out: &mut Out<W>,
+) -> Result<RawCell, FormatError> {
+    let cs = &cells[ci];
+    let nlo = cs.first_node;
+    block.clear();
+    for (lat, lon) in nodes {
+        block.extend_from_slice(NodeRec { lat: I32::new(lat), lon: I32::new(lon) }.as_bytes());
+    }
+    let mut k = 0usize;
+    for local in 0..cs.n_nodes {
+        block.extend_from_slice(U32::new(k as u32).as_bytes());
+        while k < cell_dir.len() && cell_dir[k].0 == nlo + local {
+            k += 1;
+        }
+    }
+    block.extend_from_slice(U32::new(cell_dir.len() as u32).as_bytes());
+    while !block.len().is_multiple_of(8) {
+        block.push(0);
+    }
+    for d in cell_dir {
+        block.extend_from_slice(DirEdge::new(d.1, d.2).as_bytes());
+    }
+    for &(attrs, len_dm, off) in owned {
+        block.extend_from_slice(
+            OwnedRec { attrs: U64::new(attrs), len_dm: U32::new(len_dm), geom_off: U32::new(off) }.as_bytes(),
+        );
+    }
+    let mut n_border = 0u32;
+    for (li, d) in cell_dir.iter().enumerate() {
+        let tc = node_cell_of(cells, d.1);
+        if tc != ci {
+            block.extend_from_slice(
+                BorderRec { directed: U32::new(li as u32), cell: U32::new(tc as u32) }.as_bytes(),
+            );
+            n_border += 1;
+        }
+    }
+    let layout = BlockLayout::new(cs.n_nodes, cell_dir.len() as u32, owned.len() as u32, n_border);
+    debug_assert_eq!(block.len() as u64, layout.len);
+    let block_off = out.pos;
+    out.put(block)?;
+    out.pad_to(BLOCK_ALIGN)?;
+    Ok(RawCell {
+        x: U16::new(cs.x as u16),
+        y: U16::new(cs.y as u16),
+        first_node: U32::new(nlo),
+        n_nodes: U32::new(cs.n_nodes),
+        first_edge: U32::new(first_edge),
+        n_edges: U32::new(owned.len() as u32),
+        first_directed: U32::new(first_directed),
+        n_directed: U32::new(cell_dir.len() as u32),
+        n_border: U32::new(n_border),
+        block_off: U64::new(block_off),
+        geom_off: U64::new(0),
+        xxh3: U64::new(xxh3_64(block)),
+        block_len: U32::new(block.len() as u32),
+        geom_len: U32::new(0),
+    })
+}
+
 /// Écrit le graphe : fichier temporaire à côté, en-tête en dernier, `fsync`, relecture et `verify()`,
 /// `chmod 0444`, `rename`. Jamais de réécriture sur place (le lecteur projette le fichier en mémoire).
 pub fn write_graph(
@@ -955,74 +1039,28 @@ fn write_inner(
         let cell_edges = &data.edges[epos..eend];
         debug_assert!(cell_edges.iter().all(|e| e.a >= nlo));
 
-        block.clear();
-        for gid in nlo..nhi {
-            let n = &data.nodes[gid as usize];
-            block.extend_from_slice(NodeRec { lat: I32::new(n.lat), lon: I32::new(n.lon) }.as_bytes());
-        }
-        let mut k = 0usize;
-        for local in 0..cs.n_nodes {
-            block.extend_from_slice(U32::new(k as u32).as_bytes());
-            while k < cell_dir.len() && cell_dir[k].0 == nlo + local {
-                k += 1;
-            }
-        }
-        block.extend_from_slice(U32::new(cell_dir.len() as u32).as_bytes());
-        while block.len() % 8 != 0 {
-            block.push(0);
-        }
-        for d in cell_dir {
-            block.extend_from_slice(DirEdge::new(d.1, d.2).as_bytes());
-        }
         let mut geom = Vec::new();
+        let mut owned = Vec::with_capacity(cell_edges.len());
         for ed in cell_edges {
             let off = u32::try_from(geom.len())
                 .map_err(|_| FormatError::Build("géométrie d'une cellule > 4 Go".into()))?;
-            block.extend_from_slice(
-                OwnedRec { attrs: U64::new(ed.attrs), len_dm: U32::new(ed.len_dm), geom_off: U32::new(off) }
-                    .as_bytes(),
-            );
-            let interior = data.interior(ed);
-            put_varint(&mut geom, interior.len() as u32);
+            owned.push((ed.attrs, ed.len_dm, off));
             let na = &data.nodes[ed.a as usize];
-            let (mut lat, mut lon) = (na.lat, na.lon);
-            for (la, lo) in interior {
-                put_varint(&mut geom, zigzag(la.wrapping_sub(lat)));
-                put_varint(&mut geom, zigzag(lo.wrapping_sub(lon)));
-                (lat, lon) = (la, lo);
-            }
+            encode_geometry(&mut geom, (na.lat, na.lon), &data.interior(ed));
         }
-        let mut n_border = 0u32;
-        for (li, d) in cell_dir.iter().enumerate() {
-            let tc = node_cell_of(&data.cells, d.1);
-            if tc != ci {
-                block.extend_from_slice(
-                    BorderRec { directed: U32::new(li as u32), cell: U32::new(tc as u32) }.as_bytes(),
-                );
-                n_border += 1;
-            }
-        }
-        let layout = BlockLayout::new(cs.n_nodes, cell_dir.len() as u32, cell_edges.len() as u32, n_border);
-        debug_assert_eq!(block.len() as u64, layout.len);
-        let block_off = out.pos;
-        out.put(&block)?;
-        out.pad_to(BLOCK_ALIGN)?;
-        cell_entries.push(RawCell {
-            x: U16::new(cs.x as u16),
-            y: U16::new(cs.y as u16),
-            first_node: U32::new(nlo),
-            n_nodes: U32::new(cs.n_nodes),
-            first_edge: U32::new(epos as u32),
-            n_edges: U32::new(cell_edges.len() as u32),
-            first_directed: U32::new(first_directed),
-            n_directed: U32::new(cell_dir.len() as u32),
-            n_border: U32::new(n_border),
-            block_off: U64::new(block_off),
-            geom_off: U64::new(0),
-            xxh3: U64::new(xxh3_64(&block)),
-            block_len: U32::new(block.len() as u32),
-            geom_len: U32::new(geom.len() as u32),
-        });
+        let nodes = data.nodes[nlo as usize..nhi as usize].iter().map(|n| (n.lat, n.lon));
+        let entry = encode_block(
+            &mut block,
+            ci,
+            &data.cells,
+            nodes,
+            cell_dir,
+            &owned,
+            epos as u32,
+            first_directed,
+            &mut out,
+        )?;
+        cell_entries.push(RawCell { geom_len: U32::new(geom.len() as u32), ..entry });
         geoms.push(geom);
         first_directed += cell_dir.len() as u32;
         (dpos, epos) = (dend, eend);
@@ -1096,7 +1134,37 @@ fn write_inner(
     drop(out);
 
     // En-tête en dernier.
-    let table = sections.as_slice().as_bytes();
+    let counts = HeaderCounts {
+        nodes: data.nodes.len() as u64,
+        edges: data.edges.len() as u64,
+        directed: dir.len() as u64,
+        cells: data.cells.len() as u64,
+    };
+    write_header(&mut file, data.zoom, counts, &data.meta, tool_version, build_epoch, &sections)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+/// Comptes portés par l'en-tête.
+#[derive(Clone, Copy, Debug)]
+struct HeaderCounts {
+    nodes: u64,
+    edges: u64,
+    directed: u64,
+    cells: u64,
+}
+
+/// Écrit l'en-tête et la table des sections au début du fichier (en dernier, une fois tout le reste écrit).
+fn write_header(
+    file: &mut std::fs::File,
+    zoom: u8,
+    counts: HeaderCounts,
+    meta: &crate::build::SourceMeta,
+    tool_version: &str,
+    build_epoch: i64,
+    sections: &[RawSection],
+) -> std::io::Result<()> {
+    let table = sections.as_bytes();
     let mut tv = [0u8; 16];
     let n = tool_version.len().min(16);
     tv[..n].copy_from_slice(&tool_version.as_bytes()[..n]);
@@ -1106,16 +1174,16 @@ fn write_inner(
         minor: U16::new(FORMAT_MINOR),
         attr_layout: U16::new(ATTR_LAYOUT),
         scheme: SCHEME_SLIPPY,
-        zoom: data.zoom,
+        zoom,
         endian_mark: U32::new(ENDIAN_MARK),
-        nodes: U64::new(data.nodes.len() as u64),
-        edges: U64::new(data.edges.len() as u64),
-        directed: U64::new(dir.len() as u64),
-        cells: U64::new(data.cells.len() as u64),
-        replication_timestamp: I64::new(data.meta.replication_timestamp),
-        replication_sequence: I64::new(data.meta.replication_sequence),
-        pbf_size: U64::new(data.meta.size),
-        pbf_xxh3: U64::new(data.meta.xxh3),
+        nodes: U64::new(counts.nodes),
+        edges: U64::new(counts.edges),
+        directed: U64::new(counts.directed),
+        cells: U64::new(counts.cells),
+        replication_timestamp: I64::new(meta.replication_timestamp),
+        replication_sequence: I64::new(meta.replication_sequence),
+        pbf_size: U64::new(meta.size),
+        pbf_xxh3: U64::new(meta.xxh3),
         tool_version: tv,
         build_epoch: I64::new(build_epoch),
         sections_off: U64::new(HEADER_LEN as u64),
@@ -1127,6 +1195,226 @@ fn write_inner(
     file.seek(SeekFrom::Start(0))?;
     file.write_all(header.as_bytes())?;
     file.write_all(table)?;
-    file.sync_all()?;
+    Ok(())
+}
+
+// --- Écriture en flux (construction hors mémoire) -------------------------------------------------
+
+/// Écrit un graphe **en flux**, dans le même ordre et avec les mêmes octets que [`write_graph`], pour la
+/// construction hors mémoire (`docs/design/technique/ord-graph-build-hors-memoire.md` §5, E7) : blocs de cellule
+/// un à un, puis la géométrie lue d'un flux, puis les petites sections lues de flux, puis l'en-tête.
+///
+/// Ne tient en mémoire que la table des cellules et le bloc en cours. Le fichier temporaire est supprimé si
+/// l'écrivain est lâché avant [`StreamWriter::finish`].
+pub struct StreamWriter {
+    tmp: std::path::PathBuf,
+    path: std::path::PathBuf,
+    out: Out<std::io::BufWriter<std::fs::File>>,
+    cells: Vec<crate::build::CellSpec>,
+    entries: Vec<RawCell>,
+    sections: Vec<RawSection>,
+    block: Vec<u8>,
+    first_edge: u32,
+    first_directed: u32,
+    finished: bool,
+}
+
+impl std::fmt::Debug for StreamWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StreamWriter").field("path", &self.path).field("cells", &self.entries.len()).finish()
+    }
+}
+
+/// Ce que l'en-tête d'un graphe écrit en flux porte en plus des comptes.
+#[derive(Clone, Copy, Debug)]
+pub struct StreamHeader<'a> {
+    pub zoom: u8,
+    pub nodes: u64,
+    pub edges: u64,
+    pub directed: u64,
+    pub meta: crate::build::SourceMeta,
+    pub tool_version: &'a str,
+    pub build_epoch: i64,
+}
+
+impl StreamWriter {
+    /// Ouvre `<path>.ordg.tmp` (neuf) ; `cells` : table complète des cellules, dans l'ordre du fichier.
+    pub fn create(path: &Path, cells: Vec<crate::build::CellSpec>) -> Result<Self, FormatError> {
+        let tmp = path.with_extension("ordg.tmp");
+        let _ = std::fs::remove_file(&tmp);
+        let file = std::fs::OpenOptions::new().create_new(true).write(true).open(&tmp)?;
+        let mut w = Self {
+            tmp,
+            path: path.to_path_buf(),
+            out: Out { w: std::io::BufWriter::with_capacity(1 << 20, file), pos: 0 },
+            entries: Vec::with_capacity(cells.len()),
+            cells,
+            sections: Vec::new(),
+            block: Vec::new(),
+            first_edge: 0,
+            first_directed: 0,
+            finished: false,
+        };
+        w.out.put(&vec![0u8; BLOCK_ALIGN as usize])?; // en-tête et table des sections, écrits en dernier
+        Ok(w)
+    }
+
+    /// Bloc de la cellule suivante. `geom_len` : octets de sa géométrie (somme des géométries de ses arêtes).
+    pub fn put_cell(
+        &mut self,
+        nodes: &[(i32, i32)],
+        cell_dir: &[(u32, u32, u32)],
+        owned: &[(u64, u32, u32)],
+        geom_len: u64,
+    ) -> Result<(), FormatError> {
+        let ci = self.entries.len();
+        if ci >= self.cells.len() || nodes.len() != self.cells[ci].n_nodes as usize {
+            return Err(FormatError::Build(format!("cellule {ci} : nœuds incohérents avec la table")));
+        }
+        let geom_len = u32::try_from(geom_len)
+            .map_err(|_| FormatError::Build("géométrie d'une cellule > 4 Go".into()))?;
+        let entry = encode_block(
+            &mut self.block,
+            ci,
+            &self.cells,
+            nodes.iter().copied(),
+            cell_dir,
+            owned,
+            self.first_edge,
+            self.first_directed,
+            &mut self.out,
+        )?;
+        self.entries.push(RawCell { geom_len: U32::new(geom_len), ..entry });
+        self.first_edge += owned.len() as u32;
+        self.first_directed += cell_dir.len() as u32;
+        Ok(())
+    }
+
+    /// Section `GEOMETRY` : lit la géométrie de chaque cellule, à la suite, dans `r` (`geom_len` octets par
+    /// cellule), et la place sur 4 Kio par cellule.
+    pub fn put_geometry(&mut self, r: &mut impl std::io::Read) -> Result<(), FormatError> {
+        if self.entries.len() != self.cells.len() {
+            return Err(FormatError::Build("cellules manquantes avant la géométrie".into()));
+        }
+        let blocks_end = self.out.pos;
+        self.out.pad_to(BLOCK_ALIGN)?;
+        let geom_start = self.out.pos;
+        let mut hash = Xxh3::new();
+        let mut buf = vec![0u8; 1 << 20];
+        for entry in &mut self.entries {
+            entry.geom_off = U64::new(self.out.pos);
+            let mut left = u64::from(entry.geom_len.get());
+            if left == 0 {
+                continue;
+            }
+            while left > 0 {
+                let n = left.min(buf.len() as u64) as usize;
+                r.read_exact(&mut buf[..n])?;
+                self.out.put(&buf[..n])?;
+                hash.update(&buf[..n]);
+                left -= n as u64;
+            }
+            let pad = (align(self.out.pos, BLOCK_ALIGN) - self.out.pos) as usize;
+            let zeros = vec![0u8; pad];
+            self.out.put(&zeros)?;
+            hash.update(&zeros);
+        }
+        let geom_end = self.out.pos;
+        self.sections.push(RawSection {
+            kind: U32::new(KIND_CELL_BLOCKS),
+            flags: U32::new(FLAG_PER_ENTRY_HASH),
+            off: U64::new(BLOCK_ALIGN),
+            len: U64::new(blocks_end - BLOCK_ALIGN),
+            xxh3: U64::new(0),
+        });
+        self.sections.push(RawSection {
+            kind: U32::new(KIND_GEOMETRY),
+            flags: U32::new(0),
+            off: U64::new(geom_start),
+            len: U64::new(geom_end - geom_start),
+            xxh3: U64::new(hash.digest()),
+        });
+        // L'index des cellules suit la géométrie.
+        let index = self.entries.as_slice().as_bytes().to_vec();
+        self.put_small(KIND_CELL_INDEX, &mut index.as_slice(), index.len() as u64)
+    }
+
+    fn put_small(&mut self, kind: u32, r: &mut impl std::io::Read, len: u64) -> Result<(), FormatError> {
+        self.out.pad_to(64)?;
+        let off = self.out.pos;
+        let mut hash = Xxh3::new();
+        let mut buf = vec![0u8; 1 << 20];
+        let mut left = len;
+        while left > 0 {
+            let n = left.min(buf.len() as u64) as usize;
+            r.read_exact(&mut buf[..n])?;
+            self.out.put(&buf[..n])?;
+            hash.update(&buf[..n]);
+            left -= n as u64;
+        }
+        self.sections.push(RawSection {
+            kind: U32::new(kind),
+            flags: U32::new(0),
+            off: U64::new(off),
+            len: U64::new(len),
+            xxh3: U64::new(hash.digest()),
+        });
+        Ok(())
+    }
+
+    /// Section `ID_NODES` : `n` ids OSM (`u64` petit-boutiste), dans l'ordre des ids globaux.
+    pub fn put_node_ids(&mut self, r: &mut impl std::io::Read, n: u64) -> Result<(), FormatError> {
+        self.put_small(KIND_ID_NODES, r, n * 8)
+    }
+
+    /// Section `ID_EDGES` : `n` triplets `(way u64, a u32, b u32)`, dans l'ordre des arêtes.
+    pub fn put_edge_ids(&mut self, r: &mut impl std::io::Read, n: u64) -> Result<(), FormatError> {
+        self.put_small(KIND_ID_EDGES, r, n * 16)
+    }
+
+    /// Section `STATS`, en-tête, `fsync`, relecture par `mmap` et `verify()`, `chmod 0444`, `rename`.
+    pub fn finish(mut self, stats_json: &[u8], h: &StreamHeader<'_>) -> Result<(), FormatError> {
+        self.put_small(KIND_STATS, &mut &stats_json[..], stats_json.len() as u64)?;
+        self.out.w.flush()?;
+        let counts = HeaderCounts {
+            nodes: h.nodes,
+            edges: h.edges,
+            directed: h.directed,
+            cells: self.cells.len() as u64,
+        };
+        let file = self.out.w.get_mut();
+        write_header(file, h.zoom, counts, &h.meta, h.tool_version, h.build_epoch, &self.sections)?;
+        file.sync_all()?;
+        verify_file(&self.tmp)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.tmp, std::fs::Permissions::from_mode(0o444))?;
+        }
+        std::fs::rename(&self.tmp, &self.path)?;
+        self.finished = true;
+        Ok(())
+    }
+}
+
+impl Drop for StreamWriter {
+    fn drop(&mut self) {
+        if !self.finished {
+            let _ = std::fs::remove_file(&self.tmp);
+        }
+    }
+}
+
+/// Relecture d'un fichier écrit en flux : projection mémoire (rien de proportionnel au graphe dans le RSS
+/// anonyme), puis `verify()`.
+#[cfg(feature = "mmap")]
+fn verify_file(path: &Path) -> Result<(), FormatError> {
+    GraphFile::open_mmap(path)?.verify()?;
+    Ok(())
+}
+
+#[cfg(not(feature = "mmap"))]
+fn verify_file(path: &Path) -> Result<(), FormatError> {
+    GraphFile::open(std::fs::read(path)?)?.verify()?;
     Ok(())
 }
