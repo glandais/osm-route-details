@@ -242,7 +242,7 @@ impl<'a> Weighter<'a> {
     pub fn edge<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
         let (attrs, len) = eng.attrs_len(e);
         let w = match self.taste {
-            None => cost::edge_weight(self.ride, attrs, len),
+            None => eng.base_weight(self.ride, attrs, len),
             Some(q) => cost::taste_weight(self.ride, attrs, len, q),
         };
         let Some(tt) = self.tt else { return w };

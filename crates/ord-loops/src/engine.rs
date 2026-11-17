@@ -11,7 +11,7 @@ use ord_graph::attrs::Attrs;
 use ord_graph::format::{GraphFile, DIR_BIT};
 use ord_graph::view::ViewKind;
 
-use crate::cost::RideType;
+use crate::cost::{self, RideType, Taste};
 use crate::geo::polyline_m;
 use crate::index::ViewIndex;
 
@@ -47,6 +47,10 @@ pub struct Params {
     pub window_margin_m: f64,
     /// Fils du calcul des index à l'ouverture (une vue par fil, au plus).
     pub index_threads: usize,
+    /// Goût de base (lot 4, 3b) : le poids de **toute** arête de la vue, aux deux curseurs, avec ou sans équipe. Défaut :
+    /// la table commune figée ([`Taste::common`]). [`Taste::neutral`] redonne exactement les poids de 1.9.2
+    /// (`cost::edge_weight`). Un goût passé au crochet d'une `WindowTeam` **remplace** ce poids, il ne s'y multiplie pas.
+    pub base_taste: Taste,
 }
 
 impl Default for Params {
@@ -67,6 +71,7 @@ impl Default for Params {
             max_distance_m: 400_000.0,
             window_margin_m: 1_000.0,
             index_threads: 2,
+            base_taste: Taste::common(),
         }
     }
 }
@@ -376,6 +381,13 @@ fn check_view<B: AsRef<[u8]>>(
 }
 
 impl<B: AsRef<[u8]>> Engine<B> {
+    /// Poids d'une arête de base pour un type : `⌈len × K × q8 / (64 × 256)⌉` avec la table du goût de base
+    /// (`Params::base_taste`). Avec [`Taste::neutral`], exactement [`cost::edge_weight`].
+    #[inline]
+    pub(crate) fn base_weight(&self, ride: RideType, a: Attrs, len_dm: u32) -> u32 {
+        cost::taste_weight(ride, a, len_dm, &self.params.base_taste.q8[ride.index()])
+    }
+
     pub fn params(&self) -> &Params {
         &self.params
     }

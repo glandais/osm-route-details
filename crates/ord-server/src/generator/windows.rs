@@ -253,7 +253,7 @@ impl WindowManager {
                     Some(wt) => wt,
                     None => {
                         // Réservé avant d'être construit : un agrégat servi sans être gardé reste compté.
-                        let est = WindowTeam::estimate_bytes(&win);
+                        let est = WindowTeam::estimate_bytes(&win, false);
                         let mut g = lock(&self.inner);
                         while !self.reserve_in(&mut g, est) {
                             g = self.wait(g, deadline, stop, true)?;

@@ -57,9 +57,29 @@ enum Command {
     TasteCommon(taste_common::TasteCommonArgs),
 }
 
+/// Le goût de base du moteur d'un banc (`--base-taste`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum BaseTaste {
+    Neutral,
+    Common,
+}
+
+impl BaseTaste {
+    fn taste(self) -> ord_loops::Taste {
+        match self {
+            Self::Neutral => ord_loops::Taste::neutral(),
+            Self::Common => ord_loops::Taste::common(),
+        }
+    }
+}
+
 /// Les arguments du banc du lot 2.
 #[derive(Debug, clap::Args)]
 struct BenchArgs {
+    /// Goût de base du moteur (lot 4, 3b) : `neutral` (les poids de 1.9.2, défaut : les relevés passés se rejouent tels
+    /// quels) ou `common` (la table commune du moteur, celle que sert 1.10).
+    #[arg(long, value_enum, default_value_t = BaseTaste::Neutral)]
+    base_taste: BaseTaste,
     /// Graphe de base (défaut : le graphe de la région sous `~/.cache/osm-route-details/graph/`).
     #[arg(long)]
     graph: Option<PathBuf>,
@@ -314,7 +334,7 @@ fn run_bench(a: BenchArgs) -> Result<()> {
     let load0 = load_avg();
     let t0 = std::time::Instant::now();
     let open = |p: &Path| GraphFile::open_mmap(p).with_context(|| p.display().to_string());
-    let mut params = Params::default();
+    let mut params = Params { base_taste: a.base_taste.taste(), ..Params::default() };
     if let Some(h) = a.hole_m {
         params.hole_m = h;
     }

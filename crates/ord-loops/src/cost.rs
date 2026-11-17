@@ -128,7 +128,10 @@ pub fn k64(ride: RideType, a: Attrs) -> u32 {
     k
 }
 
-/// Poids d'une arête de base pour un type, sans équipe : `len_dm × K / 64`, arrondi au supérieur.
+/// Poids d'une arête de base pour un type, sans goût : la référence de 1.9.2, que le moteur n'appelle plus (il passe
+/// par `Engine::base_weight`, qui lui est égal avec `Taste::neutral()`) ; gardée pour les tests.
+/// `len_dm × K / 64`, arrondi au supérieur.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn edge_weight(ride: RideType, a: Attrs, len_dm: u32) -> u32 {
     let k = u64::from(k64(ride, a));
     (u64::from(len_dm) * k).div_ceil(64).min(u64::from(u32::MAX / 8)) as u32

@@ -240,6 +240,12 @@ pub(crate) fn scenario_params() -> Params {
     Params { window_margin_m: 20.0, ..Params::default() }
 }
 
+/// Les mêmes paramètres avec le poids de base de 1.9.2 (`Taste::neutral`) : la référence d'avant le 3b, rejouée sans
+/// re-bénédiction pour montrer que la table commune ne change rien d'autre que les poids.
+pub(crate) fn scenario_params_192() -> Params {
+    Params { base_taste: crate::cost::Taste::neutral(), ..scenario_params() }
+}
+
 pub(crate) const ZOOMS: [u8; 2] = [11, 16];
 pub(crate) const REQUESTS: usize = 70;
 
@@ -252,9 +258,13 @@ pub(crate) type Runner<'a> = &'a dyn Fn(
 
 /// Rejoue les requêtes de la référence avec `runner` et rend les lignes de fixture.
 pub(crate) fn reference_lines(runner: Runner<'_>) -> Vec<String> {
+    reference_lines_with(runner, scenario_params)
+}
+
+pub(crate) fn reference_lines_with(runner: Runner<'_>, params: fn() -> Params) -> Vec<String> {
     let mut out = Vec::new();
     for zoom in ZOOMS {
-        let e = engine_zoomed(&mut scenario_graph(7), zoom, scenario_params());
+        let e = engine_zoomed(&mut scenario_graph(7), zoom, params());
         let team = TeamData::build(&e, &overlay_of(&e, &scenario_rows(&e, 11))).unwrap();
         let mut ws = Workspace::new();
         for (i, r) in scenario_requests(13, REQUESTS).iter().enumerate() {
@@ -269,15 +279,28 @@ pub(crate) fn fixture_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/window_reference.txt")
 }
 
+/// La référence de 1.9.2 (poids de base neutre), figée au 3b et jamais re-bénie.
+pub(crate) fn fixture_path_192() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/window_reference_192.txt")
+}
+
 pub(crate) fn assert_matches_reference(runner: Runner<'_>) {
-    let lines = reference_lines(runner);
-    let path = fixture_path();
-    if std::env::var_os("ORD_LOOPS_BLESS").is_some() {
+    assert_matches_fixture(runner, scenario_params, &fixture_path(), true);
+}
+
+pub(crate) fn assert_matches_fixture(
+    runner: Runner<'_>,
+    params: fn() -> Params,
+    path: &std::path::Path,
+    blessable: bool,
+) {
+    let lines = reference_lines_with(runner, params);
+    if blessable && std::env::var_os("ORD_LOOPS_BLESS").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        std::fs::write(path, lines.join("\n") + "\n").unwrap();
         return;
     }
-    let want = std::fs::read_to_string(&path).expect("fixture de référence absente (ORD_LOOPS_BLESS=1)");
+    let want = std::fs::read_to_string(path).expect("fixture de référence absente (ORD_LOOPS_BLESS=1)");
     let want: Vec<&str> = want.lines().collect();
     assert_eq!(want.len(), lines.len(), "nombre de requêtes");
     let mut bad = String::new();
@@ -292,6 +315,18 @@ pub(crate) fn assert_matches_reference(runner: Runner<'_>) {
 #[test]
 fn the_flat_engine_still_matches_the_frozen_reference() {
     assert_matches_reference(&|e, team, r, ws| generate_with_diagnostics(e, team, r, ws, &mut || false));
+}
+
+/// Le 3b change les poids de base (la table commune) et rien d'autre : avec `Taste::neutral`, la référence de 1.9.2
+/// se rejoue **sans** re-bénédiction (`ORD_LOOPS_BLESS` n'y touche pas).
+#[test]
+fn the_flat_engine_with_a_neutral_base_taste_still_matches_the_192_reference() {
+    assert_matches_fixture(
+        &|e, team, r, ws| generate_with_diagnostics(e, team, r, ws, &mut || false),
+        scenario_params_192,
+        &fixture_path_192(),
+        false,
+    );
 }
 
 #[test]

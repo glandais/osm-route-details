@@ -397,7 +397,7 @@ impl WindowTeam {
                     if fl & TEAM != 0 {
                         let (attrs, len) = e.attrs_len(ed);
                         let w = u64::from(match q8 {
-                            None => cost::edge_weight(ride, attrs, len),
+                            None => e.base_weight(ride, attrs, len),
                             Some(q) => cost::taste_weight(ride, attrs, len, q),
                         });
                         a += w;
@@ -406,7 +406,7 @@ impl WindowTeam {
                     } else if fl & BRIDGED != 0 {
                         let (attrs, len) = e.attrs_len(ed);
                         let w = u64::from(match q8 {
-                            None => cost::edge_weight(ride, attrs, len),
+                            None => e.base_weight(ride, attrs, len),
                             Some(q) => cost::taste_weight(ride, attrs, len, q),
                         });
                         b += w;
@@ -437,8 +437,12 @@ impl WindowTeam {
 
     /// Octets que tiendront les agrégats de `win` (une `ChainTeam` par chaîne et par type de sortie de la vue) : de
     /// quoi les réserver **avant** de les construire.
-    pub fn estimate_bytes(win: &Window) -> usize {
-        win.n_chains() * rides_of_view(win.vi).len() * std::mem::size_of::<ChainTeam>()
+    ///
+    /// `with_taste` : les agrégats portent aussi un poids au goût par chaîne et par type (4 octets de plus), ce que fait
+    /// la lecture d'un profil d'équipe (3b). Sans goût, le calcul d'avant.
+    pub fn estimate_bytes(win: &Window, with_taste: bool) -> usize {
+        let per = std::mem::size_of::<ChainTeam>() + if with_taste { std::mem::size_of::<u32>() } else { 0 };
+        win.n_chains() * rides_of_view(win.vi).len() * per
     }
 
     pub(crate) fn chains_of(&self, ride: RideType) -> &[ChainTeam] {

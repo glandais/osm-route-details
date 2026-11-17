@@ -10,7 +10,6 @@ use ord_graph::format::DIR_BIT;
 use ord_graph::grid::{tile_key, tile_of_e7, tile_of_key, tile_rect_e7};
 use ord_graph::view::{heading_to_u16, polyline_heading};
 
-use crate::cost::{self};
 use crate::engine::{rides_of_view, Engine, Snap, ViewData};
 use crate::geo::{haversine_m, point_segment, LatLon, Local, M_PER_DEG};
 use crate::{Request, RideType};
@@ -419,7 +418,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
                 for l in links {
                     let (a, len) = self.attrs_len(l.get() & !DIR_BIT);
                     for &r in rides {
-                        sums[r.index()] += u64::from(cost::edge_weight(r, a, len));
+                        sums[r.index()] += u64::from(self.base_weight(r, a, len));
                     }
                 }
                 for &r in rides {

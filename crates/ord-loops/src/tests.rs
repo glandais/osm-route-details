@@ -67,8 +67,14 @@ pub(crate) fn engine_zoomed(src: &mut MemSource, zoom: u8, params: Params) -> En
     Engine::new(base, road, gravel, params).expect("moteur")
 }
 
+/// Les paramètres par défaut avec le poids de base de 1.9.2 : les tests d'arithmétique et de non-régression ne doivent
+/// pas dépendre de la table commune (3b).
+pub(crate) fn neutral_params() -> Params {
+    Params { base_taste: Taste::neutral(), ..Params::default() }
+}
+
 pub(crate) fn engine_of(src: &mut MemSource) -> Engine<Vec<u8>> {
-    engine_with(src, Params::default())
+    engine_with(src, neutral_params())
 }
 
 /// Chaîne de la vue (fenêtre de toutes les tuiles : ids locaux = ids globaux) qui porte l'arête de base.
@@ -211,7 +217,7 @@ fn ring_rows(e: &Engine<Vec<u8>>, hole: bool) -> Vec<(u32, Counts)> {
 #[test]
 fn weights_are_monotone_in_lambda_and_strict_is_infinite_off_team() {
     let mut last = 0;
-    let e = engine_with(&mut grid(5, 300.0), Params::default());
+    let e = engine_with(&mut grid(5, 300.0), neutral_params());
     for lambda_q8 in [256u32, 512, 768, 1280] {
         let id = |i: u64, j: u64| 1 + i * 5 + j;
         // La rue `i = 2` est roulée en entier.
@@ -249,7 +255,7 @@ fn team_of_street_two(e: &Engine<Vec<u8>>) -> TeamData {
 
 #[test]
 fn a_neutral_taste_gives_the_same_window_team_chain_by_chain() {
-    let e = engine_with(&mut grid(5, 300.0), Params::default());
+    let e = engine_with(&mut grid(5, 300.0), neutral_params());
     let team = team_of_street_two(&e);
     for vi in 0..2 {
         let win = e.full_window(vi);
@@ -281,7 +287,7 @@ fn a_taste_scales_every_edge_of_the_view_team_edges_included_in_every_mode() {
     let mut s = grid(5, 300.0);
     pt(&mut s, 100, -300.0, 0.0);
     s.way(3000, &[1, 100], &tags("tertiary", &[]));
-    let e = engine_with(&mut s, Params::default());
+    let e = engine_with(&mut s, neutral_params());
     let team = team_of_street_two(&e);
     let win = e.full_window(0);
     let v = &win.v;
@@ -653,7 +659,7 @@ fn a_sector_does_not_retry_turnarounds_on_a_loop_it_has_just_rejected() {
     // secteur : au plus un candidat par secteur, et non un par essai (campagne du lot 2 : 5 à 18 candidats
     // identiques avant la règle).
     let mut g = grid(21, 300.0);
-    let e = engine_with(&mut g, Params { tries_per_sector: 6, ..Params::default() });
+    let e = engine_with(&mut g, Params { tries_per_sector: 6, ..neutral_params() });
     let id = |i: i64, j: i64| 1 + i * 21 + j;
     let mut rows = Vec::new();
     let mut add = |a: i64, b: i64| rows.push((edge_between(&e, a as u64, b as u64), ROAD1));

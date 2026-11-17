@@ -338,7 +338,9 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         open_graph(&paths.graph)?,
         open_graph(&paths.road)?,
         open_graph(&paths.gravel)?,
-        Params::default(),
+        // Toujours le poids de base de 1.9.2 : les sondes du goût passent leur table au crochet (qui remplace le poids
+        // de base) et les relevés passés se rejouent tels quels (§14.3.3).
+        Params { base_taste: Taste::neutral(), ..Params::default() },
     )
     .map_err(|e| anyhow!("moteur : {e}"))?;
     let gf: &MappedGraph = engine.base();

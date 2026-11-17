@@ -13,11 +13,12 @@ use crate::generate::generate_with_diagnostics_in;
 use crate::team::{TeamCtx, TeamData, WindowTeam};
 use crate::tests::{engine_zoomed, overlay_of};
 use crate::tests_reference::{
-    assert_matches_reference, scenario_graph, scenario_graph_dense, scenario_params, scenario_requests,
-    scenario_requests_sized, scenario_rows, REQUESTS, ZOOMS,
+    assert_matches_fixture, assert_matches_reference, fixture_path_192, scenario_graph, scenario_graph_dense,
+    scenario_params, scenario_params_192, scenario_requests, scenario_requests_sized, scenario_rows,
+    REQUESTS, ZOOMS,
 };
 use crate::window::{tiles_union, Window};
-use crate::{Diagnostics, Failure, Generation, Request, Workspace};
+use crate::{Diagnostics, Failure, Generation, Request, RideType, Workspace};
 
 fn all_tiles(e: &Engine<Vec<u8>>, vi: usize) -> Vec<u32> {
     let v = &e.views_files[vi];
@@ -58,12 +59,118 @@ fn the_window_of_all_tiles_is_the_flat_engine() {
 fn a_neutral_taste_keeps_the_frozen_reference_bit_for_bit() {
     // Le goût neutre passe par l'arithmétique du goût (`taste_weight`) et rend la référence figée, sans bénédiction :
     // les trois modes, la découverte avec équipe comprise.
-    assert_matches_reference(&|e, team, r, ws| {
-        let win = e.full_window(r.ride_type.view_index());
-        let wt = team.map(|t| WindowTeam::build_with_taste(e, &win, t, Some(&crate::Taste::neutral())));
-        let ctx = team.zip(wt.as_ref()).map(|(data, win)| TeamCtx { data, win });
-        generate_with_diagnostics_in(e, &win, ctx, r, ws, &mut || false)
-    });
+    // Contre la référence de 1.9.2 (poids de base neutre), jamais re-bénie.
+    assert_matches_fixture(
+        &|e, team, r, ws| {
+            let win = e.full_window(r.ride_type.view_index());
+            let wt = team.map(|t| WindowTeam::build_with_taste(e, &win, t, Some(&crate::Taste::neutral())));
+            let ctx = team.zip(wt.as_ref()).map(|(data, win)| TeamCtx { data, win });
+            generate_with_diagnostics_in(e, &win, ctx, r, ws, &mut || false)
+        },
+        scenario_params_192,
+        &fixture_path_192(),
+        false,
+    );
+}
+
+/// Test 3 de la spécification du 3b (§14.11) : la table commune comme poids de base et la même table passée au crochet
+/// donnent les mêmes agrégats, les mêmes `w_osm` et les mêmes parcours, sur le scénario de référence.
+#[test]
+fn the_common_table_as_base_weight_equals_the_common_table_through_the_hook() {
+    for zoom in ZOOMS {
+        let e_common = engine_zoomed(&mut scenario_graph(7), zoom, scenario_params());
+        let e_neutral = engine_zoomed(&mut scenario_graph(7), zoom, scenario_params_192());
+        let common = crate::Taste::common();
+        let (t_c, t_n) = (
+            TeamData::build(&e_common, &overlay_of(&e_common, &scenario_rows(&e_common, 11))).unwrap(),
+            TeamData::build(&e_neutral, &overlay_of(&e_neutral, &scenario_rows(&e_neutral, 11))).unwrap(),
+        );
+        let (mut ws_a, mut ws_b, mut ws_c) = (Workspace::new(), Workspace::new(), Workspace::new());
+        for vi in 0..2 {
+            let (win_c, win_n) = (e_common.full_window(vi), e_neutral.full_window(vi));
+            let plain = WindowTeam::build(&e_common, &win_c, &t_c);
+            let through_hook = WindowTeam::build_with_taste(&e_neutral, &win_n, &t_n, Some(&common));
+            let hook_on_common = WindowTeam::build_with_taste(&e_common, &win_c, &t_c, Some(&common));
+            for ride in RideType::ALL {
+                if !crate::engine::rides_of_view(vi).contains(&ride) {
+                    continue;
+                }
+                // (a) mêmes agrégats ; `w_osm` du moteur C = poids au goût de la table C du moteur neutre.
+                let (a, b) = (plain.chains_of(ride), through_hook.chains_of(ride));
+                assert_eq!(a.len(), b.len());
+                for (x, y) in a.iter().zip(b) {
+                    assert_eq!((x.a, x.b, x.z, x.strict), (y.a, y.b, y.z, y.strict), "{ride:?}");
+                }
+                let (w, _) = through_hook.taste_of(ride).unwrap();
+                assert_eq!(&win_c.v.w_osm[ride.index()][..], w, "z{zoom} {ride:?} : w_osm = w_taste");
+                // (b) moteur C : `build(None)` et le crochet à C sont la même chose.
+                let (w2, _) = hook_on_common.taste_of(ride).unwrap();
+                assert_eq!(w, w2);
+                for (x, y) in a.iter().zip(hook_on_common.chains_of(ride)) {
+                    assert_eq!((x.a, x.b, x.z, x.strict), (y.a, y.b, y.z, y.strict));
+                }
+            }
+            // Les mêmes sorties, requête par requête.
+            for r in scenario_requests(13, 24).iter().filter(|r| r.ride_type.view_index() == vi) {
+                let run =
+                    |e: &Engine<Vec<u8>>, win: &Window, wt: &WindowTeam, t: &TeamData, ws: &mut Workspace| {
+                        let ctx = Some(TeamCtx { data: t, win: wt });
+                        format!(
+                            "{:?}",
+                            generate_with_diagnostics_in(e, win, ctx, r, ws, &mut || false)
+                                .0
+                                .map(|g| g.routes)
+                        )
+                    };
+                let x = run(&e_common, &win_c, &plain, &t_c, &mut ws_a);
+                let y = run(&e_neutral, &win_n, &through_hook, &t_n, &mut ws_b);
+                let z = run(&e_common, &win_c, &hook_on_common, &t_c, &mut ws_c);
+                assert_eq!(x, y, "(a) z{zoom}");
+                assert_eq!(x, z, "(b) z{zoom}");
+            }
+        }
+    }
+}
+
+/// Test 3 (c) : sans équipe, `w_osm` d'une fenêtre du moteur C est la somme des poids au goût de C de ses liens.
+#[test]
+fn without_a_team_the_window_weights_are_the_common_table() {
+    let e = engine_zoomed(&mut scenario_graph(7), 11, scenario_params());
+    let common = crate::Taste::common();
+    for vi in 0..2 {
+        let win = e.full_window(vi);
+        for ride in RideType::ALL {
+            if !crate::engine::rides_of_view(vi).contains(&ride) {
+                continue;
+            }
+            for c in 0..win.n_chains() {
+                let sum: u64 = win
+                    .v
+                    .links(c as u32)
+                    .iter()
+                    .map(|l| {
+                        let (a, len) = e.attrs_len(l & !DIR_BIT);
+                        u64::from(crate::cost::taste_weight(ride, a, len, &common.q8[ride.index()]))
+                    })
+                    .sum();
+                assert_eq!(u64::from(win.v.w_osm[ride.index()][c]), sum.min(u64::from(u32::MAX / 8)));
+            }
+        }
+    }
+}
+
+/// Test 4 : `base_weight` à table neutre est `edge_weight`, sur les attributs de la grille de référence.
+#[test]
+fn the_base_weight_with_a_neutral_table_is_edge_weight() {
+    let e = engine_zoomed(&mut scenario_graph(7), 11, scenario_params_192());
+    for edge in 0..e.base().header().edges as u32 {
+        let (a, len) = e.attrs_len(edge);
+        for ride in RideType::ALL {
+            for l in [len, 1, 7, 999] {
+                assert_eq!(e.base_weight(ride, a, l), crate::cost::edge_weight(ride, a, l));
+            }
+        }
+    }
 }
 
 #[test]
