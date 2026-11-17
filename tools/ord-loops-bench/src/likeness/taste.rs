@@ -331,7 +331,7 @@ pub struct TasteTable {
     pub q8: Vec<u16>,
 }
 
-fn shares(v: &[f64]) -> Vec<f64> {
+pub fn shares(v: &[f64]) -> Vec<f64> {
     let s: f64 = v.iter().sum();
     v.iter().map(|x| if s > 0.0 { x / s } else { 0.0 }).collect()
 }

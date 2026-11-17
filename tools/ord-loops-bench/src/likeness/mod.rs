@@ -7,6 +7,7 @@
 //! part ailleurs ; les équipes y sont lettrées, une boucle y est désignée par `(lettre, i)`, et seuls des agrégats et
 //! des empreintes en sortent.
 
+pub mod chain;
 pub mod compare;
 pub mod export;
 #[cfg(test)]
