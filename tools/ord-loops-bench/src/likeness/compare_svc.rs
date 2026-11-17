@@ -9,8 +9,23 @@ use serde::Serialize;
 use super::compare::{Compare, CritRow, Done, Reading, ServiceRow};
 
 /// Les variantes comparées, dans l'ordre.
-pub const NAMES: [&str; 7] =
-    ["rt05-p3", "common", "common-norm", "svc", "svc-norm", "svc-cap0", "svc-capt500"];
+pub const NAMES: [&str; 11] = [
+    "rt05-p3",
+    "common",
+    "common-norm",
+    "svc",
+    "svc-norm",
+    "svc-cap0",
+    "svc-capt500",
+    // Le mélange de la seconde sonde (décision 2 du 17 novembre) : `svc+mix:sonde` et ses combinaisons.
+    "svc-sonde",
+    "svc-sonde-norm",
+    "svc-sonde-cap0",
+    "svc-sonde-capt500",
+];
+
+/// Les deux formes du service : le plafonné (le 3b codé) et la sonde.
+const FORMS: [&str; 2] = ["svc", "svc-sonde"];
 
 /// Les groupes : type × curseur.
 const GROUPS: [(&str, f64); 4] = [("ROAD", 0.25), ("ROAD", 1.0), ("GRAVEL", 0.25), ("GRAVEL", 1.0)];
@@ -81,10 +96,25 @@ fn service<'a>(rows: &'a [ServiceRow], v: &str, c: f64) -> Option<&'a ServiceRow
     rows.iter().find(|r| r.variant == v && r.cursor == c)
 }
 
-/// Applique la règle de la normalisation sur ce qui a été joué.
+/// Applique la règle de la normalisation sur ce qui a été joué (la forme plafonnée : `common` et `svc`).
 pub fn norm_rule(cmp: &Compare, done: &[Done]) -> Option<NormRule> {
-    let pairs: Vec<PairVerdict> = [("common-norm", "common"), ("svc-norm", "svc")]
-        .into_iter()
+    norm_rule_for(cmp, done, &[("common-norm", "common"), ("svc-norm", "svc")], ("svc-norm", "svc"))
+}
+
+/// La même règle pour la forme de la sonde : `svc-sonde-norm` contre `svc-sonde` seulement (la table commune brute ou
+/// normalisée est déjà jugée par la première).
+pub fn norm_rule_sonde(cmp: &Compare, done: &[Done]) -> Option<NormRule> {
+    norm_rule_for(cmp, done, &[("svc-sonde-norm", "svc-sonde")], ("svc-sonde-norm", "svc-sonde"))
+}
+
+fn norm_rule_for(
+    cmp: &Compare,
+    done: &[Done],
+    pair_names: &[(&str, &str)],
+    (svc_norm, svc_raw): (&str, &str),
+) -> Option<NormRule> {
+    let pairs: Vec<PairVerdict> = pair_names
+        .iter()
         .filter(|(n, r)| has(done, n) && has(done, r))
         .map(|(n, r)| pair(&cmp.criterion, n, r))
         .collect();
@@ -93,13 +123,13 @@ pub fn norm_rule(cmp: &Compare, done: &[Done]) -> Option<NormRule> {
     }
     let b_road: Vec<Option<f64>> = [0.25, 1.0]
         .iter()
-        .map(|&c| ratio(&cmp.criterion, "B", Reading::All, ("ROAD", c), "svc-norm"))
+        .map(|&c| ratio(&cmp.criterion, "B", Reading::All, ("ROAD", c), svc_norm))
         .collect();
-    let b_road_below_one = (has(done, "svc-norm") && b_road.iter().all(Option::is_some))
+    let b_road_below_one = (has(done, svc_norm) && b_road.iter().all(Option::is_some))
         .then(|| b_road.iter().flatten().all(|&x| x < 1.0));
-    let service_ok = (has(done, "svc-norm") && has(done, "svc")).then(|| {
+    let service_ok = (has(done, svc_norm) && has(done, svc_raw)).then(|| {
         [0.25, 1.0].iter().all(|&c| {
-            let (Some(n), Some(r)) = (service(&cmp.service, "svc-norm", c), service(&cmp.service, "svc", c))
+            let (Some(n), Some(r)) = (service(&cmp.service, svc_norm, c), service(&cmp.service, svc_raw, c))
             else {
                 return true;
             };
@@ -134,7 +164,7 @@ fn f3(x: Option<f64>) -> String {
 pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
     let mut out = Vec::new();
     let rows = &cmp.criterion;
-    for v in ["common", "svc"].into_iter().filter(|v| has(done, v)) {
+    for v in ["common", "svc", "svc-sonde"].into_iter().filter(|v| has(done, v)) {
         let mut worst = (0.0f64, String::new());
         for reading in [Reading::All, Reading::Gap] {
             for g in GROUPS {
@@ -151,11 +181,11 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
             detail: format!("plus haut : {:.3} en {}", worst.0, worst.1),
         });
     }
-    if has(done, "svc") {
+    for form in FORMS.into_iter().filter(|f| has(done, f)) {
         let b: Vec<Option<f64>> =
-            [0.25, 1.0].iter().map(|&c| ratio(rows, "B", Reading::All, ("ROAD", c), "svc")).collect();
+            [0.25, 1.0].iter().map(|&c| ratio(rows, "B", Reading::All, ("ROAD", c), form)).collect();
         out.push(Fact {
-            label: "(b) B ROAD « toutes » < 1,0 aux deux curseurs (`svc`)".into(),
+            label: format!("(b) B ROAD « toutes » < 1,0 aux deux curseurs (`{form}`)"),
             holds: b.iter().all(Option::is_some).then(|| b.iter().flatten().all(|&x| x < 1.0)),
             detail: format!(
                 "{} · {} (rappel `rt05-p3` : {} · {})",
@@ -169,7 +199,7 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
             let mut worst = (f64::MIN, String::new());
             for g in GROUPS {
                 if let (Some(s), Some(r)) = (
-                    ratio(rows, "toutes", Reading::All, g, "svc"),
+                    ratio(rows, "toutes", Reading::All, g, form),
                     ratio(rows, "toutes", Reading::All, g, "rt05-p3"),
                 ) {
                     if s - r > worst.0 {
@@ -178,7 +208,7 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
                 }
             }
             out.push(Fact {
-                label: "(c) `svc` ≤ `rt05-p3` + 0,05 par groupe, « toutes »".into(),
+                label: format!("(c) `{form}` ≤ `rt05-p3` + 0,05 par groupe, « toutes »"),
                 holds: (worst.0 > f64::MIN).then_some(worst.0 <= 0.05),
                 detail: format!("écart le plus grand : {:+.3} en {}", worst.0, worst.1),
             });
@@ -188,13 +218,13 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
                 .iter()
                 .map(|&c| {
                     Some(
-                        ratio(rows, "A", Reading::All, ("ROAD", c), "svc")?
+                        ratio(rows, "A", Reading::All, ("ROAD", c), form)?
                             - ratio(rows, "A", Reading::All, ("ROAD", c), "common")?,
                     )
                 })
                 .collect();
             out.push(Fact {
-                label: "(d) A : `svc − common` ≤ +0,03 en ROAD, « toutes »".into(),
+                label: format!("(d) A : `{form} − common` ≤ +0,03 en ROAD, « toutes »"),
                 holds: d.iter().all(Option::is_some).then(|| d.iter().flatten().all(|&x| x <= 0.03)),
                 detail: format!("{} · {}", f3(d[0]), f3(d[1])),
             });
@@ -207,13 +237,17 @@ pub fn facts(cmp: &Compare, done: &[Done]) -> Vec<Fact> {
 #[derive(Clone, Debug, Serialize)]
 pub struct ThreeB {
     pub norm_rule: Option<NormRule>,
+    /// La règle sur la forme de la sonde (`svc-sonde-norm` contre `svc-sonde`), si elle a été jouée.
+    pub norm_rule_sonde: Option<NormRule>,
     pub facts: Vec<Fact>,
 }
 
 pub fn three_b(cmp: &Compare, done: &[Done]) -> Option<ThreeB> {
-    done.iter()
-        .any(|d| d.variant.svc.is_some())
-        .then(|| ThreeB { norm_rule: norm_rule(cmp, done), facts: facts(cmp, done) })
+    done.iter().any(|d| d.variant.svc.is_some()).then(|| ThreeB {
+        norm_rule: norm_rule(cmp, done),
+        norm_rule_sonde: norm_rule_sonde(cmp, done),
+        facts: facts(cmp, done),
+    })
 }
 
 fn names_present(done: &[Done]) -> Vec<&'static str> {
@@ -292,30 +326,32 @@ pub fn section_md(s: &mut String, cmp: &Compare, done: &[Done]) {
         }
     }
     let _ = writeln!(s, "\n### Normalisation (règle du §14.12.4)\n");
-    match &tb.norm_rule {
-        None => {
-            let _ = writeln!(s, "Non jouée (`common+norm` ou `svc+norm` absent) : brute.\n");
-        }
-        Some(r) => {
-            for p in &r.pairs {
-                let _ = writeln!(
-                    s,
-                    "- `{}` contre `{}` : pire perte {} (seuil +0,02), meilleur gain {} (seuil 0,02) : **{}**",
-                    p.norm,
-                    p.raw,
-                    f3(p.worst_loss),
-                    f3(p.best_gain),
-                    if p.ok { "satisfait" } else { "non satisfait" }
-                );
+    for (form, rule) in [("plafonné", &tb.norm_rule), ("sonde", &tb.norm_rule_sonde)] {
+        let Some(r) = rule else {
+            if form == "plafonné" {
+                let _ = writeln!(s, "Non jouée (`common+norm` ou `svc+norm` absent) : brute.\n");
             }
+            continue;
+        };
+        let _ = writeln!(s, "Forme **{form}** :\n");
+        for p in &r.pairs {
             let _ = writeln!(
                 s,
-                "- B ROAD `svc-norm` « toutes » < 1,0 : {:?} ; service pas pire : {:?}\n- **Décision de la règle : {}**\n",
-                r.b_road_below_one,
-                r.service_ok,
-                if r.adopt_normalized == Some(true) { "normalisée" } else { "brute" }
+                "- `{}` contre `{}` : pire perte {} (seuil +0,02), meilleur gain {} (seuil 0,02) : **{}**",
+                p.norm,
+                p.raw,
+                f3(p.worst_loss),
+                f3(p.best_gain),
+                if p.ok { "satisfait" } else { "non satisfait" }
             );
         }
+        let _ = writeln!(
+            s,
+            "- B ROAD normalisée « toutes » < 1,0 : {:?} ; service pas pire : {:?}\n- **Décision de la règle : {}**\n",
+            r.b_road_below_one,
+            r.service_ok,
+            if r.adopt_normalized == Some(true) { "normalisée" } else { "brute" }
+        );
     }
     let _ = writeln!(s, "### Faits sur le chemin du service (§14.12.5)\n");
     for f in &tb.facts {

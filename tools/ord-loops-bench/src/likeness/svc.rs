@@ -9,7 +9,7 @@ use std::time::Instant;
 use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph_match::profile::collect::Cap;
-use ord_graph_match::profile::learn::{Common, LearnParams, Learned};
+use ord_graph_match::profile::learn::{Common, LearnParams, Learned, Mix};
 use ord_graph_match::profile::{first_kept_class_meters, Player, Stopped};
 use ord_loops::{
     generate_with_diagnostics_in, Failure, Request, Taste, TeamCtx, TeamData, Workspace, TASTE_CLASSES,
@@ -154,6 +154,8 @@ pub struct SvcMeta {
     pub learn: String,
     pub cap: String,
     pub normalize: bool,
+    /// `capped` (le service par défaut) ou `sonde`.
+    pub mix: String,
     pub teams: Vec<SvcTeam>,
 }
 
@@ -164,7 +166,15 @@ pub fn learn_params(
     cursors: [u32; 2],
     seed: u64,
 ) -> LearnParams {
-    LearnParams { normalize: svc.norm, cap: cap_of(svc), cursors, seed, retain, ..LearnParams::default() }
+    LearnParams {
+        normalize: svc.norm,
+        cap: cap_of(svc),
+        cursors,
+        seed,
+        retain,
+        mix: if svc.sonde { Mix::Sonde } else { Mix::Capped },
+        ..LearnParams::default()
+    }
 }
 
 /// Résume un apprentissage.
@@ -251,7 +261,7 @@ mod tests {
             })
             .collect();
         let set = LearnSet { loops, counts: Default::default() };
-        let common = Common { q8: [[256; TASTE_CLASSES]; 3], gen_dm_per_loop: [[0; TASTE_CLASSES]; 3] };
+        let common = Common::without_steps([[256; TASTE_CLASSES]; 3], [[0; TASTE_CLASSES]; 3]);
         let cursors = [(Mode::TeamFirst, 0.5f32, 640u32), (Mode::TeamFirst, 0.5, 256)];
         let p = LearnParams { n0: 0.0, steps: 1, normalize: false, ..LearnParams::default() };
         let out = ord_graph_match::profile::learn::learn(&set, &cursors, &Toy, &common, &p);
@@ -285,9 +295,109 @@ mod tests {
         assert_eq!(out.steps_done, 1);
     }
 
+    /// La forme `sonde` du service redonne **au bit près** les tables du `rt` du banc sur un petit cas synthétique : une
+    /// équipe, des boucles ROAD et GRAVEL, trois pas, la cible commune de chaque pas donnée aux deux (mêmes mètres).
+    #[test]
+    fn the_sonde_mix_gives_the_benchs_rt_tables_bit_for_bit() {
+        use super::super::chain::{ChainState, ClassMeters, Meters, Owner};
+        use super::super::variants::Dims;
+        use crate::likeness::TasteSource;
+        use ord_graph_match::profile::collect::loop_request;
+        use ord_graph_match::profile::learn::{Mix, StepMeters};
+
+        // Des boucles : 14 ROAD et 6 GRAVEL, 8 classes de réel ; la classe 7 a du réel mais jamais de généré commun.
+        let loops: Vec<LearnLoop> = (0..20)
+            .map(|i| {
+                let mut real_m = [0.0; TASTE_CLASSES];
+                for (c, r) in real_m.iter_mut().enumerate().take(8) {
+                    *r = 40.0 + ((i * 7 + c * 13) % 97) as f64;
+                }
+                LearnLoop {
+                    key: i as u64 + 1,
+                    ty: if i < 14 { 0 } else { 1 },
+                    start: (47.0, -1.5),
+                    bearing: None,
+                    distance_m: 20_000.0,
+                    real_m,
+                }
+            })
+            .collect();
+        let set = LearnSet { loops, counts: Default::default() };
+        let cursors = [(Mode::TeamFirst, 0.5f32, 640u32), (Mode::TeamFirst, 0.5, 256)];
+        // La cible commune : trois pas, des mètres variés (des classes sans généré, d'autres sans réel), au-dessus du
+        // seuil de kilomètres ; MTB sans boucle (`N_P = 0`).
+        let mut common = Common::without_steps([[256; TASTE_CLASSES]; 3], [[0; TASTE_CLASSES]; 3]);
+        for (k, st) in common.steps.iter_mut().enumerate() {
+            let mut sm = StepMeters::default();
+            for t in 0..2 {
+                for c in 0..TASTE_CLASSES {
+                    sm.real[t][c] = ((c * 37 + k * 11 + t * 5) % 23 + 1) as f64 * 1_500.0;
+                    sm.gen[t][c] = ((c * 29 + k * 7 + t * 3) % 19) as f64 * 1_300.0;
+                }
+                sm.gen[t][7] = 0.0;
+                sm.loops[t] = 120 + 30 * k as u32 + t as u32;
+            }
+            *st = sm;
+        }
+        let p = LearnParams { mix: Mix::Sonde, normalize: false, ..LearnParams::default() };
+        let out = ord_graph_match::profile::learn::learn(&set, &cursors, &Toy, &common, &p);
+        assert_eq!(out.steps_done, 3);
+
+        // Le banc : `rt` sur les mêmes mètres de l'équipe (jouée avec sa table du pas précédent) et la même cible.
+        let tp = TasteParams::default();
+        let mut chain = ChainState::new(Dims::D72, p.gamma);
+        let mut team_taste = Taste::neutral();
+        for step in &common.steps {
+            let mut mine = Meters::default();
+            for l in &set.loops {
+                let t = usize::from(l.ty).min(2);
+                let mut counted = false;
+                for &(mode, fam, q) in &cursors {
+                    let req =
+                        loop_request(l.start, l.bearing, l.distance_m, l.ty, mode, fam, q, l.key ^ p.seed);
+                    let Some(g) = Toy.play_all(&[req], &team_taste).unwrap()[0] else { continue };
+                    for c in 0..TASTE_CLASSES {
+                        mine.real[t][c] += l.real_m[c];
+                        mine.gen[t][c] += g[c];
+                    }
+                    mine.pairs[t] += 1;
+                    counted = true;
+                }
+                mine.loops[t] += u32::from(counted);
+            }
+            let mut pooled = Meters::default();
+            for t in 0..3 {
+                pooled.real[t] = step.real[t].to_vec();
+                pooled.gen[t] = step.gen[t].to_vec();
+                pooled.loops[t] = step.loops[t];
+            }
+            let cm = ClassMeters { pooled, team: vec![mine] };
+            chain.step(TasteSource::RecalTeam, &cm, &[0], &["A".to_string()], &tp);
+            for t in 0..3 {
+                let q = chain.owners[&Owner::Team(0)][t].q8();
+                team_taste.q8[t].copy_from_slice(&q);
+            }
+        }
+        // Les deux types qui ont des boucles : mêmes `q8`, case par case.
+        assert_eq!(out.taste.q8[0], team_taste.q8[0]);
+        assert_eq!(out.taste.q8[1], team_taste.q8[1]);
+        assert_ne!(out.taste.q8[0], [256; TASTE_CLASSES], "le pas ne doit pas être vide");
+        // Le type sans boucle garde la table commune (le banc le suivrait, sa cible `N_P = 0` le laisse neutre).
+        assert_eq!(out.taste.q8[2], common.q8[2]);
+        // La forme `capped` donne autre chose sur les mêmes entrées : le test distingue bien les deux.
+        let capped = ord_graph_match::profile::learn::learn(
+            &set,
+            &cursors,
+            &Toy,
+            &common,
+            &LearnParams { mix: Mix::Capped, ..p.clone() },
+        );
+        assert_ne!(capped.taste.q8[0], out.taste.q8[0]);
+    }
+
     #[test]
     fn cap_of_follows_the_variant_and_the_default_is_the_services() {
-        let sv = |cap| Svc { kind: SvcKind::Svc, norm: false, cap };
+        let sv = |cap| Svc { kind: SvcKind::Svc, norm: false, cap, sonde: false };
         assert_eq!(cap_of(&sv(None)), Cap::Team(500));
         assert_eq!(cap_of(&sv(Some(SvcCap::Team(0)))), Cap::None);
         assert_eq!(cap_of(&sv(Some(SvcCap::Team(300)))), Cap::Team(300));

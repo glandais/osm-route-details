@@ -1546,7 +1546,7 @@ mod tests {
             format: FORMAT,
             learned_at: 1_700_000_100,
             overlay_deposited_at: 1_700_000_000,
-            common: hex16(st.common.hash()),
+            common: hex16(st.common.hash_for(st.learn.mix)),
             learn: hex16(st.learn.hash()),
             engine: "1.10.0".into(),
             steps: 3,

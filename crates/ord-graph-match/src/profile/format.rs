@@ -106,7 +106,7 @@ pub fn decode(
         taste.q8[i / TASTE_CLASSES][i % TASTE_CLASSES] = q;
     }
     let empty_set = meta.loops == [0, 0, 0];
-    if meta.common != hex16(common.hash())
+    if meta.common != hex16(common.hash_for(learn.mix))
         || meta.learn != hex16(learn.hash())
         || meta.normalized != learn.normalize
         || (meta.steps == 0 && !empty_set)
@@ -127,7 +127,7 @@ mod tests {
             format: FORMAT,
             learned_at: 1_700_000_000,
             overlay_deposited_at: 1_699_999_000,
-            common: hex16(common.hash()),
+            common: hex16(common.hash_for(learn.mix)),
             learn: hex16(learn.hash()),
             engine: "1.10.0".into(),
             steps: 3,
@@ -148,6 +148,28 @@ mod tests {
         let bytes = encode(&meta, &taste);
         let (m2, t2) = decode(&bytes, &common, &learn).unwrap();
         assert_eq!((m2, t2), (meta, taste));
+    }
+
+    #[test]
+    fn a_profile_learned_with_the_other_mix_is_a_settings_error() {
+        use super::super::learn::Mix;
+        let (common, capped, meta, taste) = fixture();
+        let sonde = LearnParams { mix: Mix::Sonde, ..capped.clone() };
+        let as_sonde = ProfileMeta {
+            common: hex16(common.hash_for(Mix::Sonde)),
+            learn: hex16(sonde.hash()),
+            ..meta.clone()
+        };
+        let bytes = encode(&as_sonde, &taste);
+        assert!(decode(&bytes, &common, &sonde).is_ok());
+        assert_eq!(decode(&bytes, &common, &capped), Err(Incompatible::Settings));
+        assert_eq!(decode(&encode(&meta, &taste), &common, &sonde), Err(Incompatible::Settings));
+        // Des mètres de pas changés suffisent : la table commune des pas n'est plus celle du profil.
+        let mut other = common.clone();
+        other.steps[0].real[0][0] += 1.0;
+        assert_eq!(decode(&bytes, &other, &sonde), Err(Incompatible::Settings));
+        // ... et ne changent rien pour la forme `capped`.
+        assert!(decode(&encode(&meta, &taste), &other, &capped).is_ok());
     }
 
     #[test]

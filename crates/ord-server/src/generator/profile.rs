@@ -281,7 +281,7 @@ impl Ready {
             format: FORMAT,
             learned_at: now,
             overlay_deposited_at,
-            common: hex16(settings.common.hash()),
+            common: hex16(settings.common.hash_for(settings.learn.mix)),
             learn: hex16(settings.learn.hash()),
             engine: env!("CARGO_PKG_VERSION").to_string(),
             steps: l.steps_done,

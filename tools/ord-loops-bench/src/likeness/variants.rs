@@ -76,7 +76,7 @@ pub enum SvcCap {
     PerType(usize),
 }
 
-/// Variante du chemin du service (3b) : `common`, `svc`, avec `norm`, `cap:<n>` ou `capt:<n>`.
+/// Variante du chemin du service (3b) : `common`, `svc`, avec `norm`, `cap:<n>` ou `capt:<n>`, et `mix:sonde`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Svc {
     pub kind: SvcKind,
@@ -84,6 +84,8 @@ pub struct Svc {
     pub norm: bool,
     /// `None` : le plafond du service (500 par équipe).
     pub cap: Option<SvcCap>,
+    /// `mix:sonde` : le mélange de la seconde sonde (départ neutre, cible commune de chaque pas) au lieu du plafonné.
+    pub sonde: bool,
 }
 
 /// Une variante : `base`, ou la familiarité et/ou un goût.
@@ -137,6 +139,7 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     let mut taste_pos: Option<usize> = None;
     // Le chemin du service (3b) : `common` ou `svc`, `norm`, `cap:<n>`, `capt:<n>`.
     let (mut kind, mut norm, mut cap): (Option<SvcKind>, bool, Option<SvcCap>) = (None, false, None);
+    let mut sonde = false;
     ensure!(!spec.is_empty(), "variante vide");
     for comp in spec.split('+') {
         match comp {
@@ -163,6 +166,15 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                     val.parse().map_err(|_| anyhow!("variante : `{key}` attend un entier : « {val} »"))?;
                 cap = Some(if key == "cap" { SvcCap::Team(n) } else { SvcCap::PerType(n) });
                 names.push(format!("{key}{n}"));
+            }
+            "mix" => {
+                ensure!(!sonde, "variante « {spec} » : deux `mix`");
+                ensure!(
+                    val == "sonde",
+                    "variante : `mix` vaut `sonde` (le défaut `capped` est sans suffixe) : « {val} »"
+                );
+                sonde = true;
+                names.push("sonde".into());
             }
             "fam" | "famroad" => {
                 ensure!(fam.is_none(), "variante « {spec} » : deux familiarités");
@@ -210,13 +222,14 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         cap.is_none() || kind == Some(SvcKind::Svc),
         "variante « {spec} » : `cap` et `capt` demandent `svc`"
     );
+    ensure!(!sonde || kind == Some(SvcKind::Svc), "variante « {spec} » : `mix` demande `svc`");
     if kind.is_some() {
         ensure!(
             taste.is_none() && fam.is_none() && n.is_none() && dims.is_none(),
             "variante « {spec} » : `common` et `svc` n'acceptent ni autre goût, ni `fam`, ni `famroad`, ni `n`, ni `dim`"
         );
     }
-    let svc = kind.map(|kind| Svc { kind, norm, cap });
+    let svc = kind.map(|kind| Svc { kind, norm, cap, sonde });
     let recal = matches!(taste, Some((TasteSource::Recal | TasteSource::RecalTeam, _)));
     ensure!(
         recal || (n.is_none() && dims.is_none()),
@@ -477,6 +490,9 @@ mod tests {
             "svc+cap:0",
             "svc+capt:500",
             "svc+norm+cap:300",
+            "svc+mix:sonde",
+            "svc+mix:sonde+norm",
+            "svc+mix:sonde+capt:500",
         ])
         .unwrap();
         let names: Vec<&str> = v.iter().map(|x| x.name.as_str()).collect();
@@ -490,11 +506,18 @@ mod tests {
                 "svc-norm",
                 "svc-cap0",
                 "svc-capt500",
-                "svc-norm-cap300"
+                "svc-norm-cap300",
+                "svc-sonde",
+                "svc-sonde-norm",
+                "svc-sonde-capt500"
             ]
         );
-        assert_eq!(v[6].svc, Some(Svc { kind: SvcKind::Svc, norm: false, cap: Some(SvcCap::PerType(500)) }));
-        assert_eq!(v[7].svc, Some(Svc { kind: SvcKind::Svc, norm: true, cap: Some(SvcCap::Team(300)) }));
+        let sv = |norm, cap, sonde| Some(Svc { kind: SvcKind::Svc, norm, cap, sonde });
+        assert_eq!(v[6].svc, sv(false, Some(SvcCap::PerType(500)), false));
+        assert_eq!(v[7].svc, sv(true, Some(SvcCap::Team(300)), false));
+        assert_eq!(v[8].svc, sv(false, None, true));
+        assert_eq!(v[9].svc, sv(true, None, true));
+        assert_eq!(v[10].svc, sv(false, Some(SvcCap::PerType(500)), true));
         assert!(v[1].taste.is_none() && v[1].fam.is_none() && !v[1].is_base() && v[3].chain.is_none());
         for bad in [
             vec!["base", "norm"],
@@ -510,6 +533,11 @@ mod tests {
             vec!["base", "svc+n:2"],
             vec!["base", "svc+cap:x"],
             vec!["svc"],
+            vec!["base", "mix:sonde"],
+            vec!["base", "common+mix:sonde"],
+            vec!["base", "svc+mix:capped"],
+            vec!["base", "svc+mix:sonde+mix:sonde"],
+            vec!["base", "svc+mix:sonde", "svc+mix:sonde"],
             vec!["common", "base"],
             vec!["base", "svc", "svc"],
             vec!["base", "svc+norm", "svc+norm"],

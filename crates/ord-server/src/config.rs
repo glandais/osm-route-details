@@ -488,11 +488,34 @@ pub struct GeneratorProfileConfig {
     pub max_loops: usize,
     /// Le plafond s'applique par type (ROAD, GRAVEL, MTB) au lieu de par équipe.
     pub per_type: bool,
+    /// Forme du mélange avec la table commune. Elle entre dans l'empreinte des réglages d'apprentissage : la changer rend
+    /// les profils écrits `incompatibles` (`stale`, raison `profile`) jusqu'au prochain dépôt.
+    pub mix: ProfileMix,
+}
+
+/// Forme du mélange d'un profil d'équipe avec la table commune (décision 2 du 17 novembre 2026).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileMix {
+    /// L'équipe part de la table commune et corrige par `g^w`, `w` plafonné à `N / (N + n0)` : le 3b tel que codé.
+    #[default]
+    Capped,
+    /// Le mélange de la seconde sonde : départ à la table neutre, mélange à chaque pas avec la cible commune de ce pas,
+    /// poids nu `G_T / (G_T + n0 G_P / N_P)`.
+    Sonde,
 }
 
 impl Default for GeneratorProfileConfig {
     fn default() -> Self {
-        Self { enabled: true, threads: 4, max_concurrent: 1, budget_s: 720, max_loops: 500, per_type: false }
+        Self {
+            enabled: true,
+            threads: 4,
+            max_concurrent: 1,
+            budget_s: 720,
+            max_loops: 500,
+            per_type: false,
+            mix: ProfileMix::Capped,
+        }
     }
 }
 
@@ -805,6 +828,7 @@ mod tests {
             bad(&mut c);
             assert!(c.validate().is_err());
         }
+        assert_eq!(config.generator.profile.mix, ProfileMix::Capped);
         config.generator.profile.threads = 16;
         assert!(config.validate().is_ok());
         config.generator.profile.max_loops = PROFILE_MAX_LOOPS_BOUND;
@@ -813,8 +837,13 @@ mod tests {
         figment::Jail::expect_with(|jail| {
             jail.set_env("ORD_GENERATOR__PROFILE__THREADS", "2");
             jail.set_env("ORD_GENERATOR__PROFILE__PER_TYPE", "true");
+            jail.set_env("ORD_GENERATOR__PROFILE__MIX", "sonde");
             let c = Config::load(None).map_err(|e| e.to_string())?;
             assert_eq!((c.generator.profile.threads, c.generator.profile.per_type), (2, true));
+            assert_eq!(c.generator.profile.mix, ProfileMix::Sonde);
+            jail.set_env("ORD_GENERATOR__PROFILE__MIX", "lent");
+            assert!(Config::load(None).is_err(), "forme inconnue refusée");
+            jail.set_env("ORD_GENERATOR__PROFILE__MIX", "capped");
             jail.set_env("ORD_GENERATOR__PROFILE__THREAD", "2");
             assert!(Config::load(None).is_err(), "clé inconnue refusée");
             Ok(())

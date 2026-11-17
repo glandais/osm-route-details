@@ -428,8 +428,12 @@ impl Generator {
         // dépasser le budget de mémoire. Le crochet de test abaisse `min_km` pour les graphes synthétiques.
         let profile = cfg.profile.enabled.then(|| {
             use ord_graph_match::profile::collect::Cap;
-            use ord_graph_match::profile::learn::{Common, LearnParams};
+            use ord_graph_match::profile::learn::{Common, LearnParams, Mix};
             let mut learn = LearnParams {
+                mix: match cfg.profile.mix {
+                    crate::config::ProfileMix::Capped => Mix::Capped,
+                    crate::config::ProfileMix::Sonde => Mix::Sonde,
+                },
                 cap: if cfg.profile.per_type {
                     Cap::PerType(cfg.profile.max_loops)
                 } else {

@@ -1036,10 +1036,11 @@ fn svc_meta(
     let cursors = [hs.first().copied().unwrap_or(25), hs.get(1).copied().unwrap_or(100)];
     let lp = svc::learn_params(sv, retain, cursors, a.seed);
     svc::SvcMeta {
-        common: ord_graph_match::profile::format::hex16(svc::common_of(sv.norm).hash()),
+        common: ord_graph_match::profile::format::hex16(svc::common_of(sv.norm).hash_for(lp.mix)),
         learn: ord_graph_match::profile::format::hex16(lp.hash()),
         cap: if sv.kind == variants::SvcKind::Svc { format!("{:?}", lp.cap) } else { String::new() },
         normalize: sv.norm,
+        mix: lp.mix.label().to_string(),
         teams,
     }
 }
