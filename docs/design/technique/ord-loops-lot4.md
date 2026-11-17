@@ -1901,3 +1901,64 @@ contrôleur, au contrat, à la version ; rien au dépôt ; pas de nouvelle dépe
 décision 1 du §9.2) ; pas de table par curseur (une table par type sert les deux curseurs, comme le moteur l'appliquera) ;
 pas de normalisation (question 6) ; pas de jeu des boucles d'apprentissage sur la surcouche « écart » (§13.4) ; pas de
 pente ni de trafic.
+
+### 13.13 Écarts du codage
+
+Écrits le 17 novembre 2026, au codage des commits 1 à 4 du §13.10 (branche `feat/ord-loops-lot4-sonde2`). Aucune campagne
+complète n'a été lancée : le commit 5 (campagnes du §13.8, relevé `ord-loops-lot4-recal.md`) reste à faire ; seuls un essai
+de fumée (une à deux équipes, 5 à 40 boucles, sorties privées sous `~/.cache/osm-route-details/graph/lot4/smoke-sonde2/`) et
+un contrôle de déterminisme à petite échelle (équipe B, 20 boucles, 1 et 16 fils : mêmes empreintes de résultat et mêmes
+`taste_xxh3`, variante par variante, `rc` et `rt` en effets principaux compris) ont tourné. Ni le contrôle « pas 1 = `rc05` »
+(§13.6), ni `base` = `55c3b065dc085f42`, ni le contrôle « `S_base` toutes » n'ont donc été exercés sur la France : ils le sont
+au premier lancement de la campagne 1 (arrêt automatique si le pas 1 n'est pas `rc05`).
+
+1. **`Dims` vit dans `variants.rs`** (et `chain.rs` le réexporte) : `Chain` en a besoin au commit 1, avant que `chain.rs`
+   existe.
+2. **`ClassMeters::of`** garde la signature du §13.2.1 (`&[export::Loop]`) et délègue à `of_keys` sur les seuls
+   `(équipe, type)` des boucles : c'est tout ce qu'elle en lit, et le test 7 n'a pas à fabriquer des `Walk` et des `Trace`.
+3. **La comparaison des chaînes est dans `compare_chain.rs`**, appelée par `compare.rs` (qui reste dans ses 900 lignes) ;
+   les sections sont émises à leur place : 3 bis et 3 ter après le 3, 5 bis après le 5, 8 bis puis 9 après le 8.
+4. **Effets principaux, jauge** : le centrage des marges `b` et `β` ne décale que les niveaux qui ont du poids (un niveau sans
+   poids garde 0, test 6c) ; la borne `±ln bound` s'applique après la jauge, si bien que `Σ Ω_s b[s] = 0` n'est exact que tant
+   que rien n'est borné (cas du test 6d).
+5. **Mélange par équipe, bits** : `w = 0` rend `g_P` (ou le coefficient commun) sans passer par `exp ∘ ln`, et `w = 1` rend
+   `g_T`, pour que « une équipe sans donnée reçoit exactement les `q8` de la table commune » (test 5a) soit vrai au bit près ;
+   sinon `exp(w ln g_T + (1 − w) ln g_P)`. La table commune de `rt` est tenue dans l'état `Owner::General` (son signe et son γ
+   suivent la cible `g_P`), jamais jouée.
+6. **Cas dégénéré à une équipe** : si une campagne ne joue qu'une équipe, `rt` donne les mêmes tables que `rc` (l'ensemble est
+   l'équipe, `g_T = g_P`) ; observé à la fumée sur B et sur C. Sans objet aux campagnes du §13.8 (A, B, C, D, E…).
+7. **Fuite** : la convention du §13.4 est gardée (« écart, dans l'échantillon » − « écart », en `S / S_base`) ; elle est
+   **négative** quand l'échantillon se lit mieux que l'écart (le signe d'un surapprentissage). Le seuil de 0,10 du §13.11
+   point 3 est donc lu **en valeur absolue** ; la plus grande fuite rapportée au §8 bis est la plus grande en valeur
+   absolue, avec son signe.
+8. **Diagnostics** : un propriétaire sans paire comptée pour un type (le MTB, une équipe sans GRAVEL) n'a pas de ligne ; « autres »
+   somme les boucles, les paires, les paramètres divisés et les classes à la borne, et moyenne simplement `l1 avant`, `l1 après`,
+   `poids` et `mult. moyen`. `l1_after` est aussi calculé pour `base` et les variantes sans chaîne (propriétaire `général`, et
+   les équipes), sans conséquence au rapport. Les multiplicateurs cumulés du §3 ter sont pondérés **par la part générée du pas 1**
+   dans toutes les colonnes (comparables d'un pas à l'autre) ; `rt` les donne pour A et B.
+9. **Nom** : `dim:me` est inséré juste après le composant de goût quel que soit son ordre dans la spécification
+   (`dim:me+rc:0.5` donne `rc05-me`) ; le reste suit l'ordre donné.
+10. **Contrôles** : `Conditions` gagne `holdout_share`, `step1_check` et `all_check_applies` ; le contrôle « `S_base` toutes »
+    ne s'applique que hors réglages du 4a, aux curseurs par défaut, sans `--limit`, `--max-km` ni `--teams`, et sans
+    `--no-holdout` ; ailleurs, « sans objet ». Le contrôle « pas 1 = `rc05` » demande en plus `m`, `bound` et `min_km` aux
+    défauts (`LikenessArgs::taste_at_4a_defaults`).
+11. **Coût** : `cpu_s_full` est la somme des `PlayRec::ms` des jeux `full` ; « autres » est la **somme** des autres lettres
+    (pas un profil unique) ; le temps sur `k` fils est `total / k` (un calcul, pas une mesure), et l'allègement « un seul
+    curseur » prend le premier curseur de `--cursors` (0,25 par défaut).
+12. **Commit 1** : `rt` y était refusé à l'exécution (message « pas encore branché »), levé au commit 3.
+
+**Commandes des campagnes** (inchangées, §13.8 ; `B=./target/release/ord-loops-bench`, depuis le dépôt, une campagne à la
+fois) :
+
+```
+cargo build --release -p ord-loops-bench
+# 1. essai court
+$B likeness --teams C --limit 5 --variants base,rc:0.5+n:2,rt:0.5+n:2,famroad:1+rt:0.5+dim:me+n:2 --label recal-essai
+# 2. déterminisme (~15 min à 1 fil)
+$B likeness --teams B --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 1 --label recal-det1
+$B likeness --teams B --variants base,rc:0.5+n:2,rt:0.5+dim:me+n:2 --threads 16 --label recal-det16
+# 3. campagne 1
+$B likeness --label recal-general --variants base,rc:0.5+n:3,rc:0.5+dim:me+n:3
+# 4. forme X = me ou 72 (règle du §13.8.4), puis campagne 2 (X = me : +dim:me ; X = 72 : rien)
+$B likeness --label recal-equipe --holdout-share 0.25 --variants base,rc:0.5+dim:X+n:3,rt:0.5+dim:X+n:3,famroad:1+rc:0.5+dim:X+n:3,famroad:1+rt:0.5+dim:X+n:3
+```
