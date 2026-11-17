@@ -145,19 +145,54 @@ impl<'a> Deposit<'a> {
                     j
                 }
             };
-            let trv = if e.trv.is_nan() { job.glen } else { e.trv };
-            let km = f64::from(trv) / 1000.0;
-            self.stats.team_edges += 1;
-            self.stats.km_total += km;
-            match verdict(e.wk, &job) {
-                Verdict::Outside => self.stats.km_outside += km,
-                Verdict::Fail { cause, .. } => self.stats.km_unmatched[cause] += km,
-                Verdict::Counted(chain) => {
-                    self.stats.km_matched += km;
-                    push_chain_covs(self.gf, chain, &mut self.covs);
-                }
+            self.add_edge(e.wk, e.trv, &job);
+        }
+        self.end_track(ty);
+    }
+
+    /// Comme [`Deposit::push_track`], pour une trace dont chaque géométrie a déjà été appariée par [`match_job`]
+    /// (pure : même résultat que la mémoïsation, qui n'est donc pas utilisée). `edges` : `(wk, trv annoncé,
+    /// appariement)` dans l'ordre de la trace ; `None` : document illisible. Les compteurs `memo_hits` et
+    /// `memo_misses` ne bougent pas.
+    pub fn push_matched<'j, I>(&mut self, ty: u8, excluded: bool, edges: Option<I>)
+    where
+        I: IntoIterator<Item = (u8, f32, &'j Job)>,
+    {
+        self.stats.tracks += 1;
+        if excluded {
+            self.stats.excluded += 1;
+            return;
+        }
+        let Some(edges) = edges else {
+            self.stats.unreadable += 1;
+            return;
+        };
+        self.covs.clear();
+        for (wk, trv, job) in edges {
+            self.add_edge(wk, trv, job);
+        }
+        self.end_track(ty);
+    }
+
+    /// Une arête d'équipe de famille `wk`, de `trv` mètres annoncés (`NaN` : repli sur la longueur de la géométrie),
+    /// dont la géométrie a donné `job`.
+    fn add_edge(&mut self, wk: u8, trv: f32, job: &Job) {
+        let trv = if trv.is_nan() { job.glen } else { trv };
+        let km = f64::from(trv) / 1000.0;
+        self.stats.team_edges += 1;
+        self.stats.km_total += km;
+        match verdict(wk, job) {
+            Verdict::Outside => self.stats.km_outside += km,
+            Verdict::Fail { cause, .. } => self.stats.km_unmatched[cause] += km,
+            Verdict::Counted(chain) => {
+                self.stats.km_matched += km;
+                push_chain_covs(self.gf, chain, &mut self.covs);
             }
         }
+    }
+
+    /// Fin d'une trace de type `ty` : compte ses recouvrements, une fois par arête et par sens.
+    fn end_track(&mut self, ty: u8) {
         let (counted, below) = count_track(&mut self.covs, usize::from(ty), &mut self.counts);
         self.stats.km_counted += counted;
         self.stats.km_below_threshold += below;

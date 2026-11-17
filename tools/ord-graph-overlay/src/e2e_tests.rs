@@ -459,7 +459,8 @@ fn counts_saturate_at_65535_in_the_file() {
 fn the_service_deposit_gives_the_tool_overlay() {
     use ord_graph::util::Poly;
     use ord_graph_match::doc::{parse_document, type_code};
-    use ord_graph_match::{CellIndex, Deposit, Near, SegIndex};
+    use ord_graph_match::job::{match_job, Job};
+    use ord_graph_match::{CellIndex, Deposit, DepositStats, Near, SegIndex};
 
     let rows = all_rows();
     let fx = fixture(&rows);
@@ -492,5 +493,28 @@ fn the_service_deposit_gives_the_tool_overlay() {
             assert_eq!(counts, want_counts, "équipe {team}, {name} : comptes");
             assert_eq!(stats.tracks, rows.iter().filter(|r| r.team == team).count() as u64);
         }
+        // Appariements précalculés (`match_job`, pure) puis `push_matched` : mêmes arêtes et mêmes comptes, et les
+        // mêmes statistiques que `push_track` (hors compteurs de mémoïsation).
+        let mut reference = Deposit::new(&gf, &full, &poly, 1000);
+        let mut matched = Deposit::new(&gf, &full, &poly, 1000);
+        for r in rows.iter().filter(|r| r.team == team) {
+            let doc = || parse_document(doc_json(r).as_bytes());
+            reference.push_track(type_code(r.ty), r.excluded, doc());
+            let jobs: Option<Vec<(u8, f32, Job)>> = doc().map(|edges| {
+                edges.iter().map(|e| (e.wk, e.trv, match_job(&gf, &full, &poly, &e.g, e.trv))).collect()
+            });
+            matched.push_matched(
+                type_code(r.ty),
+                r.excluded,
+                jobs.as_ref().map(|v| v.iter().map(|(wk, trv, job)| (*wk, *trv, job))),
+            );
+        }
+        let (edges, counts, stats) = matched.finish();
+        let (ref_edges, ref_counts, ref_stats) = reference.finish();
+        assert_eq!(edges, want_edges, "équipe {team}, appariements précalculés : arêtes");
+        assert_eq!(counts, want_counts, "équipe {team}, appariements précalculés : comptes");
+        assert_eq!((edges, counts), (ref_edges, ref_counts));
+        let zero_memo = |s: DepositStats| DepositStats { memo_hits: 0, memo_misses: 0, ..s };
+        assert_eq!(zero_memo(stats), zero_memo(ref_stats), "équipe {team} : statistiques");
     }
 }
