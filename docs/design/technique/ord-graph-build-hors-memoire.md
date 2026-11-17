@@ -97,7 +97,8 @@ Entrées-sorties **par lecture et écriture tamponnées**, pas par `mmap` : comm
 gonflerait le RSS de pages de fichier et brouillerait la mesure du pic. Le cache de pages du noyau fait le reste.
 
 Les fichiers temporaires vont sous `--tmp-dir` (défaut : `<out-dir>/.ordg-build-<pid>/`). Ils sont supprimés en fin de
-construction, et à l'échec. Un dossier de construction laissé par un processus mort est signalé, jamais réutilisé.
+construction, et à l'échec. Un dossier de construction laissé par un processus mort est signalé, jamais réutilisé
+(réalisation : nom unique, verrou, suppression du reste au départ suivant, §13.3).
 
 ## 5. Étapes
 
@@ -246,7 +247,8 @@ comptée à ×6,5 et la planète à ×23, par le nombre de ways `highway` (tagin
 
 **Limites du format** pour la planète **[estimé]** : ≈ 550 M arêtes, sous la limite de 2^31 ; sommets sous 2^32 ;
 coordonnées de cellule sur 16 bits à z11 (2^11). La limite actuelle de 2^32 références (`Pass1`) disparaît, puisque
-les références ne sont plus indexées en `u32`.
+les références ne sont plus indexées en `u32` ; celle de 2^31 nœuds utilisés aussi, pour la même raison (§13.3) :
+la planète en compte de l'ordre de 2 milliards **[estimé]**, au ras de cette limite.
 
 ## 7. Interface
 
@@ -369,3 +371,50 @@ Code : `crates/ord-graph/src/extsort.rs` (tri externe, dossier temporaire), `cra
 Andorre est trop petite pour mesurer le pic mémoire : 58 Mo en `--external`, contre 52 Mo en mémoire, l'essentiel
 étant le processus lui-même. Les mesures de pic, de durée et de disque temporaire restent celles du §10 (région,
 France, Europe).
+
+### 13.3 Après relecture du code (17 novembre 2026)
+
+Dix points relevés à la relecture, corrigés. Les octets écrits ne changent pas (vérifications ci-dessous).
+
+1. **Paquets de géométrie dimensionnés sur leur coût en mémoire.** Un paquet chargé coûte ses octets de géométrie,
+   plus 28 o par arête (en-tête de 12 o dans le fichier, entrée d'index de 16 o). Les paquets se découpent sur ce
+   coût cumulé dans l'ordre des arêtes (`GeomReq` porte l'id d'arête), à la moitié du budget : le pic tient, que
+   les géométries soient longues ou d'un octet. Au-delà de 256 paquets ouverts à la fois, `geom0` est relu en
+   plusieurs passes de 256 paquets, au lieu de grossir les paquets : la borne ne dépend plus de la couverture.
+   Plancher : 4 Kio par paquet.
+2. **Plus de fichier `geom` intermédiaire.** Les paquets rangés sont lus en flux par `put_geometry`
+   (`GeomStream`, un `Read`) : une écriture et une lecture complètes de la section en moins, et la géométrie
+   n'est plus deux fois sur le disque à côté du fichier de sortie. La redistribution se fait après les blocs de
+   cellule, quand le tri des arêtes orientées a rendu son tampon.
+3. **Limite de 2^31 nœuds utilisés retirée** du chemin hors mémoire : rien n'y indexe les nœuds utilisés en
+   `u32`. Restent les limites du format : 2^31 arêtes, 2^32 sommets, 2^32 ways gardées.
+4. **Dossier temporaire** : `.ordg-build-<pid>-<unique>/`, avec un fichier `<dossier>.lock` verrouillé (`flock`)
+   tant que la construction vit. Deux constructions (deux conteneurs sur le même volume, deux appels dans un
+   processus) ne se gênent plus. Un dossier dont le verrou est libre vient d'une construction tuée : la suivante
+   le **supprime** au départ et le signale (`stale_tmp_removed`, message de la commande). Écart au §4, qui
+   demandait de le laisser à supprimer à la main : avec un pid repris d'un lancement à l'autre (conteneur), ce
+   reste bloquait toutes les constructions suivantes. Un dossier sans verrou n'est pas touché. Pas de
+   gestionnaire de signal : le reste d'une interruption est repris au lancement suivant, pas à l'interruption.
+5. **Erreur en passe 1** : `ElementSink::way` et `relation` rendent un `Result`, et la source arrête son
+   parcours à la première erreur (disque plein, source non triée), au lieu de décoder le reste du PBF. Vaut
+   aussi pour la construction en mémoire.
+6. **Pic de mémoire relevé avant la relecture.** `verify()` relit le fichier par `mmap` : ses pages comptent dans
+   `VmHWM`, qui monte alors d'à peu près la taille du fichier. Le rapport ajoute `peak_rss_before_verify_kb`
+   (`VmHWM` juste avant), qui est le chiffre à comparer au critère « budget + 0,3 Go » du §10 ; `peak_rss_kb`
+   et `/usr/bin/time -v` restent le pic du processus entier, pages de fichier comprises. La relecture, elle, n'a
+   pas changé.
+7. **Tampon d'un tri** : il double jusqu'à sa part de budget, jamais au-delà (il pouvait réserver près du double).
+8. **Filtre et découpe partagés.** `keep_way`, `route_relation`, `cut_way` et `len_dm` (`build.rs`) servent aux
+   deux constructions. `build_graph` adopte donc la découpe way par way du §5 E3 : plus de drapeaux `FLAG_END` et
+   `FLAG_LOOP` posés sur les nœuds, plus de tableau des segments. Conséquence pour le §8 : les tests
+   d'équivalence ne comparent plus deux découpes écrites séparément ; la référence de la découpe est le binaire
+   de `develop` (ligne « Andorre » ci-dessous) et les tests de contraction de `tests/graph.rs`.
+9. **Enregistrements `zerocopy`**, comme prévu au §4 : structures d'alignement 1 à champs petit-boutistes, sans
+   codage à la main ; une série s'écrit d'un bloc. `ID_NODES`, `ID_EDGES` et les sommets s'écrivent avec les
+   types de `format.rs` (`U64`, `EdgeIdRec`, `NodeRec`). `Edge0` 52 o, `WayNodeC` 25 o, `GeomReq` 24 o.
+10. **`tests/external.rs`** ne se compile qu'avec la feature `external` (et son test PBF avec `pbf`).
+
+| Vérification | Résultat |
+|---|---|
+| Tests | Ceux du §13.2, plus : paquets de géométrie sur plusieurs passes et paquet plus petit qu'une géométrie, avec contrôle de la mémoire tenue ; capacité du tampon de tri ; reste d'une construction morte supprimé, dossier d'une construction en cours gardé ; quatre constructions simultanées dans le même dossier ; arrêt de la source à la première erreur de passe 1. `clippy -D warnings` propre |
+| Andorre | Le binaire d'avant ces corrections et celui d'après, en mémoire, puis `--external` à 1 Mo et 1 fil, puis au budget par défaut : octets identiques de la fin de l'en-tête au début de `STATS` |

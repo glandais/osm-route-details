@@ -140,9 +140,9 @@ struct RawCell {
 
 #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy)]
 #[repr(C)]
-struct NodeRec {
-    lat: I32,
-    lon: I32,
+pub(crate) struct NodeRec {
+    pub(crate) lat: I32,
+    pub(crate) lon: I32,
 }
 
 /// Arête orientée du CSR : cible (id global de nœud) et arête (31 bits) + sens (bit 31).
@@ -194,10 +194,10 @@ struct BorderRec {
 /// Clé de la section `ID_EDGES` : way OSM et extrémités (ids globaux de nœud).
 #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy)]
 #[repr(C)]
-struct EdgeIdRec {
-    way: U64,
-    a: U32,
-    b: U32,
+pub(crate) struct EdgeIdRec {
+    pub(crate) way: U64,
+    pub(crate) a: U32,
+    pub(crate) b: U32,
 }
 
 const _: () = assert!(size_of::<RawHeader>() == HEADER_LEN);
@@ -1362,14 +1362,14 @@ impl StreamWriter {
         Ok(())
     }
 
-    /// Section `ID_NODES` : `n` ids OSM (`u64` petit-boutiste), dans l'ordre des ids globaux.
+    /// Section `ID_NODES` : `n` ids OSM (`U64`), dans l'ordre des ids globaux.
     pub fn put_node_ids(&mut self, r: &mut impl std::io::Read, n: u64) -> Result<(), FormatError> {
-        self.put_small(KIND_ID_NODES, r, n * 8)
+        self.put_small(KIND_ID_NODES, r, n * size_of::<U64>() as u64)
     }
 
-    /// Section `ID_EDGES` : `n` triplets `(way u64, a u32, b u32)`, dans l'ordre des arêtes.
+    /// Section `ID_EDGES` : `n` enregistrements `EdgeIdRec`, dans l'ordre des arêtes.
     pub fn put_edge_ids(&mut self, r: &mut impl std::io::Read, n: u64) -> Result<(), FormatError> {
-        self.put_small(KIND_ID_EDGES, r, n * 16)
+        self.put_small(KIND_ID_EDGES, r, n * size_of::<EdgeIdRec>() as u64)
     }
 
     /// Section `STATS`, en-tête, `fsync`, relecture par `mmap` et `verify()`, `chmod 0444`, `rename`.
@@ -1405,8 +1405,9 @@ impl Drop for StreamWriter {
     }
 }
 
-/// Relecture d'un fichier écrit en flux : projection mémoire (rien de proportionnel au graphe dans le RSS
-/// anonyme), puis `verify()`.
+/// Relecture d'un fichier écrit en flux : projection mémoire, puis `verify()`. Rien de proportionnel au graphe
+/// dans le RSS anonyme, mais les pages de fichier lues comptent dans `VmHWM` : le pic de la construction se
+/// relève donc avant cet appel (`ExternalReport::peak_rss_before_verify_kb`).
 #[cfg(feature = "mmap")]
 fn verify_file(path: &Path) -> Result<(), FormatError> {
     GraphFile::open_mmap(path)?.verify()?;

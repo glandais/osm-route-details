@@ -118,13 +118,16 @@ struct WaySink {
 }
 
 impl ElementSink for WaySink {
-    fn way(&mut self, way: &OsmWay<'_>) {
+    fn way(&mut self, way: &OsmWay<'_>) -> Result<(), BuildError> {
         let mask = cats_of(way.tags.iter().copied(), false);
         if mask != 0 {
             self.ways.push((way.id, mask, way.refs.to_vec()));
         }
+        Ok(())
     }
-    fn relation(&mut self, _relation: &OsmRelation<'_>) {}
+    fn relation(&mut self, _relation: &OsmRelation<'_>) -> Result<(), BuildError> {
+        Ok(())
+    }
 }
 
 /// Filtre d'appartenance rapide (un bit par hachage d'id) devant la dichotomie des nœuds demandés.

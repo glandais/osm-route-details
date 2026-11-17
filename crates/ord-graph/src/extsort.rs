@@ -9,6 +9,8 @@
 //! de sortie ne dépend alors ni du budget, qui change le découpage en séries, ni du nombre de fils.
 //!
 //! Lectures et écritures tamponnées, pas de `mmap` : le RSS ne compte que les tampons.
+//!
+//! Le tampon d'un tri grandit par doublement jusqu'à sa part de budget, jamais au-delà.
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -19,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use rayon::slice::ParallelSliceMut;
+use zerocopy::{FromBytes, Immutable, IntoBytes, Unaligned};
 
 /// Nombre maximal de séries fusionnées en une fois.
 pub const K_MAX: usize = 64;
@@ -27,19 +30,33 @@ const MIN_IO_BUF: usize = 16 << 10;
 /// Taille d'un tampon d'écriture séquentielle.
 pub const IO_BUF: usize = 1 << 20;
 
-/// Un enregistrement de taille fixe, codé en petit-boutiste.
-pub trait Record: Copy + Send + Sync {
+/// Un enregistrement de taille fixe : une structure `zerocopy` d'alignement 1 (champs petit-boutistes de
+/// `zerocopy::little_endian`), dont les octets en mémoire sont les octets sur disque.
+pub trait Record: FromBytes + IntoBytes + Immutable + Unaligned + Copy + Send + Sync {
     /// Octets sur disque.
-    const SIZE: usize;
-    fn put(&self, out: &mut [u8]);
-    fn get(b: &[u8]) -> Self;
+    const SIZE: usize = size_of::<Self>();
 }
 
-/// Dossier temporaire d'une construction : créé neuf, jamais réutilisé, supprimé avec son contenu à la fin
-/// (succès ou échec). Il compte les octets présents et leur pic.
+impl<T: FromBytes + IntoBytes + Immutable + Unaligned + Copy + Send + Sync> Record for T {}
+
+/// Préfixe des dossiers de construction et de leurs verrous.
+const DIR_PREFIX: &str = ".ordg-build-";
+
+/// Départage deux dossiers créés par le même processus.
+static DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Dossier temporaire d'une construction : créé neuf sous un nom unique, jamais réutilisé, supprimé avec son
+/// contenu à la fin (succès ou échec). Il compte les octets présents et leur pic.
+///
+/// Un fichier `<dossier>.lock`, à côté, reste verrouillé tant que la construction vit. Une construction tuée
+/// (signal, mémoire) laisse son dossier ; la suivante le reconnaît à son verrou libre et le supprime.
 #[derive(Debug)]
 pub struct TmpDir {
     path: PathBuf,
+    lock_path: PathBuf,
+    /// Tenu ouvert : le verrou tombe avec le processus.
+    _lock: File,
+    stale_removed: Vec<PathBuf>,
     current: AtomicU64,
     peak: AtomicU64,
     seq: AtomicU64,
@@ -47,31 +64,47 @@ pub struct TmpDir {
 }
 
 impl TmpDir {
-    /// Crée `parent/.ordg-build-<pid>/`. Un dossier du même nom laissé par un processus mort est une erreur
-    /// (signalé, jamais réutilisé).
+    /// Crée `parent/.ordg-build-<pid>-<unique>/`, après avoir supprimé les dossiers laissés là par des
+    /// constructions mortes ([`TmpDir::stale_removed`]).
     pub fn create(parent: &Path) -> std::io::Result<Self> {
         std::fs::create_dir_all(parent)?;
-        let path = parent.join(format!(".ordg-build-{}", std::process::id()));
-        std::fs::create_dir(&path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::AlreadyExists {
-                std::io::Error::new(
-                    e.kind(),
-                    format!(
-                        "dossier de construction déjà présent, à supprimer à la main : {}",
-                        path.display()
-                    ),
-                )
-            } else {
-                e
-            }
-        })?;
+        let stale_removed = remove_stale(parent);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.subsec_nanos());
+        let name = format!(
+            "{DIR_PREFIX}{}-{nanos:08x}-{}",
+            std::process::id(),
+            DIR_SEQ.fetch_add(1, Ordering::Relaxed)
+        );
+        let path = parent.join(&name);
+        let lock_path = parent.join(format!("{name}.lock"));
+        // Le verrou d'abord : un dossier visible a toujours son verrou déjà pris.
+        let lock = std::fs::OpenOptions::new().write(true).create_new(true).open(&lock_path)?;
+        if lock.try_lock().is_err() {
+            // Système de fichiers sans verrou : sans fichier de verrou, personne ne prendra ce dossier pour un
+            // reste.
+            let _ = std::fs::remove_file(&lock_path);
+        }
+        if let Err(e) = std::fs::create_dir(&path) {
+            let _ = std::fs::remove_file(&lock_path);
+            return Err(e);
+        }
         Ok(Self {
             path,
+            lock_path,
+            _lock: lock,
+            stale_removed,
             current: AtomicU64::new(0),
             peak: AtomicU64::new(0),
             seq: AtomicU64::new(0),
             runs: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Dossiers de constructions mortes supprimés à la création de celui-ci.
+    pub fn stale_removed(&self) -> &[PathBuf] {
+        &self.stale_removed
     }
 
     pub fn path(&self) -> &Path {
@@ -118,7 +151,34 @@ impl TmpDir {
 impl Drop for TmpDir {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.path);
+        let _ = std::fs::remove_file(&self.lock_path);
     }
+}
+
+/// Supprime de `parent` les dossiers de construction dont le verrou est libre : leur processus est mort. Un
+/// dossier sans fichier de verrou (autre origine) ou au verrou tenu (construction en cours, même d'un autre
+/// processus) n'est pas touché. Rend les dossiers supprimés.
+fn remove_stale(parent: &Path) -> Vec<PathBuf> {
+    let mut removed = Vec::new();
+    let Ok(entries) = std::fs::read_dir(parent) else { return removed };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !name.starts_with(DIR_PREFIX) || !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        let lock_path = parent.join(format!("{name}.lock"));
+        let Ok(lock) = File::open(&lock_path) else { continue };
+        if lock.try_lock().is_err() {
+            continue;
+        }
+        let dir = entry.path();
+        if std::fs::remove_dir_all(&dir).is_ok() {
+            let _ = std::fs::remove_file(&lock_path);
+            removed.push(dir);
+        }
+    }
+    removed
 }
 
 /// Écrit des enregistrements à la suite dans un fichier temporaire.
@@ -127,7 +187,6 @@ pub struct RecWriter<'t, R: Record> {
     tmp: &'t TmpDir,
     path: PathBuf,
     w: BufWriter<File>,
-    buf: Vec<u8>,
     len: u64,
     _r: std::marker::PhantomData<R>,
 }
@@ -140,17 +199,21 @@ impl<'t, R: Record> RecWriter<'t, R> {
             tmp,
             path,
             w: BufWriter::with_capacity(buf_bytes.max(MIN_IO_BUF), file),
-            buf: vec![0; R::SIZE],
             len: 0,
             _r: std::marker::PhantomData,
         })
     }
 
     pub fn push(&mut self, r: &R) -> std::io::Result<()> {
-        r.put(&mut self.buf);
-        self.w.write_all(&self.buf)?;
-        self.len += 1;
-        self.tmp.added(R::SIZE as u64);
+        self.push_all(std::slice::from_ref(r))
+    }
+
+    /// Écrit une suite d'enregistrements d'un coup.
+    pub fn push_all(&mut self, rs: &[R]) -> std::io::Result<()> {
+        let bytes = rs.as_bytes();
+        self.w.write_all(bytes)?;
+        self.len += rs.len() as u64;
+        self.tmp.added(bytes.len() as u64);
         Ok(())
     }
 
@@ -176,7 +239,6 @@ pub struct RecReader<'t, R: Record> {
     tmp: &'t TmpDir,
     path: PathBuf,
     r: BufReader<File>,
-    buf: Vec<u8>,
     left: u64,
     delete: bool,
     peeked: Option<R>,
@@ -195,7 +257,6 @@ impl<'t, R: Record> RecReader<'t, R> {
             tmp,
             path: path.to_path_buf(),
             r: BufReader::with_capacity(buf_bytes.max(MIN_IO_BUF), file),
-            buf: vec![0; R::SIZE],
             left: count,
             delete,
             peeked: None,
@@ -209,9 +270,10 @@ impl<'t, R: Record> RecReader<'t, R> {
         if self.left == 0 {
             return Ok(None);
         }
-        self.r.read_exact(&mut self.buf)?;
+        let mut rec = R::new_zeroed();
+        self.r.read_exact(rec.as_mut_bytes())?;
         self.left -= 1;
-        Ok(Some(R::get(&self.buf)))
+        Ok(Some(rec))
     }
 
     pub fn peek(&mut self) -> std::io::Result<Option<&R>> {
@@ -259,8 +321,11 @@ impl<'t, R: Record, K: Ord + Send, F: Fn(&R) -> K + Sync> ExtSort<'t, R, K, F> {
     }
 
     pub fn push(&mut self, r: R) -> std::io::Result<()> {
-        if self.buf.capacity() == 0 {
-            self.buf.reserve_exact(self.cap.min(1 << 16));
+        if self.buf.len() == self.buf.capacity() {
+            // Croissance par doublement, mais jamais au-delà de `cap` : la capacité réservée reste dans la part
+            // de budget du tri. (`len < cap` ici : le tampon plein vient d'être vidé.)
+            let target = (self.buf.capacity() * 2).max(1 << 16).min(self.cap);
+            self.buf.reserve_exact(target - self.buf.len());
         }
         self.buf.push(r);
         if self.buf.len() >= self.cap {
@@ -276,9 +341,7 @@ impl<'t, R: Record, K: Ord + Send, F: Fn(&R) -> K + Sync> ExtSort<'t, R, K, F> {
         let key = &self.key;
         self.buf.par_sort_unstable_by(|a, b| key(a).cmp(&key(b)));
         let mut w = RecWriter::<R>::create(self.tmp, &format!("{}.run", self.name), IO_BUF)?;
-        for r in &self.buf {
-            w.push(r)?;
-        }
+        w.push_all(&self.buf)?;
         self.runs.push(w.finish()?);
         self.spilled += 1;
         self.buf.clear();
@@ -428,34 +491,26 @@ impl<S: Stream<R>, R: Copy> Peekable<S, R> {
 mod tests {
     use super::*;
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-    struct P(u64, u32);
+    use zerocopy::little_endian::{U32, U64};
+    use zerocopy::KnownLayout;
 
-    impl Record for P {
-        const SIZE: usize = 12;
-        fn put(&self, out: &mut [u8]) {
-            out[..8].copy_from_slice(&self.0.to_le_bytes());
-            out[8..12].copy_from_slice(&self.1.to_le_bytes());
-        }
-        fn get(b: &[u8]) -> Self {
-            P(
-                u64::from_le_bytes(b[..8].try_into().unwrap()),
-                u32::from_le_bytes(b[8..12].try_into().unwrap()),
-            )
-        }
-    }
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned, Clone, Copy, Debug)]
+    #[repr(C)]
+    struct Rec(U64, U32);
+
+    type P = (u64, u32);
 
     fn sorted(input: &[P], budget: usize) -> (Vec<P>, u64) {
         let parent = tempfile::tempdir().unwrap();
         let tmp = TmpDir::create(parent.path()).unwrap();
-        let mut s = ExtSort::new(&tmp, "p", budget, |p: &P| *p);
+        let mut s = ExtSort::new(&tmp, "p", budget, |r: &Rec| (r.0.get(), r.1.get()));
         for p in input {
-            s.push(*p).unwrap();
+            s.push(Rec(p.0.into(), p.1.into())).unwrap();
         }
         let mut out = s.finish().unwrap();
         let mut v = Vec::new();
-        while let Some(p) = out.pull().unwrap() {
-            v.push(p);
+        while let Some(r) = out.pull().unwrap() {
+            v.push((r.0.get(), r.1.get()));
         }
         drop(out);
         let runs = tmp.runs()[0].1;
@@ -471,7 +526,7 @@ mod tests {
                 x ^= x << 13;
                 x ^= x >> 7;
                 x ^= x << 17;
-                P(x % 1000, i as u32 % 7)
+                (x % 1000, i as u32 % 7)
             })
             .collect()
     }
@@ -508,11 +563,45 @@ mod tests {
     }
 
     #[test]
-    fn existing_build_dir_is_refused() {
+    fn buffer_capacity_stays_within_the_budget() {
         let parent = tempfile::tempdir().unwrap();
-        std::fs::create_dir(parent.path().join(format!(".ordg-build-{}", std::process::id()))).unwrap();
-        let e = TmpDir::create(parent.path()).unwrap_err();
-        assert!(e.to_string().contains("déjà présent"), "{e}");
+        let tmp = TmpDir::create(parent.path()).unwrap();
+        // 100 000 enregistrements de 12 octets : la capacité double depuis 65 536, sans dépasser 100 000.
+        let mut s = ExtSort::new(&tmp, "p", 1_200_000, |r: &Rec| (r.0.get(), r.1.get()));
+        for i in 0..250_000u32 {
+            s.push(Rec(u64::from(i).into(), i.into())).unwrap();
+            assert!(s.buf.capacity() <= 100_000, "{}", s.buf.capacity());
+        }
+        assert_eq!(s.runs.len(), 2);
+    }
+
+    #[test]
+    fn dead_build_dir_is_removed_live_one_is_kept() {
+        let parent = tempfile::tempdir().unwrap();
+        let live = TmpDir::create(parent.path()).unwrap();
+        // Reste d'un processus mort : dossier et verrou, que personne ne tient.
+        let dead = parent.path().join(format!("{DIR_PREFIX}dead"));
+        std::fs::create_dir(&dead).unwrap();
+        std::fs::write(dead.join("000000-run"), b"x").unwrap();
+        std::fs::write(parent.path().join(format!("{DIR_PREFIX}dead.lock")), b"").unwrap();
+        // Dossier du même préfixe sans verrou : pas à nous, laissé en place.
+        let foreign = parent.path().join(format!("{DIR_PREFIX}foreign"));
+        std::fs::create_dir(&foreign).unwrap();
+
+        let second = TmpDir::create(parent.path()).unwrap();
+        assert_eq!(second.stale_removed(), std::slice::from_ref(&dead));
+        assert!(!dead.exists());
+        assert!(!parent.path().join(format!("{DIR_PREFIX}dead.lock")).exists());
+        assert!(foreign.exists());
+        assert!(live.path().exists(), "une construction en cours garde son dossier");
+        assert_ne!(live.path(), second.path());
+
+        let (live_path, second_path) = (live.path().to_path_buf(), second.path().to_path_buf());
+        drop(live);
+        drop(second);
+        assert!(!live_path.exists() && !second_path.exists());
+        // Ne restent que le dossier étranger : ni dossier ni verrou des constructions finies.
+        assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 1);
     }
 
     #[test]

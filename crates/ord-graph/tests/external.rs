@@ -1,6 +1,8 @@
 //! Construction hors mémoire (`docs/design/technique/ord-graph-build-hors-memoire.md` §8) : mêmes octets que la
 //! construction en mémoire, quels que soient le budget (donc le découpage en séries) et le nombre de fils.
 
+#![cfg(feature = "external")]
+
 use std::path::{Path, PathBuf};
 
 use ord_graph::build::{
@@ -218,6 +220,7 @@ fn empty_graph_same_bytes() {
     compare(&s, 11, &[1, 1 << 20], &[1]);
 }
 
+#[cfg(feature = "pbf")]
 #[test]
 fn mini_pbf_same_bytes() {
     use ord_graph::pbf::PbfSource;
@@ -269,13 +272,40 @@ fn failure_leaves_neither_output_nor_tmp_dir() {
 }
 
 #[test]
-fn leftover_build_dir_is_refused() {
+fn pass_1_error_stops_the_scan() {
+    // La troisième way sur mille arrive avec un id déjà vu : la passe 1 échoue, et la source n'en livre pas
+    // une de plus.
+    let mut s = MemSource::default();
+    s.node(1, 47.0, -1.0).node(2, 47.001, -1.0);
+    for w in 1..=1000 {
+        s.way(w, &[1, 2], &[("highway", "residential")]);
+    }
+    /// Livre les ways dans l'ordre, la troisième sous l'id 1, et compte celles qu'elle livre.
+    struct Unsorted(MemSource, usize);
+    impl OsmSource for Unsorted {
+        fn meta(&self) -> SourceMeta {
+            SourceMeta::default()
+        }
+        fn scan(&mut self, sink: &mut dyn ElementSink) -> Result<(), BuildError> {
+            for (i, (id, refs, _)) in self.0.ways.iter().enumerate() {
+                self.1 += 1;
+                let id = if i == 2 { 1 } else { *id };
+                sink.way(&ord_graph::build::OsmWay { id, refs, tags: &[("highway", "residential")] })?;
+            }
+            Ok(())
+        }
+        fn nodes(&mut self, f: &(dyn Fn(i64, i32, i32) + Sync)) -> Result<(), BuildError> {
+            self.0.nodes(f)
+        }
+        fn tagged_nodes(&mut self, f: &TaggedNodeFn<'_>) -> Result<(), BuildError> {
+            self.0.tagged_nodes(f)
+        }
+    }
     let dir = tempfile::tempdir().unwrap();
-    let stale = dir.path().join(format!(".ordg-build-{}", std::process::id()));
-    std::fs::create_dir(&stale).unwrap();
     let opts = ExternalOptions { zoom: 11, mem_budget: 1, tmp_parent: dir.path().to_path_buf() };
+    let mut src = Unsorted(s.clone(), 0);
     let e = build_external(
-        &mut random_source(3),
+        &mut src,
         &opts,
         "test",
         &dir.path().join("x.ordg"),
@@ -285,6 +315,70 @@ fn leftover_build_dir_is_refused() {
         &mut |_| {},
     )
     .unwrap_err();
-    assert!(e.to_string().contains("déjà présent"), "{e}");
-    assert!(stale.exists(), "le dossier laissé n'est ni réutilisé ni supprimé");
+    assert!(matches!(e, ExternalError::Build(BuildError::NotSorted(_))), "{e}");
+    assert_eq!(src.1, 3, "ways livrées après l'erreur");
+    assert_clean(dir.path(), &[]);
+    // Même arrêt pour la construction en mémoire.
+    let mut src = Unsorted(s, 0);
+    let e = build_graph(&mut src, &BuildOptions { zoom: 11 }, "test", &mut |_| {}).unwrap_err();
+    assert!(matches!(e, BuildError::NotSorted(_)), "{e}");
+    assert_eq!(src.1, 3);
+}
+
+#[test]
+fn dead_build_dir_is_removed_and_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    // Reste d'une construction tuée : dossier et verrou que personne ne tient.
+    let stale = dir.path().join(".ordg-build-4242-0-0");
+    std::fs::create_dir(&stale).unwrap();
+    std::fs::write(stale.join("000000-waynode.run"), vec![0u8; 4096]).unwrap();
+    std::fs::write(dir.path().join(".ordg-build-4242-0-0.lock"), b"").unwrap();
+    let opts = ExternalOptions { zoom: 11, mem_budget: 1, tmp_parent: dir.path().to_path_buf() };
+    let report = build_external(
+        &mut random_source(3),
+        &opts,
+        "test",
+        &dir.path().join("x.ordg"),
+        TOOL,
+        EPOCH,
+        Vec::new(),
+        &mut |_| {},
+    )
+    .expect("un reste ne bloque pas la construction suivante");
+    assert_eq!(report.stale_tmp_removed, vec![stale]);
+    assert_clean(dir.path(), &["x.ordg"]);
+}
+
+#[test]
+fn concurrent_builds_share_a_tmp_parent() {
+    let dir = tempfile::tempdir().unwrap();
+    let reference = tempfile::tempdir().unwrap();
+    let src = random_source(11);
+    let (mem, _) = in_memory(&mut src.clone(), 11, reference.path());
+    std::thread::scope(|scope| {
+        for i in 0..4 {
+            let (src, dir, mem) = (src.clone(), dir.path(), &mem);
+            scope.spawn(move || {
+                let path = dir.join(format!("ext-{i}.ordg"));
+                let opts = ExternalOptions { zoom: 11, mem_budget: 1, tmp_parent: dir.to_path_buf() };
+                let report = build_external(
+                    &mut src.clone(),
+                    &opts,
+                    "test",
+                    &path,
+                    TOOL,
+                    EPOCH,
+                    Vec::new(),
+                    &mut |_| {},
+                )
+                .expect("construction concurrente");
+                assert!(
+                    report.stale_tmp_removed.is_empty(),
+                    "le dossier d'une construction en cours est gardé"
+                );
+                assert_same_graph(mem, &path);
+            });
+        }
+    });
+    assert_clean(dir.path(), &["ext-0.ordg", "ext-1.ordg", "ext-2.ordg", "ext-3.ordg"]);
 }

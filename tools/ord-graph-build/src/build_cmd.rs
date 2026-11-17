@@ -53,7 +53,12 @@ pub struct BuildReport {
     pub zoom: u8,
     pub wall_s: f64,
     pub cpu_s: f64,
+    /// `VmHWM` en fin de commande. La relecture finale compte les pages du fichier relu : en construction hors
+    /// mémoire, le pic de la construction elle-même est `peak_rss_before_verify_kb`.
     pub peak_rss_kb: u64,
+    /// Construction hors mémoire seulement : `VmHWM` juste avant la relecture par `mmap` et `verify()`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_rss_before_verify_kb: Option<u64>,
     pub phases: Vec<Phase>,
     pub vertices: u64,
     pub edges: u64,
@@ -100,7 +105,7 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<BuildReport> {
     let epoch =
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
 
-    let (stats, tmp_peak_bytes, runs) = if args.external {
+    let (stats, tmp_peak_bytes, runs, peak_rss_before_verify_kb) = if args.external {
         let opts = ExternalOptions {
             zoom: args.zoom,
             mem_budget: args.mem_budget_mb.saturating_mul(1 << 20),
@@ -117,7 +122,10 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<BuildReport> {
             &mut |p| eprintln!("  fait : {p}"),
         )
         .context("construction hors mémoire")?;
-        (r.stats, Some(r.tmp_peak_bytes), r.runs)
+        for stale in &r.stale_tmp_removed {
+            eprintln!("dossier temporaire d'une construction interrompue supprimé : {}", stale.display());
+        }
+        (r.stats, Some(r.tmp_peak_bytes), r.runs, Some(r.peak_rss_before_verify_kb))
     } else {
         let mut data = build_graph(&mut src, &BuildOptions { zoom: args.zoom }, &region, &mut |p| {
             eprintln!("  fait : {p}")
@@ -130,7 +138,7 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<BuildReport> {
         eprintln!("{} : {:.1} s", write_phase.name, write_phase.wall_s);
         let mut stats = data.stats;
         stats.phases.push(write_phase);
-        (stats, None, Vec::new())
+        (stats, None, Vec::new(), None)
     };
 
     let report = BuildReport {
@@ -141,6 +149,7 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<BuildReport> {
         wall_s: started.elapsed().as_secs_f64(),
         cpu_s: ord_graph::stats::cpu_seconds(),
         peak_rss_kb: proc_status().vm_hwm_kb,
+        peak_rss_before_verify_kb,
         vertices: stats.vertices,
         edges: stats.edges,
         ways_kept: stats.ways_kept,

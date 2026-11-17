@@ -116,7 +116,7 @@ impl OsmSource for PbfSource {
                         refs.clear();
                         refs.extend(way.refs());
                         let tags: Vec<(&str, &str)> = way.tags().collect();
-                        sink.way(&OsmWay { id: way.id(), refs: &refs, tags: &tags });
+                        sink.way(&OsmWay { id: way.id(), refs: &refs, tags: &tags })?;
                     }
                     for rel in group.relations() {
                         saw_relation = true;
@@ -127,7 +127,7 @@ impl OsmSource for PbfSource {
                                 .map(|m| m.member_id),
                         );
                         let tags: Vec<(&str, &str)> = rel.tags().collect();
-                        sink.relation(&OsmRelation { id: rel.id(), tags: &tags, way_members: &members });
+                        sink.relation(&OsmRelation { id: rel.id(), tags: &tags, way_members: &members })?;
                     }
                 }
             }

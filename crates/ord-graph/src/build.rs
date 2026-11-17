@@ -37,10 +37,11 @@ pub struct OsmRelation<'a> {
     pub way_members: &'a [i64],
 }
 
-/// Reçoit les ways puis les relations, dans l'ordre des ids.
+/// Reçoit les ways puis les relations, dans l'ordre des ids. Une erreur arrête le parcours : la source la rend
+/// telle quelle, sans lire la suite.
 pub trait ElementSink {
-    fn way(&mut self, way: &OsmWay<'_>);
-    fn relation(&mut self, relation: &OsmRelation<'_>);
+    fn way(&mut self, way: &OsmWay<'_>) -> Result<(), BuildError>;
+    fn relation(&mut self, relation: &OsmRelation<'_>) -> Result<(), BuildError>;
 }
 
 /// Ce que l'extrait dit de lui-même, recopié dans l'en-tête du fichier.
@@ -132,13 +133,13 @@ impl OsmSource for MemSource {
         ways.sort_by_key(|w| w.0);
         for (id, refs, tags) in ways {
             let t: Vec<(&str, &str)> = tags.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-            sink.way(&OsmWay { id: *id, refs, tags: &t });
+            sink.way(&OsmWay { id: *id, refs, tags: &t })?;
         }
         let mut rels: Vec<_> = self.relations.iter().collect();
         rels.sort_by_key(|r| r.0);
         for (id, tags, members) in rels {
             let t: Vec<(&str, &str)> = tags.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-            sink.relation(&OsmRelation { id: *id, tags: &t, way_members: members });
+            sink.relation(&OsmRelation { id: *id, tags: &t, way_members: members })?;
         }
         Ok(())
     }
@@ -293,69 +294,87 @@ struct WayRec {
     start: u32,
 }
 
+/// Filtre d'une way (passe 1), commun aux deux constructions : ordre des ids, filtre vélo, références
+/// consécutives dédoublonnées ajoutées à la suite de `refs`. Rend les attributs d'une way gardée ; `None` si elle
+/// est rejetée (`refs` est alors inchangé).
+pub(crate) fn keep_way(
+    w: &OsmWay<'_>,
+    last_way: &mut i64,
+    stats: &mut BuildStats,
+    refs: &mut Vec<i64>,
+) -> Result<Option<u64>, BuildError> {
+    if w.id <= *last_way {
+        return Err(BuildError::NotSorted(format!("way {} après {}", w.id, last_way)));
+    }
+    *last_way = w.id;
+    stats.ways_total += 1;
+    let info = match classify(w.tags) {
+        Ok(i) => i,
+        Err(r) => {
+            *stats.rejects.entry(r.label()).or_default() += 1;
+            return Ok(None);
+        }
+    };
+    let start = refs.len();
+    for &r in w.refs {
+        if refs.len() == start || refs.last() != Some(&r) {
+            refs.push(r);
+        }
+    }
+    if refs.len() - start < 2 {
+        refs.truncate(start);
+        *stats.rejects.entry("moins de deux nœuds distincts".into()).or_default() += 1;
+        return Ok(None);
+    }
+    let n = &info.notes;
+    stats.oneway_reversible += u64::from(n.reversible);
+    stats.ignored_conditional += u64::from(n.conditional);
+    stats.ignored_bicycle_directional += u64::from(n.bicycle_directional);
+    stats.ignored_motor_vehicle += u64::from(n.motor_vehicle);
+    Ok(Some(info.attrs.0))
+}
+
+/// Relation (passe 1), commune aux deux constructions : ordre des ids, puis les bits d'itinéraire à poser sur
+/// ses membres, `None` si ce n'est pas un itinéraire retenu.
+pub(crate) fn route_relation(
+    r: &OsmRelation<'_>,
+    last_relation: &mut i64,
+    stats: &mut BuildStats,
+) -> Result<Option<u8>, BuildError> {
+    if r.id <= *last_relation {
+        return Err(BuildError::NotSorted(format!("relation {} après {}", r.id, last_relation)));
+    }
+    *last_relation = r.id;
+    stats.relations_total += 1;
+    let bits = route_bits(r.tags);
+    stats.relations_routes += u64::from(bits.is_some());
+    Ok(bits)
+}
+
 /// Passe 1 : ways filtrées puis relations.
 struct Pass1 {
     ways: Vec<WayRec>,
     refs: Vec<i64>,
     last_way: i64,
     last_relation: i64,
-    err: Option<BuildError>,
     stats: BuildStats,
 }
 
 impl ElementSink for Pass1 {
-    fn way(&mut self, w: &OsmWay<'_>) {
-        if self.err.is_some() {
-            return;
-        }
-        if w.id <= self.last_way {
-            self.err = Some(BuildError::NotSorted(format!("way {} après {}", w.id, self.last_way)));
-            return;
-        }
-        self.last_way = w.id;
-        self.stats.ways_total += 1;
-        let info = match classify(w.tags) {
-            Ok(i) => i,
-            Err(r) => {
-                *self.stats.rejects.entry(r.label()).or_default() += 1;
-                return;
-            }
-        };
+    fn way(&mut self, w: &OsmWay<'_>) -> Result<(), BuildError> {
         let start = self.refs.len();
-        for &r in w.refs {
-            if self.refs.len() == start || self.refs.last() != Some(&r) {
-                self.refs.push(r);
-            }
-        }
-        if self.refs.len() - start < 2 {
-            self.refs.truncate(start);
-            *self.stats.rejects.entry("moins de deux nœuds distincts".into()).or_default() += 1;
-            return;
-        }
+        let Some(attrs) = keep_way(w, &mut self.last_way, &mut self.stats, &mut self.refs)? else {
+            return Ok(());
+        };
         if self.refs.len() >= u32::MAX as usize {
-            self.err = Some(BuildError::TooBig("plus de 2^32 références de nœud".into()));
-            return;
+            return Err(BuildError::TooBig("plus de 2^32 références de nœud".into()));
         }
-        let n = &info.notes;
-        self.stats.oneway_reversible += u64::from(n.reversible);
-        self.stats.ignored_conditional += u64::from(n.conditional);
-        self.stats.ignored_bicycle_directional += u64::from(n.bicycle_directional);
-        self.stats.ignored_motor_vehicle += u64::from(n.motor_vehicle);
-        self.ways.push(WayRec { id: w.id, attrs: info.attrs.0, start: start as u32 });
+        self.ways.push(WayRec { id: w.id, attrs, start: start as u32 });
+        Ok(())
     }
 
-    fn relation(&mut self, r: &OsmRelation<'_>) {
-        if self.err.is_some() {
-            return;
-        }
-        if r.id <= self.last_relation {
-            self.err = Some(BuildError::NotSorted(format!("relation {} après {}", r.id, self.last_relation)));
-            return;
-        }
-        self.last_relation = r.id;
-        self.stats.relations_total += 1;
-        let Some(bits) = route_bits(r.tags) else { return };
-        self.stats.relations_routes += 1;
+    fn relation(&mut self, r: &OsmRelation<'_>) -> Result<(), BuildError> {
+        let Some(bits) = route_relation(r, &mut self.last_relation, &mut self.stats)? else { return Ok(()) };
         for &m in r.way_members {
             match self.ways.binary_search_by_key(&m, |w| w.id) {
                 Ok(i) => {
@@ -366,12 +385,9 @@ impl ElementSink for Pass1 {
                 Err(_) => self.stats.relation_way_members_not_in_graph += 1,
             }
         }
+        Ok(())
     }
 }
-
-const FLAG_MULTI: u8 = 1;
-const FLAG_END: u8 = 2;
-const FLAG_LOOP: u8 = 4;
 
 pub(crate) fn haversine_m(a: (i32, i32), b: (i32, i32)) -> f64 {
     const R: f64 = 6_371_008.8;
@@ -382,10 +398,63 @@ pub(crate) fn haversine_m(a: (i32, i32), b: (i32, i32)) -> f64 {
     2.0 * R * h.sqrt().min(1.0).asin()
 }
 
-struct Seg {
-    way: u32,
-    lo: u32,
-    hi: u32,
+/// Longueur d'une ligne de points E7, en décimètres (haversine, arrondi au plus proche).
+pub(crate) fn len_dm(mut points: impl Iterator<Item = (i32, i32)>) -> u32 {
+    let mut len = 0.0;
+    if let Some(mut prev) = points.next() {
+        for p in points {
+            len += haversine_m(prev, p);
+            prev = p;
+        }
+    }
+    (len * 10.0).round().min(f64::from(u32::MAX)) as u32
+}
+
+/// Découpe d'une way de `n` nœuds en arêtes, commune aux deux constructions. `present(k)` : le nœud de rang `k`
+/// est dans l'extrait ; `multi(k)` : il apparaît au moins deux fois dans les ways gardées ; `same(i, k)` : même
+/// nœud aux deux rangs. `emit(lo, hi)` reçoit chaque arête, par ses rangs dans la way.
+///
+/// Segments continus de nœuds présents, coupés aux jonctions (`multi`) et à leurs bouts ; une boucle est coupée à
+/// son nœud intérieur médian. Ni les bouts de segment ni ce milieu n'ont besoin d'un drapeau vu des autres ways :
+/// un nœud revu ailleurs, ou plus loin dans la même way, est déjà `multi`.
+pub(crate) fn cut_way(
+    n: usize,
+    present: impl Fn(usize) -> bool,
+    multi: impl Fn(usize) -> bool,
+    same: impl Fn(usize, usize) -> bool,
+    stats: &mut BuildStats,
+    mut emit: impl FnMut(usize, usize) -> Result<(), BuildError>,
+) -> Result<(), BuildError> {
+    let (mut run, mut cut) = (None::<usize>, false);
+    for k in 0..=n {
+        if k < n && present(k) {
+            run.get_or_insert(k);
+            continue;
+        }
+        if k < n {
+            cut = true;
+            stats.nodes_referenced_missing += 1;
+        }
+        let Some(lo) = run.take() else { continue };
+        let hi = k - 1;
+        let mut start = lo;
+        for j in lo + 1..=hi {
+            if !multi(j) && j != hi {
+                continue;
+            }
+            if same(start, j) && j - start >= 2 {
+                let m = start + (j - start) / 2;
+                stats.loops_cut += 1;
+                emit(start, m)?;
+                emit(m, j)?;
+            } else {
+                emit(start, j)?;
+            }
+            start = j;
+        }
+    }
+    stats.ways_cut_by_missing_nodes += u64::from(cut);
+    Ok(())
 }
 
 struct RawEdge {
@@ -425,18 +494,9 @@ pub fn build_graph(
     let meta = src.meta();
 
     // Passe 1 : ways puis relations.
-    let mut p1 = Pass1 {
-        ways: Vec::new(),
-        refs: Vec::new(),
-        last_way: i64::MIN,
-        last_relation: i64::MIN,
-        err: None,
-        stats,
-    };
+    let mut p1 =
+        Pass1 { ways: Vec::new(), refs: Vec::new(), last_way: i64::MIN, last_relation: i64::MIN, stats };
     src.scan(&mut p1)?;
-    if let Some(e) = p1.err.take() {
-        return Err(e);
-    }
     let Pass1 { ways, refs: refs_i64, stats: s, .. } = p1;
     stats = s;
     stats.ways_kept = ways.len() as u64;
@@ -446,7 +506,7 @@ pub fn build_graph(
     let mut sorted = refs_i64.clone();
     sort_i64(&mut sorted);
     let mut uniq: Vec<i64> = Vec::new();
-    let mut flags: Vec<u8> = Vec::new();
+    let mut multi: Vec<bool> = Vec::new();
     let mut i = 0;
     while i < sorted.len() {
         let mut j = i + 1;
@@ -454,7 +514,7 @@ pub fn build_graph(
             j += 1;
         }
         uniq.push(sorted[i]);
-        flags.push(if j - i >= 2 { FLAG_MULTI } else { 0 });
+        multi.push(j - i >= 2);
         i = j;
     }
     drop(sorted);
@@ -479,64 +539,33 @@ pub fn build_graph(
     })?;
     lap(&mut stats, &mut clock, "passe 2 : nœuds");
 
-    // Segments continus de nœuds présents : une way dont un nœud manque est coupée.
-    let mut segs: Vec<Seg> = Vec::with_capacity(ways.len());
-    for (wi, w) in ways.iter().enumerate() {
-        let end = ways.get(wi + 1).map_or(refs.len(), |n| n.start as usize);
-        let (mut run, mut cut) = (None::<usize>, false);
-        for k in w.start as usize..=end {
-            let present = k < end && !is_missing(coords[refs[k] as usize].load(Ordering::Relaxed));
-            if present {
-                run.get_or_insert(k);
-                continue;
-            }
-            if k < end {
-                cut = true;
-                stats.nodes_referenced_missing += 1;
-            }
-            if let Some(lo) = run.take() {
-                if k - 1 > lo {
-                    segs.push(Seg { way: wi as u32, lo: lo as u32, hi: (k - 1) as u32 });
-                    flags[refs[lo] as usize] |= FLAG_END;
-                    flags[refs[k - 1] as usize] |= FLAG_END;
-                }
-            }
-        }
-        stats.ways_cut_by_missing_nodes += u64::from(cut);
-    }
-
-    // Découpe aux jonctions.
+    // Découpe way par way : segments de nœuds présents, coupe aux jonctions.
     let coord = |u: u32| unpack_coord(coords[u as usize].load(Ordering::Relaxed));
     let mut raw: Vec<RawEdge> = Vec::new();
-    let emit = |raw: &mut Vec<RawEdge>, way: u32, lo: u32, hi: u32| {
-        let mut len = 0.0;
-        for k in lo..hi {
-            len += haversine_m(coord(refs[k as usize]), coord(refs[k as usize + 1]));
-        }
-        let len_dm = (len * 10.0).round().min(f64::from(u32::MAX)) as u32;
-        raw.push(RawEdge { way, a: refs[lo as usize], b: refs[hi as usize], lo, hi, len_dm });
-    };
-    for seg in &segs {
-        let mut start = seg.lo;
-        for k in seg.lo + 1..=seg.hi {
-            if flags[refs[k as usize] as usize] == 0 {
-                continue;
-            }
-            let (a, b) = (refs[start as usize], refs[k as usize]);
-            if a == b && k - start >= 2 {
-                // Boucle : coupée à son nœud intérieur médian, promu jonction.
-                let m = start + (k - start) / 2;
-                flags[refs[m as usize] as usize] |= FLAG_LOOP;
-                stats.loops_cut += 1;
-                emit(&mut raw, seg.way, start, m);
-                emit(&mut raw, seg.way, m, k);
-            } else {
-                emit(&mut raw, seg.way, start, k);
-            }
-            start = k;
-        }
+    for (wi, w) in ways.iter().enumerate() {
+        let start = w.start as usize;
+        let end = ways.get(wi + 1).map_or(refs.len(), |n| n.start as usize);
+        let r = &refs[start..end];
+        cut_way(
+            r.len(),
+            |k| !is_missing(coords[r[k] as usize].load(Ordering::Relaxed)),
+            |k| multi[r[k] as usize],
+            |i, k| r[i] == r[k],
+            &mut stats,
+            |lo, hi| {
+                raw.push(RawEdge {
+                    way: wi as u32,
+                    a: r[lo],
+                    b: r[hi],
+                    lo: (start + lo) as u32,
+                    hi: (start + hi) as u32,
+                    len_dm: len_dm(r[lo..=hi].iter().map(|&u| coord(u))),
+                });
+                Ok(())
+            },
+        )?;
     }
-    drop(segs);
+    drop(multi);
     lap(&mut stats, &mut clock, "découpe en arêtes");
 
     // Sommets : ceux qui portent une arête, triés (cellule en Morton, Morton du point, id OSM).
