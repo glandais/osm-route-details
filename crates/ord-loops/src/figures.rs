@@ -518,7 +518,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                     return Ok(());
                 }
             };
-            // Épi en P1 : une réparation, la jambe de départ refaite depuis P'.
+            // Épi en P1 : une réparation, la jambe de départ refaite depuis P'. Une seule réparation par triangle (§15.5) :
+            // un second épi, en P2, jette la paire.
+            let mut repaired = false;
             if is_spike(fx, &leg1, &leg2) {
                 fig.spikes += 1;
                 let Some(i) = repair_prefix(fx, &leg1) else {
@@ -542,6 +544,7 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                     continue;
                 }
                 fig.spikes_repaired += 1;
+                repaired = true;
             }
             let mut leg3 = match run_leg3(fx, t1, t2, sc, &leg1, &leg2, budget, fig, stop)? {
                 Leg::Found(l) => l,
@@ -554,6 +557,10 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
             // Épi en P2 : la jambe d'arrivée tronquée à P', la jambe 3 refaite depuis P'.
             if is_spike(fx, &leg2, &leg3) {
                 fig.spikes += 1;
+                if repaired {
+                    fig.spikes_dropped += 1;
+                    continue;
+                }
                 let Some(i) = repair_prefix(fx, &leg2) else {
                     fig.spikes_dropped += 1;
                     continue;
