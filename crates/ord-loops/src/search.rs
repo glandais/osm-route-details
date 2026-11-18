@@ -137,9 +137,12 @@ impl Workspace {
         Self::default()
     }
 
-    /// Octets tenus par les trois arbres et le `ban` de chaque vue (capacités réelles).
+    /// Octets tenus par les trois arbres, le `ban` et la trame du couloir de chaque vue (capacités réelles).
     pub fn bytes(&self) -> usize {
-        self.views.iter().map(|v| v.t1.bytes() + v.t2.bytes() + v.ta.bytes() + v.ban.capacity() * 4).sum()
+        self.views
+            .iter()
+            .map(|v| v.t1.bytes() + v.t2.bytes() + v.ta.bytes() + v.ban.capacity() * 4 + v.cor.bytes())
+            .sum()
     }
 
     /// Libère les tableaux si l'espace de travail tient plus de `keep_bytes` (§9) : le prochain usage les réalloue.
@@ -158,11 +161,12 @@ pub(crate) struct ViewWs {
     /// Interdits, queues et couloir du retour, par arête de vue : `génération << 3 | bits`.
     pub ban: Vec<u32>,
     pub ban_gen: u32,
+    /// Trame du couloir (lot 4, 4c, §15.6), réutilisée d'une recherche à l'autre ; vide en `Classic`.
+    pub cor: CorGrid,
 }
 
 pub(crate) const BAN: u32 = 1;
 pub(crate) const TAIL: u32 = 2;
-pub(crate) const COR: u32 = 4;
 
 // --- Poids ---------------------------------------------------------------------------------------------------
 
@@ -178,6 +182,8 @@ pub(crate) struct Weighter<'a> {
     /// λ en 256es.
     lambda_q8: u64,
     mt: [u32; 256],
+    /// Plus petit `w / len_dm` des chaînes (poids au goût de l'équipe s'il y en a un, sinon ceux de la fenêtre).
+    base_min: f64,
 }
 
 impl<'a> Weighter<'a> {
@@ -196,6 +202,7 @@ impl<'a> Weighter<'a> {
         let fam = (familiarity.clamp(0.0, 1.0) * 1000.0).round() as u32;
         // Indépendant du mode : le goût s'applique aussi en découverte dès qu'il y a une surcouche (décision 1 du §9.1).
         let taste = team.and_then(|t| t.win.taste_of(ride));
+        let base_min = team.and_then(|t| t.win.min_w_per_dm(ride)).unwrap_or(v.min_w_per_dm[ride.index()]);
         Self {
             ride,
             mode,
@@ -205,6 +212,29 @@ impl<'a> Weighter<'a> {
             tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
+            base_min,
+        }
+    }
+
+    /// Facteur minimal de coût par décimètre (lot 4, 4c, §15.0 point 11) : `chain(c) ≥ min_factor() · len_dm(c)` pour
+    /// toute chaîne (hors strict, que les triangles ne jouent pas). En équipe d'abord, `chain(c)` vaut `λ · reste +
+    /// M[z] · a + b`, donc au moins `min(1, λ, min M / 256)` fois le poids de base ; en découverte, le poids de base. Le
+    /// 0,999 absorbe l'arrondi `+ 128 >> 8` des multiplications.
+    #[allow(dead_code)] // lu par la génération organique (commit suivant)
+    pub fn min_factor(&self) -> f64 {
+        let min_m = u64::from(self.mt.iter().copied().min().unwrap_or(256));
+        let team = if self.ct.is_none() {
+            1.0
+        } else if self.mode == Mode::Strict {
+            min_m.min(256) as f64 / 256.0
+        } else {
+            self.lambda_q8.min(min_m).min(256) as f64 / 256.0
+        };
+        // En dessous de 0,1 la marge d'arrondi de `base_min` ne couvre plus l'arrondi : pas de borne.
+        if team < 0.1 {
+            0.0
+        } else {
+            0.999 * self.base_min * team
         }
     }
 
@@ -491,6 +521,12 @@ impl Disc {
         Self { loc, s: loc.xy(s), e: loc.xy(e), limit: if is_loop { d_m / 2.0 } else { d_m }, is_loop }
     }
 
+    /// Position E7 en mètres locaux, repère du départ.
+    #[inline]
+    pub fn xy_of(&self, p: (i32, i32)) -> (f64, f64) {
+        self.loc.xy(p)
+    }
+
     #[inline]
     pub fn inside(&self, p: (i32, i32)) -> bool {
         let (x, y) = self.loc.xy(p);
@@ -638,13 +674,45 @@ pub(crate) struct Found {
     pub meters: u32,
 }
 
-/// Interdits et pénalités du retour.
+/// Interdits et pénalités du retour, et couloir (lot 4, 4c, §15.6).
 pub(crate) struct Ban<'a> {
     pub stamp: &'a [u32],
     pub gen: u32,
+    /// Trame du couloir : une arête dont le nœud d'arrivée y tombe coûte `kappa_q8 / 256` fois plus. `None` : sans
+    /// couloir (toujours en `Classic`).
+    pub cor: Option<&'a CorGrid>,
+    pub kappa_q8: u32,
 }
 
-impl Ban<'_> {
+impl<'a> Ban<'a> {
+    /// Sans couloir : les interdits et les queues seulement.
+    pub(crate) fn plain(stamp: &'a [u32], gen: u32) -> Self {
+        Self { stamp, gen, cor: None, kappa_q8: 256 }
+    }
+
+    /// Poids après les pénalités du couloir : `w · κ / 256` si le nœud tombe dans une case marquée.
+    #[inline]
+    pub(crate) fn corridor(&self, w: u32, cx: &Ctx<'_>, node: u32) -> u32 {
+        match self.cor {
+            Some(g) if g.hit(cx.disc.xy_of(cx.v.pos[node as usize])) => {
+                ((u64::from(w) * u64::from(self.kappa_q8) + 128) >> 8).min(u64::from(u32::MAX / 2)) as u32
+            }
+            _ => w,
+        }
+    }
+
+    /// Plafond d'une recherche de retour : `2 h0 + 10 000` ; avec couloir, `h0 (256 + κ) / 256 + 10 000` (κ = 1 redonne
+    /// `2 h0 + 10 000`, le couloir ne fait que relever des coûts).
+    #[inline]
+    pub(crate) fn cap(&self, h0: u32) -> u32 {
+        if self.cor.is_some() {
+            let c = u64::from(h0) * (256 + u64::from(self.kappa_q8)) / 256 + 10_000;
+            c.min(u64::from(u32::MAX)) as u32
+        } else {
+            h0.saturating_mul(2).saturating_add(10_000)
+        }
+    }
+
     #[inline]
     pub(crate) fn bits(&self, c: u32) -> u32 {
         let s = self.stamp[c as usize];
@@ -675,7 +743,7 @@ pub(crate) fn astar(
     ta.begin(2 * v.n_chains, v.n_nodes);
     let from_node = v.tgt(last);
     let Some(h0) = t2.node_best(from_node).map(|b| t2.get(b)) else { return Ok(None) };
-    let cap = h0.saturating_mul(2).saturating_add(10_000);
+    let cap = ban.cap(h0);
     let end_chain = cx.e.snap.chain;
     let mut heap: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
     let expand = |ta: &mut Tree,
@@ -725,9 +793,7 @@ pub(crate) fn astar(
                 if bits & TAIL != 0 {
                     w = w.saturating_mul(2);
                 }
-                if bits & COR != 0 {
-                    w = w.saturating_mul(3);
-                }
+                w = ban.corridor(w, cx, tn);
                 (w, v.len_dm[c as usize], t2.get(hb))
             };
             let ng = g.saturating_add(w).saturating_add(tc);
@@ -779,4 +845,296 @@ pub(crate) fn astar(
         }
     }
     Ok(None)
+}
+
+// --- Couloir (lot 4, 4c, §15.6) ----------------------------------------------------------------------------------
+
+/// Trame carrée du couloir : un bit par case, centrée au départ (repère `Local` du disque de la requête), les cases des
+/// jambes déjà posées dilatées de `w`. Lue par position (`hit`) à la relaxation : poser un bit par chaîne demanderait un
+/// index case → chaînes. Réutilisée d'une recherche à l'autre (`begin` la remet à zéro).
+#[derive(Default, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // posée par la génération organique (commit suivant)
+pub(crate) struct CorGrid {
+    side: usize,
+    cell: f64,
+    half: f64,
+    bits: Vec<u64>,
+    /// Gabarit de la dilatation : les décalages `(dx, dy)` en cases d'un disque de rayon `⌈w / cell⌉`.
+    stencil: Vec<(i32, i32)>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))] // posée par la génération organique (commit suivant)
+impl CorGrid {
+    /// Octets tenus (capacités réelles).
+    pub fn bytes(&self) -> usize {
+        self.bits.capacity() * 8 + self.stencil.capacity() * 8
+    }
+
+    /// Case de la trame : `clamp(w / 3, 100 m, 500 m)`.
+    fn cell_of(w_m: f64) -> f64 {
+        (w_m / 3.0).clamp(100.0, 500.0)
+    }
+
+    /// Remet la trame à zéro pour une requête de distance `d_m` et un couloir de demi-largeur `w_m` (demi-côté
+    /// `d_m / 2 + w_m`).
+    pub fn begin(&mut self, d_m: f64, w_m: f64) {
+        let cell = Self::cell_of(w_m);
+        let half = d_m / 2.0 + w_m;
+        let side = ((2.0 * half / cell).ceil() as usize).max(1);
+        let words = (side * side).div_ceil(64);
+        if self.side == side && self.cell == cell && self.bits.len() == words {
+            self.bits.iter_mut().for_each(|x| *x = 0);
+        } else {
+            self.bits.clear();
+            self.bits.resize(words, 0);
+            let r = (w_m / cell).ceil() as i32;
+            self.stencil.clear();
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    if dx * dx + dy * dy <= r * r {
+                        self.stencil.push((dx, dy));
+                    }
+                }
+            }
+        }
+        self.side = side;
+        self.cell = cell;
+        self.half = half;
+    }
+
+    #[inline]
+    fn cell_xy(&self, p: (f64, f64)) -> Option<(i32, i32)> {
+        let (cx, cy) = (((p.0 + self.half) / self.cell).floor(), ((p.1 + self.half) / self.cell).floor());
+        let n = self.side as f64;
+        (cx >= 0.0 && cy >= 0.0 && cx < n && cy < n).then_some((cx as i32, cy as i32))
+    }
+
+    /// La case de `p` (mètres locaux) est marquée.
+    #[inline]
+    pub fn hit(&self, p: (f64, f64)) -> bool {
+        match self.cell_xy(p) {
+            Some((cx, cy)) => {
+                let i = cy as usize * self.side + cx as usize;
+                self.bits[i >> 6] >> (i & 63) & 1 != 0
+            }
+            None => false,
+        }
+    }
+
+    /// Pose la case de `p` et celles de son voisinage (dilatation).
+    fn mark_point(&mut self, p: (f64, f64)) {
+        let Some((cx, cy)) = self.cell_xy(p) else { return };
+        let n = self.side as i32;
+        for &(dx, dy) in &self.stencil {
+            let (x, y) = (cx + dx, cy + dy);
+            if x >= 0 && y >= 0 && x < n && y < n {
+                let i = y as usize * self.side + x as usize;
+                self.bits[i >> 6] |= 1 << (i & 63);
+            }
+        }
+    }
+
+    /// Marque une jambe (états `fields` dans l'ordre du parcours) : le segment entre les nœuds de chaque état,
+    /// échantillonné tous les `cell / 2`, **sauf** les points dont l'abscisse le long de la jambe est à moins de
+    /// `head_m` de son début ou de `tail_m` de sa fin (la queue du départ ou de l'arrivée, et la zone d'un sommet).
+    pub fn mark_leg(&mut self, v: &ViewData, disc: &Disc, fields: &[u32], head_m: f64, tail_m: f64) {
+        let total: f64 = fields.iter().map(|&f| f64::from(v.len_dm[(f >> 1) as usize])).sum::<f64>() / 10.0;
+        let (lo, hi) = (head_m, total - tail_m);
+        let mut acc = 0.0f64;
+        for &f in fields {
+            let l = f64::from(v.len_dm[(f >> 1) as usize]) / 10.0;
+            let (a0, a1) = (acc, acc + l);
+            acc = a1;
+            if a1 < lo || a0 > hi {
+                continue;
+            }
+            let p0 = disc.xy_of(v.pos[v.src(f) as usize]);
+            let p1 = disc.xy_of(v.pos[v.tgt(f) as usize]);
+            let seg = (p1.0 - p0.0).hypot(p1.1 - p0.1);
+            let n = ((seg / (self.cell / 2.0)).ceil() as usize).max(1);
+            for k in 0..=n {
+                let t = k as f64 / n as f64;
+                let a = a0 + t * l;
+                if a < lo || a > hi {
+                    continue;
+                }
+                self.mark_point((p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1)));
+            }
+        }
+    }
+}
+
+// --- Recherche point à point (lot 4, 4c, §15.5) -----------------------------------------------------------------
+
+/// La cible d'une recherche P1 → P2 et ses repères.
+pub(crate) struct P2pTarget {
+    pub node: u32,
+    /// Position du nœud cible, mètres locaux.
+    pub xy: (f64, f64),
+    /// Coût du meilleur état du nœud dans chaque arbre (0 si non atteint).
+    pub t1: u32,
+    pub t2: u32,
+    /// Plus petit coût par décimètre (vol d'oiseau).
+    pub f_min: f64,
+    /// Marge retranchée aux deux bornes triangulaires : le coût d'un virage sépare deux états du même nœud
+    /// (`TURN_COST_MAX + 500`, 2 500) ; 0 rejoue la sonde.
+    pub slack: u32,
+}
+
+/// Marge de l'heuristique : `TURN_COST_MAX + 500`.
+#[allow(dead_code)] // lu par la génération organique (commit suivant)
+pub(crate) const P2P_SLACK: u32 = TURN_COST_MAX + 500;
+
+impl P2pTarget {
+    /// Heuristique au nœud `n` : `max(vol d'oiseau × f_min, T1(P2) − T1(n) − slack, T2(n) − T2(P2) − slack)`, les
+    /// deux bornes triangulaires seulement avec `tri`.
+    #[inline]
+    pub(crate) fn h(&self, cx: &Ctx<'_>, t1: &Tree, t2: &Tree, n: u32, tri: bool) -> u32 {
+        let (x, y) = cx.disc.xy_of(cx.v.pos[n as usize]);
+        let crow_dm = (x - self.xy.0).hypot(y - self.xy.1) * 10.0;
+        let mut h = (crow_dm * self.f_min).floor().min(f64::from(u32::MAX / 4)) as u32;
+        if tri {
+            if let Some(b) = t1.node_best(n) {
+                h = h.max(self.t1.saturating_sub(t1.get(b)).saturating_sub(self.slack));
+            }
+            if let Some(b) = t2.node_best(n) {
+                h = h.max(t2.get(b).saturating_sub(self.t2).saturating_sub(self.slack));
+            }
+        }
+        h
+    }
+}
+
+/// Fin d'une recherche point à point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum P2pEnd {
+    Found,
+    NotFound,
+    /// Le plafond de la recherche (états fixés) est atteint : abandonnée.
+    Capped,
+    /// Le budget de la passe est à 0.
+    BudgetOut,
+}
+
+#[derive(Debug)]
+pub(crate) struct P2pOut {
+    /// Les états du dernier état de la jambe 1 (exclu) jusqu'au nœud cible (état d'arrivée compris).
+    pub fields: Option<Vec<u32>>,
+    pub meters: u32,
+    pub cost: u32,
+    pub settled: u64,
+    pub end: P2pEnd,
+}
+
+/// A* de P1 (atteint par l'état `last`, de prédécesseur `last_pred`) au **nœud** `tgt.node`, atteint par n'importe quel
+/// état, sur les arêtes que `ban` n'interdit pas, dans le disque, avec la règle de virage. `cap_states` : plafond de la
+/// recherche ; `budget` : états restants de la passe, décomptés.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn astar_p2p(
+    cx: &Ctx<'_>,
+    ta: &mut Tree,
+    t1: &Tree,
+    t2: &Tree,
+    last: u32,
+    last_pred: u32,
+    tgt: &P2pTarget,
+    ban: &Ban<'_>,
+    tri: bool,
+    cap_states: u64,
+    budget: &mut u64,
+    stop: &mut dyn FnMut() -> bool,
+) -> Result<P2pOut, Stopped> {
+    let v = cx.v;
+    ta.begin(2 * v.n_chains, v.n_nodes);
+    let mut out = P2pOut { fields: None, meters: 0, cost: 0, settled: 0, end: P2pEnd::NotFound };
+    let mut heap: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
+    let expand = |ta: &mut Tree,
+                  heap: &mut BinaryHeap<Reverse<(u32, u32, u32)>>,
+                  node: u32,
+                  f_prev: u32,
+                  pred_prev: u32,
+                  hin_over: Option<u16>,
+                  store: u32,
+                  g: u32,
+                  m: u32| {
+        if !v.complete[node as usize] {
+            cx.esc.set(true);
+            return;
+        }
+        for &fo in v.out(node) {
+            let c = fo >> 1;
+            let bits = ban.bits(c);
+            if bits & BAN != 0 {
+                continue;
+            }
+            let Some(tc) = turn_cost(v, cx.forb, f_prev, pred_prev, fo, hin_over, None) else { continue };
+            if !retro_ok(v, pred_prev, f_prev, fo) {
+                continue;
+            }
+            let mut w = cx.w.chain(c);
+            if w == INF {
+                continue;
+            }
+            let tn = v.tgt(fo);
+            if !cx.disc.inside(v.pos[tn as usize]) {
+                continue;
+            }
+            if bits & TAIL != 0 {
+                w = w.saturating_mul(2);
+            }
+            w = ban.corridor(w, cx, tn);
+            let ng = g.saturating_add(w).saturating_add(tc);
+            if ng < ta.get(fo) {
+                ta.set(fo, ng, store, m + v.len_dm[c as usize]);
+                let h = tgt.h(cx, t1, t2, tn, tri);
+                heap.push(Reverse((ng.saturating_add(h), ng, fo)));
+            }
+        }
+    };
+    let first_over = (last_pred == NONE).then(|| cx.s.out_head[(last & 1) as usize]);
+    expand(ta, &mut heap, v.tgt(last), last, last_pred, first_over, NONE, 0, 0);
+    let mut polls = 0u32;
+    while let Some(Reverse((_, g, f))) = heap.pop() {
+        if cx.esc.get() {
+            return Err(Stopped);
+        }
+        if g > ta.get(f) {
+            continue;
+        }
+        if out.settled >= cap_states {
+            out.end = P2pEnd::Capped;
+            return Ok(out);
+        }
+        if *budget == 0 {
+            out.end = P2pEnd::BudgetOut;
+            return Ok(out);
+        }
+        *budget -= 1;
+        out.settled += 1;
+        polls += 1;
+        if polls.is_multiple_of(POLL) && stop() {
+            return Err(Stopped);
+        }
+        if v.tgt(f) == tgt.node {
+            let mut fields = vec![f];
+            let mut cur = f;
+            while ta.pred(cur) != NONE {
+                cur = ta.pred(cur);
+                fields.push(cur);
+            }
+            fields.reverse();
+            out.fields = Some(fields);
+            out.meters = ta.meters(f);
+            out.cost = g;
+            out.end = P2pEnd::Found;
+            return Ok(out);
+        }
+        let node = v.tgt(f);
+        let (pred, m) = (ta.pred(f), ta.meters(f));
+        expand(ta, &mut heap, node, f, pred, None, f, g, m);
+    }
+    if cx.esc.get() {
+        return Err(Stopped);
+    }
+    Ok(out)
 }

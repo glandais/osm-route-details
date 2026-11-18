@@ -272,7 +272,7 @@ fn generate_inner<B: AsRef<[u8]>>(
         }
         tree_forward(&cx, &mut vws.t1, stop).map_err(|_| halted())?;
         tree_backward(&cx, &mut vws.t2, stop).map_err(|_| halted())?;
-        let ViewWs { t1, t2, ta, ban, ban_gen } = vws;
+        let ViewWs { t1, t2, ta, ban, ban_gen, .. } = vws;
         let (t1, t2) = (&*t1, &*t2);
         if pass == 0 {
             diag.t1_settled = t1.settled.len() as u64;
@@ -339,7 +339,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                     let bits = if cur & BAN != 0 { BAN } else { bits };
                     ban[c] = (*ban_gen << 3) | bits;
                 }
-                let b = Ban { stamp: ban, gen: *ban_gen };
+                let b = Ban::plain(ban, *ban_gen);
                 diag.astar_runs += 1;
                 let before = budget;
                 let found = astar(&cx, ta, t2, last, last_pred, &b, &mut budget, &mut exhausted, stop)
@@ -368,7 +368,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                         let bits = if cur & BAN != 0 { BAN } else { bits };
                         ban[c] = (*ban_gen << 3) | bits;
                     }
-                    let b = Ban { stamp: ban, gen: *ban_gen };
+                    let b = Ban::plain(ban, *ban_gen);
                     diag.astar_runs += 1;
                     let before = rev_budget;
                     let mut rev_exhausted = false;

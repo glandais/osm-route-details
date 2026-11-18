@@ -35,6 +35,8 @@ mod tests;
 #[cfg(test)]
 mod tests_index;
 #[cfg(test)]
+mod tests_organic;
+#[cfg(test)]
 mod tests_reference;
 #[cfg(test)]
 mod tests_team_sparse;

@@ -10,8 +10,6 @@
 //! et les deux bornes triangulaires des arbres), puis le même sans les bornes triangulaires.
 
 use std::cell::Cell;
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
 use std::time::Instant;
 
 use rustc_hash::FxHashSet;
@@ -19,8 +17,8 @@ use rustc_hash::FxHashSet;
 use crate::engine::Engine;
 use crate::geo::{turn_angle_deg, Local};
 use crate::search::{
-    astar, make_anchor, retro_ok, tree_backward, tree_forward, turn_cost, Anchor, Ban, Ctx, Disc, Forbidden,
-    Tree, ViewWs, Weighter, Workspace, BAN, COR, INF, NONE, TAIL,
+    astar, astar_p2p, make_anchor, tree_backward, tree_forward, Anchor, Ban, Ctx, Disc, Forbidden, P2pEnd,
+    P2pOut, P2pTarget, ViewWs, Weighter, Workspace, BAN, INF, NONE, TAIL,
 };
 use crate::team::TeamCtx;
 use crate::window::Window;
@@ -160,7 +158,7 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
     tree_forward(&cx, &mut vws.t1, &mut || false).map_err(halted)?;
     tree_backward(&cx, &mut vws.t2, &mut || false).map_err(halted)?;
     out.trees_us = t0.elapsed().as_secs_f64() * 1e6;
-    let ViewWs { t1, t2, ta, ban, ban_gen } = vws;
+    let ViewWs { t1, t2, ta, ban, ban_gen, .. } = vws;
     let (t1, t2) = (&*t1, &*t2);
     out.t1_settled = t1.settled.len() as u64;
     out.t2_settled = t2.settled.len() as u64;
@@ -303,18 +301,31 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
             let bits = if cur & BAN != 0 { BAN } else { bits };
             ban[c] = (*ban_gen << 3) | bits;
         }
-        let b = Ban { stamp: ban, gen: *ban_gen };
+        let b = Ban::plain(ban, *ban_gen);
         let budget = p.budget_mult * t1.settled.len() as u64 + 20_000;
-        let tgt = Target {
+        let tgt = P2pTarget {
             node: n2,
             xy: xy(n2),
             t1: t1.node_best(n2).map_or(0, |x| t1.get(x)),
             t2: t2.node_best(n2).map_or(0, |x| t2.get(x)),
-            minf,
+            f_min: minf,
+            slack: 0,
         };
-        let h_at = |tri: bool| f64::from(tgt.h(v, &loc, t1, t2, n1, tri));
-        let (tri_leg, tri_path) = astar_p2p(&cx, ta, t1, t2, last, last_pred, &tgt, &loc, &b, true, budget);
-        let (crow_leg, _) = astar_p2p(&cx, ta, t1, t2, last, last_pred, &tgt, &loc, &b, false, budget);
+        let halted = |_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
+        let run = |ta: &mut crate::search::Tree,
+                   tri: bool|
+         -> Result<(LegProbe, Option<Vec<u32>>), Failure> {
+            let t0 = Instant::now();
+            let mut left = u64::MAX / 2;
+            let r =
+                astar_p2p(&cx, ta, t1, t2, last, last_pred, &tgt, &b, tri, budget, &mut left, &mut || false)
+                    .map_err(halted)?;
+            Ok(leg_of(&r, t0.elapsed().as_secs_f64() * 1e6))
+        };
+        // Heuristique au départ de la jambe 2 (nœud P1), pour situer.
+        let h_at = |tri: bool| -> f64 { f64::from(tgt.h(&cx, t1, t2, n1, tri)) };
+        let (tri_leg, tri_path) = run(ta, true)?;
+        let (crow_leg, _) = run(ta, false)?;
         if esc.get() {
             return Err(Failure::WindowEscape);
         }
@@ -365,7 +376,7 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
                 for &f in &leg2 {
                     ban[(f >> 1) as usize] = (*ban_gen << 3) | BAN;
                 }
-                let b3 = Ban { stamp: ban, gen: *ban_gen };
+                let b3 = Ban::plain(ban, *ban_gen);
                 let last2 = *leg2.last().expect("jambe non vide");
                 let pred2 = if leg2.len() >= 2 { leg2[leg2.len() - 2] } else { last };
                 let mut budget3 = budget;
@@ -392,133 +403,16 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
 /// Une paire gardée : (pas à la lettre, agrément moyen, i P1, j P2, écart, φ, estimation m, vol d'oiseau P1-P2 m).
 type PairKey = (bool, f64, usize, usize, f64, f64, f64, f64);
 
-/// La cible d'une recherche et ses repères.
-struct Target {
-    node: u32,
-    xy: (f64, f64),
-    t1: u32,
-    t2: u32,
-    /// Plus petit coût par décimètre.
-    minf: f64,
-}
-
-impl Target {
-    /// Heuristique du §4.3 au nœud `n` : max(vol d'oiseau × plus petit facteur, T1(P2) − T1(n), T2(n) − T2(P2)).
-    #[inline]
-    fn h(&self, v: &crate::engine::ViewData, loc: &Local, t1: &Tree, t2: &Tree, n: u32, tri: bool) -> u32 {
-        let (x, y) = loc.xy(v.pos[n as usize]);
-        let crow_dm = (x - self.xy.0).hypot(y - self.xy.1) * 10.0;
-        let mut h = (crow_dm * self.minf).floor().min(f64::from(u32::MAX / 4)) as u32;
-        if tri {
-            if let Some(b) = t1.node_best(n) {
-                h = h.max(self.t1.saturating_sub(t1.get(b)));
-            }
-            if let Some(b) = t2.node_best(n) {
-                h = h.max(t2.get(b).saturating_sub(self.t2));
-            }
-        }
-        h
-    }
-}
-
-/// A* de P1 (atteint par l'état `last`) au nœud `tgt.node`, sur les arêtes que `ban` n'interdit pas, dans le disque.
-#[allow(clippy::too_many_arguments)]
-fn astar_p2p(
-    cx: &Ctx<'_>,
-    ta: &mut Tree,
-    t1: &Tree,
-    t2: &Tree,
-    last: u32,
-    last_pred: u32,
-    tgt: &Target,
-    loc: &Local,
-    ban: &Ban<'_>,
-    tri: bool,
-    budget: u64,
-) -> (LegProbe, Option<Vec<u32>>) {
-    let t0 = Instant::now();
-    let v = cx.v;
-    ta.begin(2 * v.n_chains, v.n_nodes);
-    let mut leg = LegProbe::default();
-    let mut heap: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
-    let expand = |ta: &mut Tree,
-                  heap: &mut BinaryHeap<Reverse<(u32, u32, u32)>>,
-                  node: u32,
-                  f_prev: u32,
-                  pred_prev: u32,
-                  hin_over: Option<u16>,
-                  store: u32,
-                  g: u32,
-                  m: u32| {
-        if !v.complete[node as usize] {
-            cx.esc.set(true);
-            return;
-        }
-        for &fo in v.out(node) {
-            let c = fo >> 1;
-            let bits = ban.bits(c);
-            if bits & BAN != 0 {
-                continue;
-            }
-            let Some(tc) = turn_cost(v, cx.forb, f_prev, pred_prev, fo, hin_over, None) else { continue };
-            if !retro_ok(v, pred_prev, f_prev, fo) {
-                continue;
-            }
-            let mut w = cx.w.chain(c);
-            if w == INF {
-                continue;
-            }
-            let tn = v.tgt(fo);
-            if !cx.disc.inside(v.pos[tn as usize]) {
-                continue;
-            }
-            if bits & TAIL != 0 {
-                w = w.saturating_mul(2);
-            }
-            if bits & COR != 0 {
-                w = w.saturating_mul(3);
-            }
-            let ng = g.saturating_add(w).saturating_add(tc);
-            if ng < ta.get(fo) {
-                ta.set(fo, ng, store, m + v.len_dm[c as usize]);
-                let h = tgt.h(v, loc, t1, t2, tn, tri);
-                heap.push(Reverse((ng.saturating_add(h), ng, fo)));
-            }
-        }
+/// La mesure d'une recherche point à point.
+fn leg_of(r: &P2pOut, us: f64) -> (LegProbe, Option<Vec<u32>>) {
+    let found = r.end == P2pEnd::Found;
+    let leg = LegProbe {
+        us,
+        settled: r.settled,
+        found,
+        exhausted: matches!(r.end, P2pEnd::Capped | P2pEnd::BudgetOut),
+        meters_m: if found { f64::from(r.meters) / 10.0 } else { 0.0 },
+        cost: if found { r.cost } else { 0 },
     };
-    let first_over = (last_pred == NONE).then(|| cx.s.out_head[(last & 1) as usize]);
-    expand(ta, &mut heap, v.tgt(last), last, last_pred, first_over, NONE, 0, 0);
-    let mut path = None;
-    while let Some(Reverse((_, g, f))) = heap.pop() {
-        if cx.esc.get() {
-            break;
-        }
-        if g > ta.get(f) {
-            continue;
-        }
-        if leg.settled >= budget {
-            leg.exhausted = true;
-            break;
-        }
-        leg.settled += 1;
-        if v.tgt(f) == tgt.node {
-            let mut fields = vec![f];
-            let mut cur = f;
-            while ta.pred(cur) != NONE {
-                cur = ta.pred(cur);
-                fields.push(cur);
-            }
-            fields.reverse();
-            leg.found = true;
-            leg.cost = g;
-            leg.meters_m = f64::from(ta.meters(f)) / 10.0;
-            path = Some(fields);
-            break;
-        }
-        let node = v.tgt(f);
-        let (pred, m) = (ta.pred(f), ta.meters(f));
-        expand(ta, &mut heap, node, f, pred, None, f, g, m);
-    }
-    leg.us = t0.elapsed().as_secs_f64() * 1e6;
-    (leg, path)
+    (leg, r.fields.clone())
 }

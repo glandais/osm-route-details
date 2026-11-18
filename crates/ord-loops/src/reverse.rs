@@ -5,7 +5,7 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use crate::search::{turn_cost, Ban, Ctx, Found, Stopped, Tree, BAN, COR, INF, NONE, POLL, TAIL};
+use crate::search::{turn_cost, Ban, Ctx, Found, Stopped, Tree, BAN, INF, NONE, POLL, TAIL};
 
 /// Rend les états de l'aller, du départ au dernier état avant le demi-tour `turn_node`. `ret0` : premier état du
 /// retour (il fixe le virage au demi-tour).
@@ -24,7 +24,7 @@ pub(crate) fn astar_back(
     let v = cx.v;
     ta.begin(2 * v.n_chains, v.n_nodes);
     let Some(h0) = t1.node_best(turn_node).map(|b| t1.get(b)) else { return Ok(None) };
-    let cap = h0.saturating_mul(2).saturating_add(10_000);
+    let cap = ban.cap(h0);
     let start_chain = cx.s.snap.chain;
     let mut heap: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
     let expand = |ta: &mut Tree,
@@ -67,9 +67,7 @@ pub(crate) fn astar_back(
                 if bits & TAIL != 0 {
                     w = w.saturating_mul(2);
                 }
-                if bits & COR != 0 {
-                    w = w.saturating_mul(3);
-                }
+                w = ban.corridor(w, cx, sn);
                 (w, v.len_dm[c as usize], t1.get(hb))
             };
             let ng = g.saturating_add(w).saturating_add(tc);
