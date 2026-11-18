@@ -484,6 +484,27 @@ tranchés par l'orchestrateur du travail, comme la spécification le recommandai
 5. **Strict et aller simple** : lentille seule (`organic` sans effet), à rouvrir avec un banc strict (tranché par l'orchestrateur).
 6. **Après le 4c** : 4d si A1 tient ; sinon une étape « lentille au ρ* » avant le 4d.
 
+### 9.8 Décisions (2026-11-18, après les campagnes du 4c)
+
+Décisions du propriétaire sur le §13 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md), transmises par
+l'orchestrateur du travail ; la spécification qui les applique est au §16 :
+
+1. **Étape « virages » avant la bascule** : la recherche des jambes (et le choix des sommets ou des paires si utile)
+   modélise la règle des virages du contrôle (grappes de 100 m, < 150°), pour ne plus produire des triangles refusés après
+   coup. **Seuils inchangés** : C1 × 1,15 au banc ; C3 0,56 s à 4 clients et 0,29 s en série.
+2. **A4 jugé en absolu** pour `shared_share` : médiane ≤ 0,05 et P90 ≤ P90 de `svc` + 0,05, par type et curseur (remplace la
+   W1 / IQR de cette mesure).
+3. **A2 inchangé**, rejugé après l'étape.
+4. **Contrôle interne aligné sur le contrôleur indépendant** pour les virages, dans la même étape : c'est le moteur qui
+   s'aligne, `crates/ord-loops-check` ne change pas. Invariant : `figures = Classic` reste 1.10 au bit près (références figées
+   sans re-bénédiction) ; si l'alignement change forcément le `Classic`, il ne s'applique qu'en organique, et la note dit
+   pourquoi.
+5. **Bascule** : comme au §9.7 (commit à part si A1 à A4, B1, B2, C1, C2 et D tiennent, puis séance en conteneur, `git revert` si
+   C3 manque). Si elle se fait, la règle L du relevé impose l'apprentissage organique (`learn_figures = organic`) : les profils
+   sont `incompatible` jusqu'au redépôt. La fusion reste au propriétaire.
+6. **Point 15 du §15.19** (`REUSE_OUTSIDE_TAIL`) : traité dans la même étape si sa cause s'établit. Elle s'établit (§16.0) ;
+   le remède est au §16.4.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -521,6 +542,8 @@ tranchés par l'orchestrateur du travail, comme la spécification le recommandai
    série, mais en 0,66 s à 4 clients, au-delà des 0,56 s de C3. **Prêt à fusionner**, figures
    organiques en option. **Reste**, au propriétaire : C1 et A4 (§13 du relevé), la bascule ; puis le 4d (décision 6 du §9.7, A1
    tient). Spécification : §15.
+   **Étape « virages »** (décisions du §9.8) : causes établies et **spécifiée** le 18 novembre (§16), à coder, puis trois
+   campagnes et, si les critères tiennent, la bascule.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -3764,3 +3787,326 @@ tranche pas :
     `SHARP_TURN` 55 % (6 147). La jambe 2 reste en `TAIL` au coût × 2 : la passer en `BAN` ne lèverait pas le frein principal.
 22. **Mineurs, non corrigés** : au banc, quand l'équipe A n'est pas jouée, le détail de B2 écrit « `common-org` absent » même si la
     variante est jouée (le critère lit A seulement) ; `w:0.025` et `w:0.03` portent toujours le même nom de variante.
+
+## 16. 4c, étape « virages » : spécification
+
+Écrit le 18 novembre 2026 sur la branche `feat/ord-loops-lot4c`, après les campagnes du 4c
+([`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md)) et les décisions du §9.8, à la lecture de `ord-loops`
+(`verify.rs`, `search.rs`, `reverse.rs`, `generate.rs`, `figures.rs`), de `ord-loops-check` (`check.rs`, `geo.rs`,
+`bounded.rs`) et de `ord-graph/src/view.rs` (caps des chaînes). Cette section **suffit au codeur** ; ce qu'elle ne dit pas est
+laissé à son jugement, à condition de tenir les invariants du §16.6. Les §15.0 à §15.19 restent vrais, sauf ce que le §16
+remplace explicitement.
+
+**Ce que livre l'étape** : (1) en organique, toutes les recherches respectent la règle des virages du contrôle (virage simple et
+grappes de 100 m), par un contrôle incrémental à la relaxation ; (2) en organique, aucune jambe ne repasse sur l'une de ses
+chaînes ; (3) en organique, le contrôle interne calcule les caps comme le contrôleur indépendant ; (4) le banc (options,
+A4 en absolu) ; (5) trois campagnes, puis la bascule si les critères du §16.11 tiennent.
+
+### 16.0 Ce que la mesure a établi
+
+Instrumentation **non commitée** (relevés écrits par variables d'environnement dans le banc, le contrôle interne et le
+contrôleur ; correctif gardé hors dépôt avec les sorties sous `~/.cache/osm-route-details/graph/lot4/4c-virages/`). Deux
+tirages : la campagne complète `base,common,svc,svc+org` (toutes équipes, `--holdout-share 0.25`), dont les empreintes sont
+celles de la campagne 4 (`base` `4686c904975302e7`, `common` `07b62287e64fa258`, `svc` `384f003c0bd19b7f`, `svc-org`
+`c48118447315c118`) : l'instrumentation est neutre ; et l'essai de fumée `--teams B,C --limit 20`, rejoué trois fois
+(`svc-org` `27952d4befd451f4` aux trois).
+
+1. **Contrôle interne contre contrôleur (34 contre 5) : une seule cause, la projection** [mesuré]. Le contrôleur refuse
+   `SHARP_TURN` **43** parcours que le contrôle interne a acceptés : 4 sous `base`, 5 sous `common`, 0 sous `svc`, **34** sous
+   `svc-org`. Dans les 43 cas, les degrés, les longueurs de grappe, les bouts exemptés et l'épingle sont identiques des deux
+   côtés ; seuls les caps diffèrent. Le contrôle interne prend les caps dans un repère `Local` centré **au départ** du parcours
+   (`verify.rs`, `loc = Local::new(s_e7)`) ; le contrôleur dans un repère centré **au nœud** (`Proj::new(origin)`,
+   `check.rs::heading`). L'échelle des x diffère de `cos φ₀ / cos φ` : l'angle du contrôle interne est plus petit de 0,04° à
+   1,34° (le nœud est à 10,5 à 81,6 km du départ), et l'angle du contrôleur vaut 150,024° à 150,056°. Recalculé dans un repère
+   centré au nœud, l'angle du moteur redonne celui du contrôleur **à 0,0009° près dans les 43 cas**.
+   Les 34 cas de `svc-org` (33 GRAVEL, 1 ROAD) se groupent à **trois distances du départ** (24 refus à 10,5 km,
+   9 à 14,2 km, 1 à 81,6 km) : quelques carrefours, que les figures organiques traversent plus souvent [calculé]. Le « couloir multiplie les cas » du §15.19
+   (point 19) n'est donc pas une propriété du couloir.
+   **L'aligner change forcément le `Classic`** : `base` et `common` rendent 9 candidats que le contrôle aligné refuserait, et la
+   recherche continuerait autrement, si bien que l'empreinte de `base` changerait. L'alignement ne s'applique donc qu'en
+   organique (décision 4 du §9.8). En `Classic`, le service continue d'écarter ces parcours au contrôleur (`checker_rejected`),
+   comme 1.10.
+2. **Où tombent les virages refusés des triangles** [mesuré, essai B et C, `svc+org`, 1 487 triangles refusés pour
+   `SHARP_TURN`, deux surcouches, reprises comprises] : 12 897 paires de nœuds refusées, dont 2 082 par la règle du virage simple
+   et 10 815 par la règle des grappes ; 2 723 endroits distincts, dont **70 % au milieu d'une jambe** (à plus d'un kilomètre d'un
+   sommet et des bouts). La jambe 1 (le chemin de T1) porte le virage dans **38 %** des triangles refusés (571), la jambe 2 seule
+   dans 29 % (426), la jambe 3 seule dans 23 % (348). Le motif : une suite de chaînes courtes (3 à 30 m : giratoires, carrefours
+   à plusieurs nœuds, ouvertures de terre-plein) où chaque virage est permis (< 150°) mais où leur somme est un demi-tour (150° à
+   178°). La recherche ne voit qu'un nœud à la fois, avec les caps de bout de chaîne : la règle des grappes n'y est pas, et pour
+   une chaîne de moins de 50 m le cap prolongé (`in_head_ext`, mélange avec le prédécesseur) est loin de la fenêtre de 30 à 50 m
+   du contrôle (écart médian ~80°) ; 1 477 des 2 082 refus simples ont leurs deux chaînes sous 50 m. Une grappe refusée enjambe 1
+   à 9 chaînes intérieures (1 : 3 016 paires, 2 : 2 710, 3 : 2 019, 4 à 9 : 3 053).
+3. **Un modèle calculable sur la seule vue suffit** [mesuré, même essai]. Caps repris sur un chemin approché : une chaîne de
+   50 m ou plus est droite le long de son cap de bout (`v.head`) ; une chaîne plus courte est le segment entre ses deux nœuds
+   (`v.pos`) ; fenêtres de 30 à 50 m sur ce chemin, comme le contrôle. Sur les paires refusées où il se calcule (2 058 et 10 810), le modèle trouve ≥ 150° dans
+   82 % (simple) et 84 % (grappe) des cas, **≥ 145° dans 91 % et 89 %**, ≥ 140° dans 93 % ; sur les triangles **acceptés**
+   (2 780 triangles, 1 728 941 paires de nœuds hors des 250 m des bouts), il dépasse à tort 145° sur 439 paires (2,5 × 10⁻⁴), et
+   150° sur 38 (2,2 × 10⁻⁵).
+4. **`REUSE_OUTSIDE_TAIL` (point 15 du §15.19) : la cause s'établit** [mesuré, campagne complète, `svc-org`, 1 796 triangles
+   refusés avec ce code, deux surcouches]. **1 695 (94 %)** contiennent un **aller-retour dans une même jambe** : une chaîne prise
+   dans un sens puis dans l'autre par la même jambe (jambe 1, le chemin de T1 : 840 ; jambe 2 : 609 ; jambe 3 : 266). Dans l'essai,
+   tous ces réemprunts sont en sens inverse, et la seconde passe vient souvent plus d'un kilomètre après la première. La jambe 2
+   sur la queue de la jambe 1 (l'hypothèse du point 15) ne pèse que 52 refus (2,9 %), la jambe 3 sur la queue de la jambe 1 avec
+   plus de 0,15 D derrière elle 49 (2,7 %). L'étiquetage par état de chaîne orientée n'interdit pas de reprendre une chaîne en sens
+   inverse : quand un demi-tour direct est interdit, une recherche peut faire demi-tour par une boucle au bout d'une impasse ou
+   d'une route, et revenir sur ses pas.
+5. **Une racine commune** : les recherches font demi-tour au milieu d'une jambe, d'une façon que le contrôle refuse, soit par
+   une grappe de chaînes courtes (`SHARP_TURN`), soit par un aller-retour (`REUSE_OUTSIDE_TAIL`). Les deux remèdes vont
+   ensemble : interdire la seule grappe pousserait les recherches vers l'aller-retour.
+
+### 16.1 Choix tranchés
+
+| # | Question | Tranché | Raison |
+|---|---|---|---|
+| 1 | Comment la recherche évite les virages refusés | **Contrôle incrémental à la relaxation**, sur le chemin courant (prédécesseurs, puis jambes précédentes), caps du modèle du §16.0 point 3 | Coût nul hors des zones de chaînes courtes ; aucune mémoire ; même dépendance au chemin que `in_head_ext` et `retro_ok` aujourd'hui |
+| 2 | État étendu (chaîne, chaîne d'arrivée) | Écarté | ~3 fois plus d'états dans T1 et T2, qui dominent le temps (C1) ; une grappe enjambe jusqu'à 9 chaînes intérieures, une chaîne d'arrivée ne suffit pas |
+| 3 | Transitions interdites précalculées aux jonctions | Écarté | Une grappe est une suite de 3 à 11 chaînes, pas une paire ; les triplets ne couvrent que 28 % des paires refusées (une seule chaîne intérieure) ; précalcul par fenêtre et mémoire du cache |
+| 4 | Recherches concernées | **Toutes**, en organique : T1, T2, retour de la lentille, ordre inverse, jambes 2 et 3 | La jambe 1 (chemin de T1) porte 38 % des refus |
+| 5 | Marge | **5°** (`turn_margin_deg`) : refus du modèle à ≥ 145° | 91 % et 89 % des refus captés, 2,5 × 10⁻⁴ faux refus par paire |
+| 6 | Épingle d'une même way | Non modélisée (le modèle refuse là où le contrôle exempte) | Demande les polylignes de base ; rare entre deux nœuds de degré ≥ 3 |
+| 7 | Aller-retour dans une jambe | **Interdit** en organique, dans toutes les recherches (test d'ancêtre borné) | 94 % des `REUSE_OUTSIDE_TAIL` |
+| 8 | Jambe 2 sur la queue de la jambe 1 | **`BAN`** au lieu de `TAIL` | Toujours refusé par le contrôle (§15.19, point 15) ; 2,9 % des refus |
+| 9 | Contrôle interne | Caps et corde d'épingle **centrés au nœud** en organique ; `Classic` inchangé | §16.0, point 1 |
+| 10 | Reprises (`sharp_retry`) et interdits appris | **Gardés**, en filet | Les 9 à 11 % de refus que la marge ne capte pas |
+| 11 | Réglages | Dans `OrganicTune` (`turns`, `turn_margin_deg`, `no_reuse`), défauts actifs | Le banc les fait varier sans rouvrir le moteur, comme au §15.8 |
+
+### 16.2 Le modèle des virages (`ord-loops`, `turns.rs`, nouveau)
+
+**Données** : rien de nouveau dans la vue ni dans la fenêtre. Positions des nœuds `v.pos` (repère `Disc::xy_of` de la requête),
+caps de bout `in_head` et `out_head` (`v.head`, fenêtre de 30 à 50 m de la chaîne, `ord-graph/src/view.rs`), longueurs
+`v.len_dm`, degrés `v.deg`.
+
+```rust
+pub(crate) struct TurnModel { pub max_deg: f64 /* 150 − marge */, pub cluster_dm: u32 /* 1 000 */, pub free_end_dm: u32 /* 2 000 */ }
+```
+
+**Chemin approché et fenêtres.** `pt_back(path, k, d)` : point situé à `d` mètres **avant** le nœud d'arrivée de l'état `path[k]`,
+en remontant : une chaîne de 50 m ou plus est droite, du nœud d'arrivée vers l'arrière le long de `in_head` (le point est
+`E − d′ · u(in_head)`) ; une chaîne plus courte est le segment entre ses nœuds ; au-delà du chemin connu, le dernier segment est
+prolongé. `pt_fwd(path, k, d)`, le symétrique en avançant depuis le nœud de départ de `path[k]` (`out_head`). Cap avant le nœud :
+`heading(pt_back(50) → pt_back(30))` ; cap après : `heading(pt_fwd(30) → pt_fwd(50))` ; angle `turn_angle_deg`. Tout en `f64`
+(opérations IEEE, résultat identique en natif et en WASM, comme la géométrie d'aujourd'hui).
+
+**Ce que l'ajout d'un état fixe** (recherche **en avant**, chemin finissant par `f`, état candidat `fo`, `b₀ = tgt(f)`) :
+- `B` = `b₀` s'il est de degré ≥ 3, plus les nœuds de degré ≥ 3 du chemin situés à **moins de 50 m avant** `b₀` (leur fenêtre
+  d'après déborde sur `fo`) ;
+- pour chaque `b ∈ B`, les nœuds `a` de degré ≥ 3 du chemin, de `a = b` (virage simple) jusqu'à `run(a, b) ≤ cluster_dm`
+  (`run` : somme des `len_dm` des chaînes entières entre `a` et `b`, exactement la boucle du contrôle) ;
+- la paire `(a, b)` est **refusée** si `angle(cap avant a, cap après b) ≥ max_deg`, sauf si elle est exemptée aux bouts :
+  `b` à `free_end_dm` au plus du départ du parcours (mètres connus : jambes précédentes plus `meters` de la recherche), ou `a` à
+  `free_end_dm` au plus de l'arrivée (connu exactement en arrière ; en avant, lu sur `t2.meters` du meilleur état de `a` :
+  une approximation, le filet du §16.5 couvre l'écart ; dans T1, construit avant T2, aucune exemption à l'arrivée) ;
+- une paire refusée refuse la relaxation `f → fo` (`continue`, comme un virage interdit) ; le compteur `turn_cut` monte.
+
+**Voie rapide** : `len(f) ≥ 50 m` donne `B ⊆ {b₀}` ; `len(f) > 100 m` donne `a = b₀` seul ; si de plus `len(fo) ≥ 50 m`, le modèle
+se réduit à `angle(in_head(f), out_head(fo)) ≥ 145°`, sans remonter le chemin. Hors de la voie rapide, `turn_evals` monte (mesure
+du coût).
+
+**En arrière** (`tree_backward`, `astar_back` ; état candidat `fg` placé **avant** `f`, `a₀ = src(f)`) : le symétrique. `A` =
+`a₀` et les nœuds de degré ≥ 3 à moins de 50 m **après** `a₀` sur la suite connue (successeurs de l'arbre, puis la jambe fixée
+derrière) ; pour chaque `a`, les `b` jusqu'à 100 m après ; cap avant `a` prolongé au-delà du début de `fg`. Exemptions : `a` près de
+l'arrivée (exact, mètres vers l'arrivée), `b` près du départ (lu sur `t1.meters`).
+
+**Où** (organique et `tune.turns`) : `tree_forward`, `tree_backward`, `astar` (retour de la lentille, jambe 3), `astar_p2p` (jambe
+2), `astar_back` (ordre inverse). Le test vient **après** `turn_cost` et `retro_ok`, qui restent tels quels (coûts de virage,
+demi-tour, interdits appris) : le modèle ne fait qu'interdire de plus. La sonde (`probe.rs`) n'est pas touchée.
+
+**Contexte des jonctions** : le chemin que remonte le modèle continue au-delà de la racine de la recherche dans les jambes déjà
+posées. `astar_p2p` reçoit la jambe 1 ; la jambe 3 (`astar`), les jambes 1 et 2 ; le retour de la lentille, l'aller ; `astar_back`,
+le retour fixé derrière lui. Seuls les ~150 derniers mètres (50 + 100) sont lus. `Ctx` gagne `turns: Option<&TurnModel>`, `None`
+en `Classic` et quand `tune.turns` est faux ; les fonctions de recherche gagnent un paramètre `ctx_path: &[u32]` (vide en `Classic`).
+
+**Chemins d'arbre gardés tels quels** : la jambe 3 prise sur T2 (§15.5) est rejouée par le modèle sur ses états des 150 premiers
+mètres, avec les jambes 1 et 2 pour contexte (`junction_ok`) ; un refus l'envoie à l'A* (comme un réemprunt). La jambe 1 et l'aller
+de la lentille sont des chemins de T1, sûrs par construction ; leur jonction avec la jambe suivante est vue par la recherche de
+celle-ci. Le retour de l'ordre inverse (chemin de T2) est sûr de même, et sa jonction est vue par `astar_back`.
+
+**Heuristiques** : T1 et T2 portent le modèle. Leurs coûts peuvent dépasser le vrai coût contraint d'un état (l'étiquette dépend du
+chemin), si bien que les bornes de `astar_p2p` et `astar` ne sont plus garanties admissibles en organique : la recherche reste
+**sûre** (tout chemin rendu respecte le modèle), peut-être un peu moins bonne. Le test d'admissibilité 5 du §15.13 se joue modèle
+coupé.
+
+### 16.3 Le contrôle interne aligné
+
+- `verify::check_route_in` ne change pas (`Classic`, banc, sonde). Une variante interne, `check_route_aligned` (ou un paramètre
+  `Rules { node_frame: bool }` d'une fonction commune), prend les caps du virage simple et des grappes dans un `Local` **centré au
+  nœud** (le nœud entre les morceaux, comme l'origine de `Checker::heading`), et la corde et la portion droite de l'épingle dans un
+  `Local` centré au nœud `a` (`Checker::hairpin`). Le reste est inchangé.
+- Appelée par la lentille (`generate.rs`) et par les triangles (`figures.rs`) quand la requête est organique et `tune.turns` vrai.
+- Le couloir doublé (`CORRIDOR_DOUBLED`) garde son repère : aucune divergence n'y est relevée (§16.0, point 1).
+- Attendu : zéro parcours organique rendu refusé `SHARP_TURN` par le contrôleur (34 sous `svc-org`).
+
+### 16.4 Aucun aller-retour dans une jambe (`tune.no_reuse`)
+
+- **Test d'ancêtre borné**, à la relaxation `f → fo` de toutes les recherches organiques : si `t.get(fo ^ 1) < t.get(f)`, remonter
+  les prédécesseurs depuis `f` tant que `t.meters(cur) ≥ t.meters(fo ^ 1)` (les mètres décroissent le long des ancêtres : la
+  remontée s'arrête au premier ancêtre plus près de la racine) ; trouver `fo ^ 1` refuse la relaxation (`reuse_cut`). En arrière,
+  le symétrique sur les successeurs et les mètres vers l'arrivée. Hors du filtre, rien n'est remonté ; dans le cas courant (l'état
+  inverse atteint plus tard, ou par un autre chemin), la remontée s'arrête en un ou deux pas.
+- La même chaîne dans le même sens est impossible (un état est fixé une fois). Les jambes précédentes sont déjà `BAN`.
+- **Jambe 2** : `stamp_leg1` pose `BAN` sur **toutes** les chaînes de la jambe 1 (plus de `TAIL`) ; la jambe 3 et la lentille gardent
+  `TAIL` (leur réemprunt de la queue est légitime près de l'arrivée).
+- Non traité : la jambe 3 sur la queue de la jambe 1 avec plus de 0,15 D derrière elle (2,7 %).
+
+### 16.5 Reprises, interdits appris
+
+Inchangés : un refus du contrôle interne ajoute ses transitions `SHARP_TURN` aux interdits de la passe suivante, et `sharp_retry`
+reprend une fois la paire refusée (§15.19, point 13). Attendu : moins de passes et de reprises, puisque 90 % des refus sont captés
+avant ; `noretry` est rejoué à la campagne 3 pour en lire le prix. Aucun changement de défaut sans mesure.
+
+### 16.6 Interface et invariants
+
+```rust
+pub struct OrganicTune { /* …, */ pub turns: bool /* true */, pub turn_margin_deg: u8 /* 5 */, pub no_reuse: bool /* true */ }
+pub struct FigureDiagnostics { /* …, */ pub turn_cut: u64, pub turn_evals: u64, pub reuse_cut: u64 }   // toute la requête
+```
+
+`Generation`, `Diagnostics`, `Route` et `Family` ne gagnent rien (§15.0, point 3).
+
+- **I1** : `Figures::Classic` rend 1.10 au bit près : `window_reference.txt`, `window_reference_192.txt`, `team_reference.txt`,
+  `team_check_reference.txt` passent **sans re-bénédiction** ; au banc, `base` `4686c904975302e7`, `common` `07b62287e64fa258`,
+  `svc` `384f003c0bd19b7f`.
+- **I2 (remplace celui du §15.8)** : `Organic { mix: LENS_ONLY, tune: { corridor_w_milli: 0, turns: false, no_reuse: false, .. } }`
+  rend exactement `Classic` sur les 140 requêtes de la référence ; au banc, `svc+org+tri:0+w:0+turns:0+reuse:0` rend `svc`.
+- **I2′** : `turns: false` et `no_reuse: false` rendent l'organique de `ea6ef63` : au banc, `svc+org+turns:0+reuse:0` rend
+  `c48118447315c118` (toutes équipes) et `27952d4befd451f4` (essai B et C).
+- **I3, I4** : inchangés (tout parcours organique passe le contrôleur ; déterminisme ; fenêtre plus grande, même sortie).
+
+### 16.7 Tests (synthétiques, aucune donnée de production)
+
+**`ord-loops`**
+1. I1 tel quel ; I2 et I2′ (le test 2 du §15.13 réécrit avec les deux champs).
+2. Modèle exact sur chaînes droites : réseau à arêtes droites (dont des chaînes de 5 à 40 m), chemins tirés au hasard : pour toute
+   paire `(a, b)` du contrôle, l'angle du modèle égale celui du contrôle aligné à 10⁻⁶° près.
+3. Demi-tour composé : deux chaussées à sens unique à 20 m l'une de l'autre, ouvertures de terre-plein tous les 400 m, et un
+   giratoire de six nœuds à 10 m : une recherche point à point vers une cible derrière l'état de départ ne rend, modèle actif,
+   aucun chemin refusé `SHARP_TURN` par le contrôle aligné ; modèle coupé, elle rend le demi-tour par l'ouverture (garde : le
+   test ne prouve rien sinon).
+4. De bout en bout, sur ces réseaux : 50 requêtes organiques, aucun `SharpTurn` dans `tri_rejected` ni dans le `rejected` de la
+   lentille, modèle actif ; au moins un, modèle coupé.
+5. Exemptions : une grappe à moins de 200 m du départ (et de l'arrivée, en arrière) n'est pas refusée.
+6. Aller-retour : réseau où le chemin le moins cher de P1 à P2 revient sur ses pas (boucle au bout d'une route) : `no_reuse`
+   rend un chemin sans chaîne répétée, ou aucun ; sans, l'aller-retour (garde).
+7. Jambe 2 : aucune chaîne de la jambe 1 dans la jambe 2, queue comprise.
+8. I4 : déterminisme et fenêtre plus grande avec les nouveaux défauts.
+9. Référence organique (`organic_reference.txt`) **re-bénie** aux commits 2 et 3, en le disant.
+
+**`ord-loops-check`**
+10. Alignement : réseau à 47,2° de latitude, carrefour à ~45 km au nord du départ dessiné pour un angle de 150,02° au nœud
+    (< 150° dans le repère du départ) : le contrôle interne `Classic` l'accepte, le contrôle aligné et le contrôleur le refusent
+    (garde : les deux repères doivent diverger, sinon le test ne prouve rien).
+11. `engine_vs_checker` organique (I3) avec les nouveaux défauts.
+
+**`ord-loops-bench`**
+12. `parse_variants` : `turns:0` (`-turns0`), `reuse:0` (`-reuse0`), `margin:<deg>` (`-m<deg>`), refus en double et sans `org`.
+13. A4 en absolu sur des distributions synthétiques (médiane, P90, marge de `svc`).
+
+### 16.8 Banc
+
+- Options `turns:0`, `reuse:0`, `margin:<deg>` (§16.7, test 12) ; `FigAgg` gagne `turn_cut`, `turn_evals`, `reuse_cut`, affichés par
+  requête dans la section « 4c ».
+- Section « 4c » : refus du **contrôleur indépendant** sur les parcours rendus, par code et par variante (déjà comptés dans
+  `dropped`), à côté des refus du contrôle interne ; contrôles d'empreinte I2 et I2′ affichés au résumé, arrêt si l'un manque.
+- A4 (`compare_org.rs`) : pour `shared_share`, médiane ≤ 0,05 **et** P90 ≤ P90 de `svc` + 0,05, par type et curseur (lecture
+  « toutes », premier parcours gardé) ; pour `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km`, la W1 / IQR ≤ `svc` + 0,10
+  comme au §15.12.
+
+### 16.9 Commits
+
+Chacun passe `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` et les tests des crates touchés ;
+avant le dernier, `cargo test --workspace`. Fin de message : ligne vide, puis `Co-Authored-By` du modèle qui code.
+
+1. `feat(loops): contrôle interne aligné sur le contrôleur pour les virages, en organique (lot 4, 4c)` — §16.3, `OrganicTune::turns`,
+   tests 1 (I2) et 10 ; la référence organique re-bénie si elle change, en le disant.
+2. `feat(loops): la recherche organique suit la règle des virages du contrôle (lot 4, 4c)` — §16.2, `turn_margin_deg`,
+   compteurs ; tests 2 à 5 ; référence organique re-bénie.
+3. `feat(loops): aucun aller-retour dans une jambe organique (lot 4, 4c)` — §16.4, `no_reuse` ; tests 6, 7, 8, 11 ; référence
+   re-bénie.
+4. `feat(bench): options turns, reuse et margin, A4 en absolu pour le partage de route (lot 4, 4c)` — §16.8 ; tests 12, 13.
+   Puis les campagnes du §16.10.
+5. Si les critères tiennent : `feat(server): figures organiques par défaut (lot 4, 4c)` — `generator.figures = organic`,
+   `generator.profile.learn_figures = organic` (règle L du relevé), `CHANGELOG` « Changé », puis la séance en conteneur ;
+   `git revert` de ce commit si C3 manque.
+6. `docs(ord-loops): relevé de l'étape virages (lot 4, 4c)` — nouvelles sections de `ord-loops-lot4c-mesures.md` (style des relevés,
+   lettres d'équipes et agrégats seulement), §16.13 « Écarts du codage », étape 4 du §10 marquée.
+
+### 16.10 Campagnes (trois au plus, une complète)
+
+Une à la fois, la machine pour elle seule ; `B=./target/release/ord-loops-bench`, `G=~/.cache/osm-route-details/graph`, sorties
+sous `$G/lot4/4c-virages/` seulement, binaire reconstruit après le commit 4.
+
+1. **Essai** (~5 min) :
+   `$B likeness --teams B,C --limit 20 --holdout-share 0.25 --variants base,svc,svc+org,svc+org+turns:0+reuse:0,svc+org+tri:0+w:0+turns:0+reuse:0,svc+org+reuse:0 --label virages-essai --out $G/lot4/4c-virages`.
+   Contrôles : `base` `93149ec262198e9e`, `svc-org-turns0-reuse0` `27952d4befd451f4` (I2′), `svc-org-tri0-w000-turns0-reuse0` =
+   `svc` (I2). Lecture : refus `SHARP_TURN` et `REUSE_OUTSIDE_TAIL` par triangle complet, requêtes avec un triangle gardé,
+   reprises, `turn_cut`, `turn_evals`, P50 × `svc` (indicatif, bruit de 5 à 15 %). **Arrêt** (relevé, pas de campagne 2) si un
+   contrôle manque, ou si les refus `SHARP_TURN` par triangle complet ne baissent pas de moitié au moins contre
+   `svc-org-turns0-reuse0`.
+2. **Déterminisme** (~13 min) : `$B likeness --teams B,C --holdout-share 0.25 --variants base,svc+org --threads 1 --label virages-det1 --out $G/lot4/4c-virages`,
+   puis la même avec `--threads 16 --label virages-det16` : mêmes empreintes (D).
+3. **Complète** (~70 min, RSS ≤ 21 Gio) :
+   `$B likeness --holdout-share 0.25 --variants base,common,svc,common+org,svc+org,svc+org+noretry,svc+org+lc,svc+org+turns:0+reuse:0 --label lot4-4c-virages --out $G/lot4/4c-virages`.
+   Contrôles : `base`, `common`, `svc` aux empreintes de I1, `svc-org-turns0-reuse0` à `c48118447315c118` (I2′). Si C1 tombe entre
+   1,15 et 1,20, second tirage des temps dans la même campagne :
+   `$B likeness --holdout-share 0.25 --variants base,svc,svc+org --label lot4-4c-virages-t2 --out $G/lot4/4c-virages`, moyenne des deux.
+
+Puis, si le §16.11 tient : commit 5, et la séance en conteneur du §11 du relevé (image `osm-route-details:lot4-4c-virages`, jamais
+poussée, défauts organiques, mêmes départs et même volume, méthode du §14.13).
+
+### 16.11 Critères
+
+Candidat : `svc-org` aux défauts du §16.6, contre `svc` du même tirage (campagne 3), lecture « toutes », toutes équipes, quatre
+groupes, sauf mention. Les seuils sont ceux du §15.12, sauf A4 :
+
+- **A1** : W1 / IQR de r / D ≤ 0,75 × `svc` (ROAD), ≤ 0,85 × (GRAVEL).
+- **A2** (inchangé, décision 3 du §9.8) : part des premiers à `vertices_10 = 2` dans [0,40 ; 0,58] (ROAD) et [0,32 ; 0,50] (GRAVEL),
+  à chaque curseur ; W1 / IQR de `vertices_10` ≤ 0,5 × `svc`.
+- **A3** : compacité ROAD ≤ 0,80 × `svc` (GRAVEL rapporté).
+- **A4** (décision 2) : `shared_share` en absolu, médiane ≤ 0,05 et P90 ≤ P90 de `svc` + 0,05, par type et curseur ; `far_pos`,
+  `detour_far`, `sinuosity_10`, `turns_per_10km` : W1 / IQR ≤ `svc` + 0,10.
+- **B1** : `S / S_base` ≤ `svc` + 0,03 et ≤ 0,5, « toutes » et « écart ». **B2** : A ROAD, `svc-org − common-org` ≤ +0,054 aux deux
+  curseurs (réserve levée ≤ +0,03).
+- **C1** : P50 ≤ 1,15 × `svc` à chaque curseur, P90 ≤ 1,25 ×. **C2** : `OK` ≥ `svc` − 0,5 point ; aucune `PANIC` ni `WINDOW_ESCAPE` ;
+  `VIOLATION` ≤ `svc`. Rapporté avec C2 : les refus `SHARP_TURN` du contrôleur sur les parcours organiques rendus (attendu 0 ; un
+  cas relevé est expliqué au relevé).
+- **D** : mêmes empreintes à 1 et 16 fils (campagne 2).
+- **C3** (après la bascule, en conteneur de 3 Gio) : P50 ≤ 0,56 s à 4 clients, ≤ 0,29 s en série ; pic `anon` ≤ 2,4 Gio ; `oom` 0 ;
+  dépôts en 200.
+- **Règle L** : rejugée (`svc-org-lc`) ; si la bascule se fait, `learn_figures = organic` sauf si `lc` tient la règle du §15.12.
+- Rapportés, non bloquants : part `SHARP_TURN` des refus de triangles (87 à 91 % au 4c), `REUSE_OUTSIDE_TAIL`, requêtes avec un
+  triangle gardé, reprises par requête, `turn_cut`, `turn_evals`, `reuse_cut`, `svc-org-noretry` contre `svc-org`.
+
+**Bascule** : A1 à A4, B1, B2, C1, C2 et D tiennent → commit 5, puis C3 ; si C3 manque, `git revert` et le relevé le dit. Sinon le
+défaut reste `classic` et le relevé nomme les critères manqués. La fusion revient au propriétaire.
+
+### 16.12 Risques, et points tranchés par prudence
+
+- **Temps** : le modèle coûte dans les zones de chaînes courtes, dans T1 et T2 aussi ; le gain attendu vient de passes et de reprises
+  en moins. Non chiffré avant mesure : `turn_evals` et le P50 de l'essai le disent ; la règle d'arrêt de la campagne 1 évite une
+  campagne complète inutile.
+- **Rendement** : un triangle que le contrôle aurait accepté peut être perdu par un faux refus (2,5 × 10⁻⁴ par paire), par la
+  dépendance au chemin des étiquettes, ou par l'interdiction de l'aller-retour (une jambe sans demi-tour possible n'est plus
+  trouvée). A2 en GRAVEL était à 0,003 de sa borne.
+- **Heuristiques non admissibles** en organique (§16.2) : chemins sûrs, peut-être un peu plus longs.
+- Points non couverts par les décisions, tranchés ici par prudence : (1) la décision 2 vise `shared_share` seul, les quatre autres
+  mesures d'A4 gardent leur W1 / IQR (un seuil absolu de 0,05 n'a pas de sens pour `turns_per_10km`) ; (2) l'alignement porte sur
+  les seuls caps et l'épingle, là où la divergence est mesurée ; (3) l'épingle n'est pas modélisée (la recherche est plus stricte
+  que le contrôle) ; (4) l'exemption près de l'arrivée, en avant, est lue sur T2 et peut se tromper (filet du §16.5) ;
+  (5) l'instrumentation du §16.0 n'est pas commitée (elle écrit des positions de parcours, privées) ;
+  (6) les questions du §16.14 ont leur option recommandée appliquée.
+
+### 16.13 Écarts du codage
+
+À écrire par le codeur.
+
+### 16.14 Questions au propriétaire
+
+Chaque question a une option recommandée, appliquée par défaut ; une autre réponse change un réglage, pas l'architecture.
+
+1. **Marge du modèle** : 5° (recommandé : 90 % des refus captés, 2,5 × 10⁻⁴ faux refus par paire) ; 0° (82 à 84 %, 2,2 × 10⁻⁵) ;
+   10° (93 %, 7 × 10⁻⁴).
+2. **Modèle dans les arbres T1 et T2** (recommandé : oui, la jambe 1 porte 38 % des refus), au prix d'heuristiques non garanties
+   admissibles en organique ; sinon, chemins d'arbre seulement validés après coup, et des paires perdues.
+3. **A4** : la décision 2 lue pour `shared_share` seul (recommandé) ; ou pour les cinq mesures.
+4. **Si C1 manque encore après l'étape** : pas de bascule, le relevé décompose le temps (couloir seul : +10 à +12 % au 4c) ;
+   le prochain levier serait le couloir (recommandé), avant tout relâchement de seuil.
