@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.10"
+    "version": "1.11"
   },
   "paths": {
     "/health/live": {
@@ -1919,6 +1919,35 @@
           }
         }
       },
+      "FiguresInfo": {
+        "type": "object",
+        "description": "The figures the generator offers.",
+        "required": [
+          "default",
+          "values"
+        ],
+        "properties": {
+          "default": {
+            "type": "string",
+            "description": "`classic` or `organic`: the figures of a request that names none (`generator.figures`)."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accepted values of `figures`."
+          }
+        }
+      },
+      "FiguresV1": {
+        "type": "string",
+        "description": "The figures a generation tried.",
+        "enum": [
+          "classic",
+          "organic"
+        ]
+      },
       "GainParamsV1": {
         "type": "object",
         "description": "Effective parameters of the elevation gain.",
@@ -2027,6 +2056,17 @@
               }
             ]
           },
+          "figures": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FiguresV1",
+                "description": "Figures the engine tries: `classic` (turnaround loops only) or `organic` (turnarounds widened by a corridor, and\ntriangles). Defaults to `capabilities.generator.figures.default`. No effect in strict mode or for a one-way ride."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "ride_type": {
             "$ref": "#/components/schemas/RideTypeV1"
           },
@@ -2053,6 +2093,7 @@
           "coverage",
           "taste",
           "dropped",
+          "figures",
           "routes"
         ],
         "properties": {
@@ -2064,6 +2105,10 @@
             "format": "int32",
             "description": "Routes the engine produced and the independent checker refused (never returned).",
             "minimum": 0
+          },
+          "figures": {
+            "$ref": "#/components/schemas/FiguresV1",
+            "description": "The figures applied: the request's, else `capabilities.generator.figures.default`."
           },
           "graph_id": {
             "type": "string"
@@ -2154,6 +2199,17 @@
           "enabled": {
             "type": "boolean",
             "description": "The `/v1/generator/*` routes answer (otherwise 503 `data_unavailable`)."
+          },
+          "figures": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FiguresInfo",
+                "description": "Figures a request may ask for (`figures`) and the one used when it names none (api 1.11)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "graph": {
             "oneOf": [
@@ -3336,7 +3392,7 @@
           },
           "family": {
             "type": "string",
-            "description": "`turnaround` or `polygon`."
+            "description": "`turnaround` or `triangle`; `polygon` is never returned."
           },
           "polyline": {
             "type": "string",

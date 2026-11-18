@@ -87,6 +87,21 @@ pub struct GenerateRequestV1 {
     /// Seed of the choice among equivalent routes (default 0).
     #[serde(default)]
     pub seed: Option<u64>,
+    /// Figures the engine tries: `classic` (turnaround loops only) or `organic` (turnarounds widened by a corridor, and
+    /// triangles). Defaults to `capabilities.generator.figures.default`. No effect in strict mode or for a one-way ride.
+    #[serde(default)]
+    pub figures: Option<FiguresV1>,
+}
+
+/// The figures a generation tried.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FiguresV1 {
+    /// Turnaround loops only: out to a far point, back by another way.
+    Classic,
+    /// Turnarounds with a corridor between the way out and the way back, and triangles, drawn on the shapes of real
+    /// loops (the team's own when it has enough).
+    Organic,
 }
 
 /// Mode applied by the engine for the cursor value.
@@ -145,7 +160,7 @@ pub struct RouteV1 {
     pub presumed_surface_m: f64,
     /// Gap to the requested bearing, in degrees; null without a bearing.
     pub bearing_deviation_deg: Option<f64>,
-    /// `turnaround` or `polygon`.
+    /// `turnaround` or `triangle`; `polygon` is never returned.
     pub family: &'static str,
     /// Distance from the asked start and end to the graph, in metres.
     pub start_snap_m: f64,
@@ -169,6 +184,8 @@ pub struct GenerateResponseV1 {
     pub taste: TasteV1,
     /// Routes the engine produced and the independent checker refused (never returned).
     pub dropped: u32,
+    /// The figures applied: the request's, else `capabilities.generator.figures.default`.
+    pub figures: FiguresV1,
     pub routes: Vec<RouteV1>,
 }
 
@@ -513,6 +530,10 @@ fn validate(req: &GenerateRequestV1, ready: &Ready) -> Result<(GenInput, u32), P
         },
         applied: cursor::apply(h),
         seed: req.seed.unwrap_or(0),
+        figures: req.figures.unwrap_or(match ready.cfg.figures {
+            crate::config::GeneratorFigures::Classic => FiguresV1::Classic,
+            crate::config::GeneratorFigures::Organic => FiguresV1::Organic,
+        }),
     };
     Ok((input, h))
 }

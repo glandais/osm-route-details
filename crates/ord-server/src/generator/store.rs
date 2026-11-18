@@ -303,6 +303,9 @@ pub struct Entry {
     /// Le profil de goût de l'équipe (3b) ; `None` : la table commune sert. Il suit le fichier de profil : un profil
     /// remplacé recharge l'entrée.
     pub profile: Option<Taste>,
+    /// Les formes de l'équipe, de l'en-tête de son profil (lot 4, 4c) : `None` sans profil ou avec un profil écrit par 1.10
+    /// (le mélange général sert jusqu'au dépôt suivant, l'état ne devient pas `stale` pour cela).
+    pub shapes: Option<ord_graph_match::profile::shape::ShapeProfile>,
     profile_id: Option<FileId>,
     /// Numéro unique de cette construction : la clé de ses agrégats dans les fenêtres en cache.
     pub serial: u64,
@@ -712,9 +715,9 @@ impl Store {
             return Err(ReadyError::State(State::Stale(StaleReason::Matcher)));
         }
         // Le profil de goût, s'il y en a un d'utilisable : sinon la table commune sert (jamais une erreur ici).
-        let (profile, profile_id) = match self.read_profile(c) {
-            ProfileRead::Present(t, _, id) => (Some(*t), Some(id)),
-            _ => (None, self.profile_file_id(&key).filter(|_| self.profiles_enabled())),
+        let (profile, shapes, profile_id) = match self.read_profile(c) {
+            ProfileRead::Present(t, m, id) => (Some(*t), m.shapes, Some(id)),
+            _ => (None, None, self.profile_file_id(&key).filter(|_| self.profiles_enabled())),
         };
         self.hooks.team_builds.fetch_add(1, Ordering::Relaxed);
         let (team, check) = build_team_pair(engine, gi, &overlay, reserve)?;
@@ -727,6 +730,7 @@ impl Store {
         let entry = Arc::new(Entry {
             id,
             profile,
+            shapes,
             profile_id,
             serial,
             meta,

@@ -17,7 +17,7 @@ use ord_loops_check::{Checker, Config};
 
 use super::crypto::Credentials;
 use super::cursor::Applied;
-use super::routes::{CoverageV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1, TasteV1};
+use super::routes::{CoverageV1, FiguresV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1, TasteV1};
 use super::store::{Entry, ReadyError, StaleReason, State};
 use super::windows::{AcquireError, TeamRef};
 use super::Ready;
@@ -36,6 +36,7 @@ pub(crate) struct GenInput {
     pub ride: RideType,
     pub applied: Applied,
     pub seed: u64,
+    pub figures: FiguresV1,
 }
 
 /// Une place dans la file d'attente de calcul ; rendue à la chute.
@@ -308,6 +309,7 @@ impl Ready {
             overlay: computed.overlay,
             taste: computed.taste,
             dropped: computed.dropped,
+            figures: input.figures,
             routes: computed.routes,
         })
     }
@@ -367,7 +369,17 @@ impl Ready {
             familiarity: input.applied.familiarity,
             off_team_cost_q8: input.applied.off_team_cost_q8,
             seed: input.seed,
-            figures: ord_loops::Figures::Classic,
+            figures: match input.figures {
+                FiguresV1::Classic => ord_loops::Figures::Classic,
+                // Le mélange de l'équipe (ses formes au dépôt) s'il existe, sinon le général ; les réglages du service.
+                FiguresV1::Organic => ord_loops::Figures::Organic(ord_loops::Organic {
+                    mix: ord_graph_match::profile::shape::mix_for(
+                        entry.as_ref().and_then(|e| e.shapes.as_ref()),
+                        input.ride,
+                    ),
+                    tune: ord_loops::OrganicTune::default(),
+                }),
+            },
         };
         let mut stop = || cancel.load(Ordering::Relaxed) || Instant::now() >= deadline;
         let generation = self.generate_windowed(&req, entry.as_deref(), deadline, &mut stop)?;
@@ -404,7 +416,12 @@ impl Ready {
                 );
             }
         }
-        metrics::counter!("ord_generator_routes_total").increment(routes.len() as u64);
+        for family in ["turnaround", "triangle"] {
+            let n = routes.iter().filter(|r| r.family == family).count() as u64;
+            if n > 0 {
+                metrics::counter!("ord_generator_routes_total", "family" => family).increment(n);
+            }
+        }
         Ok(Computed {
             routes,
             dropped,

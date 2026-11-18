@@ -391,3 +391,81 @@ async fn deleting_a_team_removes_its_profile_with_its_overlay() {
     assert!(w.fingerprint(&k, "team-a").is_none());
     assert!(walk(&w._dir.path().join("overlays")).iter().all(|p| !p.to_string_lossy().ends_with(".enc")));
 }
+
+// --- 4c : figures et formes de l'équipe -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_deposit_writes_the_shapes_of_the_team_in_its_profile_header() {
+    let w = World::new();
+    let k = key(1);
+    assert_eq!(w.deposit(&k, "team-a", loops_deposit(&RINGS)).await.status, StatusCode::OK);
+    let shapes =
+        w.state.generator().test_profile_shapes(&k, "team-a").expect("formes écrites avec le profil");
+    // Quatre anneaux carrés de 7,2 km, tous ROAD : trois sommets à 10 % de D chacun.
+    let road = &shapes.types[0];
+    assert_eq!((road.loops, road.k1, road.k2, road.k3), (4, 0, 0, 4), "{road:?}");
+    assert!(shapes.types[1].loops == 0 && shapes.types[2].loops == 0);
+    // Sous le seuil de 50 boucles : le mélange général sert (jamais celui d'une équipe de quatre boucles).
+    use ord_graph_match::profile::shape::mix_for;
+    assert_eq!(
+        mix_for(Some(&shapes), ord_loops::RideType::Road),
+        ord_loops::FigureMix::general(ord_loops::RideType::Road)
+    );
+    // Un dépôt sans boucle : pas de formes.
+    assert_eq!(w.deposit(&k, "team-b", team_deposit()).await.status, StatusCode::OK);
+    assert!(w.state.generator().test_profile_shapes(&k, "team-b").is_none());
+}
+
+#[tokio::test]
+async fn a_request_names_its_figures_or_takes_the_service_setting_and_the_answer_says_which() {
+    use ord_server::config::GeneratorFigures;
+    let w = World::new();
+    let k = key(1);
+    assert_eq!(w.deposit(&k, "team-a", loops_deposit(&RINGS)).await.status, StatusCode::OK);
+    let body = |figures: Option<&str>, seed: u64| {
+        let mut b = generate_body(0.25);
+        b["seed"] = json!(seed);
+        if let Some(f) = figures {
+            b["figures"] = json!(f);
+        }
+        b
+    };
+    let run = |b: Value| {
+        let (w, k) = (&w, k.clone());
+        async move { w.send(generate(Some(&k), Some("team-a"), &b)).await }
+    };
+    // Absent : le réglage du service (classique par défaut) ; nommé : ce qu'il dit.
+    let r = run(body(None, 0)).await;
+    assert_eq!((r.status, r.json()["figures"].as_str()), (StatusCode::OK, Some("classic")), "{}", r.text);
+    let r = run(body(Some("organic"), 0)).await;
+    assert_eq!((r.status, r.json()["figures"].as_str()), (StatusCode::OK, Some("organic")), "{}", r.text);
+    for route in r.json()["routes"].as_array().unwrap() {
+        assert!(["turnaround", "triangle"].contains(&route["family"].as_str().unwrap()), "{route}");
+    }
+    // Classique : jamais de triangle ; organique : des triangles sur quelques graines, tous contrôlés par le contrôleur.
+    let (mut triangles, mut routes) = (0, 0);
+    for seed in 0..30u64 {
+        let c = run(body(Some("classic"), seed)).await.json();
+        assert!(c["routes"].as_array().unwrap().iter().all(|x| x["family"] == "turnaround"), "{c}");
+        let o = run(body(Some("organic"), seed)).await.json();
+        assert_eq!(o["dropped"], 0, "le contrôleur indépendant refuse un parcours organique : {o}");
+        for x in o["routes"].as_array().unwrap() {
+            routes += 1;
+            triangles += usize::from(x["family"] == "triangle");
+        }
+    }
+    assert!(routes > 0);
+    eprintln!("triangles rendus : {triangles} parcours sur {routes}");
+    // Un nom inconnu est refusé.
+    let r = run(body(Some("quadrilateral"), 0)).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
+    // Le réglage du service change le défaut, la requête garde la main.
+    let w2 = World::with(|c| c.generator.figures = GeneratorFigures::Organic);
+    assert_eq!(w2.deposit(&k, "team-a", loops_deposit(&RINGS)).await.status, StatusCode::OK);
+    let r = w2.send(generate(Some(&k), Some("team-a"), &body(None, 0))).await;
+    assert_eq!(r.json()["figures"], "organic", "{}", r.text);
+    let r = w2.send(generate(Some(&k), Some("team-a"), &body(Some("classic"), 0))).await;
+    assert_eq!(r.json()["figures"], "classic", "{}", r.text);
+    let caps = w2.send(get("/v1/capabilities")).await.json();
+    assert_eq!(caps["generator"]["figures"]["default"], "organic");
+}

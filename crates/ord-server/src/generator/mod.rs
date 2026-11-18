@@ -90,6 +90,18 @@ pub struct GeneratorCapabilities {
     pub matcher_hash: Option<String>,
     /// Do the routes carry ascent and descent (`ascent_m`, `descent_m`)? No: the engine has no elevation.
     pub ascent: bool,
+    /// Figures a request may ask for (`figures`) and the one used when it names none (api 1.11).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub figures: Option<FiguresInfo>,
+}
+
+/// The figures the generator offers.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FiguresInfo {
+    /// `classic` or `organic`: the figures of a request that names none (`generator.figures`).
+    pub default: &'static str,
+    /// Accepted values of `figures`.
+    pub values: Vec<&'static str>,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -428,7 +440,7 @@ impl Generator {
         // dépasser le budget de mémoire. Le crochet de test abaisse `min_km` pour les graphes synthétiques.
         let profile = cfg.profile.enabled.then(|| {
             use ord_graph_match::profile::collect::Cap;
-            use ord_graph_match::profile::learn::{Common, LearnParams, Mix};
+            use ord_graph_match::profile::learn::{Common, LearnFigures, LearnParams, Mix};
             let mut learn = LearnParams {
                 mix: match cfg.profile.mix {
                     crate::config::ProfileMix::Capped => Mix::Capped,
@@ -438,6 +450,10 @@ impl Generator {
                     Cap::PerType(cfg.profile.max_loops)
                 } else {
                     Cap::Team(cfg.profile.max_loops)
+                },
+                figures: match cfg.profile.learn_figures {
+                    crate::config::GeneratorFigures::Classic => LearnFigures::Classic,
+                    crate::config::GeneratorFigures::Organic => LearnFigures::Organic,
                 },
                 ..LearnParams::default()
             };
@@ -514,6 +530,13 @@ impl Generator {
             overlay_ttl_days: Some(cfg.overlay_ttl_days),
             matcher_hash: Some(format!("{matcher_hash:016x}")),
             ascent: false,
+            figures: Some(FiguresInfo {
+                default: match cfg.figures {
+                    crate::config::GeneratorFigures::Classic => "classic",
+                    crate::config::GeneratorFigures::Organic => "organic",
+                },
+                values: vec!["classic", "organic"],
+            }),
         };
         tracing::info!(
             graph = %gid,
@@ -571,6 +594,7 @@ impl Generator {
                 overlay_ttl_days: None,
                 matcher_hash: None,
                 ascent: false,
+                figures: None,
             },
         }
     }
@@ -629,6 +653,21 @@ impl Generator {
                 let bytes: Vec<u8> = t.q8.iter().flatten().flat_map(|q| q.to_le_bytes()).collect();
                 Some((format!("{:016x}", xxh3_64(&bytes)), m.steps))
             }
+            _ => None,
+        }
+    }
+
+    /// Les formes de l'équipe écrites dans l'en-tête de son profil (4c) ; `None` sans profil lisible ou sans formes.
+    #[doc(hidden)]
+    pub fn test_profile_shapes(
+        &self,
+        key: &str,
+        team: &str,
+    ) -> Option<ord_graph_match::profile::shape::ShapeProfile> {
+        let r = self.ready()?;
+        let k = crypto::decode_key(key)?;
+        match r.store.read_profile(&crypto::Credentials::derive(&k, team)) {
+            store::ProfileRead::Present(_, m, _) => m.shapes,
             _ => None,
         }
     }

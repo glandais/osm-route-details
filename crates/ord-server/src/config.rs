@@ -373,6 +373,18 @@ pub struct GeneratorConfig {
     pub deposit: GeneratorDepositConfig,
     /// Profil de goût d'équipe appris au dépôt (lot 4, 3b).
     pub profile: GeneratorProfileConfig,
+    /// Figures de la génération quand la requête n'en nomme pas (lot 4, 4c) : `classic` (la lentille seule) ou `organic`.
+    pub figures: GeneratorFigures,
+}
+
+/// Les figures que le moteur essaie : la lentille seule (1.10), ou les figures organiques du 4c (lentille au couloir et
+/// triangle). Sans effet en strict ni pour un aller simple.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeneratorFigures {
+    #[default]
+    Classic,
+    Organic,
 }
 
 impl Default for GeneratorConfig {
@@ -401,6 +413,7 @@ impl Default for GeneratorConfig {
             storage: GeneratorStorageConfig::default(),
             deposit: GeneratorDepositConfig::default(),
             profile: GeneratorProfileConfig::default(),
+            figures: GeneratorFigures::Classic,
         }
     }
 }
@@ -491,6 +504,9 @@ pub struct GeneratorProfileConfig {
     /// Forme du mélange avec la table commune. Elle entre dans l'empreinte des réglages d'apprentissage : la changer rend
     /// les profils écrits `incompatibles` (`stale`, raison `profile`) jusqu'au prochain dépôt.
     pub mix: ProfileMix,
+    /// Figures jouées pour apprendre un profil (lot 4, 4c) : `organic` entre dans l'empreinte des réglages et rend tous les
+    /// profils écrits `incompatibles` (`stale`, raison `profile`) jusqu'au prochain dépôt ; `classic` (défaut) ne les touche pas.
+    pub learn_figures: GeneratorFigures,
 }
 
 /// Forme du mélange d'un profil d'équipe avec la table commune (décision 2 du 17 novembre 2026).
@@ -515,6 +531,7 @@ impl Default for GeneratorProfileConfig {
             max_loops: 500,
             per_type: false,
             mix: ProfileMix::Capped,
+            learn_figures: GeneratorFigures::Classic,
         }
     }
 }
@@ -829,6 +846,11 @@ mod tests {
             assert!(c.validate().is_err());
         }
         assert_eq!(config.generator.profile.mix, ProfileMix::Capped);
+        // 4c : les figures par défaut sont classiques, pour la génération et pour l'apprentissage.
+        assert_eq!(
+            (config.generator.figures, config.generator.profile.learn_figures),
+            (GeneratorFigures::Classic, GeneratorFigures::Classic)
+        );
         config.generator.profile.threads = 16;
         assert!(config.validate().is_ok());
         config.generator.profile.max_loops = PROFILE_MAX_LOOPS_BOUND;
@@ -846,6 +868,23 @@ mod tests {
             jail.set_env("ORD_GENERATOR__PROFILE__MIX", "capped");
             jail.set_env("ORD_GENERATOR__PROFILE__THREAD", "2");
             assert!(Config::load(None).is_err(), "clé inconnue refusée");
+            jail.set_env("ORD_GENERATOR__PROFILE__THREAD", "");
+            Ok(())
+        });
+        // 4c : `figures` et `profile.learn_figures`, par variable d'environnement, valeurs connues seulement.
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__FIGURES", "organic");
+            jail.set_env("ORD_GENERATOR__PROFILE__LEARN_FIGURES", "organic");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(
+                (c.generator.figures, c.generator.profile.learn_figures),
+                (GeneratorFigures::Organic, GeneratorFigures::Organic)
+            );
+            jail.set_env("ORD_GENERATOR__FIGURES", "quadrilateral");
+            assert!(Config::load(None).is_err(), "figure inconnue refusée");
+            jail.set_env("ORD_GENERATOR__FIGURES", "classic");
+            jail.set_env("ORD_GENERATOR__PROFILE__LEARN_FIGURES", "triangle");
+            assert!(Config::load(None).is_err(), "figure d'apprentissage inconnue refusée");
             Ok(())
         });
     }
