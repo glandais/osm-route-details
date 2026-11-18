@@ -66,8 +66,10 @@ pub(crate) struct TriState {
     pub draw: Draw,
     /// Biais de l'estimation (sécante).
     pub beta: f64,
-    /// Paires `(P1, P2)` déjà cherchées.
+    /// Paires `(P1, P2)` déjà cherchées (au plus `max_pairs` par requête).
     pub searched: Vec<(u32, u32)>,
+    /// Paires refusées pour un virage serré à la passe d'avant, reprises une fois à celle-ci (`sharp_retry`).
+    pub retry: Vec<(u32, u32)>,
     /// Triangles gardés.
     pub kept: u32,
     /// Plus de triangle à chercher : sans part de triangles, assez de paires ou de triangles, ou plus de paire admissible.
@@ -80,6 +82,7 @@ impl TriState {
             draw,
             beta: f64::from(o.tune.beta0_milli) / 1000.0,
             searched: Vec::new(),
+            retry: Vec::new(),
             kept: 0,
             done: tri_q8_eff(o) == 0,
         }
@@ -456,31 +459,34 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
     let admissible = |st: &TriState, p: &Pair| (st.beta * p.est_m - fx.d).abs() <= est_tol * fx.d;
     fig.pairs_admissible += pairs.iter().filter(|p| admissible(st, p)).count() as u32;
     let mut rejected: BTreeMap<Violation, u32> = fig.tri_rejected.iter().copied().collect();
-    // Paires dont le triangle a été refusé pour un virage trop serré dans cette passe : le contrôle a ajouté des transitions
-    // interdites, la passe suivante peut les trouver autrement. Elles ne sont pas « cherchées » au sens de `max_pairs`
-    // pour la requête (écart au §15.7, §15.19), mais comptent pour la passe.
+    // Reprises (écart au §15.7, §15.19) : une paire dont le triangle a été refusé pour un virage trop serré a ajouté des
+    // transitions interdites ; si `sharp_retry`, la passe suivante la cherche une fois de plus, sans qu'elle prenne une
+    // seconde place parmi les `max_pairs` paires de la requête (décision 2 du §9.7 : 4 paires par requête).
+    let retry_now: Vec<(u32, u32)> = std::mem::take(&mut st.retry);
+    let mut tried_now: Vec<(u32, u32)> = Vec::new();
     let mut sharp_now: Vec<(u32, u32)> = Vec::new();
+    let mut out_of_budget = false;
     let res = (|| -> Result<(), Failure> {
         loop {
-            if st.searched.len() >= usize::from(tune.max_pairs) || st.kept >= u32::from(tune.tri_keep) {
-                st.done = true;
-                return Ok(());
-            }
-            if st.searched.len() + sharp_now.len() >= usize::from(tune.max_pairs) {
+            if st.kept >= u32::from(tune.tri_keep) {
                 return Ok(());
             }
             if *budget == 0 {
+                out_of_budget = true;
                 return Ok(());
             }
             if stop() {
                 return Err(Failure::Stopped);
             }
+            // Une paire neuve tant que la requête n'en a pas cherché `max_pairs`, ou une reprise de la passe d'avant.
+            let fresh = st.searched.len() < usize::from(tune.max_pairs);
             // Le rang : l'écart du r / D de la paire au r / D visé (par pas de 0,02), l'agrément, puis les ids.
             let best = pairs
                 .iter()
                 .filter(|p| {
-                    !st.searched.contains(&(p.n1, p.n2))
-                        && !sharp_now.contains(&(p.n1, p.n2))
+                    let k = (p.n1, p.n2);
+                    !tried_now.contains(&k)
+                        && ((fresh && !st.searched.contains(&k)) || retry_now.contains(&k))
                         && admissible(st, p)
                 })
                 .min_by(|a, b| {
@@ -492,19 +498,25 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         .then(a.n2.cmp(&b.n2))
                 });
             let Some(&pair) = best else {
-                // Plus de paire admissible : fini, sauf celles qu'un virage serré a fait refuser, que la passe suivante
-                // reprend avec les transitions interdites en plus.
-                st.done = sharp_now.is_empty();
                 return Ok(());
             };
-            st.searched.push((pair.n1, pair.n2));
+            let key = (pair.n1, pair.n2);
+            tried_now.push(key);
+            if st.searched.contains(&key) {
+                fig.retried += 1;
+            } else {
+                st.searched.push(key);
+            }
             fig.searched += 1;
             let f_min = *f_min_cell.get_or_insert_with(|| t1_min_factor(fx.cx, t1));
             let mut leg1 = t1.path_to(pair.b1);
             let mut leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, f_min, budget, fig, stop)? {
                 Leg::Found(l) => l,
                 Leg::None => continue,
-                Leg::OutOfBudget => return Ok(()),
+                Leg::OutOfBudget => {
+                    out_of_budget = true;
+                    return Ok(());
+                }
             };
             // Épi en P1 : une réparation, la jambe de départ refaite depuis P'.
             if is_spike(fx, &leg1, &leg2) {
@@ -520,7 +532,10 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         fig.spikes_dropped += 1;
                         continue;
                     }
-                    Leg::OutOfBudget => return Ok(()),
+                    Leg::OutOfBudget => {
+                        out_of_budget = true;
+                        return Ok(());
+                    }
                 };
                 if is_spike(fx, &leg1, &leg2) {
                     fig.spikes_dropped += 1;
@@ -531,7 +546,10 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
             let mut leg3 = match run_leg3(fx, t1, t2, sc, &leg1, &leg2, budget, fig, stop)? {
                 Leg::Found(l) => l,
                 Leg::None => continue,
-                Leg::OutOfBudget => return Ok(()),
+                Leg::OutOfBudget => {
+                    out_of_budget = true;
+                    return Ok(());
+                }
             };
             // Épi en P2 : la jambe d'arrivée tronquée à P', la jambe 3 refaite depuis P'.
             if is_spike(fx, &leg2, &leg3) {
@@ -547,7 +565,10 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         fig.spikes_dropped += 1;
                         continue;
                     }
-                    Leg::OutOfBudget => return Ok(()),
+                    Leg::OutOfBudget => {
+                        out_of_budget = true;
+                        return Ok(());
+                    }
                 };
                 if is_spike(fx, &leg2, &leg3) {
                     fig.spikes_dropped += 1;
@@ -596,9 +617,8 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         new_forb.push((step_field[i], step_field[i + 1]));
                     }
                 }
-                if new_forb.len() > forb_before {
-                    st.searched.retain(|&q| q != (pair.n1, pair.n2));
-                    sharp_now.push((pair.n1, pair.n2));
+                if tune.sharp_retry && new_forb.len() > forb_before {
+                    sharp_now.push(key);
                 }
                 continue;
             }
@@ -610,6 +630,17 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
             }
         }
     })();
+    // Fin de la phase : assez de triangles, ou plus de paire (neuve ni reprise) : la requête a fini ses triangles, sauf
+    // les reprises de la passe suivante. Budget épuisé ou arrêt : les reprises non jouées restent pour la passe suivante.
+    if st.kept >= u32::from(tune.tri_keep) {
+        st.done = true;
+    } else {
+        if out_of_budget || res.is_err() {
+            sharp_now.extend(retry_now.iter().filter(|k| !tried_now.contains(k)));
+        }
+        st.done = !out_of_budget && res.is_ok() && sharp_now.is_empty();
+        st.retry = sharp_now;
+    }
     fig.tri_rejected = rejected.into_iter().collect();
     fig.beta_final = st.beta;
     res

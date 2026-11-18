@@ -283,6 +283,8 @@ pub struct TriRow {
     /// Par requête : paires admissibles (moyenne), paires cherchées (moyenne), jambes 2 trouvées, abandonnées au plafond.
     pub admissible_mean: f64,
     pub searched_mean: f64,
+    /// Dont les reprises d'une paire refusée pour un virage serré (moyenne par requête).
+    pub retried_mean: f64,
     pub leg2_found_mean: f64,
     pub leg2_capped_mean: f64,
     /// Jambes 3 : chemin T2 gardé, A* d'arrivée, échec (totaux).
@@ -342,6 +344,7 @@ fn tri_rows(done: &[Done]) -> Vec<TriRow> {
                 tri_first_share: figs.iter().filter(|f| f.tri_first).count() as f64 / n as f64,
                 admissible_mean: mean(&|f| f64::from(f.pairs_admissible)),
                 searched_mean: mean(&|f| f64::from(f.searched)),
+                retried_mean: mean(&|f| f64::from(f.retried)),
                 leg2_found_mean: mean(&|f| f64::from(f.leg2_found)),
                 leg2_capped_mean: mean(&|f| f64::from(f.leg2_capped)),
                 leg3_t2: sum(&|f| f.leg3_t2),
@@ -895,18 +898,19 @@ pub fn section_md(s: &mut String, cmp: &Compare) {
     let _ = writeln!(s, "### 4. Triangles : compteurs par requête\n");
     let _ = writeln!(
         s,
-        "| variante | type | requêtes | `tri_first` | paires admissibles | cherchées | jambes 2 trouvées · au plafond | jambes 3 : T2 · A* · échec | complets | à ±10 % | gardés | requêtes avec triangle | refus | épis · réparés · jetés · gardés | états jambe 2 · jambe 3 | β P10 · P50 · P90 |\n|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---|---|"
+        "| variante | type | requêtes | `tri_first` | paires admissibles | cherchées (reprises) | jambes 2 trouvées · au plafond | jambes 3 : T2 · A* · échec | complets | à ±10 % | gardés | requêtes avec triangle | refus | épis · réparés · jetés · gardés | états jambe 2 · jambe 3 | β P10 · P50 · P90 |\n|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---|---|"
     );
     for t in &o.triangles {
         let _ = writeln!(
             s,
-            "| {} | {} | {} | {:.3} | {:.2} | {:.2} | {:.2} · {:.2} | {} · {} · {} | {} | {} | {} | {:.3} | {} | {} · {} · {} · {} | {:.0} · {:.0} | {} · {} · {} |",
+            "| {} | {} | {} | {:.3} | {:.2} | {:.2} ({:.2}) | {:.2} · {:.2} | {} · {} · {} | {} | {} | {} | {:.3} | {} | {} · {} · {} · {} | {:.0} · {:.0} | {} · {} · {} |",
             t.variant,
             t.ty,
             t.requests,
             t.tri_first_share,
             t.admissible_mean,
             t.searched_mean,
+            t.retried_mean,
             t.leg2_found_mean,
             t.leg2_capped_mean,
             t.leg3_t2,

@@ -391,6 +391,8 @@ fn the_organic_generation_is_deterministic() {
         let a = generate_with_figures_in(&e, &win[vi], ctx(), &r, &mut Workspace::new(), &mut stop());
         let b = generate_with_figures_in(&e, &win[vi], ctx(), &r, &mut Workspace::new(), &mut stop());
         assert_eq!(format!("{a:?}"), format!("{b:?}"));
+        // Au plus `max_pairs` paires distinctes par requête (décision 2 du §9.7), reprises à part.
+        assert!(a.2.searched - a.2.retried <= u32::from(OrganicTune::default().max_pairs), "{:?}", a.2);
         if let Ok(g) = &a.0 {
             triangles += g.routes.iter().filter(|x| x.family == Family::Triangle).count();
         }

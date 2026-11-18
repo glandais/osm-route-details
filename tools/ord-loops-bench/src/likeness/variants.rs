@@ -105,6 +105,8 @@ pub struct Org {
     pub boost_q8: Option<u16>,
     /// `lc` : apprentissage `Classic`, service organique.
     pub lc: bool,
+    /// `noretry` : une paire refusée pour un virage serré n'est pas reprise (`sharp_retry = false`, la lettre du §15.7).
+    pub noretry: bool,
 }
 
 impl Org {
@@ -127,6 +129,9 @@ impl Org {
         }
         if let Some(b) = self.boost_q8 {
             t.tri_boost_q8 = b;
+        }
+        if self.noretry {
+            t.sharp_retry = false;
         }
         t
     }
@@ -236,7 +241,7 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 names.push("org".into());
                 continue;
             }
-            "wide" | "lc" => {
+            "wide" | "lc" | "noretry" => {
                 ensure!(!org_opt.contains(&comp), "variante « {spec} » : deux `{comp}`");
                 org_opt.push(comp);
                 names.push(comp.into());
@@ -367,6 +372,7 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         for flag in &org_opt {
             match *flag {
                 "wide" => o.wide = true,
+                "noretry" => o.noretry = true,
                 "lc" => {
                     ensure!(kind == Some(SvcKind::Svc), "variante « {spec} » : `lc` demande `svc`");
                     o.lc = true;
@@ -720,6 +726,7 @@ mod tests {
             "svc+org+boost:1.3",
             "svc+org+lc",
             "svc+org+tri:0+w:0",
+            "svc+org+noretry",
         ])
         .unwrap();
         let names: Vec<&str> = v.iter().map(|x| x.name.as_str()).collect();
@@ -738,7 +745,8 @@ mod tests {
                 "svc-org-wide",
                 "svc-org-b130",
                 "svc-org-lc",
-                "svc-org-tri0-w000"
+                "svc-org-tri0-w000",
+                "svc-org-noretry"
             ]
         );
         assert!(v[..3].iter().all(|x| x.org.is_none()));
@@ -752,6 +760,7 @@ mod tests {
         assert_eq!((wide.band_milli, wide.sep_deg, wide.sub_bands), ([250, 430], [25, 90], 4));
         assert_eq!(o(10).tune().tri_boost_q8, 333);
         assert!(o(11).lc && !o(4).lc);
+        assert!(!o(13).tune().sharp_retry && o(4).tune().sharp_retry);
         // `tri:0` retire la part de triangles du mélange, `org` la laisse.
         let mix = ord_loops::FigureMix { tri_q8: 145, rd_tri_milli: [1, 2, 3, 4, 5] };
         let tri = |f: ord_loops::Figures| match f {
@@ -773,6 +782,8 @@ mod tests {
             vec!["base", "svc+org+w:0.03+w:0.05"],
             vec!["base", "svc+org+wide+wide"],
             vec!["base", "svc+org+lc+lc"],
+            vec!["base", "svc+noretry"],
+            vec!["base", "svc+org+noretry+noretry"],
             vec!["base", "svc+org+tri:1"],
             vec!["base", "svc+org+pairs:0"],
             vec!["base", "svc+org+pairs:2.5"],

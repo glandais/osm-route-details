@@ -181,6 +181,9 @@ pub struct OrganicTune {
     /// Épi : angle (degrés) entre l'arrivée et le départ d'un sommet, et distance (m) lue de part et d'autre.
     pub spike_deg: u8,
     pub spike_m: u16,
+    /// Une paire dont le triangle est refusé pour un virage serré est reprise une fois à la passe suivante, avec les
+    /// transitions que le refus interdit (§15.19 de la note) ; elle ne prend pas une seconde place parmi `max_pairs`.
+    pub sharp_retry: bool,
 }
 
 impl Default for OrganicTune {
@@ -200,6 +203,7 @@ impl Default for OrganicTune {
             near_score_milli: 1_000,
             spike_deg: 150,
             spike_m: 500,
+            sharp_retry: true,
         }
     }
 }
@@ -244,8 +248,10 @@ pub struct FigureDiagnostics {
     pub candidates: u32,
     pub pairs: u32,
     pub pairs_admissible: u32,
-    /// Paires cherchées, jambes 2 trouvées ou abandonnées au plafond.
+    /// Recherches de paires (reprises comprises), dont les reprises d'une paire refusée pour un virage serré ; jambes 2
+    /// trouvées ou abandonnées au plafond. `searched − retried` ≤ `max_pairs` (paires distinctes de la requête).
     pub searched: u32,
+    pub retried: u32,
     pub leg2_found: u32,
     pub leg2_capped: u32,
     /// Jambes 3 : chemin de l'arbre retour gardé, A* d'arrivée trouvé, échec.
