@@ -497,7 +497,7 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
      Écarts : §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b. On y revoit la
    réserve du §9.6 sur le fait (d) (A ROAD, `svc` contre `common`, +0,021 · +0,044), avec les classes du GRAVEL que la
-   table à 100 % pousse à la borne (§14.16, point 32).
+   table à 100 % pousse à la borne (§14.16, point 32). Spécification : §15.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -3055,3 +3055,580 @@ accès à la production.
       `WARN` ou `ERROR`, aucune panique, aucun redémarrage. Génération à 4 clients : p50 de 0,49 s. 1.9.2 garde les 18
       `.ordp.enc`. Tous les critères du §14.13 tiennent.
     - **Prêt à fusionner : oui.** La réserve du §9.6 sur (d) passe au 4c (§10, point 4).
+
+---
+
+## 15. 4c : spécification
+
+Écrit le 18 novembre 2026 sur la branche `feat/ord-loops-lot4c`, après la sonde point à point
+([`ord-loops-lot4c-sonde.md`](ord-loops-lot4c-sonde.md)) et les décisions des §9.1 et §9.4 à §9.6 (appliquées telles
+quelles), à la lecture de `crates/ord-loops` (`lib.rs`, `generate.rs`, `search.rs`, `reverse.rs`, `engine.rs`, `window.rs`,
+`team.rs`, `cost.rs`, `probe.rs`, `tests_reference.rs`), de `crates/ord-graph-match/src/profile` (`collect.rs`, `learn.rs`,
+`format.rs`), de `crates/ord-server/src/generator` (`generate.rs`, `routes.rs`), du banc (`likeness/{play,p2p,variants,shape,
+svc}.rs`) et des relevés du 4a, du 3b et de la sonde. Cette section **suffit au codeur** : ce qu'elle ne dit pas est laissé
+à son jugement, à condition de tenir les invariants du §15.8 et le §15.17. Les sections antérieures ne sont pas réécrites ;
+leurs erreurs factuelles sont signalées au §15.0 (points 12 à 17).
+
+**Ce que livre le 4c** : (1) une **génération organique** dans `ord-loops` : la lentille d'aujourd'hui (figure k = 1),
+élargie par un **couloir**, et le **triangle** (k = 2), tirés par requête sur la répartition réelle des sommets à 10 % de
+D ; (2) la **répartition par équipe** calculée au dépôt et rangée dans l'en-tête du profil du 3b ; (3) le **service** en
+api 1.11, champ `figures` ajouté, défaut `classic` ; (4) le **banc** qui mesure organique contre `svc` et les critères
+chiffrés de la bascule du défaut ; (5) si ces critères tiennent, la bascule et une séance en conteneur.
+
+### 15.0 Ce que la lecture a établi
+
+1. **Le moteur ne fait qu'une figure** (`generate_inner`) : par passe (6 au plus), les deux arbres, puis par secteur de 30°
+   (4 secteurs dans le cap, 12 sans cap, ordre tiré par la graine) au plus `tries_per_sector` (6) demi-tours ; **un
+   candidat retenu par secteur au plus** (`break` au premier gardé) ; le retour par `astar` (heuristique T2, plafond
+   `2 h0 + 10 000`), sinon l'ordre inverse (`astar_back`). Budget d'états **par passe** : `6 × |T1| + 20 000`, l'ordre
+   inverse le sien (`/ 3 + 10 000`). Tolérance du candidat : `Params::tolerance` = 0,10. Choix : tri par note puis clé,
+   glouton avec recouvrement < 0,5 et part d'équipe minimale.
+2. **Le bit `COR` existe déjà** (`search.rs`, valeur 4) : `astar` et `astar_back` multiplient le poids par **3** quand il
+   est posé, mais **rien ne le pose**. Le retirer ne change aucune sortie.
+3. **Les références figées hachent le `Debug` complet** de `(Result<Generation, Failure>, Diagnostics)`
+   (`tests_reference::snapshot`) : **ajouter un champ à `Generation`, `Diagnostics` ou `Route`, ou renommer une variante de
+   `Family`, change les 140 empreintes** de `window_reference.txt` et de `window_reference_192.txt`, même si aucun parcours
+   ne change. Le `Debug` de `Request` n'y entre pas.
+4. **`family` est une chaîne libre du contrat** (`RouteV1.family: &'static str`, doc « `turnaround` or `polygon` ») ; le
+   backend de Pédalons **ne lit pas** ce champ [lu dans le dépôt tribly : aucune occurrence]. Ajouter `triangle` est un
+   ajout de documentation.
+5. **L'en-tête JSON du profil tolère les champs inconnus** (`ProfileMeta` sans `deny_unknown_fields`) : un champ facultatif
+   ajouté au format 1 est ignoré par 1.10, comme `complete_at` l'a été par 1.9.2 (§14.16, point 25). Pas de format 2.
+6. **Le collecteur du dépôt voit chaque boucle retenue** avec sa marche et sa polyligne plane (`LoopCollector::offer`,
+   `trace.pts`) **avant** le plafond de 500 : les formes peuvent y être comptées sur toutes les boucles, pour un coût nul.
+7. **La sonde ne vérifie pas le virage en P2** entre le dernier état de la jambe 2 et le premier du chemin T2 : dans la
+   génération, ce virage doit être contrôlé (sinon `SHARP_TURN` au contrôle).
+8. **La géométrie du triangle** [calculé] : sommets à vol d'oiseau r de part et d'autre, écart θ vu du départ, détour f
+   sur les trois jambes : `r / D = 1 / (2 f (1 + sin(θ/2)))`. Avec le détour du moteur (f = 1,25, §4.3 du relevé du 4a) :
+   0,298 à θ = 40°, 0,234 à θ = 90°, **0,329 à θ = 25°**. Le r / D médian des triangles réels est 0,318 (ROAD) et 0,267
+   (GRAVEL) : l'écart de 40° à 90° de la sonde convient au GRAVEL et place les triangles ROAD **sous** le réel ; la bande
+   des mètres T1 et l'écart minimal se règlent ensemble (variante `wide`, §15.11).
+9. **La lentille garde son r / D** : à figure égale, l'aller du moteur fait 1,25 fois le vol d'oiseau, celui des équipes
+   1,41 (ROAD) à 1,66 (GRAVEL) ; le couloir ne baisse presque pas r / D (−5 % pour une compacité × 2,7, §4.3 du relevé du
+   4a). Le 4c ne touche donc pas au choix du demi-tour : le gain de r / D vient des triangles.
+10. **Le mode strict n'a aucun jeu au banc** (curseurs 0,25 et 1 seulement) ; l'aller simple non plus.
+11. **Facteur minimal de coût** : `Weighter::chain` vaut `λ · reste + M[z] · a + b` (équipe d'abord), `M[z] · a + b`
+    (strict) ou `w` (découverte), avec `w = reste + a + b` le poids de base (au goût) de la chaîne. Donc
+    `chain(c) ≥ min(1, λ, min_z M[z] / 256) · w(c)` : le plus petit `w / longueur` de la fenêtre (ou des agrégats au goût de
+    l'équipe), calculé **une fois**, borne toutes les requêtes ; le facteur d'une requête s'en déduit par deux minimums.
+
+**Erreurs factuelles des sections antérieures, corrigées ici** (le texte d'origine reste) :
+
+12. *§4.1* : k ∈ {1, 2, 3} → **{1, 2}** (quadrilatère hors lot, §9.1) ; « r / D visé » ne vaut que pour le triangle (point 9).
+13. *§4.2* : « estimation à ±5 % de D » et « un nœud par secteur » → fenêtre **[0,91 ; 1,01] × D** et **3 sous-bandes** par
+    secteur (§3 et §5 du relevé de la sonde) ; la sécante recale un biais **par requête**, pas « par secteur ».
+14. *§4.3* : « un bit de plus dans l'estampille `Ban` » → une **trame lue par position** (§15.6) : poser un bit par chaîne
+    demanderait un index case → chaînes ; le `COR` inutilisé (point 2) est retiré.
+15. *§4.6* : « `Family` gagne `Lens`, `Triangle`, `Quad` ; `Polygon` retiré » → la lentille **garde le nom `Turnaround`**
+    (point 3 : un renommage change les références figées) et la valeur d'API `turnaround` ; seul `Triangle` est ajouté ;
+    `Polygon` reste (documenté dans le contrat, jamais rendu ; retiré au prochain changement cassant).
+16. *§3.3* : les formes de l'équipe ne sont pas « le profil » au sens des tables : elles vont dans l'en-tête JSON du profil
+    (point 5), sans entrer dans son empreinte.
+17. *§6* : l'api du 4c est **1.11** (déjà dit au §14.0, point 16).
+
+### 15.1 Choix tranchés
+
+| # | Question | Tranché | Raison |
+|---|---|---|---|
+| 1 | Figures | Lentille (k = 1, le demi-tour d'aujourd'hui, au couloir) et triangle (k = 2) | §9.1 |
+| 2 | Part du quadrilatère réel (6,5 % ROAD, 1,7 % GRAVEL) | **Ôtée, parts renormalisées** : `p_tri = n₂ / (n₁ + n₂)` | Aucune figure ne la porte ; la verser au triangle surestimerait `vertices_10 = 2` |
+| 3 | Où vit la répartition | Constantes générales générées (`shape_common.rs`) **et** formes de l'équipe dans l'en-tête du profil (champ facultatif) | Points 5 et 6 du §15.0 |
+| 4 | Seuil de l'équipe | 50 boucles retenues du type, comptées **avant** le plafond de 500 | §9.1 ; seules A (ROAD 1 860, GRAVEL 545) et B (167, 228) passent |
+| 5 | r / D visé | Tiré par requête entre P10 et P90 des **triangles** réels (équipe ou général) ; sert de **clé de rang** des paires, jamais de filtre | Garder le rendement de 97 % des paires (§3 de la sonde) |
+| 6 | Tirage | Le **premier** parcours suit la figure tirée ; les deux autres préfèrent une figure absente à note voisine (Δ ≤ 1,0) | Le banc lit le premier ; §4.1 pour les suivants |
+| 7 | Paires par requête | **4** au plus, deux triangles gardés au plus, lentille en repli | Question 2 de la sonde, §15.18 question 2 |
+| 8 | Bornes T1 / T2 | Admissibles : **−2 500** sur chacune | §4 de la sonde |
+| 9 | Facteur minimal | Une fois par fenêtre et par agrégat d'équipe, par type | §4 de la sonde ; point 11 |
+| 10 | Plafond d'une recherche P1 → P2 | **1 × \|T1\|** états, dans le budget partagé de la passe | P90 mesuré 0,28 × T1 ; aucune n'a dépassé 6 × T1 |
+| 11 | Jambe d'arrivée | Chemin T2 s'il ne reprend rien **et** si le virage en P2 est permis ; sinon `astar`, plafond inchangé (multiplié par le couloir) | Point 7 ; un retour au-delà de 2 × T2 sort de toute façon de ±10 % de D |
+| 12 | Épi | Angle ≥ 150° entre les 500 m d'arrivée et de départ d'un **sommet de triangle** ; une réparation par triangle | §4.4 ; pas sur la lentille (son demi-tour est un épi par nature) |
+| 13 | Couloir | Trame lue par position, `w` = 0,03 D, κ = 2, queue 0,15 D, sommets exclus sur 2 w | §4.3 ; point 14 |
+| 14 | Strict, aller simple, sans boucle | `Classic` (organique sans effet) | Point 10 : rien de mesuré |
+| 15 | MTB | `p_tri = 0` : lentille au couloir | 4 boucles réelles |
+| 16 | Apprentissage du profil | Joue les figures du réglage `generator.profile.learn_figures` (défaut `classic`) ; `organic` entre dans l'empreinte | Tranché au banc par `lc` (§15.12, règle L) |
+| 17 | Défaut du service | `classic` jusqu'aux critères du §15.12 ; bascule dans un commit à part | §6, §10 étape 6 |
+| 18 | API | 1.11, ajouts seulement ; paquet 1.11.0 | §14.0, point 16 |
+
+### 15.2 Où vit chaque morceau
+
+| Morceau | Où | |
+|---|---|---|
+| `Figures`, `Organic`, `FigureMix`, `OrganicTune`, `Family::Triangle`, `FigureDiagnostics` | `ord-loops` : `lib.rs` | ajout |
+| Constantes de forme générales, générées | `ord-loops` : `shape_common.rs` (accesseur `FigureMix::general`) | nouveau |
+| Recherche point à point (déplacée de `probe.rs`), trame du couloir, `Ban.cor`, facteur minimal | `ord-loops` : `search.rs`, `reverse.rs`, `window.rs`, `team.rs` | changé |
+| Génération organique, paires, sécante, épi, choix | `ord-loops` : `generate.rs` (le lot de la lentille inchangé) et `figures.rs` (nouveau : paires, triangle, choix) | changé, nouveau |
+| Sonde | `ord-loops` : `probe.rs` appelle `search::astar_p2p` (marge 0 : le relevé se rejoue) | changé |
+| Mesures pures de forme (Douglas-Peucker, `vertex_indices`, `vertices`, r / D) | `ord-graph-match` : `plane.rs` (déplacées du banc, réexportées par `shape.rs`) | déplacé |
+| Formes de l'équipe au dépôt | `ord-graph-match` : `profile/shape.rs` (nouveau), `collect.rs`, `format.rs`, `learn.rs` | nouveau, changé |
+| Service | `ord-server` : `generator/{routes,generate,store,profile}.rs`, `config.rs`, `lib.rs`, contrat, `CHANGELOG.md` | changé |
+| Banc | `tools/ord-loops-bench` : sous-commande `shape-common`, `likeness/{variants,play,svc,compare_org,out}.rs` | nouveau, changé |
+
+### 15.3 Tirage de la figure
+
+**Constantes générales** (`shape_common.rs`, généré par `$B shape-common`, §15.11.1) : par type, `n₁`, `n₂`, `n₃₊` (comptes
+`vertices_10` des boucles réelles retenues, k ≤ 1 compté avec 1), `SHAPE_TRI_Q8[t] = round(256 · n₂ / (n₁ + n₂))` et
+`SHAPE_RD_TRI_MILLI[t]` = P10, P25, P50, P75, P90 (type 7) de r / D des boucles à `vertices_10 = 2`, en millièmes. Attendu
+[calculé sur le §3.3 du relevé du 4a] : ROAD `tri_q8` ≈ 145 (0,567), GRAVEL ≈ 112 (0,436) ; MTB **forcé à 0** (4 boucles).
+Un agrégat de quelques nombres par type : commité.
+
+**Formes de l'équipe** (§15.9) : `TypeShape { loops, k1, k2, k3, rd_tri_milli: Option<[u16; 5]> }` par type.
+`ShapeProfile::mix(ride) -> Option<FigureMix>` : `Some` si `loops ≥ 50` ; `tri_q8 = round(256 · k2 / (k1 + k2))` ;
+`rd_tri_milli` de l'équipe si `k2 ≥ 20`, sinon celui des constantes générales. MTB : toujours `None`.
+
+**Choix du mélange** (service et banc, une fonction `ord_graph_match::profile::shape::mix_for(shapes: Option<&ShapeProfile>,
+ride) -> FigureMix`) : celui de l'équipe s'il existe, sinon `FigureMix::general(ride)`. Sans équipe, sans profil, profil
+sans formes (écrit par 1.10) ou équipe sous le seuil : général.
+
+**Tirage, par requête** (organique, boucle, mode ≠ strict) : générateur à part, **jamais celui de la lentille** (sa suite de
+tirages reste celle de `Classic`) : `fr = SplitMix64(r.seed ^ fingerprint(r) ^ FIGURE_SALT)` avec `FIGURE_SALT =
+0x4f52_4746_4947_0001`. Dans cet ordre :
+1. `tri_first = fr.below(256) < tri_q8_eff`, `tri_q8_eff = min(256, tri_q8 · tri_boost_q8 / 256)` ;
+2. `ρ* = interp(u)`, `u = 0,1 + 0,8 · fr.below(10 000) / 10 000`, interpolation linéaire par morceaux entre (0,10 ; P10),
+   (0,25 ; P25), (0,50 ; P50), (0,75 ; P75), (0,90 ; P90) de `rd_tri_milli / 1 000` ;
+3. `clockwise = fr.below(2) == 0` : sens du triangle (P2 après P1 dans le sens horaire vu du départ, ou l'inverse).
+
+Le triangle est cherché **quelle que soit** la figure tirée pour le premier parcours (§15.7) : `tri_first` ne décide que du
+choix. `tri_q8 = 0` : aucune recherche de triangle.
+
+### 15.4 Points lointains, paires, estimation, sécante
+
+**Candidats** (une passe sur `t1.reached`, comme la sonde) : nœud atteint par T1 et T2, **degré de vue ≥ 3**
+(`v.deg[node] ≥ 3` : une sortie autre que l'arête d'arrivée, §3 de la sonde), mètres T1 `m₁ / D` dans la bande
+`[band_lo, band_hi)` (défaut [0,27 ; 0,39]), secteur de 30° dans le cap (même règle que la lentille : centre à 50° au plus ;
+sans cap, les 12). Par secteur et par sous-bande (`sub_bands` = 3, tiers égaux de la bande) : le plus agréable, `coût T1 /
+mètres T1` minimal, départage par id de nœud.
+
+**Paires** : deux candidats d'écart `sep` vu du départ dans `[sep_lo, sep_hi]` (défaut [40° ; 90°]), ordonnés selon
+`clockwise`. Pour P1, P2 : `r_i` vol d'oiseau départ → P_i, `m_i` mètres T1 du meilleur état, `φ = (m₁ / r₁ + m₂ / r₂) / 2`,
+`c` vol d'oiseau P1 → P2, `m₃` mètres T2 du meilleur état de P2, **`est = m₁ + φ · c + m₃`** (la formule de la sonde),
+`r_pair = max(r₁, r₂) / D`.
+
+**Fenêtre et sécante** : biais `β` par requête, initial `beta0` = 1,04 (biais médian mesuré +4,2 % de D). Une paire est
+**admissible** si `|β · est − D| ≤ est_tol · D` (`est_tol` = 0,05) : à `β = 1,04`, `est ∈ [0,913 ; 1,010] × D`, la fenêtre
+tranchée par la sonde. Après chaque triangle **complet** (trois jambes trouvées, avant contrôle) de longueur `L` :
+`β ← clamp(β · sqrt(L / (β · est)), 0,90 ; 1,30)` (demi-pas géométrique : la queue de l'erreur, P90 0,27 × D, ne doit pas
+emporter β sur un seul cas) ; `secant = false` le fige.
+
+**Rang** des paires admissibles non encore cherchées : `(⌊|r_pair − ρ*| / 0,02⌋, agrément moyen des deux sommets, id P1,
+id P2)` croissant. La paire suivante est relue après chaque mise à jour de β.
+
+### 15.5 Les jambes
+
+**Jambe 1** : `t1.path_to(meilleur état de P1)`.
+
+**Jambe 2, `search::astar_p2p`** (la fonction de la sonde déplacée, `pub(crate)`) :
+- départ : l'état d'arrivée de la jambe 1 et son prédécesseur (règle de virage et `retro_ok` comme `astar`) ; cible : le
+  **nœud** P2, atteint par n'importe quel état ;
+- graphe privé : `Ban` de la jambe 1 (`BAN` au-delà de la queue `tail_reuse_share · D`, `TAIL` au coût × 2 en deçà), plus le
+  couloir de la jambe 1 (§15.6) ; disque D/2 ; `forb` de la passe ;
+- heuristique au nœud x : `max(⌊crow_dm(x, P2) · f_min⌋, T1b(P2) − T1b(x) − 2 500, T2b(x) − T2b(P2) − 2 500)` (soustractions
+  saturées à 0), `T1b` et `T2b` le coût du meilleur état du nœud dans chaque arbre (0 si non atteint), `2 500 =
+  TURN_COST_MAX + 500` (la sonde rejoue avec une marge 0 : paramètre `slack`) ;
+- `f_min = 0,999 · base_min[ride] · min(1, λ_q8 / 256, min M[z] / 256)` en équipe d'abord, `0,999 · base_min[ride]` en
+  découverte (§15.0, point 11 ; le strict ne joue pas de triangle) ; `base_min` = `Window::min_w_per_dm(ride)` sans goût d'équipe,
+  `WindowTeam::min_w_per_dm(ride)` avec (calculés à la construction : `min_c w(c) / len_dm(c)` sur les chaînes de longueur
+  non nulle, `f64`) ; le facteur 0,999 absorbe l'arrondi `+128 >> 8` des multiplications ;
+- budget : décompté du **budget de la passe** (`budget` de `generate_inner`), plafonné à `|T1|` états par recherche ;
+  plafond atteint : recherche abandonnée (compteur) ; budget de la passe à 0 : la phase des triangles s'arrête pour la
+  passe, **sans** lever `exhausted` (la lentille a déjà joué) ;
+- `WindowEscape`, `stop` : comme `astar`.
+
+**Jambe 3** : `ret = t2.path_to(meilleur état T2 de P2)`. Gardée telle quelle si (a) aucune de ses chaînes n'est `BAN` dans le
+`Ban` de la jambe 2 ni prise par la jambe 2, **et** (b) `turn_cost(dernier état de la jambe 2, son prédécesseur, ret[0])`
+est `Some` et `retro_ok` tient. Sinon `astar` (heuristique T2) depuis le dernier état de la jambe 2, sur le graphe privé des
+jambes 1 (`BAN` / `TAIL` comme la jambe 2) et 2 (`BAN`), couloir des jambes 1 et 2, budget de la passe.
+
+**Épi** (sommets P1 puis P2 du triangle) : sur les positions des nœuds (`Local` du départ), `h_in` = cap du point situé
+`spike_m` (500 m) **avant** le sommet le long de la jambe d'arrivée jusqu'au sommet, `h_out` = cap du sommet au point situé
+500 m **après** le long de la jambe de départ (le premier nœud au-delà, ou le bout de la jambe) ; épi si
+`turn_angle_deg(h_in, h_out) ≥ spike_deg` (150°). **Réparation, une seule par triangle** : P' = le dernier nœud de degré ≥ 3
+de la jambe d'arrivée situé à 500 m au moins avant le sommet ; la jambe d'arrivée est tronquée à P' (préfixe de ses états),
+la jambe de départ refaite depuis P' (jambe 2 vers P2 si le sommet est P1 ; jambe 3 si c'est P2), l'épi relu ; s'il reste,
+ou si la recherche échoue, la paire est jetée. La forme « couloir partagé » du §4.4 n'est pas codée : le couloir l'écarte
+déjà au-delà de 2 w (§15.6) ; le banc compte les épis rendus (`spikes_kept`, par le contrôle de l'angle sur les parcours
+gardés) et la décision se reprend s'il en compte.
+
+**Longueur** : `L = mètres(jambe 1) + mètres(jambe 2) + mètres(jambe 3)` ; hors `tolerance · D` (0,10) : sécante, paire
+suivante. Sinon `steps_of` sur les états concaténés, `Route { family: Family::Triangle, .. }`, `check_route_in` : refus →
+transitions `SHARP_TURN` ajoutées à `new_forb` comme pour la lentille, refus compté dans `FigureDiagnostics` ; gardé →
+même note que la lentille, ajouté à `scored` (même déduplication par clé).
+
+### 15.6 Couloir
+
+**Trame** (`search::CorGrid`, dans `ViewWs`, réutilisée d'une requête à l'autre, comptée par `Workspace::bytes`) : carrée,
+centrée au départ (coordonnées `Local`), demi-côté `D/2 + w`, cellule `cell = clamp(w / 3, 100 m, 500 m)`, un bit par case
+(`Vec<u64>`). À w = 0,03 D : 300 m à 30 km, 500 m dès 50 km ; 424 × 424 cases (22 Ko) à 200 km [calculé].
+
+**Marquage d'une jambe** : pour deux états consécutifs, le segment entre leurs nœuds d'arrivée, échantillonné tous les
+`cell / 2` (une chaîne de vue peut faire plusieurs kilomètres sans nœud), **sauf** les parties dont l'abscisse le long du
+parcours est (a) à moins de `tail_reuse_share · D` (0,15 D) du départ ou de l'arrivée (la queue), ou (b) à moins de `2 w` d'un
+sommet (demi-tour de la lentille, P1, P2) — sans (b), toute jambe partirait de son sommet dans le couloir de la précédente.
+Puis **dilatation** par un disque de rayon `⌈w / cell⌉` cases (gabarit précalculé).
+
+**Coût** : à la relaxation d'une arête de vue dans `astar`, `astar_back` et `astar_p2p`, si `ban.cor` est `Some` et que le
+nœud d'arrivée tombe dans une case marquée : `w ← min((w · κ_q8 + 128) >> 8, u32::MAX / 2)`, après le `× 2` de la queue.
+`Ban` gagne `cor: Option<&CorGrid>` et `kappa_q8: u32` ; `None` partout en `Classic`. Le plafond d'`astar` et
+d'`astar_back` devient `h0 · (256 + κ_q8) / 256 + 10 000` **quand `cor` est `Some`** (κ = 1 redonne `2 h0 + 10 000`), et
+reste exactement `2 h0 + 10 000` sinon. L'heuristique reste admissible : le couloir n'augmente que des coûts.
+
+**Où** : retour de la lentille (couloir de l'aller), ordre inverse de la lentille (couloir du retour), jambe 2 (couloir de la
+jambe 1), jambe 3 cherchée (couloir des jambes 1 et 2). Le chemin T2 gardé tel quel (§15.5) n'est pas pénalisé.
+
+**Valeurs de départ** : `w` = 0,03 D (`corridor_w_milli` = 30 ; 0 = sans couloir), κ = 2 (`kappa_q8` = 512) : la séparation
+minimale du §4.3, pas la largeur visée (0,11 D).
+
+**Plan de réglage** (banc, §15.15) : campagne 1, `w` ∈ {0 ; 0,03} à κ = 2 (l'effet du couloir isolé) ; campagne 2, `w` ∈
+{0,02 ; 0,05} à κ = 2, puis κ ∈ {1,5 ; 3} au meilleur `w`. **Choix** : la plus petite W1 / IQR de la compacité ROAD
+(moyenne des deux curseurs, lecture « toutes »), parmi les réglages qui tiennent C1, C2 et B1 du §15.12 et dont la W1 / IQR de
+r / D ne dépasse pas celle de `w` = 0,03 de plus de 0,03 ; à 0,02 près, le plus petit `w` puis le plus petit κ.
+
+### 15.7 Génération organique : une passe, puis le choix
+
+`generate_inner` prend `figures` ; `org = Some(o)` si `r.figures` est `Organic(o)`, que la requête est une boucle et que le
+mode n'est pas strict ; sinon `org = None` et **tout le code suit le chemin de `Classic`**.
+
+```text
+pour chaque passe (6 au plus) :
+    arbres T1, T2 ; faisabilité (passe 0)                                     — inchangé
+    boucle des secteurs de la lentille                                        — inchangée, sauf :
+        org et w > 0 : couloir de l'aller (ou du retour en ordre inverse) dans le Ban, plafond ajusté
+    si org, tri_q8_eff > 0, non exhausted, triangles non finis :
+        candidats et paires de cette passe (paires (P1, P2) déjà cherchées sautées)
+        tant que cherchées < max_pairs (4), triangles gardés < tri_keep (2), budget de la passe > 0 :
+            paire admissible de rang minimal, sinon sortir
+            jambe 2 ; épi en P1 ; jambe 3 ; épi en P2 ; L ; sécante ; tolérance ; contrôle ; note ; scored
+    fin : exhausted, ou (scored ≥ 3 et triangles finis), ou new_forb vide — « triangles finis » vaut vrai sans org
+```
+
+« Triangles finis » : `tri_q8_eff = 0`, ou `tri_keep` triangles gardés, ou `max_pairs` paires cherchées, ou plus aucune paire
+admissible dans la passe. `max_pairs` et `tri_keep` comptent sur **toute la requête**, passes comprises.
+
+**Choix des trois parcours** (après le filtre de part d'équipe, inchangé) :
+1. premier : le meilleur (note, clé) de la famille `tri_first ? Triangle : Turnaround` ; s'il n'y en a pas, le meilleur toutes
+   familles ;
+2. deuxième et troisième : parmi les restants dont le recouvrement avec chaque choisi est < 0,5, `c` le meilleur toutes
+   familles, `c'` le meilleur d'une famille **pas encore choisie** ; `c'` si sa note ≤ note de `c` + `near_score` (1,0 : 5 % de
+   D d'écart de longueur, ou 45° d'écart de cap), sinon `c`.
+
+Sans triangle, ce choix est exactement le glouton de `Classic` (même tri, même filtre). `Family::Triangle` pour les
+triangles, `Turnaround` pour les lentilles.
+
+### 15.8 Interface du moteur et non-régression
+
+```rust
+pub struct Request { /* … */ pub figures: Figures }          // tous les littéraux du workspace : `figures: Figures::Classic`
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Figures { Classic, Organic(Organic) }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Organic { pub mix: FigureMix, pub tune: OrganicTune }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FigureMix { pub tri_q8: u16, pub rd_tri_milli: [u16; 5] }      // FigureMix::general(ride), FigureMix::LENS_ONLY
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OrganicTune {                                     // Default = les valeurs du service
+    pub corridor_w_milli: u16, pub kappa_q8: u16,            // 30, 512
+    pub max_pairs: u8, pub tri_keep: u8, pub sub_bands: u8,  // 4, 2, 3
+    pub band_milli: [u16; 2], pub sep_deg: [u8; 2],          // [270, 390], [40, 90]
+    pub beta0_milli: u16, pub est_tol_milli: u16, pub secant: bool,   // 1 040, 50, true
+    pub tri_boost_q8: u16, pub near_score_milli: u16,        // 256, 1 000
+    pub spike_deg: u8, pub spike_m: u16,                     // 150, 500
+}
+pub enum Family { Turnaround, Polygon, Triangle }             // ajout en dernier ; `Polygon` jamais rendu
+pub struct FigureDiagnostics { /* compteurs, §15.11.3 */ }
+pub fn generate_with_figures_in(e, win, team, r, ws, stop)
+    -> (Result<Generation, Failure>, Diagnostics, FigureDiagnostics);
+```
+
+- `generate_with_diagnostics_in` appelle `generate_with_figures_in` et lâche le troisième terme : **`Generation`,
+  `Diagnostics`, `Route` ne gagnent aucun champ** (§15.0, point 3). Les compteurs des triangles ne vont que dans
+  `FigureDiagnostics` ; `Diagnostics` (dont `rejected`, qui classe les échecs) reste celui de la lentille.
+- `fingerprint(r)` n'entre pas `figures` ; la lentille consomme le même générateur dans le même ordre.
+- Les réglages vivent dans la requête et non dans `Params` : le banc fait varier `w`, κ, les paires sans rouvrir le moteur.
+- **Invariants, tenus par des tests (§15.13)** :
+  - **I1** : `Figures::Classic` rend exactement 1.10 : `window_reference.txt` et `window_reference_192.txt` passent **sans
+    re-bénédiction** ; `team_reference.txt` et `team_check_reference.txt` inchangées.
+  - **I2** : `Organic` avec `tri_q8 = 0` et `corridor_w_milli = 0` rend exactement `Classic` (mêmes `Debug`), sur les 140
+    requêtes de la référence.
+  - **I3** : tout parcours rendu en organique passe `check_route_in` et le contrôleur indépendant (`engine_vs_checker`).
+  - **I4** : même graine, même sortie ; fenêtre plus grande, même sortie et aucun échappement (lot 6).
+- Poids et pénalités en entiers (κ en 256es) ; ρ*, β et l'estimation en `f64` (opérations IEEE déterministes, `sqrt`
+  correctement arrondie) : même résultat natif et WASM, comme la géométrie d'aujourd'hui.
+- `probe.rs` appelle `search::astar_p2p` avec `slack = 0` et sans couloir ; la sonde se rejoue (empreintes de `base` et
+  `svc` inchangées avec elle).
+
+### 15.9 Profil : formes de l'équipe au dépôt
+
+- `ord_graph_match::plane` reçoit, **déplacées du banc sans changement**, `douglas_peucker`, `dist_to_segment`,
+  `vertex_indices`, `vertices` et le calcul de `r_over_d` (`far_of(pts) -> (r_over_d, far_pos)`) ; `shape.rs` du banc les
+  réexporte. Contrôle : empreinte de `likeness --teams C --limit 5` inchangée.
+- `profile/shape.rs` : `ShapeAcc` (par type : comptes k ≤ 1, 2, ≥ 3 sur `vertices(trace.pts, 0,10)`, et les r / D des boucles
+  à k = 2), alimenté dans `LoopCollector::offer` **après** `judge_pieces` et **avant** le plafond ; `finish()` rend
+  `LearnSet { loops, counts, shapes: ShapeProfile }` (quantiles type 7 en millièmes, `None` sous 20 boucles à k = 2).
+- `ProfileMeta` gagne `#[serde(default, skip_serializing_if = "Option::is_none")] pub shapes: Option<ShapeProfile>` :
+  format 1 inchangé, **hors** des empreintes `common` et `learn`. Écrit pour `learned`, `partial` et `empty` (`None` si aucune
+  boucle) ; `skipped` garde l'ancien profil et ses formes. Taille : +~200 octets.
+- `LearnParams` gagne `figures: LearnFigures { Classic, Organic }`, défaut `Classic`, ajouté au texte canonique **seulement**
+  s'il vaut `Organic` (`;figures=organic`, comme `mix`) : les profils écrits restent compatibles tant qu'il vaut `Classic`.
+  `loop_request` reçoit `figures: Figures` ; en `Organic`, l'apprentissage joue `Organic { mix: mix_for(Some(&set.shapes),
+  ride), tune: Default }`.
+- Lecture en service : `Entry` gagne `shapes: Option<ShapeProfile>` (profil `Present` seulement). Un profil écrit par 1.10
+  (sans formes) sert le mélange général jusqu'au dépôt suivant ; l'état ne devient **pas** `stale` pour cela (A et B
+  diffèrent du général de 1 à 11 points sur `p_tri`, B ROAD 0,454 contre 0,567 [calculé sur le §3.3 du relevé du 4a] ; le
+  redépôt vient au changement des traces ou dans les 7 jours).
+
+### 15.10 Service (api 1.11, paquet 1.11.0)
+
+- `POST /v1/generator/routes` : `figures: classic | organic`, facultatif ; absent → `generator.figures` (réglage, défaut
+  `classic`, variable `ORD_GENERATOR__FIGURES`). Le service construit `Figures::Organic { mix: mix_for(entry.shapes, ride),
+  tune: OrganicTune::default() }`.
+- Réponse : `figures` (la valeur appliquée) ; `routes[].family` peut valoir `triangle` (doc : « `turnaround`, `triangle` ;
+  `polygon` is never returned »).
+- `/v1/capabilities` : `generator.figures: { default, values: [classic, organic] }`.
+- `generator.profile.learn_figures: classic | organic`, défaut `classic` (§15.12, règle L) ; validé comme les autres.
+- Métriques : `ord_generator_routes_total{family}` (valeurs fixes) ; journaux : la famille, jamais une position.
+- `API_VERSION` 1.11, espace de travail 1.11.0, `CHANGELOG.md` (« Ajouté » : figures organiques, famille triangle, formes du
+  profil ; « Compatibilité » : défaut inchangé, déploiement roulant sûr — 1.10 ignore `shapes`, Pédalons n'envoie pas
+  `figures` ; « Changé » au commit de bascule seulement). Contrat régénéré par le test `contract`. Rien pour Pédalons.
+
+### 15.11 Banc
+
+#### 15.11.1 Constantes générales
+
+`$B shape-common --report <rapport base> --out crates/ord-loops/src/shape_common.rs` : lit les `LoopRec` du réel (le réel ne
+dépend pas du moteur : le rapport `base` le plus récent du même export convient, par exemple celui de la campagne 2 de la
+sonde), **refuse** si les boucles retenues ne sont pas ROAD 2 071, GRAVEL 780, MTB 4 ou si les parts `vertices_10` ne
+redonnent pas 40,5 / 53,0 / 6,5 et 55,4 / 42,9 / 1,7 % au dixième ; écrit le fichier généré (provenance, aucune donnée
+privée), MTB à `tri_q8 = 0`.
+
+#### 15.11.2 Variantes
+
+Composant `org`, combinable avec `svc` ou `common` (le 4c se juge sur le chemin du service du 3b), et ses options :
+
+| Option | Effet | Nom |
+|---|---|---|
+| `org` | `Organic`, réglages par défaut ; avec `svc`, apprentissage organique | `-org` |
+| `w:<x>` | `corridor_w_milli = 1 000 x` (0 : sans couloir) | `-w003` |
+| `k:<x>` | `kappa_q8 = 256 x` | `-k15` |
+| `tri:0` | `tri_q8 = 0` (lentille au couloir seule) | `-tri0` |
+| `pairs:<n>` | `max_pairs = n` | `-pairs8` |
+| `wide` | bande [0,25 ; 0,43], écart [25° ; 90°], 4 sous-bandes (§15.0, point 8) | `-wide` |
+| `boost:<x>` | `tri_boost_q8 = 256 x` | `-b130` |
+| `lc` | avec `svc+org` : apprentissage `Classic`, service organique | `-lc` |
+
+Refus avant toute phase lourde : `org` sans `svc` ni `common` ; une option sans `org` ; `lc` sans `svc` ; une option en double.
+`common+org` donne à toutes les équipes le mélange **général** (le service sans profil) ; `svc+org`, celui de l'équipe (formes
+du collecteur de la surcouche d'apprentissage, « écart »), sinon le général.
+
+**Contrôle de neutralité** : `svc+org+tri:0+w:0` doit rendre **l'empreinte de `svc`** (I2 au banc) ; `base` et `svc` celles de
+la sonde (`4686c904975302e7`, `384f003c0bd19b7f`, `--holdout-share 0.25`, toutes équipes). Affichés au résumé ; arrêt si
+`base` diffère.
+
+#### 15.11.3 Ce que le banc enregistre
+
+`play_one` appelle `generate_with_figures_in`. `PlayRec` gagne `fig: FigAgg` (agrégats de `FigureDiagnostics` : `applied`,
+`tri_first`, `rho_target`, `candidates`, `pairs`, `pairs_admissible`, `searched`, `leg2_found`, `leg2_capped`,
+`leg3_t2`, `leg3_astar`, `leg3_failed`, `complete`, `within_tol`, `spikes`, `spikes_repaired`, `tri_rejected` par code,
+`tri_scored`, `p2p_settled`, `leg3_settled`, `beta_final`) ; `GenRoute.family` existe déjà. Rien de privé : des compteurs.
+
+#### 15.11.4 Comparaison (`compare_org.rs`, section « 4c » de `<label>-compare.{md,json}`)
+
+Groupes ROAD 0,25 · ROAD 1 · GRAVEL 0,25 · GRAVEL 1, lectures « toutes » et « écart », toutes équipes puis A et B, premier
+parcours gardé, jeux `OK`, normalisation fixe du §12.6 :
+1. **Formes** : W1 / IQR de `r_over_d`, `compactness`, `vertices_10`, `far_pos`, `detour_far`, `sinuosity_10`,
+   `turns_per_10km`, `shared_share`, par variante, et l'écart à `svc` ; P50 de r / D et de la compacité ; part des premiers
+   à `vertices_10 = 2`, part des premiers `Triangle`, et r / D et compacité médians **par famille**.
+2. **Goût** : `S / S_base` par variante ; **fait (d) organique** : A ROAD « toutes », `svc-org − common-org`, aux deux
+   curseurs, à côté de `svc − common` ; **cases à la borne** : pour chaque classe dont le `COMMON_Q8` vaut 64 ou 1 024
+   (ROAD, GRAVEL), parts réelle et générée de la longueur (mètres groupés, `class_meters.pooled`) sous `svc` et `svc-org`, et
+   le nombre de classes à la borne cumulée `[1/4, 4]` des profils de A et B.
+3. **Service** : P50 et P90 par appel contre `svc` du même tirage, part `OK`, `PANIC`, `WINDOW_ESCAPE`, `VIOLATION`.
+4. **Triangles** : les compteurs du §15.11.3 (rendements : paires admissibles par requête, triangles complets, à ±10 %,
+   gardés par le contrôle ; refus par code ; épis ; β final P10 · P50 · P90).
+5. **Lecture, en faits** : les critères du §15.12, chacun « tient » ou « ne tient pas » avec ses chiffres.
+
+### 15.12 Critères
+
+Candidat : `svc-org` aux réglages retenus (§15.6) ; référence : `svc` du même tirage. Lecture « toutes », toutes équipes,
+quatre groupes, sauf mention.
+
+**Formes**
+- **A1, r / D** : W1 / IQR ≤ **0,75 ×** celle de `svc` dans les deux groupes ROAD, **≤ 0,85 ×** dans les deux GRAVEL. Attendu
+  [calculé, modèle grossier : 40 % de triangles à r / D tiré du réel, 60 % de lentilles à 0,39] : ~0,5 × en ROAD, ~0,7 × en
+  GRAVEL. Le P50 de r / D ROAD sous 0,36 (critère du §12 du relevé du 4a) est **rapporté, pas exigé** : tant que les
+  lentilles font plus de la moitié des premiers parcours, le médian reste dans les lentilles.
+- **A2, figure** : part des premiers à `vertices_10 = 2` dans **[0,40 ; 0,58]** en ROAD et **[0,32 ; 0,50]** en GRAVEL, à
+  chaque curseur (réel : 0,530 et 0,429) ; W1 / IQR de `vertices_10` ≤ 0,5 × `svc`. Attendu [calculé] : ~0,45 et ~0,37
+  (`p_tri × ~0,70` de triangles gardés, plus 9 % de lentilles comptées à 2).
+- **A3, compacité** : ROAD ≤ 0,80 × `svc` aux deux curseurs ; GRAVEL ≤ `svc` + 0,05.
+- **A4, le reste** : `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km`, `shared_share` ≤ `svc` + 0,10 chacune.
+
+**Goût**
+- **B1** : `S / S_base` ≤ celui de `svc` + 0,03 dans les quatre groupes, lectures « toutes » **et** « écart », et ≤ 0,5 (fait
+  (a)).
+- **B2, réserve du fait (d)** : A ROAD « toutes », `svc-org − common-org` ≤ **+0,054** à chaque curseur (l'acceptation du
+  §9.6, +0,044, plus 0,01 de bruit de tirage) ; **réserve levée** si ≤ +0,03 aux deux.
+- **B3, cases à la borne** : signalées au propriétaire si, sous `svc-org`, la part générée d'une classe à la borne s'écarte
+  de la réelle de plus de max(0,02 ; 0,5 × réelle) **et** plus que sous `svc` ; non bloquant.
+
+**Service**
+- **C1, temps au banc** : P50 par appel ≤ **1,15 ×** `svc` à chaque curseur (deux fois le surcoût calculé de la sonde, +8 %) ;
+  P90 ≤ 1,25 × `svc`. Entre 1,15 et 1,20 au premier tirage : second tirage des temps (`--variants base,svc,svc+org…`), moyenne
+  des deux.
+- **C2, issues** : part `OK` ≥ `svc` − 0,5 point à chaque curseur ; aucune `PANIC` ni `WINDOW_ESCAPE` ; `VIOLATION` ≤ `svc`.
+- **C3, conteneur de 3 Gio** (après la bascule, séance du §14.13 rejouée) : P50 à 4 clients ≤ 0,56 s (1,15 × 0,49 s), en
+  série ≤ 0,29 s (1,15 × 0,25 s) ; pic `anon` ≤ 2,4 Gio ; `oom` 0 ; tous les dépôts en 200.
+- **D, déterminisme** : mêmes empreintes à 1 et 16 fils (B et C).
+
+**Bascule du défaut sur `organic`** : A1, A2, A3 (ROAD), A4, B1, B2, C1, C2 et D tiennent → commit de bascule, puis C3 ; si C3
+échoue, le commit est annulé (`git revert`) et le relevé le dit. Sinon le défaut reste `classic` et le relevé nomme les
+critères manqués. La fusion revient au propriétaire.
+
+**Règle L, apprentissage** : `svc-org-lc` (appris en `Classic`, servi organique) contre `svc-org` : si `S / S_base` de `lc` ≤
+celui de `svc-org` + 0,02 dans les quatre groupes « toutes » **et** si B2 tient pour `lc`, `learn_figures` reste `classic` (aucun
+profil invalidé, coût d'apprentissage inchangé) ; sinon `learn_figures = organic` au commit de bascule : tous les profils
+deviennent `incompatible`, donc `stale` raison `profile`, et se refont à la nuit suivante (~10,5 min de profils par
+environnement, × ~1,08 [calculé sur le §14.0 et le §6 de la sonde]).
+
+**Gain de triangles trop faible** (A2 sous la borne basse) : `boost` = min(1,5 ; part réelle / part obtenue), joué en
+campagne 2 ; retenu s'il ramène A2 dans l'intervalle sans faire manquer A1, B1 ou C1.
+
+### 15.13 Tests (synthétiques, aucune donnée de production)
+
+**`ord-loops`**
+1. I1 : les deux références figées passent telles quelles ; `team_reference.txt` inchangée.
+2. I2 : sur le scénario de référence (deux zooms, 70 requêtes, trois modes, avec équipe), `Organic { mix: LENS_ONLY, tune: {
+   corridor_w_milli: 0, .. } }` rend des `snapshot` égaux à `Classic`, ligne par ligne.
+3. Référence organique : `tests/fixtures/organic_reference.txt`, bénie au commit 3 avec `tri_q8 = 256` et les réglages par
+   défaut, rejouée ensuite ; **re-bénissable** au réglage, en le disant au commit.
+4. Triangle sur une grille de 48 × 48 : `tri_q8 = 256`, une boucle dans un cap → au moins une requête rend un
+   `Family::Triangle` ; P1 et P2 sont sur le parcours, dans l'ordre et le sens tirés ; longueur à ±10 %.
+5. Admissibilité : sur 200 paires tirées de grilles avec virages et sens uniques, `astar_p2p` (bornes, `slack` 2 500) trouve
+   le **même coût** que la même recherche à heuristique nulle ; avec `slack` 0, au moins un cas plus cher est toléré (le
+   défaut que la sonde a mesuré).
+6. Facteur minimal : pour toutes les chaînes d'une fenêtre de test, trois modes, familiarités {0 ; 0,5 ; 1}, λ {1 ; 3 ; 5},
+   avec et sans goût : `chain(c) ≥ f_min · len_dm(c)`.
+7. Couloir : deux routes parallèles à 200 m et une troisième à 4 km, la troisième moins de 1,5 fois plus longue : sans
+   couloir le retour prend la parallèle, avec `w` couvrant 200 m et κ = 2 il prend la troisième ; queue et zone du sommet non
+   marquées (lecture directe de la trame).
+8. Épi : un sommet au bout d'un peigne → épi détecté ; P' est le dernier nœud de degré ≥ 3 à 500 m ; sans P' possible, paire
+   jetée.
+9. Tirage : sur 10 000 graines, part de `tri_first` à `tri_q8 / 256` ± 0,02 ; ρ* dans [P10 ; P90] ; `FIGURE_SALT` ne change
+   rien à la suite de la lentille (test 2).
+10. Choix : sans triangle, l'ordre de `Classic` ; avec, premier de la famille tirée, préférence à note voisine.
+11. I4 : déterminisme et fenêtre plus grande (`any_superset_of_the_needed_tiles_gives_the_same_routes_and_no_escape`) étendus
+    à `Organic`.
+
+**`ord-loops-check`** : 12. `engine_vs_checker` étendu à `Organic` (`tri_q8 = 256`) : tout parcours rendu passe (I3).
+
+**`ord-graph-match`** : 13. mesures déplacées : tests du banc passés tels quels ; 14. `ShapeAcc` : boucle triangulaire → k = 2,
+aller-retour → 1 ; comptes indépendants du plafond et de l'ordre ; quantiles ; `mix_for` sous 50 boucles → général ;
+15. format : en-tête avec `shapes`, aller-retour ; en-tête sans `shapes` → `None` ; décodage par une copie de la structure de
+1.10 (sans le champ) → succès ; `LearnParams::hash` inchangé à `Classic`, changé à `Organic`.
+
+**`ord-server`** : 16. `figures` absent → réglage ; `organic` → famille `triangle` possible, `figures` rendu ; 17. profil avec
+formes → mélange de l'équipe (crochet de test qui lit le `Request`) ; 18. capacités, contrat régénéré, validation des
+réglages ; 19. dépôt de bout en bout : `shapes` écrit, relu.
+
+**`ord-loops-bench`** : 20. `parse_variants` : les options du §15.11.2 et leurs refus ; 21. `shape-common` sur un rapport
+synthétique : refus des comptes, MTB à 0, fichier qui compile.
+
+### 15.14 Commits
+
+Chacun passe `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings` et les tests des crates touchés (les tests du
+backend de Pédalons ne sont pas concernés) ; avant le dernier, `cargo test --workspace`. Fin de message : ligne vide puis
+`Co-Authored-By` du modèle qui code.
+
+1. `refactor(graph-match): mesures de forme pures partagées avec le banc (lot 4, 4c)` — §15.9 premier point, test 13 ; contrôle
+   d'empreinte.
+2. `feat(loops): recherche point à point, couloir et facteur minimal, sans effet sur Classic (lot 4, 4c)` — `astar_p2p`
+   déplacée, `CorGrid`, `Ban.cor`, `COR` retiré, `min_w_per_dm`, plafond ajusté ; tests 1, 5, 6, 7 ; la sonde rejouée sur une
+   équipe (même relevé).
+3. `feat(loops): figures organiques, triangle et lentille au couloir (lot 4, 4c)` — §15.3 à §15.8 sans les constantes
+   (`FigureMix::general` provisoire = `LENS_ONLY`), `generate_with_figures_in` ; tests 2, 3, 4, 8 à 12.
+4. `feat(bench): forme commune exportée et constantes du moteur (lot 4, 4c)` — `shape-common`, `shape_common.rs` généré,
+   test 21 ; la référence organique re-bénie (le mélange général change), en le disant.
+5. `feat(graph-match): formes de l'équipe au dépôt, dans l'en-tête du profil (lot 4, 4c)` — §15.9 ; tests 14, 15.
+6. `feat(bench): likeness, variantes organiques et comparaison du 4c` — §15.11 ; test 20. Puis campagnes du §15.15.
+7. `feat(server): figures organiques en option, famille triangle, formes du profil (api 1.11, 1.11.0)` — §15.10 ; tests 16 à
+   19.
+8. Si les critères tiennent : `feat(server): figures organiques par défaut (lot 4, 4c)` — `generator.figures = organic`,
+   `learn_figures` selon la règle L, réglages retenus en `OrganicTune::default()` (et la référence organique re-bénie si le
+   réglage a changé), `CHANGELOG` « Changé » ; puis la séance en conteneur.
+9. `docs(ord-loops): relevé du 4c, figures organiques au banc (lot 4)` — `ord-loops-lot4c-mesures.md` (style des relevés, marques
+   de l'en-tête, lettres d'équipes et agrégats seulement), §15.19 « Écarts du codage », étape 4 du §10 marquée.
+
+### 15.15 Campagnes, temps, mémoire
+
+Une à la fois, la machine pour elle seule (16 cœurs, 30 Go) ; sorties sous `~/.cache/osm-route-details/graph/lot4/4c/`
+seulement. `B=./target/release/ord-loops-bench`.
+
+| # | Après | Commande (`$B likeness …`) | [estimé] |
+|---|---|---|---|
+| 0 | commit 1 | `--teams C --limit 5 --label 4c-refacto` : empreinte d'avant | 1 min |
+| 1 | commit 6 | `--teams C --limit 20 --holdout-share 0.25 --variants base,svc,svc+org+tri:0+w:0 --label 4c-neutre` : `svc-org-tri0-w0` = `svc` | 3 min |
+| 2 | — | `--teams B,C --limit 20 --holdout-share 0.25 --variants base,svc,common+org,svc+org --label 4c-essai` | 6 min |
+| 3 | — | `--teams B,C --holdout-share 0.25 --variants base,svc+org --threads {1,16} --label 4c-det{1,16}` | 25 min |
+| 4 | — | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org,svc+org+w:0,svc+org+tri:0,svc+org+lc --label lot4-4c` | ~65 min, RSS ≤ 21 Gio |
+| 5 | — | `--holdout-share 0.25 --variants base,svc,svc+org+w:0.02,svc+org+w:0.05,svc+org+pairs:8,svc+org+wide --label lot4-4c-r1` | ~55 min |
+| 6 | — | `--holdout-share 0.25 --variants base,svc,svc+org+w:<w*>+k:1.5,svc+org+w:<w*>+k:3[,…+boost:<b>]` `--label lot4-4c-r2` | ~40 min |
+| 7 | commit 8 | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org --label lot4-4c-final` (défauts retenus), puis second tirage des temps | ~45 + 25 min |
+| 8 | commit 8 | séance en conteneur du §14.13 (image `osm-route-details:lot4-4c`, défauts organiques) | ~45 min |
+
+Estimations sur la campagne 4 du 3b (13 variantes en 84 min, pic 18,2 Gio) et la sonde (`base` + `svc` en 12 min, pic 19,5
+Gio), +8 % par jeu organique. Total machine ~6 h. `wide` et `pairs:8` informent les questions 2 et 6 du §15.18 ; ils ne
+deviennent défauts que s'ils gagnent 0,05 de W1 / IQR de r / D sans manquer C1.
+
+### 15.16 Risques
+
+- **Rendement du triangle** après contrôle sous les ~70 % supposés : A2 manque ; levier `boost`, puis `wide`.
+- **Couloir et plafond** : un retour plus coûteux dépasse plus souvent `2 h0` ; le plafond suit κ (§15.6), C2 le surveille.
+- **Temps** : le GRAVEL est déjà à 527 ms au P50 au banc avant tout triangle (question 1).
+- **Une équipe fait la statistique** : A pèse 84 % des boucles ; la répartition générale est la sienne ; B ROAD (53 %
+  de lentilles) est la seule équipe qui en diffère et dépasse le seuil.
+- **Table commune apprise en `Classic`** : si les triangles déplacent les classes, B1 ou B2 manquent ; le remède (rejouer la
+  chaîne commune en organique) change `Common::hash` et invalide tous les profils : décision du propriétaire, pas du
+  codeur.
+- **La lentille garde son r / D** (0,39 contre 0,353 et 0,300) : le gain de forme vient des seuls triangles (question 6).
+- **Le piège du `Debug`** (§15.0, point 3) : un champ ajouté par mégarde à `Route` ou `Diagnostics` casse I1 sans rien changer
+  au comportement ; le test 1 le voit, ne pas re-bénir.
+- **Déploiement roulant** : 1.10 ignore `shapes` et ne connaît pas `figures` (refus d'une clé inconnue) ; Pédalons ne
+  l'envoie pas ; la bascule du défaut ne touche que les instances 1.11.
+
+### 15.17 Ce que le 4c ne fait pas
+
+Quadrilatère ; r / D visé pour la lentille ; figures en strict et en aller simple ; attracteurs et destinations (4d) ;
+réapprentissage de la table commune ; changement du contrôleur (`ord-loops-check`), du format du graphe, des vues, de
+`params_hash` ; figure choisie par la personne (§9.1, point 5 : `figures` sert l'exploitation et le banc, Pédalons ne
+l'envoie pas) ; rien au backend de Pédalons ; **rien n'est poussé, aucune image publiée, aucun déploiement**, aucun accès à la
+production.
+
+### 15.18 Questions au propriétaire
+
+Chaque question a une option recommandée, **appliquée par défaut** dans la spécification ; une réponse différente change un
+réglage ou un seuil, pas l'architecture.
+
+1. **Où lire la cible « médiane sous 500 ms jusqu'à 100 km » ?** Au banc à 16 fils, la génération 1.10 est déjà à 527 ms au
+   P50 en GRAVEL de 30 à 60 km et 966 ms de 60 à 100 km, avant tout triangle [mesuré, sonde §2] ; le triangle ajoute ~8 %
+   [calculé]. En conteneur, le 3b sert 0,25 s en série et 0,49 s à 4 clients [mesuré]. **Recommandé** : la lire en
+   conteneur (C3 : ≤ 0,56 s à 4 clients, ≤ 0,29 s en série) ; au banc, juger le 4c par rapport à `svc` (C1 : P50 ≤ 1,15 ×).
+2. **Combien de paires par requête ?** Avec 4, 63 % des requêtes ont un triangle à ±5 % de D et 78 % à ±10 %, pour ~23 ms et
+   0,29 × T1 d'états au P50 [mesuré / calculé, sonde §5 et §6]. **Recommandé** : 4, lentille en repli ; `pairs:8` mesuré en
+   campagne 5, retenu seulement s'il gagne 0,05 de W1 / IQR de r / D sans manquer C1.
+3. **Seuils de la réserve du fait (d)** : acceptée à +0,021 · +0,044 (A ROAD, `svc` contre `common`) [mesuré, §9.6].
+   **Recommandé** : réserve **levée** si `svc-org − common-org` ≤ +0,03 aux deux curseurs ; **maintenue** jusqu'à +0,054 (le
+   bruit d'un tirage, 0,01) ; au-delà, la bascule ne se fait pas et la table commune organique vous est proposée (elle
+   invalide tous les profils, une nuit de redépôt, ~10,5 min de profils par environnement [calculé, §14.0]).
+4. **La bascule du défaut sur `organic` par le codeur, sur critères ?** **Recommandé** : oui, dans un commit à part de la
+   branche, si A1 à A4, B1, B2, C1, C2 et D tiennent, suivi de la séance en conteneur (annulé si C3 manque) ; la fusion reste
+   la vôtre. Coût éventuel : si la règle L choisit l'apprentissage organique, une nuit où les équipes sont servies par la
+   table commune.
+5. **Le mode strict reste-t-il en lentille seule ?** Aucun jeu strict au banc (curseurs 0,25 et 1) [mesuré, 4a] ; les
+   triangles y seraient servis sans mesure. **Recommandé** : oui pour le 4c (`organic` sans effet en strict et en aller
+   simple), à rouvrir avec un banc strict.
+6. **Après le 4c, la lentille ou le 4d ?** Le 4c laisse le r / D des lentilles à ~0,39 contre 0,353 (ROAD) et 0,300
+   (GRAVEL) réels [mesuré, 4a §4.3], et les lentilles restent ~60 à 70 % des premiers parcours [calculé, §15.12 A2].
+   **Recommandé** : passer au 4d si A1 tient ; sinon, une étape « lentille au ρ* » (le demi-tour choisi aussi sur r / D
+   visé, à mesurer au même banc) avant le 4d.
+
+### 15.19 Écarts du codage
+
+Écrits au commit 9, après le codage et les campagnes.
