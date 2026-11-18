@@ -157,6 +157,7 @@ pub(crate) fn scenario_requests_sized(seed: u64, n: usize, d_min: f64, d_span: u
                 familiarity: rng.below(11) as f32 / 10.0,
                 off_team_cost_q8: [256, 768, 1280][rng.below(3)],
                 seed: rng.next_u64(),
+                figures: crate::Figures::Classic,
             }
         })
         .collect()

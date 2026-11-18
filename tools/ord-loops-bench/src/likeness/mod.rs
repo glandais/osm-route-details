@@ -1113,6 +1113,7 @@ fn measure_real(
         familiarity: 0.5,
         off_team_cost_q8: 256,
         seed: 0,
+        figures: ord_loops::Figures::Classic,
     };
     let rep = checker.check(&req, &route);
     let codes: Vec<String> = rep.violations.iter().map(|v| v.code().to_string()).collect();

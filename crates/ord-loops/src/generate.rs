@@ -11,6 +11,7 @@ use ord_graph::util::SplitMix64;
 use rustc_hash::FxHashSet;
 
 use crate::engine::{Engine, Snap, ViewData};
+use crate::figures::{self, Fixed, Scratch, TriState, FIGURE_SALT};
 use crate::geo::{heading_deg, turn_angle_deg, LatLon, Local};
 use crate::reverse::astar_back;
 use crate::search::{
@@ -18,9 +19,12 @@ use crate::search::{
     Weighter, Workspace, BAN, INF, NONE, TAIL,
 };
 use crate::team::{TeamCtx, TeamData, WindowTeam};
-use crate::verify::{check_route_in, trim_piece, Violation};
+use crate::verify::{check_route_in, trim_piece, Check, Violation};
 use crate::window::Window;
-use crate::{Diagnostics, Failure, Family, Generation, Mode, NoRouteDetail, Position, Request, Route, Step};
+use crate::{
+    Diagnostics, Failure, Family, FigureDiagnostics, Figures, Generation, Mode, NoRouteDetail, Organic,
+    Position, Request, Route, Step,
+};
 
 const SECTORS: usize = 12;
 /// Équipe d'abord : à partir de cette familiarité, une proposition garde au moins cette part de la meilleure part d'équipe.
@@ -29,7 +33,7 @@ const MIN_SHARE_RATIO: f64 = 0.5;
 /// Passes : la première, puis jusqu'à deux autres après avoir interdit les virages que le contrôle a refusés.
 const PASSES: usize = 6;
 
-fn fingerprint(r: &Request) -> u64 {
+pub(crate) fn fingerprint(r: &Request) -> u64 {
     let (la, lo) = r.start.to_e7();
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     for x in [
@@ -47,7 +51,7 @@ fn fingerprint(r: &Request) -> u64 {
 }
 
 /// Les étapes d'une suite d'états : morceau partiel du départ, arêtes entières, morceau partiel de l'arrivée.
-fn steps_of(v: &ViewData, fields: &[u32], s: &Snap, en: &Snap) -> (Vec<Step>, Vec<u32>) {
+pub(crate) fn steps_of(v: &ViewData, fields: &[u32], s: &Snap, en: &Snap) -> (Vec<Step>, Vec<u32>) {
     let mut steps = Vec::new();
     let mut step_field = Vec::new();
     let n = fields.len();
@@ -101,13 +105,44 @@ pub fn route_geometry<B: AsRef<[u8]>>(base: &GraphFile<B>, r: &Route) -> Vec<Lat
     out.into_iter().map(LatLon::from_e7).collect()
 }
 
-struct Scored {
-    route: Route,
-    score: f64,
-    key: Vec<Step>,
+pub(crate) struct Scored {
+    pub route: Route,
+    pub score: f64,
+    pub key: Vec<Step>,
 }
 
-fn overlap_share<B: AsRef<[u8]>>(e: &Engine<B>, a: &Route, b: &Route) -> f64 {
+/// Complète un parcours contrôlé avec les mesures du contrôle et le note (lentille et triangle, même formule).
+pub(crate) fn scored_route<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    r: &Request,
+    d: f64,
+    mut route: Route,
+    chk: &Check,
+) -> Scored {
+    route.length_m = chk.length_m;
+    route.team_m = chk.team_m;
+    route.bridged_m = chk.bridged_m;
+    route.shared_m = chk.shared_m;
+    route.crossings = chk.crossings;
+    route.unpaved_m = chk.unpaved_m;
+    route.presumed_surface_m = chk.presumed_surface_m;
+    route.bearing_deviation_deg = bearing_deviation(e, r, &route);
+    let dev = route.bearing_deviation_deg.unwrap_or(0.0) / 45.0;
+    let team_term = if r.mode == Mode::Discovery {
+        0.0
+    } else {
+        3.0 * (1.0 - (route.team_m + route.bridged_m) / route.length_m.max(1.0))
+    };
+    let score = (route.length_m - d).abs() / d * 20.0
+        + route.shared_m / d * 10.0
+        + f64::from(route.crossings) * 0.5
+        + dev
+        + team_term;
+    let key = route.steps.clone();
+    Scored { route, score, key }
+}
+
+pub(crate) fn overlap_share<B: AsRef<[u8]>>(e: &Engine<B>, a: &Route, b: &Route) -> f64 {
     let sa: BTreeSet<u32> = a.steps.iter().map(|s| s.base_edge).collect();
     let mut common = 0u64;
     let mut seen = BTreeSet::new();
@@ -198,17 +233,34 @@ pub fn generate_with_diagnostics_in<B: AsRef<[u8]>>(
     ws: &mut Workspace,
     stop: &mut dyn FnMut() -> bool,
 ) -> (Result<Generation, Failure>, Diagnostics) {
+    let (res, diag, _) = generate_with_figures_in(e, win, team, r, ws, stop);
+    (res, diag)
+}
+
+/// Comme [`generate_with_diagnostics_in`], avec les compteurs de la génération organique (vides pour
+/// [`crate::Figures::Classic`]). `Generation` et `Diagnostics` ne gagnent aucun champ : les références figées en
+/// hachent le `Debug` complet.
+pub fn generate_with_figures_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+) -> (Result<Generation, Failure>, Diagnostics, FigureDiagnostics) {
     let mut diag = Diagnostics::default();
-    let res = generate_inner(e, win, team, r, ws, stop, &mut diag);
+    let mut fig = FigureDiagnostics::default();
+    let res = generate_inner(e, win, team, r, ws, stop, &mut diag, &mut fig);
     match res {
         Ok(mut g) => {
             g.diagnostics = diag.clone();
-            (Ok(g), diag)
+            (Ok(g), diag, fig)
         }
-        Err(f) => (Err(f), diag),
+        Err(f) => (Err(f), diag, fig),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_inner<B: AsRef<[u8]>>(
     e: &Engine<B>,
     win: &Window,
@@ -217,6 +269,7 @@ fn generate_inner<B: AsRef<[u8]>>(
     ws: &mut Workspace,
     stop: &mut dyn FnMut() -> bool,
     diag: &mut Diagnostics,
+    fig: &mut FigureDiagnostics,
 ) -> Result<Generation, Failure> {
     if r.mode != Mode::Discovery && team.is_none() {
         return Err(Failure::NoTeamData);
@@ -254,6 +307,20 @@ fn generate_inner<B: AsRef<[u8]>>(
     diag.start_snap_m = s_snap.dist_m;
     diag.end_snap_m = e_snap.dist_m;
     let mut rng = SplitMix64(r.seed ^ fingerprint(r));
+    // Génération organique : boucle, hors strict. Sinon tout suit le chemin de `Classic`.
+    let org: Option<Organic> = match r.figures {
+        Figures::Organic(o) if is_loop && r.mode != Mode::Strict => Some(o),
+        _ => None,
+    };
+    let mut tri = org.map(|o| TriState::new(figures::draw(r.seed ^ fingerprint(r) ^ FIGURE_SALT, &o), &o));
+    if let (Some(o), Some(st)) = (org.as_ref(), tri.as_ref()) {
+        fig.applied = true;
+        fig.tri_first = st.draw.tri_first && figures::tri_q8_eff(o) > 0;
+        fig.rho_target = st.draw.rho;
+    }
+    // Couloir de la lentille : demi-largeur en mètres, 0 sans couloir.
+    let cor_w_m = org.map_or(0.0, |o| f64::from(o.tune.corridor_w_milli) / 1000.0 * d);
+    let f_min = w.min_factor();
     let mut scored: Vec<Scored> = Vec::new();
     let mut rejected: BTreeMap<Violation, u32> = BTreeMap::new();
     let mut exhausted = false;
@@ -272,7 +339,7 @@ fn generate_inner<B: AsRef<[u8]>>(
         }
         tree_forward(&cx, &mut vws.t1, stop).map_err(|_| halted())?;
         tree_backward(&cx, &mut vws.t2, stop).map_err(|_| halted())?;
-        let ViewWs { t1, t2, ta, ban, ban_gen, .. } = vws;
+        let ViewWs { t1, t2, ta, ban, ban_gen, cor } = vws;
         let (t1, t2) = (&*t1, &*t2);
         if pass == 0 {
             diag.t1_settled = t1.settled.len() as u64;
@@ -339,7 +406,16 @@ fn generate_inner<B: AsRef<[u8]>>(
                     let bits = if cur & BAN != 0 { BAN } else { bits };
                     ban[c] = (*ban_gen << 3) | bits;
                 }
-                let b = Ban::plain(ban, *ban_gen);
+                if cor_w_m > 0.0 {
+                    cor.begin(d, cor_w_m);
+                    cor.mark_leg(v, &disc, &out_fields, f64::from(tail_dm) / 10.0, 2.0 * cor_w_m);
+                }
+                let b = Ban {
+                    stamp: ban,
+                    gen: *ban_gen,
+                    cor: (cor_w_m > 0.0).then_some(&*cor),
+                    kappa_q8: org.map_or(256, |o| u32::from(o.tune.kappa_q8)),
+                };
                 diag.astar_runs += 1;
                 let before = budget;
                 let found = astar(&cx, ta, t2, last, last_pred, &b, &mut budget, &mut exhausted, stop)
@@ -368,7 +444,16 @@ fn generate_inner<B: AsRef<[u8]>>(
                         let bits = if cur & BAN != 0 { BAN } else { bits };
                         ban[c] = (*ban_gen << 3) | bits;
                     }
-                    let b = Ban::plain(ban, *ban_gen);
+                    if cor_w_m > 0.0 {
+                        cor.begin(d, cor_w_m);
+                        cor.mark_leg(v, &disc, &ret, 2.0 * cor_w_m, f64::from(tail_dm) / 10.0);
+                    }
+                    let b = Ban {
+                        stamp: ban,
+                        gen: *ban_gen,
+                        cor: (cor_w_m > 0.0).then_some(&*cor),
+                        kappa_q8: org.map_or(256, |o| u32::from(o.tune.kappa_q8)),
+                    };
                     diag.astar_runs += 1;
                     let before = rev_budget;
                     let mut rev_exhausted = false;
@@ -402,7 +487,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                 }
                 diag.within_tolerance += 1;
                 let (steps, step_field) = steps_of(v, &fields, &s_snap, &e_snap);
-                let mut route = Route {
+                let route = Route {
                     start: Position { edge: s_snap.edge, offset_m: s_snap.offset_m },
                     end: Position { edge: e_snap.edge, offset_m: e_snap.offset_m },
                     steps,
@@ -434,28 +519,9 @@ fn generate_inner<B: AsRef<[u8]>>(
                     rho = rho_seen;
                     continue;
                 }
-                route.length_m = chk.length_m;
-                route.team_m = chk.team_m;
-                route.bridged_m = chk.bridged_m;
-                route.shared_m = chk.shared_m;
-                route.crossings = chk.crossings;
-                route.unpaved_m = chk.unpaved_m;
-                route.presumed_surface_m = chk.presumed_surface_m;
-                route.bearing_deviation_deg = bearing_deviation(e, r, &route);
-                let dev = route.bearing_deviation_deg.unwrap_or(0.0) / 45.0;
-                let team_term = if r.mode == Mode::Discovery {
-                    0.0
-                } else {
-                    3.0 * (1.0 - (route.team_m + route.bridged_m) / route.length_m.max(1.0))
-                };
-                let score = (route.length_m - d).abs() / d * 20.0
-                    + route.shared_m / d * 10.0
-                    + f64::from(route.crossings) * 0.5
-                    + dev
-                    + team_term;
-                let key = route.steps.clone();
-                if !scored.iter().any(|x| x.key == key) {
-                    scored.push(Scored { route, score, key });
+                let sc = scored_route(e, r, d, route, &chk);
+                if !scored.iter().any(|x| x.key == sc.key) {
+                    scored.push(sc);
                 }
                 break;
             }
@@ -463,8 +529,40 @@ fn generate_inner<B: AsRef<[u8]>>(
                 break;
             }
         }
+        if let (Some(o), Some(st)) = (org.as_ref(), tri.as_mut()) {
+            if !st.done && !exhausted {
+                let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc };
+                let fx = Fixed {
+                    e,
+                    win,
+                    team,
+                    r,
+                    cx: &cx,
+                    s_snap: &s_snap,
+                    e_snap: &e_snap,
+                    o,
+                    d,
+                    tail_dm,
+                    f_min,
+                };
+                let mut sc = Scratch { ta, ban, ban_gen, cor };
+                figures::triangle_phase(
+                    &fx,
+                    st,
+                    t1,
+                    t2,
+                    &mut sc,
+                    &mut budget,
+                    &mut new_forb,
+                    &mut scored,
+                    fig,
+                    stop,
+                )?;
+            }
+        }
         let wanted = scored.len() >= 3;
-        if exhausted || wanted || new_forb.is_empty() {
+        let tri_done = tri.as_ref().is_none_or(|st| st.done);
+        if exhausted || (wanted && tri_done) || new_forb.is_empty() {
             break;
         }
         forb.extend(new_forb);
@@ -494,18 +592,25 @@ fn generate_inner<B: AsRef<[u8]>>(
     } else {
         0.0
     };
-    let mut chosen: Vec<Route> = Vec::new();
-    for s in scored {
-        if chosen.len() == 3 {
-            break;
+    let has_triangle = scored.iter().any(|s| s.route.family == Family::Triangle);
+    let chosen: Vec<Route> = if let (Some(o), Some(st), true) = (org.as_ref(), tri.as_ref(), has_triangle) {
+        let pool: Vec<Scored> = scored.into_iter().filter(|s| share(&s.route) >= min_share).collect();
+        figures::choose(e, pool, st.draw.tri_first, f64::from(o.tune.near_score_milli) / 1000.0)
+    } else {
+        let mut chosen: Vec<Route> = Vec::new();
+        for s in scored {
+            if chosen.len() == 3 {
+                break;
+            }
+            if share(&s.route) < min_share {
+                continue;
+            }
+            if chosen.iter().all(|c| overlap_share(e, c, &s.route) < 0.5) {
+                chosen.push(s.route);
+            }
         }
-        if share(&s.route) < min_share {
-            continue;
-        }
-        if chosen.iter().all(|c| overlap_share(e, c, &s.route) < 0.5) {
-            chosen.push(s.route);
-        }
-    }
+        chosen
+    };
     Ok(Generation {
         routes: chosen,
         network_m: diag.reached_m,

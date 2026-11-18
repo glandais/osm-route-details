@@ -595,6 +595,7 @@ mod tests {
             familiarity: fam,
             off_team_cost_q8: q8,
             seed: 1,
+            figures: ord_loops::Figures::Classic,
         }
     }
 

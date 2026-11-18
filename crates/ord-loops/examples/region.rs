@@ -68,6 +68,7 @@ fn main() {
         familiarity: 0.5,
         off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
         seed: 1,
+        figures: ord_loops::Figures::Classic,
     };
     let mut ws = Workspace::new();
     for round in 0..3 {

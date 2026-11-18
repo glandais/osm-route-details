@@ -220,7 +220,6 @@ impl<'a> Weighter<'a> {
     /// toute chaîne (hors strict, que les triangles ne jouent pas). En équipe d'abord, `chain(c)` vaut `λ · reste +
     /// M[z] · a + b`, donc au moins `min(1, λ, min M / 256)` fois le poids de base ; en découverte, le poids de base. Le
     /// 0,999 absorbe l'arrondi `+ 128 >> 8` des multiplications.
-    #[allow(dead_code)] // lu par la génération organique (commit suivant)
     pub fn min_factor(&self) -> f64 {
         let min_m = u64::from(self.mt.iter().copied().min().unwrap_or(256));
         let team = if self.ct.is_none() {
@@ -853,7 +852,6 @@ pub(crate) fn astar(
 /// jambes déjà posées dilatées de `w`. Lue par position (`hit`) à la relaxation : poser un bit par chaîne demanderait un
 /// index case → chaînes. Réutilisée d'une recherche à l'autre (`begin` la remet à zéro).
 #[derive(Default, Debug)]
-#[cfg_attr(not(test), allow(dead_code))] // posée par la génération organique (commit suivant)
 pub(crate) struct CorGrid {
     side: usize,
     cell: f64,
@@ -863,7 +861,6 @@ pub(crate) struct CorGrid {
     stencil: Vec<(i32, i32)>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // posée par la génération organique (commit suivant)
 impl CorGrid {
     /// Octets tenus (capacités réelles).
     pub fn bytes(&self) -> usize {
@@ -982,7 +979,6 @@ pub(crate) struct P2pTarget {
 }
 
 /// Marge de l'heuristique : `TURN_COST_MAX + 500`.
-#[allow(dead_code)] // lu par la génération organique (commit suivant)
 pub(crate) const P2P_SLACK: u32 = TURN_COST_MAX + 500;
 
 impl P2pTarget {

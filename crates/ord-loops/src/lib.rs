@@ -15,6 +15,7 @@
 mod cache;
 mod cost;
 mod engine;
+mod figures;
 mod generate;
 mod geo;
 mod index;
@@ -23,6 +24,7 @@ pub mod probe;
 mod reverse;
 mod search;
 mod selfcheck;
+mod shape_common;
 mod taste_common;
 mod team;
 #[cfg(any(test, feature = "reference"))]
@@ -51,7 +53,8 @@ pub use cost::{
 };
 pub use engine::{Engine, EngineError, Params};
 pub use generate::{
-    generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, route_geometry,
+    generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, generate_with_figures_in,
+    route_geometry,
 };
 pub use geo::LatLon;
 pub use search::Workspace;
@@ -113,6 +116,92 @@ pub struct Request {
     /// [`DEFAULT_OFF_TEAM_COST_Q8`] (768) vaut λ = 3, le λ du lot 2 ; 256 vaut λ = 1, le coût OSM seul.
     pub off_team_cost_q8: u32,
     pub seed: u64,
+    /// Figures jouées (lot 4, 4c) : [`Figures::Classic`] rend exactement les parcours de 1.10.
+    pub figures: Figures,
+}
+
+/// Les figures que la génération essaie (lot 4, 4c, §15.8).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Figures {
+    /// La lentille d'aujourd'hui seule, sans couloir : les parcours de 1.10, au bit près.
+    Classic,
+    /// La lentille élargie par un couloir et le triangle, tirés par requête sur la répartition réelle des sommets. Sans
+    /// effet pour un aller simple et en mode strict (lentille seule, comme `Classic`).
+    Organic(Organic),
+}
+
+/// Réglages de la génération organique.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Organic {
+    pub mix: FigureMix,
+    pub tune: OrganicTune,
+}
+
+/// La répartition des figures d'une requête : la part des triangles et la loi du r / D des triangles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FigureMix {
+    /// Part des premiers parcours qui sont des triangles, en 256es (0 : aucune recherche de triangle).
+    pub tri_q8: u16,
+    /// P10, P25, P50, P75, P90 du r / D des triangles réels, en millièmes.
+    pub rd_tri_milli: [u16; 5],
+}
+
+impl FigureMix {
+    /// Lentille seule : aucun triangle.
+    pub const LENS_ONLY: Self = Self { tri_q8: 0, rd_tri_milli: [0; 5] };
+
+    /// La répartition générale d'un type (constantes de `shape_common.rs`, tirées des boucles réelles de toutes les
+    /// équipes) ; le MTB n'a que des lentilles.
+    pub fn general(ride: RideType) -> Self {
+        crate::shape_common::general(ride)
+    }
+}
+
+/// Réglages fins de la génération organique (§15.8) ; `Default` = les valeurs du service.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OrganicTune {
+    /// Demi-largeur du couloir en millièmes de D (0 : sans couloir).
+    pub corridor_w_milli: u16,
+    /// Multiplicateur de coût d'une arête dans le couloir, en 256es.
+    pub kappa_q8: u16,
+    /// Paires de sommets cherchées au plus par requête, triangles gardés au plus, sous-bandes de la bande de distance.
+    pub max_pairs: u8,
+    pub tri_keep: u8,
+    pub sub_bands: u8,
+    /// Bande des mètres de T1 des sommets, en millièmes de D, et écart de cap des deux sommets, en degrés.
+    pub band_milli: [u16; 2],
+    pub sep_deg: [u8; 2],
+    /// Biais initial de l'estimation (millièmes), tolérance de l'estimation (millièmes de D), sécante.
+    pub beta0_milli: u16,
+    pub est_tol_milli: u16,
+    pub secant: bool,
+    /// Multiplicateur de la part de triangles (256es), écart de note qui fait préférer une figure absente (millièmes).
+    pub tri_boost_q8: u16,
+    pub near_score_milli: u16,
+    /// Épi : angle (degrés) entre l'arrivée et le départ d'un sommet, et distance (m) lue de part et d'autre.
+    pub spike_deg: u8,
+    pub spike_m: u16,
+}
+
+impl Default for OrganicTune {
+    fn default() -> Self {
+        Self {
+            corridor_w_milli: 30,
+            kappa_q8: 512,
+            max_pairs: 4,
+            tri_keep: 2,
+            sub_bands: 3,
+            band_milli: [270, 390],
+            sep_deg: [40, 90],
+            beta0_milli: 1_040,
+            est_tol_milli: 50,
+            secant: true,
+            tri_boost_q8: 256,
+            near_score_milli: 1_000,
+            spike_deg: 150,
+            spike_m: 500,
+        }
+    }
 }
 
 /// λ = 3 en 256es : la valeur du lot 2.
@@ -134,10 +223,49 @@ pub struct Step {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Family {
-    /// Aller jusqu'à un point de demi-tour, retour par un autre chemin.
+    /// Aller jusqu'à un point de demi-tour, retour par un autre chemin (la lentille).
     Turnaround,
-    /// Polygone dans le cap.
+    /// Polygone dans le cap : jamais rendu (documenté dans le contrat, retiré au prochain changement cassant).
     Polygon,
+    /// Boucle à deux sommets (lot 4, 4c) : jambe d'aller, jambe transverse, jambe de retour.
+    Triangle,
+}
+
+/// Ce que la génération organique a fait pour une requête (compteurs, aucune donnée privée) ; vide pour `Classic`.
+/// Les compteurs des triangles ne vont pas dans [`Diagnostics`], dont `rejected` classe les échecs de la lentille.
+#[derive(Clone, Debug, Default)]
+pub struct FigureDiagnostics {
+    /// La génération organique a joué (boucle, mode autre que strict, [`Figures::Organic`]).
+    pub applied: bool,
+    /// La figure tirée pour le premier parcours est le triangle, et le r / D visé tiré.
+    pub tri_first: bool,
+    pub rho_target: f64,
+    /// Candidats (nœuds lointains), paires écartées, paires admissibles ; cumulés sur les passes.
+    pub candidates: u32,
+    pub pairs: u32,
+    pub pairs_admissible: u32,
+    /// Paires cherchées, jambes 2 trouvées ou abandonnées au plafond.
+    pub searched: u32,
+    pub leg2_found: u32,
+    pub leg2_capped: u32,
+    /// Jambes 3 : chemin de l'arbre retour gardé, A* d'arrivée trouvé, échec.
+    pub leg3_t2: u32,
+    pub leg3_astar: u32,
+    pub leg3_failed: u32,
+    /// Triangles complets (trois jambes), à ±tolérance de D, jetés pour un épi, épis relevés et réparés.
+    pub complete: u32,
+    pub within_tol: u32,
+    pub spikes: u32,
+    pub spikes_repaired: u32,
+    pub spikes_dropped: u32,
+    /// Triangles refusés par le contrôle, par code ; triangles gardés (notés).
+    pub tri_rejected: Vec<(Violation, u32)>,
+    pub tri_scored: u32,
+    /// États fixés par les recherches de la jambe 2 et par les A* de la jambe 3.
+    pub p2p_settled: u64,
+    pub leg3_settled: u64,
+    /// Biais final de la sécante.
+    pub beta_final: f64,
 }
 
 #[derive(Clone, Debug)]

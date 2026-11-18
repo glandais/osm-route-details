@@ -141,6 +141,7 @@ fn req_at(start: LatLon, d: f64, mode: Mode) -> Request {
         familiarity: 0.5,
         off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
         seed: 0,
+        figures: ord_loops::Figures::Classic,
     }
 }
 

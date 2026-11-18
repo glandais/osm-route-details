@@ -52,5 +52,6 @@ pub(crate) fn request(north: f64, east: f64) -> Request {
         familiarity: 0.5,
         off_team_cost_q8: 768,
         seed: 1,
+        figures: ord_loops::Figures::Classic,
     }
 }

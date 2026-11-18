@@ -527,6 +527,7 @@ mod tests {
             familiarity: 0.5,
             off_team_cost_q8: 256,
             seed: 0,
+            figures: ord_loops::Figures::Classic,
         };
         let rep = Checker::new(&gf, None, Config::default()).check(&req, &r);
         let codes: Vec<&str> = rep.violations.iter().map(|v| v.code()).collect();

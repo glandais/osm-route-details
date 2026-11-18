@@ -27,6 +27,7 @@ fn loop_request(start: crate::LatLon, d: f64, mode: Mode) -> Request {
         familiarity: 0.5,
         off_team_cost_q8: DEFAULT_OFF_TEAM_COST_Q8,
         seed: 1,
+        figures: crate::Figures::Classic,
     }
 }
 
@@ -262,4 +263,306 @@ fn a_corridor_sends_the_return_off_the_parallel_road_and_leaves_the_tail_and_the
     assert_eq!(one.cap(1000), Ban::plain(ban, *ban_gen).cap(1000));
     assert_eq!(run(&one, ta).fields, run(&plain, ta).fields);
     let _ = CorGrid::default().bytes();
+}
+
+// --- La génération organique (commit 3, §15.13 tests 2, 3, 4, 8 à 11) -----------------------------------------------
+
+use crate::engine::Engine;
+use crate::generate::{
+    fingerprint, generate_with_diagnostics, generate_with_diagnostics_in, generate_with_figures_in,
+};
+use crate::tests::{edge_between, request};
+use crate::tests_reference::{
+    assert_matches_fixture, assert_matches_reference, scenario_requests, REQUESTS, ZOOMS,
+};
+use crate::tests_window::{all_tiles, run_in};
+use crate::{Family, FigureMix, Figures, Organic, OrganicTune, Route, Step};
+
+/// La répartition des tests : tous les premiers parcours préférés triangles, r / D comme celui des vraies équipes.
+pub(crate) fn test_mix() -> FigureMix {
+    FigureMix { tri_q8: 256, rd_tri_milli: [230, 270, 318, 360, 420] }
+}
+
+pub(crate) fn organic() -> Figures {
+    Figures::Organic(Organic { mix: test_mix(), tune: OrganicTune::default() })
+}
+
+fn with_figures(r: &Request, figures: Figures) -> Request {
+    Request { figures, ..r.clone() }
+}
+
+fn stop() -> impl FnMut() -> bool {
+    || false
+}
+
+/// Test 2 (I2) : sans triangle ni couloir, `Organic` rend ce que rend `Classic`, sur les 140 requêtes de la référence.
+#[test]
+fn an_organic_request_without_triangles_or_corridor_is_the_classic_one() {
+    let lens_only = Figures::Organic(Organic {
+        mix: FigureMix::LENS_ONLY,
+        tune: OrganicTune { corridor_w_milli: 0, ..OrganicTune::default() },
+    });
+    assert_matches_reference(&|e, team, r, ws| {
+        generate_with_diagnostics(e, team, &with_figures(r, lens_only), ws, &mut stop())
+    });
+}
+
+pub(crate) fn organic_fixture_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/organic_reference.txt")
+}
+
+/// Test 3 : la référence organique, bénie au commit 3 (`tri_q8 = 256`, réglages par défaut), rejouée ensuite ;
+/// `ORD_LOOPS_BLESS=1` la réécrit quand le réglage change, en le disant au commit.
+#[test]
+fn the_organic_reference_is_replayed() {
+    assert_matches_fixture(
+        &|e, team, r, ws| generate_with_diagnostics(e, team, &with_figures(r, organic()), ws, &mut stop()),
+        scenario_params,
+        &organic_fixture_path(),
+        true,
+    );
+}
+
+/// Test 11 (I4) : toute fenêtre qui contient les tuiles nécessaires rend la sortie organique figée, sans échappement.
+#[test]
+fn any_window_gives_the_organic_reference() {
+    let rng = std::cell::RefCell::new(SplitMix64(7));
+    assert_matches_fixture(
+        &|e, team, r, ws| {
+            run_in(e, team, &with_figures(r, organic()), ws, &|e, p| {
+                let all = all_tiles(e, p.view);
+                let share = rng.borrow_mut().below(101);
+                all.into_iter().filter(|_| rng.borrow_mut().below(100) < share).collect()
+            })
+        },
+        scenario_params,
+        &organic_fixture_path(),
+        false,
+    );
+}
+
+/// Test 11 (I4) : même graine, même sortie, compteurs compris.
+#[test]
+fn the_organic_generation_is_deterministic() {
+    let e = engine_zoomed(&mut scenario_graph(7), 11, scenario_params());
+    let team = TeamData::build(&e, &overlay_of(&e, &scenario_rows(&e, 11))).unwrap();
+    let win = [e.full_window(0), e.full_window(1)];
+    let mut triangles = 0;
+    for r in scenario_requests(13, REQUESTS).iter().map(|r| with_figures(r, organic())) {
+        let vi = r.ride_type.view_index();
+        let wt = WindowTeam::build(&e, &win[vi], &team);
+        let ctx = || Some(TeamCtx { data: &team, win: &wt });
+        let a = generate_with_figures_in(&e, &win[vi], ctx(), &r, &mut Workspace::new(), &mut stop());
+        let b = generate_with_figures_in(&e, &win[vi], ctx(), &r, &mut Workspace::new(), &mut stop());
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
+        if let Ok(g) = &a.0 {
+            triangles += g.routes.iter().filter(|x| x.family == Family::Triangle).count();
+        }
+    }
+    assert!(triangles > 0, "aucun triangle sur la référence : le test ne prouve rien");
+}
+
+/// Aire signée (lacet) du parcours dans le repère du départ : négative pour un parcours dans le sens horaire.
+fn signed_area(e: &Engine<Vec<u8>>, r: &Request, route: &crate::Route) -> f64 {
+    let base = e.base();
+    let loc = crate::geo::Local::new(r.start.to_e7());
+    let pts: Vec<(f64, f64)> = crate::route_geometry(base, route).iter().map(|p| loc.xy(p.to_e7())).collect();
+    let mut a = 0.0;
+    for i in 0..pts.len() {
+        let (p, q) = (pts[i], pts[(i + 1) % pts.len()]);
+        a += p.0 * q.1 - q.0 * p.1;
+    }
+    a / 2.0
+}
+
+/// Test 4 : sur la grille de 48 × 48, `tri_q8 = 256` : des triangles sont rendus, dans le sens tiré, à ±10 % de D.
+#[test]
+fn a_triangle_is_found_on_the_grid_in_the_drawn_sense_and_at_the_asked_length() {
+    let e = engine_zoomed(&mut scenario_graph_dense_for_tests(), 11, scenario_params());
+    let (mut seen, mut sense_ok) = (0, 0);
+    let win = e.full_window(0);
+    for k in 0..120u64 {
+        let mut r = request(ll(3000.0 + 20.0 * k as f64, 3000.0 + 13.0 * k as f64), 7000.0, Mode::Discovery);
+        r.seed = k;
+        r.figures = organic();
+        let Ok(g) = generate_with_diagnostics_in(&e, &win, None, &r, &mut Workspace::new(), &mut stop()).0
+        else {
+            continue;
+        };
+        let Figures::Organic(o) = r.figures else { unreachable!() };
+        let draw = crate::figures::draw(r.seed ^ fingerprint(&r) ^ crate::figures::FIGURE_SALT, &o);
+        for route in g.routes.iter().filter(|x| x.family == Family::Triangle) {
+            seen += 1;
+            assert!((route.length_m - r.distance_m).abs() <= 0.10 * r.distance_m + 1.0, "{}", route.length_m);
+            sense_ok += usize::from((signed_area(&e, &r, route) < 0.0) == draw.clockwise);
+        }
+    }
+    assert!(seen >= 10, "trop peu de triangles ({seen})");
+    assert!(sense_ok * 10 >= seen * 9, "sens tiré : {sense_ok} sur {seen}");
+}
+
+fn scenario_graph_dense_for_tests() -> MemSource {
+    crate::tests_reference::scenario_graph_dense(5)
+}
+
+/// Test 9 : la part de `tri_first` suit `tri_q8 / 256`, ρ* reste entre P10 et P90, et le tirage de la figure ne touche
+/// pas la suite de la lentille (test 2 : `FIGURE_SALT` et le générateur à part).
+#[test]
+fn the_figure_draw_follows_the_mix() {
+    let o = Organic {
+        mix: FigureMix { tri_q8: 115, rd_tri_milli: [230, 270, 318, 360, 420] },
+        tune: OrganicTune::default(),
+    };
+    let n = 10_000;
+    let (mut tri, mut cw) = (0, 0);
+    for seed in 0..n {
+        let d = crate::figures::draw(SplitMix64(seed).next_u64(), &o);
+        tri += usize::from(d.tri_first);
+        cw += usize::from(d.clockwise);
+        assert!((0.230..=0.420).contains(&d.rho), "{}", d.rho);
+    }
+    let p = tri as f64 / n as f64;
+    assert!((p - 115.0 / 256.0).abs() < 0.02, "part de triangles {p}");
+    assert!((cw as f64 / n as f64 - 0.5).abs() < 0.02);
+    // Aucun triangle : jamais `tri_first`.
+    let none = Organic { mix: FigureMix::LENS_ONLY, tune: OrganicTune::default() };
+    assert!((0..1000).all(|s| !crate::figures::draw(s, &none).tri_first));
+    // Au-delà du minimum, le multiplicateur plafonne à 256.
+    let boosted = Organic {
+        mix: FigureMix { tri_q8: 200, ..test_mix() },
+        tune: OrganicTune { tri_boost_q8: 512, ..OrganicTune::default() },
+    };
+    assert_eq!(crate::figures::tri_q8_eff(&boosted), 256);
+}
+
+/// Test 8 : un sommet au bout d'un peigne (des carrefours tous les 500 m sur l'aller, une impasse au bout) : le
+/// parcours repart par où il est venu, c'est un épi ; P' est le dernier carrefour à 500 m au moins avant le sommet ;
+/// sans carrefour, pas de réparation possible.
+#[test]
+fn a_comb_apex_is_a_spike_and_is_repaired_at_the_last_junction_500_m_back() {
+    for (junctions, expect_repair_at) in [(true, Some(1500.0)), (false, None)] {
+        let mut s = MemSource::default();
+        let mut way = 10i64;
+        for k in 0..=4i64 {
+            pt(&mut s, 1 + k, 0.0, k as f64 * 500.0);
+        }
+        for k in 0..4i64 {
+            way += 1;
+            s.way(way, &[1 + k, 2 + k], &tags("tertiary", &[]));
+        }
+        if junctions {
+            for k in 1..=3i64 {
+                pt(&mut s, 100 + k, 40.0, k as f64 * 500.0);
+                way += 1;
+                s.way(way, &[1 + k, 100 + k], &tags("tertiary", &[]));
+            }
+        }
+        let e = engine_of(&mut s);
+        let d = 6000.0;
+        let r = request(ll(0.0, 0.0), d, Mode::Discovery);
+        let win = e.full_window(0);
+        let v = &win.v;
+        let w = Weighter::new(v, None, RideType::Road, Mode::Discovery, 0.5, DEFAULT_OFF_TEAM_COST_Q8);
+        let s_snap = e.snap(&win, r.start, &|_| true, 0).unwrap().unwrap();
+        let sa = make_anchor(&e, v, &w, s_snap);
+        let disc = Disc::new(r.start.to_e7(), r.start.to_e7(), d, true);
+        let (forb, esc) = (Forbidden::default(), Cell::new(false));
+        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+        let mut ws = Workspace::new();
+        let ViewWs { t1, t2, .. } = &mut ws.views[0];
+        tree_forward(&cx, t1, &mut stop()).unwrap();
+        tree_backward(&cx, t2, &mut stop()).unwrap();
+        let (t1, t2) = (&*t1, &*t2);
+        let apex = *t1
+            .reached
+            .iter()
+            .max_by(|&&a, &&b| disc.xy_of(v.pos[a as usize]).0.total_cmp(&disc.xy_of(v.pos[b as usize]).0))
+            .unwrap();
+        assert!((disc.xy_of(v.pos[apex as usize]).0 - 2000.0).abs() < 5.0);
+        let arr = t1.path_to(t1.node_best(apex).unwrap());
+        let mut dep = t2.path_to(t2.node_best(apex).unwrap());
+        dep.reverse();
+        let o = Organic { mix: test_mix(), tune: OrganicTune::default() };
+        let (s_snap2, e_snap) = (s_snap, s_snap);
+        let fx = crate::figures::Fixed {
+            e: &e,
+            win: &win,
+            team: None,
+            r: &r,
+            cx: &cx,
+            s_snap: &s_snap2,
+            e_snap: &e_snap,
+            o: &o,
+            d,
+            tail_dm: 0,
+            f_min: 0.0,
+        };
+        assert!(crate::figures::is_spike(&fx, &arr, &dep), "le retour par la même route est un épi");
+        let prefix = crate::figures::repair_prefix(&fx, &arr);
+        match expect_repair_at {
+            Some(x) => {
+                let i = prefix.expect("un carrefour à 500 m ou plus");
+                let at = disc.xy_of(v.pos[v.tgt(arr[i - 1]) as usize]).0;
+                assert!((at - x).abs() < 5.0, "P' à {at} m, attendu {x}");
+            }
+            None => assert!(prefix.is_none(), "sans carrefour, pas de réparation : la paire est jetée"),
+        }
+        // Un départ qui s'écarte du sens d'arrivée n'est pas un épi : on continue tout droit après le carrefour.
+        let straight = [arr[0]];
+        assert!(!crate::figures::is_spike(&fx, &straight, &arr[..]), "tout droit n'est pas un épi");
+    }
+}
+
+/// Test 10 : le choix. Premier : le meilleur de la figure tirée, sinon de toutes ; les suivants préfèrent une figure
+/// absente à note voisine.
+#[test]
+fn the_choice_prefers_the_drawn_figure_then_an_absent_one_at_a_close_score() {
+    let e = engine_of(&mut corridor_graph());
+    let scored = |edge: u32, family: Family, score: f64| {
+        let route = Route {
+            start: crate::Position { edge, offset_m: 0.0 },
+            end: crate::Position { edge, offset_m: 0.0 },
+            steps: vec![Step { base_edge: edge, reverse: false }],
+            length_m: 1.0,
+            team_m: 0.0,
+            bridged_m: 0.0,
+            shared_m: 0.0,
+            crossings: 0,
+            unpaved_m: 0.0,
+            presumed_surface_m: 0.0,
+            bearing_deviation_deg: None,
+            familiarity: 0.5,
+            family,
+        };
+        crate::generate::Scored { key: route.steps.clone(), route, score }
+    };
+    let (a, b, c, d) = (
+        edge_between(&e, 1000, 1001),
+        edge_between(&e, 1001, 1002),
+        edge_between(&e, 2000, 2001),
+        edge_between(&e, 2001, 2002),
+    );
+    let pool = || {
+        vec![
+            scored(a, Family::Turnaround, 0.5),
+            scored(b, Family::Turnaround, 0.6),
+            scored(c, Family::Triangle, 1.2),
+            scored(d, Family::Triangle, 3.0),
+        ]
+    };
+    let fams = |routes: Vec<Route>| routes.iter().map(|r| r.family).collect::<Vec<_>>();
+    // Un triangle tiré : il passe en premier même s'il note moins bien ; le second est la lentille, la figure absente.
+    let got = fams(crate::figures::choose(&e, pool(), true, 1.0));
+    assert_eq!(got[0], Family::Triangle);
+    // Une lentille tirée : première, puis la figure absente à note voisine (1,2 ≤ 0,6 + 1,0), puis le reste.
+    let got = crate::figures::choose(&e, pool(), false, 1.0);
+    assert_eq!(fams(got.clone())[..2], [Family::Turnaround, Family::Triangle]);
+    assert_eq!(got[0].steps[0].base_edge, a);
+    // Note trop éloignée (écart de 0,1) : la figure absente n'est pas préférée.
+    let got = fams(crate::figures::choose(&e, pool(), false, 0.1));
+    assert_eq!(got[..2], [Family::Turnaround, Family::Turnaround]);
+    // Pas de triangle tiré mais aucun en pool : la lentille.
+    let only_lens = vec![scored(a, Family::Turnaround, 0.5)];
+    assert_eq!(crate::figures::choose(&e, only_lens, true, 1.0).len(), 1);
+    let _ = (Mode::Strict, ZOOMS);
 }

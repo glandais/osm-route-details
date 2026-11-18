@@ -367,6 +367,7 @@ impl Ready {
             familiarity: input.applied.familiarity,
             off_team_cost_q8: input.applied.off_team_cost_q8,
             seed: input.seed,
+            figures: ord_loops::Figures::Classic,
         };
         let mut stop = || cancel.load(Ordering::Relaxed) || Instant::now() >= deadline;
         let generation = self.generate_windowed(&req, entry.as_deref(), deadline, &mut stop)?;
@@ -435,6 +436,7 @@ impl Ready {
             family: match route.family {
                 Family::Turnaround => "turnaround",
                 Family::Polygon => "polygon",
+                Family::Triangle => "triangle",
             },
             start_snap_m: r1(snaps.0),
             end_snap_m: r1(snaps.1),

@@ -567,6 +567,7 @@ fn run_bench(a: BenchArgs) -> Result<()> {
                     familiarity,
                     off_team_cost_q8: q8,
                     seed: u64::from(jr.i),
+                    figures: ord_loops::Figures::Classic,
                 };
                 let mut rec = Rec {
                     team: letter.clone(),

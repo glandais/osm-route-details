@@ -7,7 +7,10 @@ use ord_graph::format::{write_graph, GraphFile};
 use ord_graph::overlay::{encode, Overlay, OverlayMeta};
 use ord_graph::util::SplitMix64;
 use ord_graph::view::{build_view, ViewSpec};
-use ord_loops::{generate, Engine, LatLon, Mode, Params, Request, RideType, TeamData, Workspace};
+use ord_loops::{
+    generate, Engine, Family, FigureMix, Figures, LatLon, Mode, Organic, OrganicTune, Params, Request,
+    RideType, TeamData, Workspace,
+};
 use ord_loops_check::{Checker, Config};
 
 const LAT0: f64 = 47.2;
@@ -78,8 +81,29 @@ fn random_overlay(graph: &GraphFile<Vec<u8>>, seed: u64, keep: u64) -> Overlay {
     Overlay::decode(&encode(&meta, &edges, &counts).unwrap()).unwrap()
 }
 
+/// Les figures organiques du 4c, tous les premiers parcours préférés triangles.
+fn organic() -> Figures {
+    Figures::Organic(Organic {
+        mix: FigureMix { tri_q8: 256, rd_tri_milli: [230, 270, 318, 360, 420] },
+        tune: OrganicTune::default(),
+    })
+}
+
 #[test]
 fn every_route_the_engine_returns_passes_the_independent_checker() {
+    check_all(Figures::Classic);
+}
+
+/// Test 12 du 4c (I3) : tout parcours rendu en organique, triangles compris, passe le contrôleur indépendant.
+#[test]
+fn every_organic_route_passes_the_independent_checker_and_triangles_are_among_them() {
+    let triangles = check_all(organic());
+    assert!(triangles > 0, "aucun triangle rendu : le test ne prouve rien pour eux");
+}
+
+/// Rend le nombre de triangles contrôlés.
+fn check_all(figures: Figures) -> usize {
+    let mut triangles = 0usize;
     let mut returned = [0usize; 3];
     let mut refused: Vec<String> = Vec::new();
     for seed in 0..10u64 {
@@ -112,10 +136,12 @@ fn every_route_the_engine_returns_passes_the_independent_checker() {
                     familiarity: 0.5,
                     off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
                     seed: seed * 10 + k as u64,
+                    figures,
                 };
                 let Ok(g) = generate(&engine, Some(&team), &req, &mut ws, &mut || false) else { continue };
                 for r in &g.routes {
                     returned[mi] += 1;
+                    triangles += usize::from(r.family == Family::Triangle);
                     let rep = checker.check(&req, r);
                     if !rep.ok() {
                         refused.push(format!("graine {seed}, D {d}, {mode:?} : {:?}", rep.violations));
@@ -128,4 +154,5 @@ fn every_route_the_engine_returns_passes_the_independent_checker() {
         assert!(returned[mi] > 0, "le moteur n'a rendu aucun parcours en {name} : le test ne prouve rien");
     }
     assert!(refused.is_empty(), "{} parcours refusés sur {returned:?} : {refused:?}", refused.len());
+    triangles
 }

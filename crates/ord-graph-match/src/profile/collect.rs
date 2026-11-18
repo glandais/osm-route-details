@@ -150,6 +150,7 @@ pub fn loop_request(
         familiarity,
         off_team_cost_q8,
         seed,
+        figures: ord_loops::Figures::Classic,
     }
 }
 

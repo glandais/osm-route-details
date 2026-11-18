@@ -131,6 +131,7 @@ pub(crate) fn request(start: LatLon, d: f64, mode: Mode) -> Request {
         familiarity: 0.5,
         off_team_cost_q8: crate::DEFAULT_OFF_TEAM_COST_Q8,
         seed: 1,
+        figures: crate::Figures::Classic,
     }
 }
 

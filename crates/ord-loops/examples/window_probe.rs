@@ -48,6 +48,7 @@ fn main() {
                     familiarity: 0.5,
                     off_team_cost_q8: DEFAULT_OFF_TEAM_COST_Q8,
                     seed: 1,
+                    figures: ord_loops::Figures::Classic,
                 };
                 let plan = engine.plan(&req, 10_000.0);
                 let t = Instant::now();

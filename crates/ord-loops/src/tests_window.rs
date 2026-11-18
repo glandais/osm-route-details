@@ -20,17 +20,17 @@ use crate::tests_reference::{
 use crate::window::{tiles_union, Window};
 use crate::{Diagnostics, Failure, Generation, Request, RideType, Workspace};
 
-fn all_tiles(e: &Engine<Vec<u8>>, vi: usize) -> Vec<u32> {
+pub(crate) fn all_tiles(e: &Engine<Vec<u8>>, vi: usize) -> Vec<u32> {
     let v = &e.views_files[vi];
     let mut t: Vec<u32> = (0..v.n_cells()).map(|c| tile_key(v.cell_xy(c).0, v.cell_xy(c).1)).collect();
     t.sort_unstable();
     t
 }
 
-type Pick<'a> = &'a dyn Fn(&Engine<Vec<u8>>, &crate::WindowPlan) -> Vec<u32>;
+pub(crate) type Pick<'a> = &'a dyn Fn(&Engine<Vec<u8>>, &crate::WindowPlan) -> Vec<u32>;
 
 /// Génère dans la fenêtre de `tiles` (réunie aux tuiles nécessaires), équipe comprise.
-fn run_in(
+pub(crate) fn run_in(
     e: &Engine<Vec<u8>>,
     team: Option<&TeamData>,
     r: &Request,
@@ -433,6 +433,7 @@ fn a_chain_longer_than_the_margin_that_leaves_the_disc_is_loaded_whole_and_the_a
                 familiarity: 0.5,
                 off_team_cost_q8: 768,
                 seed: 3,
+                figures: crate::Figures::Classic,
             };
             let want =
                 generate_with_diagnostics_in(&e, &full, None, &r, &mut Workspace::new(), &mut || false);
