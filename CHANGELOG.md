@@ -26,7 +26,8 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
 
 - **Comportement du moteur** : le poids de base de toute arête, avec ou sans équipe et aux deux curseurs, est désormais
   la table de goût commune du moteur (la table recalée commune à trois pas, 72 classes par type, MTB neutre), au lieu
-  des seuls `K` par classe. Les parcours rendus changent en conséquence ; le moteur d'avant se retrouve avec
+  des seuls `K` par classe, apprise sur 100 % des boucles retenues de toutes les équipes réunies (agrégat, aucune donnée
+  d'équipe). Les parcours rendus changent en conséquence ; le moteur d'avant se retrouve avec
   `Params::base_taste = Taste::neutral()`.
 - La place de dépôt est rendue à la fin de l'appariement, avant la phase de profil.
 

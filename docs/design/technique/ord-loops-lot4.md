@@ -458,6 +458,16 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
   relevé.
 - **Décisions 6 et 7 : codées** (§14.16, points 24 et 25), relues sans correction.
 
+### 9.6 Décisions du propriétaire (2026-11-18, sur le fait (d))
+
+1. **Fait (d) accepté** à +0,021 · +0,044 (A ROAD, aux deux curseurs, `svc` contre `common`), sous une **réserve écrite, à
+   revoir au 4c** (distributions rejouées sur le profil du 3b). Aucun paramètre ne change.
+2. **Plafond de 500 boucles** : la lecture « aux deux curseurs » est confirmée, donc **par équipe** (défaut inchangé).
+3. **Forme `capped`, table brute sans normalisation** : confirmées (ce sont déjà les défauts).
+4. **On enchaîne jusqu'à la fusion** : table commune réapprise sur 100 % (décision 5 du §9.5, faite : §14.16, point 32),
+   références re-bénies (même point), puis séance en conteneur rejouée une fois (décision 8 du §9.5, **encore à faire**) ;
+   la fusion elle-même se fait après, hors de ce travail.
+
 ---
 
 ## 10. Étapes, dans l'ordre
@@ -474,11 +484,12 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
      (relevé : [`ord-loops-lot4-3b-mesures.md`](ord-loops-lot4-3b-mesures.md)).
      **Campagne 4 faite** (17 novembre au soir, §6 et §7 du relevé). Les choix retenus sont la forme `capped`, le plafond
      par équipe et la table brute, définitivement : aucun défaut ne change. B ROAD vaut 0,750 · 0,924 et le service tient.
-     **Le fait (d) ne tient pas** (A ROAD, curseur 1 : +0,044 contre `common`) : **pas prêt à fusionner**.
+     **Le fait (d) ne tient pas** (A ROAD, curseur 1 : +0,044 contre `common`) : accepté par le propriétaire le 18 novembre
+     avec une réserve à revoir au 4c (§9.6).
+     **Fait** le 18 novembre : la table commune réapprise sur 100 % et les références re-bénies (§14.16, point 32).
      **Reste** :
-     - la décision du propriétaire sur (d) (trois issues mesurées, §9 du relevé) ;
-     - puis, une seule fois, la table commune réapprise sur 100 %, les références re-bénies et la séance en conteneur ;
-     - la mise en service.
+     - la séance en conteneur de 3 Gio, rejouée une fois ;
+     - la fusion et la mise en service.
 
      Écarts : §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
@@ -3003,3 +3014,23 @@ accès à la production.
     - **Choix prudent, signalé** : pour la décision 4, le gain est exigé sur le GRAVEL de A aux deux curseurs, pas à un seul.
     - **Pas prêt à fusionner** : le fait (d) ne tient pas. La réapprise sur 100 % et la séance en conteneur sont donc
       remises après la décision du propriétaire (§8 et §9 du relevé).
+32. **Table commune réapprise sur 100 %** (18 novembre, décision 5 du §9.5, après l'acceptation de (d), §9.6) :
+    `likeness --label lot4-3b-commune100 --no-holdout --variants base,rc:0.5+n:3` (commit du banc `2a4e446`, 16 fils, pic de
+    16 122 Mo, sorties sous `G/lot4/lot4-3b-commune100-*`), puis `taste-common --holdout-share 0 --expect-xxh3
+    effbdf7c3e979d77 --min-loops 50 --step2 … --step3 …`. Les mètres des trois pas `COMMON_STEP_*` sont réécrits à 100 % au
+    même passage (le même outil, la même chaîne). Les contrôles `RECAL_EQUIPE_*` sont ceux du rejeu à 25 % : ils ne
+    s'appliquent pas à `--no-holdout` ; `base` redonne bien le `taste_xxh3` neutre `2d06800538d394c2`.
+    - **Empreintes** : `taste_xxh3` de `rc05-p3` `66ee08d3eb9c910c` -> `effbdf7c3e979d77` ; empreinte de résultat
+      `2c563b8bbe8059ae` -> `cb966d45c326c3bd` ; empreinte des trois tables exportées (MTB neutre) `ea699c10cdd18e0c` ->
+      `0090972c6fbf4bdf` (nouveau `Common::hash` : les profils écrits sur l'ancienne table sont `incompatible`, jamais
+      effacés). Boucles comptées `[1545, 553, 3]` -> `[2045, 754, 4]` ; MTB neutre dans les deux cas (moins de 50).
+    - **Écart 75 % -> 100 %** (`COMMON_Q8`, 72 valeurs par type) : ROAD, 24 cases sur 72 changent, écart maximal 172 (case 67 :
+      118 -> 290, soit |ln| 0,90) ; GRAVEL, 39 sur 72, écart maximal 768 (case 59 : 256 -> 1 024, la borne haute, |ln| 1,39) ;
+      MTB, aucun. Un agrégat : aucune ligne par équipe. À relire au 4c avec la réserve du §9.6 : la table à 100 % déplace
+      quelques classes peu fournies jusqu'à la borne.
+    - **Références** : `window_reference.txt` re-bénie (`ORD_LOOPS_BLESS=1`) : 43 requêtes sur 140 changent (36 gardent le
+      nombre de routes et de pas, 7 changent aussi de pas) ; `window_reference_192.txt` (poids neutre), `team_reference.txt` et
+      `team_check_reference.txt` **ne bougent pas**, comme prévu au §14.3.3. Les empreintes FNV figées de `cost.rs`
+      (`RAW_HASH`, `NORMALIZED_HASH`) sont re-bénies avec la table.
+    - **Mince écart du banc** : l'en-tête généré par `taste-common` dit « sans mise à l'écart » quand `--holdout-share 0`.
+    - **Reste** : la séance en conteneur (décision 8), à rejouer une fois sur cette table.
