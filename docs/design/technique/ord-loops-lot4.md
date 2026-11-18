@@ -511,7 +511,9 @@ tranchés par l'orchestrateur du travail, comme la spécification le recommandai
      **Reste** : la fusion et la mise en service. La réserve sur le fait (d) passe au 4c (point 4).
 
      Écarts : §14.16.
-4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b. On y revoit la
+4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b. **Codé** le 18 novembre
+   (étapes 1 à 7 et 9 du §15.14, écarts au §15.19) ; **reste** : les campagnes du §15.15, puis, si les critères tiennent, la
+   bascule du défaut (étape 8) et la séance en conteneur. On y revoit la
    réserve du §9.6 sur le fait (d) (A ROAD, `svc` contre `common`, +0,021 · +0,044), avec les classes du GRAVEL que la
    table à 100 % pousse à la borne (§14.16, point 32). Spécification : §15.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
@@ -3647,4 +3649,46 @@ réglage ou un seuil, pas l'architecture.
 
 ### 15.19 Écarts du codage
 
-Écrits au commit 9, après le codage et les campagnes.
+Écrits le 18 novembre 2026 au codage des étapes 1 à 7 et 9 du §15.14 (branche `feat/ord-loops-lot4c`). **L'étape 8 (la
+bascule du défaut) n'est pas faite** : elle attend les campagnes du §15.15 (non lancées par le codeur, §15.17). Relevé de
+l'essai de fumée et commandes des campagnes : [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md).
+
+1. **Un commit de plus : `fix(loops)`, entre les étapes 5 et 6.** Au premier essai de fumée (équipe C, 20 boucles, ROAD),
+   62 % des triangles complets sont refusés pour `SHARP_TURN` et seuls 40 % des requêtes gardent un triangle (attendu : ~70 %).
+   Cause : le chemin d'arrivée de l'arbre retour est le même pour toutes les paires et porte souvent un virage que le
+   contrôle refuse (la règle des grappes de 100 m, que la recherche ne modélise pas) ; les transitions interdites que le
+   refus ajoute ne servaient qu'à la lentille, les quatre paires étant déjà « cherchées ». **Une paire refusée pour un virage
+   serré n'est plus comptée comme cherchée pour la requête** : la passe suivante la reprend avec les transitions interdites en
+   plus (elle compte pour la passe : au plus `max_pairs` essais par passe). Rendement mesuré : 77 % des requêtes ROAD avec un
+   triangle gardé. À revoir aux campagnes ; la référence organique figée ne change pas.
+2. **Facteur minimal (§15.0 point 11, §15.5)** : le facteur 0,999 n'absorbe pas l'arrondi `+ 128 >> 8` sur une chaîne courte
+   (test 6 : coût 242 pour 0,1729 × 1 400 = 242,08). `min_w_per_dm` est calculé sur `max(w − 16, 0) / len_dm` (16 unités de
+   poids, constante `ROUND_MARGIN`), et `Weighter::min_factor` rend 0 quand le facteur d'équipe (`min(1, λ, min M / 256)`) tombe
+   sous 0,1 (la marge ne couvre plus l'arrondi) : l'heuristique est alors celle des deux bornes triangulaires seules. En strict
+   le facteur ne contient pas λ (le strict ne joue pas de triangle).
+3. **La référence organique n'est pas re-bénie au commit 4** : `organic_reference.txt` se joue avec un mélange explicite des
+   tests (`tri_q8 = 256`, r / D de `[230, 270, 318, 360, 420]`), non avec `FigureMix::general` ; les constantes générées ne
+   la touchent donc pas. `shape-common` a été lancé sur `lot4-3b-commune100-base-report.json` (ROAD 2 071, GRAVEL 780, MTB 4,
+   parts redonnées au dixième) : ROAD `tri_q8` 145, r / D `[252, 286, 318, 345, 363]` ; GRAVEL 112, `[207, 236, 267, 294, 316]`.
+4. **Apprentissage organique des variantes du banc** : le service joue `OrganicTune::default()` à l'apprentissage
+   (`LearnFigures::Organic` n'a pas de réglage). Pour que `svc+org+tri:0+w:0` rende l'empreinte de `svc` (§15.11.2) et que
+   `svc+org+w:0.02` apprenne ce qu'on lui sert, `BenchPlayer` réécrit les figures des requêtes d'apprentissage avec les
+   options de la variante (`Org::rewrite`) ; sous `lc`, l'apprentissage reste classique. Contrôle fait : `svc-org-tri0-w000`
+   et `svc` ont l'empreinte `c584b04e30bf54e9` (équipe C, 20 boucles).
+5. **Noms des variantes** : `w:<x>` donne `-w<centièmes sur 3 chiffres>` (`w:0` : `-w000`, pas `-w0` comme le §15.15), `k:1.5` `-k15`,
+   `boost:1.3` `-b130`, `tri:0` `-tri0`, `pairs:8` `-pairs8`, `wide`, `lc`.
+6. **Tests** : le test 17 (« crochet de test qui lit le `Request` ») est remplacé par l'accesseur `test_profile_shapes`
+   (formes écrites au dépôt et relues) et les tests unitaires de `mix_for` ; le test 5 ne fait qu'écrire le nombre de cas
+   plus chers sans la marge (36 sur 191 paires), sans l'exiger ; les tests 8 lisent `is_spike` et `repair_prefix` sur un
+   peigne (réseau synthétique à carrefours tous les 500 m), non la phase complète.
+7. **Critères non évalués par le banc** : D (empreintes à 1 et 16 fils, campagne 3) et C3 (conteneur) sont marqués « non
+   évalué » dans la lecture ; B2 demande `common+org` dans le même tirage (campagnes 4 et 7, pas 5 ni 6 : sans lui, le verdict
+   de bascule reste « non évalué »). Le choix de `w` et de κ de la campagne 6 (§15.6) se lit dans les tableaux, il n'est pas
+   automatisé.
+8. **`spikes_kept`** compte, sur la polyligne des triangles **gardés** (tous ceux du jeu, pas seulement le premier), les sommets
+   gardés à 10 % de D dont l'angle d'arrivée et de départ atteint 150° à 500 m ; un aller-retour compte 1 par nature, on ne
+   compte que les triangles.
+9. **`ProfileMeta.shapes: Option<ShapeProfile>`** n'est pas mis en boîte : `ProfileRead` porte `#[allow(clippy::large_enum_variant)]`
+   (une valeur par lecture d'équipe).
+10. **Sans objet pour 1.10** : `figures` n'existe pas dans le contrat de 1.10, qui refuse une clé inconnue ; Pédalons ne
+    l'envoie pas (§15.16).
