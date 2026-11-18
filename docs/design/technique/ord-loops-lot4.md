@@ -512,10 +512,15 @@ tranchés par l'orchestrateur du travail, comme la spécification le recommandai
 
      Écarts : §14.16.
 4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b. **Codé** le 18 novembre
-   (étapes 1 à 7 et 9 du §15.14, écarts au §15.19) ; **reste** : les campagnes du §15.15, puis, si les critères tiennent, la
-   bascule du défaut (étape 8) et la séance en conteneur. On y revoit la
-   réserve du §9.6 sur le fait (d) (A ROAD, `svc` contre `common`, +0,021 · +0,044), avec les classes du GRAVEL que la
-   table à 100 % pousse à la borne (§14.16, point 32). Spécification : §15.
+   (étapes 1 à 7 et 9 du §15.14, écarts au §15.19). **Campagnes faites** le même jour (campagnes 1 à 6 du §15.15, relevé :
+   [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md)). La forme gagne nettement (A1 : r / D × 0,46 à × 0,72 de `svc`),
+   le goût tient (B1) et la réserve du §9.6 sur le fait (d) est **levée** (B2 : `svc-org − common-org` = −0,058 · −0,045), le
+   déterminisme aussi (D). **La bascule du défaut n'est pas faite** : C1 (× 1,29 · × 1,38 au banc), A2 (GRAVEL 1 à 0,317), A4
+   (`shared_share` GRAVEL) et C2 (2 jeux `VIOLATION`) manquent, et aucun réglage de `w`, κ, `pairs`, `wide` ou `boost` ne les
+   tient tous. Le défaut reste `classic`. Une séance en conteneur indicative (§11 du relevé) sert l'organique en 0,28 s en
+   série, mais en 0,66 s à 4 clients, au-delà des 0,56 s de C3. **Prêt à fusionner**, figures
+   organiques en option. **Reste**, au propriétaire : C1 et A4 (§13 du relevé), la bascule ; puis le 4d (décision 6 du §9.7, A1
+   tient). Spécification : §15.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -3729,3 +3734,33 @@ les points 1 et 2 ci-dessus ; les références figées, Classic et organique, pa
 
 Essai de relecture (équipes C et B, 20 boucles, mêmes réglages que l'essai du codeur, variantes `base`, `svc`, `common+org`,
 `svc+org`, `svc+org+noretry`, `svc+org+tri:0+w:0`) : chiffres au §3.4 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md).
+
+**Campagnes du 18 novembre 2026** (campagnes 1 à 6 du §15.15, binaire de `ea6ef63` ; relevé :
+[`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md), §4 à §13). Choix faits par prudence là où la spécification ne
+tranche pas :
+
+16. **Campagne 6 à `w` = 0,02, choisi sans C1.** La règle du §15.6 retient le réglage de plus petite compacité ROAD parmi ceux qui
+    tiennent C1, C2 et B1. Aucun réglage de la campagne 5 ne tient C1, si bien que la règle n'a aucun candidat. La campagne 6 a
+    été jouée au `w` que la règle désigne quand on lui retire C1 (0,02 : C2 et B1 tiennent, r / D dans la marge de 0,03). Elle
+    ajoute `boost:1.5` (A2 sous la borne en GRAVEL : 0,429 / 0,283 = 1,52, plafonné à 1,5) et une variante hors plan,
+    `svc+org+w:0.02+noretry`, qui mesure le levier du temps. Le choix « au meilleur `w` » est donc indicatif.
+17. **Aucun réglage retenu.** Faute de candidat qui tienne C1, A1 et A2 ensemble, `OrganicTune::default()` garde les valeurs du
+    §15.8. La référence organique n'est pas re-bénie, et `pairs:8` comme `wide` ne sont pas retenus (décision 2 du §9.7 ; gain de
+    W1 / IQR de r / D de `pairs:8` : 0,048 en moyenne, et C1 manque).
+18. **Pas de campagne 7, pas de C3.** Elles suivent la bascule, qui n'est pas faite. Une séance en conteneur **indicative** les
+    remplace pour le temps (§11 du relevé). L'image est construite sur `ea6ef63`, aux défauts `classic`. Les figures y sont
+    choisies par requête (`figures: classic`, puis `organic`) sur les mêmes départs et le même volume, et une 1.10 (image du 3b)
+    est jouée sur ce volume. Le cache de pages n'a pas été évincé (`sudo` sans mot de passe indisponible), comme à la séance du 3b
+    qui utilisait le même script.
+19. **Lecture de C2.** Un jeu `VIOLATION` est un jeu dont tous les parcours rendus sont refusés par le contrôleur indépendant. Sous
+    `svc-org`, ce contrôleur refuse 34 parcours sur 19 479 pour `SHARP_TURN` ; il en refuse 0 sous `svc`, 5 sous `common` (en
+    `Classic`), 10 sous `tri:0` et 2 sous `w:0`. Le contrôle interne et le contrôleur indépendant divergent donc déjà en `Classic`,
+    et le couloir multiplie les cas. Le service ne rend que ce que le contrôleur accepte : ce n'est pas une faute de I3. Le critère
+    est appliqué tel quel (2 jeux contre 0 : C2 manque). Rien n'est changé (§15.17 : le contrôleur n'est pas touché).
+20. **B2 négatif.** `svc-org − common-org` vaut −0,058 · −0,045, parce que la table commune apprise en `Classic` sert mal les
+    figures organiques (`common-org` perd 0,07 sur `common` en A ROAD) ; la réserve est levée par la lettre de la décision 3 du
+    §9.7 (≤ +0,03).
+21. **Point 15, lu** : `REUSE_OUTSIDE_TAIL` ne pèse que 6,8 % des triangles ROAD à ±10 % de D sous `svc-org` (753 sur 11 143), contre
+    `SHARP_TURN` 55 % (6 147). La jambe 2 reste en `TAIL` au coût × 2 : la passer en `BAN` ne lèverait pas le frein principal.
+22. **Mineurs, non corrigés** : au banc, quand l'équipe A n'est pas jouée, le détail de B2 écrit « `common-org` absent » même si la
+    variante est jouée (le critère lit A seulement) ; `w:0.025` et `w:0.03` portent toujours le même nom de variante.
