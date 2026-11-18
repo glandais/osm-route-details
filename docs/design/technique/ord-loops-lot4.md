@@ -474,7 +474,10 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
 
 1. 4a : mesures de forme en Rust, sous-commande du banc, relevé du moteur 1.9.2 → `ord-loops-lot4-mesures.md`.
    **Arrêt et relecture** : les §3 à §5 sont confirmés ou réordonnés.
-2. Sonde du coût d'une recherche point à point (§4.5).
+2. Sonde du coût d'une recherche point à point (§4.5). **Fait** le 18 novembre sur la branche `feat/ord-loops-lot4c`
+   (relevé : [`ord-loops-lot4c-sonde.md`](ord-loops-lot4c-sonde.md)). Une recherche P1 → P2 coûte 5,4 ms et 0,08 × T1
+   au P50. Le frein du triangle est la longueur (jambe d'arrivée reprise dans 70 % des cas), pas le budget. Deux
+   questions au §9 du relevé.
 3. 4b, révisé après les sondes (§9.2 à §9.4) :
    - 3a : sondes du goût au banc → `ord-loops-lot4-sonde.md`, `ord-loops-lot4-sonde2.md` (fait) ;
    - 3b : profil de goût recalé par équipe, appris au dépôt par regénération (au plus 500 boucles), fichier `.ordp.enc`
