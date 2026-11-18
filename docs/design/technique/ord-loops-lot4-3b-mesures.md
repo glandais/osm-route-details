@@ -8,6 +8,11 @@
 > `3b-essai-*`, `smoke-3b/`, `3b-conteneur/`). Équipes désignées par les lettres A à I ; ni départ, ni coordonnée, ni
 > identifiant d'équipe, de trace ou d'arête ici. Rien n'a été poussé, publié ni déployé : les images Docker sont locales.
 >
+> **Mise à jour du 18 novembre : prêt à fusionner** (§12). Le propriétaire a accepté le fait (d) sous réserve, à revoir au
+> 4c (§9.6 de la note). La table commune est réapprise sur 100 % des boucles retenues (`15c2cbd`), les références sont
+> re-bénies (`b9374a4`) et la séance en conteneur de 3 Gio est rejouée une fois sur cette table : 18 dépôts en 200, aucun
+> `oom`, pic `anon` de 1,47 Gio, aucune panique. Les §6 à §9 qui suivent sont l'état d'avant ces décisions, tel quel.
+>
 > **Mise à jour du 17 novembre au soir : la campagne 4 a tourné** (§6 à §9 ci-dessous, commits `8131ab1` à `502c6ac`).
 > Le relevé lit ses chiffres et applique les décisions 2, 3 et 4 du §9.5 de la note. **La forme retenue est la forme
 > plafonnée (`capped`), le plafond est par équipe et la table est brute** : ce sont les défauts déjà codés, aucun ne
@@ -279,6 +284,8 @@ elle, est apprise sur 1 545 boucles, dont une large majorité de A. Le plafond p
 
 ## 8. Réapprise sur 100 % et conteneur : non faites
 
+> Faites le 18 novembre, après la décision du propriétaire sur (d) : §12.
+
 Les étapes 3 de la consigne (décision 5, table commune réapprise sur 100 %) et 8 (séance en conteneur de 3 Gio, une fois)
 sont conditionnées aux critères, qui ne tiennent pas. Elles ne sont pas faites, pour deux raisons prudentes :
 - **Tables à 100 % :** une table commune apprise sur 100 % des boucles verrait les boucles mises à l'écart. Elle fausserait
@@ -291,6 +298,9 @@ La séance du §5 (forme plafonnée, par équipe, table à 75 %) reste la derni�
 séance est prêt à être rejoué, sorties sous `G/lot4/3b-conteneur-2/`.
 
 ## 9. Ce qui reste avant la mise en service
+
+> Le point 1 est tranché le 18 novembre (fait (d) accepté sous réserve, §9.6 de la note) et le point 2 est fait (§12).
+> Le point 3 reste ouvert, sans bloquer la fusion.
 
 1. **Au propriétaire, le fait (d)**, avec trois issues mesurées ici :
    - accepter (d) à +0,044, A ROAD au curseur 1, avec la forme et le plafond actuels ;
@@ -331,3 +341,90 @@ bibliothèque (magasin, purge, chiffrement, réglages) et 9 de bout en bout (`ge
 
 [mesuré] Après les commits des décisions du §9.5 et la correction `502c6ac` : `cargo fmt` et `cargo clippy --workspace
 --all-targets -- -D warnings` sont verts. `cargo test --workspace` passe **880 tests sans échec**, 11 ignorés.
+
+[mesuré] Le 18 novembre, après la table à 100 % et la référence re-bénie : `cargo fmt --all -- --check` et `cargo clippy
+--workspace --all-targets -- -D warnings` sont verts, Rust 1.100.0 (`rustup check` : à jour). `cargo test --workspace` passe
+**880 tests sans échec**, 11 ignorés.
+
+## 12. Table commune à 100 % et séance en conteneur (18 novembre)
+
+Décisions du propriétaire du 18 novembre : §9.6 de la note. Le fait (d) est accepté (+0,021 · +0,044, A ROAD, `svc` contre
+`common`) sous une réserve à revoir au 4c. Plafond par équipe, forme `capped`, table brute : inchangés.
+
+### 12.1 Table commune réapprise sur 100 %
+
+[mesuré] `likeness --label lot4-3b-commune100 --no-holdout --variants base,rc:0.5+n:3` (banc du commit `2a4e446`, 809 s, pic
+`anon` de 16 122 Mo), puis `taste-common --holdout-share 0 --expect-xxh3 effbdf7c3e979d77 --min-loops 50 --step2 … --step3
+…`. Les rapports donnent `holdout` = 0 et `kept` = `retained` pour les neuf équipes. `base` redonne le `taste_xxh3` neutre
+`2d06800538d394c2`.
+
+| | 75 % (campagne 1) | 100 % |
+|---|---|---|
+| `taste_xxh3` de `rc05-p3` | `66ee08d3eb9c910c` | `effbdf7c3e979d77` |
+| empreinte de résultat de `rc05-p3` | `2c563b8bbe8059ae` | `cb966d45c326c3bd` |
+| tables exportées (MTB neutre) | `ea699c10cdd18e0c` | `0090972c6fbf4bdf` |
+| boucles comptées (ROAD, GRAVEL, MTB) | 1 545, 553, 3 | 2 045, 754, 4 |
+
+[mesuré] À la relecture, `taste-common` a été relancé depuis la branche sur les mêmes rapports. Le fichier produit, passé par
+`rustfmt`, est **identique octet pour octet** à `crates/ord-loops/src/taste_common.rs` (en-tête compris). L'écart de la table
+à 75 % est au §14.16, point 32 de la note. ROAD change 24 cases sur 72, GRAVEL 39, MTB aucune. Une case du GRAVEL atteint la
+borne haute (1 024). Seule `window_reference.txt` est re-bénie, 43 requêtes sur 140.
+
+### 12.2 Séance en conteneur de 3 Gio, rejouée une fois
+
+Image `osm-route-details:lot4-3b` reconstruite depuis `b9374a4` (40,8 Mo). L'image de la table à 75 % est gardée en local
+sous `lot4-3b-75`. Même méthode et mêmes réductions qu'au §5 : cache de pages non évincé, 54 générations en série et 162 à
+4 clients. Script et sorties sont privés, sous `G/lot4/3b-conteneur-2/`, et le volume a été effacé après la séance. Les
+lettres sont celles du §5 (mêmes corps, mêmes boucles apprises).
+
+**Dépôts (18, deux clés en parallèle)** [mesuré]
+
+| Équipe | Boucles | Jeux | Dépôt, clé 1 (s) | dont profil (s) | Dépôt, clé 0 (s) | dont profil (s) |
+|---|---:|---:|---:|---:|---:|---:|
+| A | 493 | 3 000 | 524,8 | 377,3 | 297,6 | 236,0 |
+| B | 381 | 2 382 | 144,2 | 137,6 | 296,4 | 290,3 |
+| D | 6 | 42 | 99,8 | 10,9 | 103,7 | 11,1 |
+| C | 20 | 132 | 117,4 | 27,0 | 137,9 | 29,2 |
+| E | 3 | 18 | 9,7 | 2,8 | 53,4 | 22,9 |
+| H, I | 1 | 12 | 3,4 · 3,8 | 1,3 · 1,3 | 8,5 · 3,7 | 2,2 · 1,2 |
+| G | 0 | 0 (`empty`) | 1,1 | 0 | 2,0 | 0 |
+| F | 1 | 6 | 8,4 | 6,4 | 5,8 | 3,8 |
+
+Les 18 dépôts rendent **200 au premier essai** : aucun 503, aucun nouvel essai. On compte 16 profils `learned` à 3 pas et 2
+`empty`. Le plus long profil dure 377,3 s, dont environ 141 s d'attente de la place de profil tenue par l'autre clé
+[calculé]. Tous tiennent dans le budget de 720 s. Après les dépôts, les 18 états sont `ready` / `present`, avec 18 `.ordp.enc`,
+18 `.ordo.enc` et aucun temporaire.
+
+**Générations** (p50 / p90 / max, s) [mesuré]
+
+| Séance | Résultats | Avant redémarrage | Après redémarrage |
+|---|---|---|---|
+| 54 en série | 48 × 200 (`taste: team`), 6 × 422 | 0,25 / 0,49 / 0,74 | 0,25 / 0,65 / 2,90 |
+| 162 à 4 clients | 144 × 200, 18 × 422 | 0,49 / 0,76 / 0,91 | 0,42 / 0,65 / 0,85 |
+| 162 à 4 clients pendant un dépôt de A | 144 × 200, 18 × 422 | 0,53 / 0,75 / 1,08 | 0,48 / 0,68 / 0,90 |
+
+Le dépôt de A pendant les générations rend 200 en 289 s, puis en 296 s après redémarrage. Les 422 sont les mêmes refus
+fonctionnels qu'au §5. Au redémarrage, on retrouve les 18 états `ready` / `present` et le compte de `.ordp.enc` inchangé.
+
+**Compatibilité** [mesuré] : `1.9.2-local` sur le même volume, avec purge toutes les 10 s pendant 45 s. Le volume compte 18
+`.ordp.enc` avant et 18 après. Les 18 états sont `ready`, la série donne 48 × 200 (0,24 / 0,71 / 2,82 s). Au retour sur
+1.10, les 18 états sont `ready` / `present`. Le dépôt de A sous `docker update --cpus=4` rend **200 en 285,9 s**, profil
+`learned` en 224,4 s.
+
+**Mémoire et état du service** [mesuré]
+
+| | Mesure | §5 (table à 75 %) |
+|---|---|---|
+| `anon` au plus, dépôts | **1 584 Mo (1,47 Gio)**, `memory.peak` 1 603 Mo | 1 519 Mo |
+| `anon` au plus, générations et dépôt de A en parallèle | 1 551 Mo ; après redémarrage 1 104 Mo ; A sous 4 CPU 1 046 Mo | 1 573 · 1 151 · 1 026 Mo |
+| `memory.events` (`max`, `oom`, `oom_kill`) | 0, 0, 0 dans toutes les phases | 0, 0, 0 |
+| Conteneur | `running`, code 0, `OOMKilled` faux, 0 redémarrage, dans chaque phase | |
+| Journaux | aucune ligne `WARN` ni `ERROR`, aucune panique | |
+
+**Critères du §14.13** : tous tiennent. `oom` 0 et `max` 0 ; pic `anon` de 1,47 Gio, pour 2,4 Gio au plus ; tous les dépôts
+en 200 ; profil de A `learned` à 3 pas dans le budget ; aucun 503 ; 1.9.2 garde tous les profils. Contre la séance du §5,
+les temps de profil sont les mêmes à 1 % près (A seule : 236,0 s contre 237,2 s), et le pic `anon` monte de 65 Mo
+[calculé], dans le bruit d'une séance à l'autre.
+
+**Prêt à fusionner : oui.** Réserves : le fait (d), accepté sous réserve et à revoir au 4c avec les quelques classes du
+GRAVEL que la table à 100 % pousse à la borne ; et les mesures du §9, point 3, toujours ouvertes.

@@ -465,8 +465,8 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
 2. **Plafond de 500 boucles** : la lecture « aux deux curseurs » est confirmée, donc **par équipe** (défaut inchangé).
 3. **Forme `capped`, table brute sans normalisation** : confirmées (ce sont déjà les défauts).
 4. **On enchaîne jusqu'à la fusion** : table commune réapprise sur 100 % (décision 5 du §9.5, faite : §14.16, point 32),
-   références re-bénies (même point), puis séance en conteneur rejouée une fois (décision 8 du §9.5, **encore à faire**) ;
-   la fusion elle-même se fait après, hors de ce travail.
+   références re-bénies (même point), puis séance en conteneur rejouée une fois (décision 8 du §9.5, faite : §14.16,
+   point 33). La fusion elle-même se fait après, hors de ce travail.
 
 ---
 
@@ -486,13 +486,15 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
      par équipe et la table brute, définitivement : aucun défaut ne change. B ROAD vaut 0,750 · 0,924 et le service tient.
      **Le fait (d) ne tient pas** (A ROAD, curseur 1 : +0,044 contre `common`) : accepté par le propriétaire le 18 novembre
      avec une réserve à revoir au 4c (§9.6).
-     **Fait** le 18 novembre : la table commune réapprise sur 100 % et les références re-bénies (§14.16, point 32).
-     **Reste** :
-     - la séance en conteneur de 3 Gio, rejouée une fois ;
-     - la fusion et la mise en service.
+     **Fait** le 18 novembre : la table commune réapprise sur 100 % et les références re-bénies (§14.16, point 32), puis
+     la séance en conteneur de 3 Gio rejouée une fois sur cette table (§14.16, point 33 ; §12 du relevé). **3b terminé :
+     prêt à fusionner.**
+     **Reste** : la fusion et la mise en service. La réserve sur le fait (d) passe au 4c (point 4).
 
      Écarts : §14.16.
-4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b.
+4. 4c : triangle et couloir (quadrilatère hors lot, §9.1) ; distributions rejouées sur le profil du 3b. On y revoit la
+   réserve du §9.6 sur le fait (d) (A ROAD, `svc` contre `common`, +0,021 · +0,044), avec les classes du GRAVEL que la
+   table à 100 % pousse à la borne (§14.16, point 32).
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -3034,3 +3036,19 @@ accès à la production.
       (`RAW_HASH`, `NORMALIZED_HASH`) sont re-bénies avec la table.
     - **Mince écart du banc** : l'en-tête généré par `taste-common` dit « sans mise à l'écart » quand `--holdout-share 0`.
     - **Reste** : la séance en conteneur (décision 8), à rejouer une fois sur cette table.
+33. **Relecture du point 32 et séance en conteneur rejouée** (18 novembre, décision 8 du §9.5 ; relevé, §12) :
+    - **Relecture** : `taste-common` relancé depuis la branche sur les rapports `lot4-3b-commune100-*`. Il redonne
+      `crates/ord-loops/src/taste_common.rs` octet pour octet après `rustfmt`. Les rapports portent `holdout` = 0 et
+      `kept` = `retained` pour les neuf équipes : la table vient bien de 100 % des boucles retenues. Le fichier ne contient
+      que des agrégats. Seule `window_reference.txt` est re-bénie. Aucune correction.
+    - **Mention « arbre modifié » de la provenance** : la cause n'est pas établie, car l'état de l'arbre au moment de la
+      construction du banc n'est pas gardé. La mention était déjà dans l'en-tête de la table à 75 % (`ad94ccd`). La chaîne
+      `base`, `rc:0.5+n:3` joue sur un poids de base neutre : `base` redonne son `taste_xxh3` neutre, et à 75 % les contrôles
+      `RECAL_EQUIPE_*` passaient aux bits près malgré la même mention. **Laissé tel quel, signalé.**
+    - **Séance** : image `osm-route-details:lot4-3b` reconstruite depuis `b9374a4`, avec la méthode et les réductions du
+      §5 du relevé (`drop_caches` refusé sans droit d'administration). Résultats : 18 dépôts en 200 au premier essai,
+      16 `learned` et 2 `empty` ; profil de A seul en 236,0 s (285,9 s de dépôt sous 4 CPU) ; le plus long dépôt dure
+      524,8 s, attente de la place comprise. Pic `anon` de 1 584 Mo (1,47 Gio), `memory.events` à 0 partout, aucune ligne
+      `WARN` ou `ERROR`, aucune panique, aucun redémarrage. Génération à 4 clients : p50 de 0,49 s. 1.9.2 garde les 18
+      `.ordp.enc`. Tous les critères du §14.13 tiennent.
+    - **Prêt à fusionner : oui.** La réserve du §9.6 sur (d) passe au 4c (§10, point 4).
