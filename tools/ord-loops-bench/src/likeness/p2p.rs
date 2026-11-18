@@ -110,7 +110,7 @@ pub fn probe(
                 "probed": p.probed.iter().map(|x| json!({
                     "lit": x.literal, "sep": x.sep_deg, "phi": x.phi, "est": x.est_m, "leg1": x.leg1_m, "crow_m": x.crow_m,
                     "leg3": x.leg3_m, "reuse3": x.leg3_reuse_m, "h0c": x.h0_crow, "h0t": x.h0_tri,
-                    "tri": leg(&x.tri), "crow": leg(&x.crow),
+                    "tri": leg(&x.tri), "crow": leg(&x.crow), "leg3a": x.leg3_astar.as_ref().map(leg),
                 })).collect::<Vec<_>>(),
             });
         }

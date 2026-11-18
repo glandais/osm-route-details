@@ -19,8 +19,8 @@ use rustc_hash::FxHashSet;
 use crate::engine::Engine;
 use crate::geo::{turn_angle_deg, Local};
 use crate::search::{
-    make_anchor, retro_ok, tree_backward, tree_forward, turn_cost, Anchor, Ban, Ctx, Disc, Forbidden, Tree,
-    ViewWs, Weighter, Workspace, BAN, COR, INF, NONE, TAIL,
+    astar, make_anchor, retro_ok, tree_backward, tree_forward, turn_cost, Anchor, Ban, Ctx, Disc, Forbidden,
+    Tree, ViewWs, Weighter, Workspace, BAN, COR, INF, NONE, TAIL,
 };
 use crate::team::TeamCtx;
 use crate::window::Window;
@@ -90,6 +90,8 @@ pub struct PairProbe {
     /// Heuristique au départ (P1), en part du coût trouvé : vol d'oiseau seul, et avec les bornes.
     pub h0_crow: f64,
     pub h0_tri: f64,
+    /// Si le chemin T2 depuis P2 reprend les jambes 1 ou 2 : l'A* de la jambe d'arrivée sur leur graphe privé.
+    pub leg3_astar: Option<LegProbe>,
 }
 
 /// Ce que la sonde rend pour une requête.
@@ -345,6 +347,42 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
                 }
             }
             pp.leg3_reuse_m = reuse as f64 / 10.0;
+            if reuse > 0 {
+                // La jambe d'arrivée du §4.3 : l'A* d'heuristique T2 (celui des retours d'aujourd'hui), sur le graphe
+                // privé des jambes 1 (hors queue) et 2, avec son propre budget.
+                *ban_gen += 1;
+                if *ban_gen >= (1 << 28) {
+                    ban.iter_mut().for_each(|x| *x = 0);
+                    *ban_gen = 1;
+                }
+                for &f in &leg1 {
+                    let c = (f >> 1) as usize;
+                    let bits = if t1.meters(f) <= tail_dm { TAIL } else { BAN };
+                    let cur = if ban[c] >> 3 == *ban_gen { ban[c] & 7 } else { 0 };
+                    let bits = if cur & BAN != 0 { BAN } else { bits };
+                    ban[c] = (*ban_gen << 3) | bits;
+                }
+                for &f in &leg2 {
+                    ban[(f >> 1) as usize] = (*ban_gen << 3) | BAN;
+                }
+                let b3 = Ban { stamp: ban, gen: *ban_gen };
+                let last2 = *leg2.last().expect("jambe non vide");
+                let pred2 = if leg2.len() >= 2 { leg2[leg2.len() - 2] } else { last };
+                let mut budget3 = budget;
+                let mut exhausted3 = false;
+                let t0 = Instant::now();
+                let found =
+                    astar(&cx, ta, t2, last2, pred2, &b3, &mut budget3, &mut exhausted3, &mut || false)
+                        .map_err(|_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped })?;
+                pp.leg3_astar = Some(LegProbe {
+                    us: t0.elapsed().as_secs_f64() * 1e6,
+                    settled: budget - budget3,
+                    found: found.is_some(),
+                    exhausted: exhausted3,
+                    meters_m: found.as_ref().map_or(0.0, |f| f64::from(f.meters) / 10.0),
+                    cost: 0,
+                });
+            }
         }
         out.probed.push(pp);
     }
