@@ -333,6 +333,7 @@ pub fn request_of(gf: &MappedGraph, lp: &Loop, cursor: f64, seed: u64) -> Result
         applied.familiarity,
         applied.off_team_cost_q8,
         lp.id_hash ^ seed,
+        ord_loops::Figures::Classic,
     ))
 }
 

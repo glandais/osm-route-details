@@ -129,8 +129,10 @@ pub struct ProfileInfo {
     pub loops: Option<u32>,
 }
 
-/// Ce que la lecture du fichier de profil rend.
+/// Ce que la lecture du fichier de profil rend. Une valeur par équipe et par lecture : l'en-tête, qui porte les formes de
+/// l'équipe depuis le 4c, n'est pas mis en boîte.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ProfileRead {
     Present(Box<Taste>, ProfileMeta, FileId),
     Absent,
@@ -1554,6 +1556,7 @@ mod tests {
             pairs: [8, 4, 0],
             normalized: st.learn.normalize,
             complete_at: None,
+            shapes: None,
         };
         let mut taste = ord_loops::Taste::neutral();
         taste.q8[0][3] = 400;

@@ -3,10 +3,11 @@
 //! le service jugent et jouent de la même façon.
 
 use ord_graph::mmap::MappedGraph;
-use ord_loops::{Bearing8, LatLon, Mode, Request, RideType};
+use ord_loops::{Bearing8, Figures, LatLon, Mode, Request, RideType};
 
 use crate::matcher::Piece;
 use crate::plane::{self, Pt};
+use crate::profile::shape::{ShapeAcc, ShapeProfile};
 use crate::walk::{Trace, Walk};
 
 /// Pourquoi une trace n'est pas retenue, dans l'ordre où c'est jugé.
@@ -139,6 +140,7 @@ pub fn loop_request(
     familiarity: f32,
     off_team_cost_q8: u32,
     seed: u64,
+    figures: Figures,
 ) -> Request {
     Request {
         start: LatLon::new(start.0, start.1),
@@ -150,7 +152,7 @@ pub fn loop_request(
         familiarity,
         off_team_cost_q8,
         seed,
-        figures: ord_loops::Figures::Classic,
+        figures,
     }
 }
 
@@ -216,6 +218,8 @@ pub struct CollectCounts {
 pub struct LearnSet {
     pub loops: Vec<LearnLoop>,
     pub counts: CollectCounts,
+    /// Les formes de **toutes** les boucles retenues, plafond ou non (lot 4, 4c) : un agrégat par type.
+    pub shapes: ShapeProfile,
 }
 
 impl LearnSet {
@@ -238,7 +242,7 @@ impl LearnSet {
                     .collect()
             }
         };
-        LearnSet { loops, counts: self.counts.clone() }
+        LearnSet { loops, counts: self.counts.clone(), shapes: self.shapes.clone() }
     }
 }
 
@@ -272,6 +276,8 @@ pub struct LoopCollector {
     /// Un tas (équipe, ou aucun plafond) ou trois (un par type).
     heaps: Vec<BinaryHeap<Item>>,
     counts: CollectCounts,
+    /// Formes des boucles retenues, comptées avant le plafond.
+    shapes: ShapeAcc,
 }
 
 impl LoopCollector {
@@ -282,6 +288,7 @@ impl LoopCollector {
             cap,
             heaps: (0..n).map(|_| BinaryHeap::new()).collect(),
             counts: CollectCounts::default(),
+            shapes: ShapeAcc::default(),
         }
     }
 
@@ -307,6 +314,7 @@ impl LoopCollector {
                 }
             };
         self.counts.retained += 1;
+        self.shapes.add(ty, &trace.pts);
         let Some(start) = start_latlon(gf, &walk) else { return };
         let item = LearnLoop {
             key: walk_key(ty, &walk),
@@ -332,7 +340,7 @@ impl LoopCollector {
         let mut loops: Vec<LearnLoop> =
             self.heaps.into_iter().flat_map(BinaryHeap::into_vec).map(|i| i.0).collect();
         loops.sort_by_key(|l| (l.key, l.ty));
-        LearnSet { loops, counts: self.counts }
+        LearnSet { loops, counts: self.counts, shapes: self.shapes.finish() }
     }
 }
 
@@ -519,6 +527,33 @@ pub(crate) mod tests {
             assert!(team.heaps[0].len() <= 8);
         }
         assert_eq!(team.finish().loops.len(), 7);
+    }
+
+    #[test]
+    fn the_shapes_count_every_retained_loop_whatever_the_cap_and_the_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let gf = graph(dir.path());
+        let laps = all_laps(&gf);
+        let run = |order: &[usize], cap: Cap| {
+            let mut c = LoopCollector::new(params(), cap);
+            for &i in order {
+                offer(&mut c, &gf, &laps[i]);
+            }
+            c.finish()
+        };
+        let n = laps.len();
+        let fwd: Vec<usize> = (0..n).collect();
+        let rev: Vec<usize> = (0..n).rev().collect();
+        let (all, capped, other_order) =
+            (run(&fwd, Cap::None), run(&fwd, Cap::Team(3)), run(&rev, Cap::Team(3)));
+        assert_eq!(capped.loops.len(), 3);
+        assert_eq!(all.shapes, capped.shapes, "les formes ne dépendent pas du plafond");
+        assert_eq!(capped.shapes, other_order.shapes, "ni de l'ordre d'arrivée");
+        let t = &all.shapes.types[0];
+        assert_eq!(u64::from(t.loops), all.counts.retained, "toutes les boucles retenues sont comptées");
+        // Les tours d'un carré de 300 m de côté ont trois sommets à 10 % de D.
+        assert_eq!((t.k1, t.k2, t.k3), (0, 0, t.loops));
+        assert_eq!(all.capped(Cap::Team(2)).shapes, all.shapes);
     }
 
     #[test]

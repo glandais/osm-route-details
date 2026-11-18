@@ -5,6 +5,7 @@ use ord_loops::{Taste, TASTE_CLASSES};
 use serde::{Deserialize, Serialize};
 
 use super::learn::{Common, LearnParams};
+use super::shape::ShapeProfile;
 
 /// Version du format en clair. Un format 2 (formes du 4c, destinations du 4d) montera ce numéro ; un format inconnu est
 /// refusé en lecture sans jamais être effacé.
@@ -35,6 +36,11 @@ pub struct ProfileMeta {
     /// début de la série de profils partiels. Absent (écrit sans) : la date d'apprentissage. Décision 6 du 17 novembre.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub complete_at: Option<i64>,
+    /// Les formes de l'équipe (lot 4, 4c) : le nombre de sommets à 10 % de D de **toutes** ses boucles retenues, par
+    /// type. Facultatif, hors des empreintes `common` et `learn` : un profil écrit par 1.10 n'en a pas (le service sert
+    /// alors le mélange général jusqu'au dépôt suivant) et 1.10 ignore ce champ dans un profil écrit par 1.11.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shapes: Option<ShapeProfile>,
 }
 
 impl ProfileMeta {
@@ -135,6 +141,7 @@ mod tests {
             pairs: [20, 10, 0],
             normalized: learn.normalize,
             complete_at: None,
+            shapes: None,
         };
         let mut taste = Taste::neutral();
         taste.q8[0][3] = 400;
@@ -206,6 +213,67 @@ mod tests {
         assert_eq!(decode(b"\x05\0\0\0{nope", &common, &learn), Err(Incompatible::Format));
         // La longueur annoncée déborde.
         assert_eq!(decode(&[255, 255, 255, 255, 1], &common, &learn), Err(Incompatible::Format));
+    }
+
+    /// L'en-tête de 1.10, copie de la structure d'avant le 4c : sans `shapes`, et sans `deny_unknown_fields`.
+    #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
+    struct ProfileMeta110 {
+        format: u32,
+        learned_at: i64,
+        overlay_deposited_at: i64,
+        common: String,
+        learn: String,
+        engine: String,
+        steps: u8,
+        loops: [u32; 3],
+        pairs: [u32; 3],
+        normalized: bool,
+        #[serde(default)]
+        complete_at: Option<i64>,
+    }
+
+    #[test]
+    fn the_shapes_round_trip_are_optional_and_ignored_by_the_1_10_header() {
+        use super::super::shape::{ShapeProfile, TypeShape};
+        let (common, learn, meta, taste) = fixture();
+        let mut shapes = ShapeProfile::default();
+        shapes.types[0] =
+            TypeShape { loops: 90, k1: 40, k2: 45, k3: 5, rd_tri_milli: Some([250, 290, 320, 350, 380]) };
+        let with = ProfileMeta { shapes: Some(shapes), ..meta.clone() };
+        let bytes = encode(&with, &taste);
+        let (back, _) = decode(&bytes, &common, &learn).unwrap();
+        assert_eq!(back, with);
+        // Sans le champ : `None`, et le champ n'est pas écrit.
+        let plain = encode(&meta, &taste);
+        assert_eq!(decode(&plain, &common, &learn).unwrap().0.shapes, None);
+        let json = |b: &[u8]| {
+            let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
+            String::from_utf8(b[4..4 + n].to_vec()).unwrap()
+        };
+        assert!(!json(&plain).contains("shapes"));
+        assert!(json(&bytes).contains("shapes"));
+        // L'en-tête de 1.10 relit celui de 1.11, formes comprises.
+        let old: ProfileMeta110 = serde_json::from_str(&json(&bytes)).unwrap();
+        assert_eq!((old.format, old.steps, old.loops), (FORMAT, 3, [10, 5, 0]));
+        // Et les formes ne sont dans aucune des deux empreintes.
+        assert_eq!((back.common, back.learn), (meta.common, meta.learn));
+    }
+
+    #[test]
+    fn learn_figures_enter_the_hash_only_when_organic() {
+        use super::super::learn::LearnFigures;
+        let classic = LearnParams::default();
+        assert_eq!(classic.figures, LearnFigures::Classic);
+        assert!(!classic.canonical().contains("figures"));
+        let organic = LearnParams { figures: LearnFigures::Organic, ..classic.clone() };
+        assert!(organic.canonical().ends_with(";figures=organic"));
+        assert_ne!(classic.hash(), organic.hash());
+        // Le profil appris en classique n'est pas servi à un moteur qui apprend en organique, et inversement.
+        let (common, _, meta, taste) = fixture();
+        let bytes = encode(&meta, &taste);
+        assert!(decode(&bytes, &common, &classic).is_ok());
+        assert_eq!(decode(&bytes, &common, &organic), Err(Incompatible::Settings));
     }
 
     #[test]

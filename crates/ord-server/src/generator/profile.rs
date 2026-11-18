@@ -288,6 +288,7 @@ impl Ready {
             loops: l.loops,
             pairs: l.pairs,
             normalized: settings.learn.normalize,
+            shapes: (!set.shapes.is_empty()).then(|| set.shapes.clone()),
         };
         // Aucune boucle : le profil est la table commune, sans aucun jeu ; l'état devient `ready`.
         if set.loops.is_empty() {

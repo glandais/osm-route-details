@@ -5,10 +5,11 @@
 //! parallélisme est dans le joueur, à résultats indexés : même binaire, même machine, mêmes octets, quel que soit le
 //! nombre de fils. Aucune coordonnée ni empreinte de boucle n'en sort : des mètres et des parts par classe.
 
-use ord_loops::{Mode, Request, Taste, TASTE_CLASSES};
+use ord_loops::{Figures, Mode, Organic, OrganicTune, Request, Taste, TASTE_CLASSES};
 use xxhash_rust::xxh3::xxh3_64;
 
 use super::collect::{loop_request, Cap, LearnSet, RetainParams};
+use super::shape::mix_for;
 use super::Player;
 
 /// Forme du mélange d'une équipe avec la table commune (décision 2 du propriétaire, 17 novembre 2026).
@@ -37,6 +38,43 @@ impl Mix {
             "capped" => Some(Self::Capped),
             "sonde" => Some(Self::Sonde),
             _ => None,
+        }
+    }
+}
+
+/// Les figures que joue l'apprentissage d'un profil (lot 4, 4c, §15.9). `Classic` : la lentille seule, comme 1.10 ;
+/// `Organic` : les figures organiques de la requête, avec le mélange de l'équipe (ses formes, sinon le général).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LearnFigures {
+    #[default]
+    Classic,
+    Organic,
+}
+
+impl LearnFigures {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Classic => "classic",
+            Self::Organic => "organic",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "classic" => Some(Self::Classic),
+            "organic" => Some(Self::Organic),
+            _ => None,
+        }
+    }
+
+    /// Les figures d'une requête de l'apprentissage, pour le type `ty` de l'équipe aux formes `set`.
+    pub fn figures_of(self, set: &LearnSet, ty: u8) -> Figures {
+        match self {
+            Self::Classic => Figures::Classic,
+            Self::Organic => Figures::Organic(Organic {
+                mix: mix_for(Some(&set.shapes), super::collect::ride_of(ty)),
+                tune: OrganicTune::default(),
+            }),
         }
     }
 }
@@ -73,6 +111,9 @@ pub struct LearnParams {
     /// Forme du mélange avec la table commune. Hors de l'empreinte tant qu'elle vaut `Capped` (celle d'avant reste la
     /// même), dedans dès `Sonde`.
     pub mix: Mix,
+    /// Figures jouées pour apprendre (lot 4, 4c). Hors de l'empreinte tant qu'elles valent `Classic` : les profils écrits
+    /// avant le 4c restent compatibles ; `Organic` entre dans l'empreinte (`;figures=organic`) et invalide tous les profils.
+    pub figures: LearnFigures,
 }
 
 impl Default for LearnParams {
@@ -91,6 +132,7 @@ impl Default for LearnParams {
             seed: 20_261_117,
             retain: RetainParams { max_km: Some(200.0), ..RetainParams::default() },
             mix: Mix::Capped,
+            figures: LearnFigures::Classic,
         }
     }
 }
@@ -119,9 +161,13 @@ impl LearnParams {
             self.retain.max_km,
             self.retain.loop_gap,
         );
-        match self.mix {
+        let base = match self.mix {
             Mix::Capped => base,
             Mix::Sonde => format!("{base};mix=sonde"),
+        };
+        match self.figures {
+            LearnFigures::Classic => base,
+            LearnFigures::Organic => format!("{base};figures=organic"),
         }
     }
 
@@ -480,7 +526,17 @@ pub fn learn(
         .iter()
         .flat_map(|l| {
             cursors.iter().map(move |&(mode, fam, q8)| {
-                loop_request(l.start, l.bearing, l.distance_m, l.ty, mode, fam, q8, l.key ^ p.seed)
+                loop_request(
+                    l.start,
+                    l.bearing,
+                    l.distance_m,
+                    l.ty,
+                    mode,
+                    fam,
+                    q8,
+                    l.key ^ p.seed,
+                    p.figures.figures_of(set, l.ty),
+                )
             })
         })
         .collect();
@@ -608,7 +664,7 @@ mod tests {
                 }
             })
             .collect();
-        LearnSet { loops, counts: Default::default() }
+        LearnSet { loops, counts: Default::default(), shapes: Default::default() }
     }
 
     fn cursors() -> Vec<(Mode, f32, u32)> {
@@ -718,7 +774,19 @@ mod tests {
                 &[set_of(&[0], &[])
                     .loops
                     .iter()
-                    .map(|l| loop_request(l.start, l.bearing, l.distance_m, 0, Mode::TeamFirst, 0.5, 640, 1))
+                    .map(|l| {
+                        loop_request(
+                            l.start,
+                            l.bearing,
+                            l.distance_m,
+                            0,
+                            Mode::TeamFirst,
+                            0.5,
+                            640,
+                            1,
+                            Figures::Classic,
+                        )
+                    })
                     .next()
                     .unwrap()],
                 &cm.taste(),

@@ -7,6 +7,7 @@
 pub mod collect;
 pub mod format;
 pub mod learn;
+pub mod shape;
 
 use ord_loops::{
     generate_in, Engine, Failure, Generation, Request, Taste, TeamCtx, TeamData, WindowTeam, Workspace,

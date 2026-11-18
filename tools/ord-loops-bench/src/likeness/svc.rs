@@ -260,7 +260,7 @@ mod tests {
                 }
             })
             .collect();
-        let set = LearnSet { loops, counts: Default::default() };
+        let set = LearnSet { loops, counts: Default::default(), shapes: Default::default() };
         let common = Common::without_steps([[256; TASTE_CLASSES]; 3], [[0; TASTE_CLASSES]; 3]);
         let cursors = [(Mode::TeamFirst, 0.5f32, 640u32), (Mode::TeamFirst, 0.5, 256)];
         let p = LearnParams { n0: 0.0, steps: 1, normalize: false, ..LearnParams::default() };
@@ -279,6 +279,7 @@ mod tests {
                     fam,
                     q,
                     1,
+                    ord_loops::Figures::Classic,
                 );
                 let g = Toy.play_all(&[req], &neutral).unwrap()[0].unwrap();
                 for c in 0..TASTE_CLASSES {
@@ -322,7 +323,7 @@ mod tests {
                 }
             })
             .collect();
-        let set = LearnSet { loops, counts: Default::default() };
+        let set = LearnSet { loops, counts: Default::default(), shapes: Default::default() };
         let cursors = [(Mode::TeamFirst, 0.5f32, 640u32), (Mode::TeamFirst, 0.5, 256)];
         // La cible commune : trois pas, des mètres variés (des classes sans généré, d'autres sans réel), au-dessus du
         // seuil de kilomètres ; MTB sans boucle (`N_P = 0`).
@@ -353,8 +354,17 @@ mod tests {
                 let t = usize::from(l.ty).min(2);
                 let mut counted = false;
                 for &(mode, fam, q) in &cursors {
-                    let req =
-                        loop_request(l.start, l.bearing, l.distance_m, l.ty, mode, fam, q, l.key ^ p.seed);
+                    let req = loop_request(
+                        l.start,
+                        l.bearing,
+                        l.distance_m,
+                        l.ty,
+                        mode,
+                        fam,
+                        q,
+                        l.key ^ p.seed,
+                        ord_loops::Figures::Classic,
+                    );
                     let Some(g) = Toy.play_all(&[req], &team_taste).unwrap()[0] else { continue };
                     for c in 0..TASTE_CLASSES {
                         mine.real[t][c] += l.real_m[c];
