@@ -11,6 +11,9 @@ license.workspace = true
 # La construction d'équipe d'avant la finition 2 du lot 6, gardée pour le banc (`--teams-reference`) ; les tests l'ont
 # toujours.
 reference = []
+# La sonde du coût d'une recherche point à point (lot 4, 4c, `ord-loops-lot4c-sonde.md`) : code de mesure, pour le
+# banc seulement.
+probe = []
 
 [dependencies]
 ord-graph.workspace = true

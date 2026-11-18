@@ -383,14 +383,35 @@ pub fn play_one(
             generate_with_diagnostics_in(ctx.engine, win, Some(tc), req, ws, &mut || false).0
         }))
     };
-    let (win, wt) = ctx.wins.acquire(env.key, env.team, req, env.taste);
+    let (mut win, mut wt) = ctx.wins.acquire(env.key, env.team, req, env.taste);
     let mut res = call(ws, &win, &wt);
-    drop((win, wt));
     if matches!(res, Ok(Err(Failure::WindowEscape))) {
-        let (win, wt) = ctx.wins.acquire_wide(env.team, req, env.taste);
+        (win, wt) = ctx.wins.acquire_wide(env.team, req, env.taste);
         res = call(ws, &win, &wt);
     }
     rec.ms = t0.elapsed().as_secs_f64() * 1000.0;
+    // La sonde point à point (4c), hors du temps mesuré, sur la fenêtre du jeu.
+    if super::p2p::wanted(req, overlay) {
+        let (outcome, diag) = match &res {
+            Err(_) => ("PANIC".to_string(), None),
+            Ok(Err(f)) => (failure_code(f), None),
+            Ok(Ok(g)) => (format!("ROUTES_{}", g.routes.len()), Some(&g.diagnostics)),
+        };
+        super::p2p::probe(
+            ctx.engine,
+            &win,
+            env.team,
+            &wt,
+            req,
+            ws,
+            env.key,
+            task.cursor,
+            rec.ms,
+            &outcome,
+            diag,
+        );
+    }
+    drop((win, wt));
     let generation = match res {
         Err(_) => {
             rec.outcome = "PANIC".into();

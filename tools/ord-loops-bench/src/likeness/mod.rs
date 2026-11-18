@@ -17,6 +17,7 @@ mod fixture;
 pub mod holdout;
 pub mod measure;
 pub mod out;
+pub mod p2p;
 pub mod play;
 pub mod shape;
 pub mod svc;
@@ -575,6 +576,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             step = Some(st.step(src, inputs, &order, &letter_of, &tp));
             prev_meters = None;
         }
+        *p2p::CURRENT.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = v.name.clone();
         let run = bench.play_variant(v, step.as_ref(), &mut workspaces)?;
         ph.end(&if legacy { "jeux".to_string() } else { format!("variante {}", v.name) });
         let team_windows = wins.take_team_counters();

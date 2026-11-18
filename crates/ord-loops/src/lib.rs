@@ -18,6 +18,8 @@ mod engine;
 mod generate;
 mod geo;
 mod index;
+#[cfg(feature = "probe")]
+pub mod probe;
 mod reverse;
 mod search;
 mod selfcheck;
