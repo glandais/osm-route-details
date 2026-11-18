@@ -26,6 +26,11 @@
   sont rendus et passent le contrôle ; **67 à 77 % des requêtes ROAD de C** et 36 à 43 % de celles de B gardent un triangle ; la
   part de premiers parcours à deux sommets monte de 7 à 50 % (ROAD de C, curseur 1) ; **mais le temps au curseur 1 monte de
   1,5 × sur C (P50)** : un risque pour C1, à lire à la campagne (échantillon de 20 boucles, bruit des 16 fils) [§3].
+- **Relecture** (commits `1d218ed` à `1b91dfd`, §15.19 points 11 à 15) : le facteur minimal de l'heuristique, nul en service, est
+  lu sur T1 ; le gabarit du couloir suit le rayon de chaque requête ; une requête cherche au plus quatre paires distinctes,
+  reprises à part ; une seule réparation d'épi par triangle. Les chiffres des §3.1 à §3.3 sont ceux **d'avant** ; l'essai rejoué
+  après la relecture est au §3.4 (C ROAD : 53 % des requêtes gardent un triangle au lieu de 67 %, temps au curseur 1 × 1,11 à
+  × 1,21 `svc` au lieu de × 1,58).
 
 ## 1. Ce qui est codé
 
@@ -41,6 +46,11 @@
 | 7 | `7c7c857` | service : `figures`, `triangle`, `generator.figures`, `learn_figures`, api 1.11, paquet 1.11.0 |
 | 8 | **non fait** | bascule du défaut : attend les campagnes |
 | 9 | ce commit | ce relevé, §15.19, étape 4 du §10 |
+| relecture | `1d218ed` | facteur minimal lu sur T1, sans marge ni fenêtre (§15.19, point 11) |
+| relecture | `e6a75be` | gabarit du couloir refait quand le rayon change (point 12) |
+| relecture | `5852ea3` | au plus `max_pairs` paires distinctes par requête, reprises à part ; `sharp_retry`, option `noretry` (point 13) |
+| relecture | `63468df` | message d'arrêt du banc (empreinte de la sonde) |
+| relecture | `1b91dfd` | une seule réparation d'épi par triangle (point 14) |
 
 Constantes générales écrites par `shape-common` [mesuré, 2 071 boucles ROAD, 780 GRAVEL, 4 MTB] : ROAD 838 · 1 098 · 135
 boucles à ≤ 1, 2, ≥ 3 sommets à 10 % de D, `tri_q8` 145, r / D des triangles P10 à P90 `0,252 · 0,286 · 0,318 · 0,345 · 0,363` ;
@@ -113,11 +123,44 @@ surcoût du couloir [calculé : ~5 paires cherchées en moyenne au lieu de 4, 0,
 0,29 × T1 pour quatre paires à la sonde]. À lire à la campagne 4 avant toute bascule ; leviers prévus au §15.16 : `pairs`, `wide`, et
 ici le nombre de reprises par passe (§15.19, point 1).
 
+### 3.4 Après la relecture
+
+Même commande que le §2, variantes `base,svc,common+org,svc+org,svc+org+noretry,svc+org+tri:0+w:0`, `--label review2-<C|B>`,
+sorties sous `$G/lot4/smoke-4c-review/`, binaire `release` de `1b91dfd` [mesuré]. Empreintes : `base` et `svc` inchangées (C
+`55bacae189c658ee`, `c584b04e30bf54e9` ; B `51ee2e3500688b9d`, `bdcedda897265fb4`), `svc-org-tri0-w000` = `svc` sur les deux ; C :
+`svc-org` `c0324bdca9385c0f`, `common-org` `43caf4010b25b3ec`, `svc-org-noretry` `3188dadbdb3debde` ; B : `svc-org`
+`d43b5e1115120b68`, `common-org` `cfc1f2e869f270a7` (inchangée), `svc-org-noretry` `d5501b85edb489d5`. Rejouées deux fois sur C
+(avant et après le commit `1b91dfd`) : mêmes empreintes.
+
+| équipe · type | variante | recherches par requête (reprises) | états des jambes 2 par requête | requêtes avec un triangle gardé |
+|---|---|---|---:|---:|
+| C · ROAD | `svc+org` | 4,37 (0,90) | 177 317 | 0,53 |
+| C · ROAD | `svc+org+noretry` | 3,30 (0) | 117 292 | 0,33 |
+| C · GRAVEL | `svc+org` | 5,50 (2,25) | — | 0,25 |
+| B · ROAD | `svc+org` | 3,07 (0,29) | — | 0,36 |
+| B · GRAVEL | `svc+org` | 2,62 (0,27) | — | 0,65 |
+| B · GRAVEL | `svc+org+noretry` | 2,38 (0) | — | 0,58 |
+
+Avant la relecture, C ROAD `svc+org` : 5,13 recherches et 254 108 états de jambe 2 par requête ; par recherche, les états baissent
+de 18 % en ROAD et en GRAVEL (le terme du vol d'oiseau revient) [calculé].
+
+| équipe · curseur | `svc+org` × `svc` (P50 · P90) | `svc+org+noretry` × `svc` | `svc+org+tri:0+w:0` × `svc` (bruit) |
+|---|---|---|---|
+| C · 0,25 | 0,89 · 1,01 | 0,92 · 1,02 | 0,93 · 0,97 |
+| C · 1 | 1,11 · 1,41 | 1,09 · 1,37 | 0,92 · 0,95 |
+| B · 0,25 | 1,10 · 1,23 | 1,11 · 1,03 | 0,95 · 1,00 |
+| B · 1 | 1,06 · 1,52 | 1,10 · 1,11 | 0,99 · 1,05 |
+
+Le premier tirage de C, aux mêmes empreintes, donnait au curseur 1 × 1,21 · × 1,32 : le bruit du P50 reste de l'ordre de 10 %. La
+forme ROAD de C bouge peu : W1 / IQR de r / D 0,262 · 0,558 sous `svc+org` contre 0,520 · 1,103 sous `svc` (× 0,50 aux deux
+curseurs ; × 0,48 et × 0,54 avant la relecture). **C1 reste le risque principal, surtout au P90** ; l'essai ne juge rien (§5).
+
 ## 4. Commandes exactes des campagnes (§15.15)
 
 `B=./target/release/ord-loops-bench`, `G=~/.cache/osm-route-details/graph`, sorties sous `$G/lot4/4c/`. Une campagne à la fois, la
 machine pour elle seule. Les noms de variantes : `svc-org`, `common-org`, `svc-org-w000`, `svc-org-tri0`, `svc-org-lc`,
-`svc-org-w002`, `svc-org-w005`, `svc-org-pairs8`, `svc-org-wide`, `svc-org-w<w>-k15`, `svc-org-w<w>-k30` (§15.19, point 5).
+`svc-org-w002`, `svc-org-w005`, `svc-org-pairs8`, `svc-org-wide`, `svc-org-noretry`, `svc-org-w<w>-k15`, `svc-org-w<w>-k30`
+(§15.19, points 5 et 13).
 
 | # | Après | Commande (`$B likeness …`, `--out $G/lot4/4c`) | Durée [estimé] |
 |---|---|---|---|
@@ -126,7 +169,7 @@ machine pour elle seule. Les noms de variantes : `svc-org`, `common-org`, `svc-o
 | 2 | — | `--teams B,C --limit 20 --holdout-share 0.25 --variants base,svc,common+org,svc+org --label 4c-essai` | 6 min |
 | 3 | — | `--teams B,C --holdout-share 0.25 --variants base,svc+org --threads 1 --label 4c-det1` puis `--threads 16 --label 4c-det16` : mêmes empreintes (critère D) | 25 min |
 | 4 | — | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org,svc+org+w:0,svc+org+tri:0,svc+org+lc --label lot4-4c` | ~65 min, RSS ≤ 21 Gio |
-| 5 | — | `--holdout-share 0.25 --variants base,svc,svc+org+w:0.02,svc+org+w:0.05,svc+org+pairs:8,svc+org+wide --label lot4-4c-r1` | ~55 min |
+| 5 | — | `--holdout-share 0.25 --variants base,svc,svc+org+w:0.02,svc+org+w:0.05,svc+org+pairs:8,svc+org+wide,svc+org+noretry --label lot4-4c-r1` (`noretry` : coût et rendement des reprises, §15.19 point 13) | ~60 min |
 | 6 | — | `--holdout-share 0.25 --variants base,svc,svc+org+w:<w*>+k:1.5,svc+org+w:<w*>+k:3[,svc+org+w:<w*>+boost:<b>] --label lot4-4c-r2` (`<w*>` : choix du §15.6 lu après la campagne 5) | ~40 min |
 | 7 | commit 8 | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org --label lot4-4c-final` (défauts retenus), puis un second tirage des temps | ~45 + 25 min |
 | 8 | commit 8 | séance en conteneur du §14.13 (`docker build -t osm-route-details:lot4-4c .`, défauts organiques) | ~45 min |

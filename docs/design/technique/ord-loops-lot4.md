@@ -474,7 +474,7 @@ Réponses du propriétaire aux questions du §15.18 (la spécification du 4c les
 tranchés par l'orchestrateur du travail, comme la spécification le recommandait) :
 
 1. **Temps** : jugé **en conteneur** (C3 : P50 ≤ 0,56 s à 4 clients, ≤ 0,29 s en série) et **relatif au banc** (C1 : P50 ≤
-   1,15 × `svc`). On ne réduit pas le nombre de figures pour le temps.
+   1,15 × `svc`).
 2. **Paires** : **4** par requête, lentille en repli ; `pairs:8` mesuré, retenu seulement s'il gagne 0,05 de W1 / IQR de r / D
    sans manquer C1 (tranché par l'orchestrateur, recommandation de la spécification).
 3. **Réserve du fait (d)** : **levée** si `svc-org − common-org` ≤ +0,03 aux deux curseurs ; **maintenue** jusqu'à +0,054 ; au-delà,
@@ -3692,3 +3692,40 @@ l'essai de fumée et commandes des campagnes : [`ord-loops-lot4c-mesures.md`](or
    (une valeur par lecture d'équipe).
 10. **Sans objet pour 1.10** : `figures` n'existe pas dans le contrat de 1.10, qui refuse une clé inconnue ; Pédalons ne
     l'envoie pas (§15.16).
+
+**Relecture du 18 novembre 2026** (commits `1d218ed` à `1b91dfd`, après celui du relevé) : quatre corrections, qui changent
+les points 1 et 2 ci-dessus ; les références figées, Classic et organique, passent sans re-bénédiction.
+
+11. **Le facteur minimal est lu sur T1, pas sur la fenêtre** (remplace le point 2 ; écart au §15.5 et au choix 9 du §15.1).
+    Avec la marge de 16, le plus petit `(w − 16) / len_dm` de la fenêtre vaut **0** sur le graphe France dans les 30 fenêtres
+    relevées (Paris, Lyon, Nantes, Clermont-Ferrand et un départ rural ; 30, 60 et 100 km ; ROAD et GRAVEL ; fenêtres des tuiles
+    nécessaires et de classe) [mesuré] : une chaîne de moins de 1,6 m suffit, et le terme du vol d'oiseau de l'heuristique
+    était mort en service. Sans la marge, le minimum dépend de la fenêtre (GRAVEL, Nantes, 30 km : 0,175875 sur les tuiles
+    nécessaires, 0,175782 sur la fenêtre de classe [mesuré]), alors que le service sert une requête dans toute fenêtre du cache
+    qui la contient : I4 serait rompu. Le facteur vaut désormais 0,999 fois le plus petit `chain(c) / len_dm(c)` des états
+    fixés par T1 de la passe, calculé à la première recherche de la passe : T1 fixe tout état atteignable dans le disque, donc
+    toute chaîne qu'une jambe 2 relâche (au prédécesseur près de la règle de rétro-virage : un écart borné, déterministe) ;
+    `chain` est le poids exact, sans arrondi à couvrir ; T1 ne dépend pas de la fenêtre. Coût : une passe sur les états de T1 (P50 145 000 en ROAD,
+    190 000 en GRAVEL, §2 de la sonde) par passe qui cherche une paire. `Weighter::min_factor`, `Window::min_w_per_dm`, `WindowTeam::min_w_per_dm`
+    et `ViewData::min_w_per_dm` sont retirés. Test 6 : la borne tient pour toute chaîne atteinte par T1, et le facteur est le
+    même sur la fenêtre des tuiles nécessaires et sur le graphe entier.
+12. **Le gabarit du couloir suit le rayon de sa requête.** `CorGrid::begin` ne refaisait le gabarit que si la trame changeait ;
+    à case bornée (500 m) et côté égal, deux requêtes peuvent demander deux rayons (D = 66,6 puis 66,7 km à w = 0,03 D : rayon
+    4 puis 5 cases) : la seconde héritait du gabarit de la première, et la sortie dépendait de la requête jouée avant dans le
+    même espace de travail (D, I4). Test `a_reused_grid_dilates_with_the_radius_of_its_request`.
+13. **Au plus `max_pairs` paires distinctes par requête** (amende le point 1). La reprise retirait la paire des paires
+    cherchées : quatre paires neuves par passe, jusqu'à 24 recherches par requête, contre la décision 2 du §9.7. Une paire
+    prend désormais sa place à la première recherche et la garde ; refusée pour un virage serré avec de nouvelles transitions
+    interdites, elle est reprise **une fois** à la passe suivante, sans place de plus (les reprises non jouées faute de budget
+    passent à la passe d'après). `OrganicTune::sharp_retry` (défaut `true`), option `noretry` du banc (`-noretry`, la lettre du
+    §15.7), compteur `FigureDiagnostics::retried` (colonne « cherchées (reprises) » de la section « 4c ») ; le test de
+    déterminisme vérifie `searched − retried ≤ max_pairs`.
+14. **Une seule réparation d'épi par triangle** (§15.5) : un second épi, en P2, après une réparation en P1, jette la paire.
+15. **Non changé, à surveiller** : des triangles complets sont refusés pour `REUSE_OUTSIDE_TAIL` (11 sur 100 à ±10 % de D, C
+    ROAD, `svc+org`, essai de relecture). La jambe 2 tourne sur le graphe privé de la jambe 1 avec `TAIL` au coût × 2 (§15.5)
+    alors qu'elle ne passe jamais dans la queue du parcours (ses abscisses sont au-delà de 0,27 D des deux bouts) : tout
+    réemprunt de la queue de la jambe 1 par la jambe 2 est refusé par le contrôle. La mettre en `BAN` serait sans risque, mais
+    la cause des onze refus n'est pas établie (la jambe 3 peut aussi déborder la queue) ; laissé à la lecture des campagnes.
+
+Essai de relecture (équipes C et B, 20 boucles, mêmes réglages que l'essai du codeur, variantes `base`, `svc`, `common+org`,
+`svc+org`, `svc+org+noretry`, `svc+org+tri:0+w:0`) : chiffres au §3.4 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md).
