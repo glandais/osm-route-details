@@ -411,7 +411,7 @@ mod tests {
         for t in [&raw, &norm] {
             assert!(t.q8.iter().flatten().all(|&q| (64..=1_024).contains(&q)));
         }
-        // MTB : apprise sur 3 boucles, sous le seuil de 50 : neutre, brute comme normalisée.
+        // MTB : apprise sur 4 boucles, sous le seuil de 50 : neutre, brute comme normalisée.
         assert!(raw.q8[2].iter().all(|&q| q == 256) && norm.q8[2].iter().all(|&q| q == 256));
         assert!(!raw.is_neutral() && !norm.is_neutral() && raw != norm);
         // La table commune servie suit la constante.
@@ -441,8 +441,8 @@ mod tests {
         assert!(rr / g3 > 0.5 && rr / g3 < 2.0, "{rr} {g3}");
     }
 
-    const RAW_HASH: u64 = 0x8f43a55dab78eda4;
-    const NORMALIZED_HASH: u64 = 0xdad60f58ca7c0dea;
+    const RAW_HASH: u64 = 0x10b612cf5c8ce655;
+    const NORMALIZED_HASH: u64 = 0xfdebe1ba92ea36e1;
 
     const LENS: [u32; 7] = [1, 7, 999, 1_000_000, u32::MAX / 8, u32::MAX / 2, u32::MAX];
 

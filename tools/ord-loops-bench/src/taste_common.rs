@@ -310,12 +310,21 @@ pub fn run(a: &TasteCommonArgs) -> Result<()> {
         e.steps = Some(export_steps(&base, &read_report(p1)?, &read_report(p2)?)?);
     }
     let meta = |k: &str| r.meta.iter().find(|(n, _)| n == k).map_or("?", |(_, v)| v.as_str()).to_string();
+    // Sans part mise à l'écart (`likeness --no-holdout`) : la table est apprise sur toutes les boucles retenues.
+    let holdout = if a.holdout_share > 0.0 {
+        format!(
+            "rejouée sans les {:.0} % de boucles mises à l'écart ;\nappris sur les boucles restantes",
+            a.holdout_share * 100.0
+        )
+    } else {
+        "rejouée sans mise à l'écart ;\nappris sur 100 % des boucles retenues".to_string()
+    };
     let provenance = format!(
-        "Variante : {} (empreinte de résultat {}, taste_xxh3 {}), rejouée sans les {:.0} % de boucles mises à l'écart ;\nappris sur les boucles restantes, toutes équipes réunies, deux curseurs.\nTypes neutralisés (moins de {} boucles) : {}.\nBoucles comptées : {:?}.\nBanc : commit {}, le {}.",
+        "Variante : {} (empreinte de résultat {}, taste_xxh3 {}), {}, toutes équipes réunies, deux curseurs.\nTypes neutralisés (moins de {} boucles) : {}.\nBoucles comptées : {:?}.\nBanc : commit {}, le {}.",
         r.variant.name,
         r.fingerprint,
         r.variant.taste_xxh3,
-        a.holdout_share * 100.0,
+        holdout,
         a.min_loops,
         RIDES
             .iter()
