@@ -744,7 +744,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             );
             anyhow::ensure!(
                 ok,
-                "l'empreinte de `base` n'est pas celle de la sonde 4c ({SONDE_4C_BASE_FINGERPRINT}) : le moteur                  `Classic` n'est plus celui de 1.10 ; chercher, ne pas lire la suite"
+                "l'empreinte de `base` n'est pas celle de la sonde 4c ({SONDE_4C_BASE_FINGERPRINT}) : le moteur `Classic` n'est plus celui de 1.10 ; chercher, ne pas lire la suite"
             );
         }
         if at_sonde && v.name == "svc" {
