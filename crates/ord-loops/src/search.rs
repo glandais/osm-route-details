@@ -182,8 +182,6 @@ pub(crate) struct Weighter<'a> {
     /// λ en 256es.
     lambda_q8: u64,
     mt: [u32; 256],
-    /// Plus petit `w / len_dm` des chaînes (poids au goût de l'équipe s'il y en a un, sinon ceux de la fenêtre).
-    base_min: f64,
 }
 
 impl<'a> Weighter<'a> {
@@ -202,7 +200,6 @@ impl<'a> Weighter<'a> {
         let fam = (familiarity.clamp(0.0, 1.0) * 1000.0).round() as u32;
         // Indépendant du mode : le goût s'applique aussi en découverte dès qu'il y a une surcouche (décision 1 du §9.1).
         let taste = team.and_then(|t| t.win.taste_of(ride));
-        let base_min = team.and_then(|t| t.win.min_w_per_dm(ride)).unwrap_or(v.min_w_per_dm[ride.index()]);
         Self {
             ride,
             mode,
@@ -212,28 +209,6 @@ impl<'a> Weighter<'a> {
             tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
-            base_min,
-        }
-    }
-
-    /// Facteur minimal de coût par décimètre (lot 4, 4c, §15.0 point 11) : `chain(c) ≥ min_factor() · len_dm(c)` pour
-    /// toute chaîne (hors strict, que les triangles ne jouent pas). En équipe d'abord, `chain(c)` vaut `λ · reste +
-    /// M[z] · a + b`, donc au moins `min(1, λ, min M / 256)` fois le poids de base ; en découverte, le poids de base. Le
-    /// 0,999 absorbe l'arrondi `+ 128 >> 8` des multiplications.
-    pub fn min_factor(&self) -> f64 {
-        let min_m = u64::from(self.mt.iter().copied().min().unwrap_or(256));
-        let team = if self.ct.is_none() {
-            1.0
-        } else if self.mode == Mode::Strict {
-            min_m.min(256) as f64 / 256.0
-        } else {
-            self.lambda_q8.min(min_m).min(256) as f64 / 256.0
-        };
-        // En dessous de 0,1 la marge d'arrondi de `base_min` ne couvre plus l'arrondi : pas de borne.
-        if team < 0.1 {
-            0.0
-        } else {
-            0.999 * self.base_min * team
         }
     }
 
@@ -958,6 +933,36 @@ impl CorGrid {
                 self.mark_point((p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1)));
             }
         }
+    }
+}
+
+/// Facteur minimal de coût par décimètre de la recherche point à point (lot 4, 4c, §15.0 point 11, §15.5) : 0,999 fois le
+/// plus petit `chain(c) / len_dm(c)` des états fixés par l'arbre aller `t1` (chaînes de longueur non nulle, permises),
+/// 0 s'il n'y en a pas.
+///
+/// Écart au §15.5 (§15.19 de la note) : le minimum est lu sur T1 et non sur la fenêtre. T1 fixe tout état atteignable du
+/// départ dans le disque, donc (au prédécesseur près de la règle de rétro-virage) toute chaîne qu'une jambe 2 peut
+/// relâcher : la borne vaut pour elles **sans** marge d'arrondi (`chain` est le poids exact, équipe et goût compris), et
+/// elle ne dépend pas de la fenêtre servie (une fenêtre plus grande du cache rend la même sortie, I4). Le 0,999 absorbe
+/// l'écart entre le vol d'oiseau dans le plan local et les longueurs arrondies au décimètre.
+pub(crate) fn t1_min_factor(cx: &Ctx<'_>, t1: &Tree) -> f64 {
+    let v = cx.v;
+    let mut m = f64::INFINITY;
+    for &f in &t1.settled {
+        let c = f >> 1;
+        let l = v.len_dm[c as usize];
+        if l == 0 {
+            continue;
+        }
+        let w = cx.w.chain(c);
+        if w != INF {
+            m = m.min(f64::from(w) / f64::from(l));
+        }
+    }
+    if m.is_finite() {
+        0.999 * m
+    } else {
+        0.0
     }
 }
 

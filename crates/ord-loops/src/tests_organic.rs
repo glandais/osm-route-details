@@ -8,8 +8,8 @@ use ord_graph::util::SplitMix64;
 
 use crate::cost::Taste;
 use crate::search::{
-    astar, astar_p2p, make_anchor, tree_backward, tree_forward, Anchor, Ban, CorGrid, Ctx, Disc, Forbidden,
-    P2pEnd, P2pTarget, ViewWs, Weighter, Workspace, BAN, NONE, P2P_SLACK, TAIL,
+    astar, astar_p2p, make_anchor, t1_min_factor, tree_backward, tree_forward, Anchor, Ban, CorGrid, Ctx,
+    Disc, Forbidden, P2pEnd, P2pTarget, ViewWs, Weighter, Workspace, BAN, NONE, P2P_SLACK, TAIL,
 };
 use crate::team::{TeamCtx, TeamData, WindowTeam};
 use crate::tests::{engine_of, engine_zoomed, ll, overlay_of, pt, tags};
@@ -104,8 +104,10 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
                 .unwrap()
             };
             let zero = run(&tgt(0, 0.0), false);
-            let safe = run(&tgt(P2P_SLACK, w.min_factor()), true);
-            let bare = run(&tgt(0, w.min_factor()), true);
+            let f_min = t1_min_factor(&cx, t1);
+            assert!(f_min > 0.0, "facteur nul");
+            let safe = run(&tgt(P2P_SLACK, f_min), true);
+            let bare = run(&tgt(0, f_min), true);
             assert_eq!(zero.end == P2pEnd::Found, safe.end == P2pEnd::Found, "{n1} -> {n2}");
             if zero.end == P2pEnd::Found {
                 assert_eq!(zero.cost, safe.cost, "{n1} -> {n2} : l'heuristique n'est pas admissible");
@@ -121,48 +123,82 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
     eprintln!("paires {pairs}, plus chères sans la marge {worse_without_slack}");
 }
 
-/// Test 6 : `chain(c) ≥ f_min · len_dm(c)` pour toutes les chaînes d'une fenêtre, trois modes, familiarités {0 ; 0,5 ;
-/// 1}, λ {1 ; 3 ; 5}, avec et sans goût d'équipe.
+/// Test 6 : `chain(c) ≥ f_min · len_dm(c)` pour toutes les chaînes que l'arbre aller atteint, trois modes,
+/// familiarités {0 ; 0,5 ; 1}, λ {1 ; 3 ; 5}, avec et sans goût d'équipe ; et le facteur ne dépend pas de la fenêtre
+/// (celle des tuiles nécessaires rend celui du graphe entier, I4).
 #[test]
 fn the_minimum_factor_bounds_every_chain_cost() {
     let e = engine_zoomed(&mut scenario_graph(7), 11, scenario_params());
     let team = TeamData::build(&e, &overlay_of(&e, &scenario_rows(&e, 11))).unwrap();
+    let mut checked = 0usize;
     for vi in 0..2 {
-        let win = e.full_window(vi);
+        let full = e.full_window(vi);
         for taste in [None, Some(Taste::common()), Some(Taste::neutral())] {
-            let wt = WindowTeam::build_with_taste(&e, &win, &team, taste.as_ref());
             for ride in crate::engine::rides_of_view(vi) {
+                let mut r = loop_request(ll(3000.0, 3000.0), 6000.0, Mode::Discovery);
+                r.ride_type = *ride;
+                let plan = e.plan(&r, 500.0);
+                let need = e.build_window(plan.view, &plan.need, &mut || false).unwrap();
                 for mode in [Mode::Strict, Mode::TeamFirst, Mode::Discovery] {
                     for fam in [0.0f32, 0.5, 1.0] {
                         for lambda in [256u32, 768, 1280] {
-                            let w = Weighter::new(
-                                &win.v,
-                                Some(TeamCtx { data: &team, win: &wt }),
-                                *ride,
-                                mode,
-                                fam,
-                                lambda,
-                            );
-                            let f_min = w.min_factor();
-                            assert!(f_min > 0.0, "facteur nul");
-                            for c in 0..win.v.n_chains as u32 {
-                                let wc = w.chain(c);
-                                let l = win.v.len_dm[c as usize];
-                                if wc == u32::MAX || l == 0 {
-                                    continue;
-                                }
-                                assert!(
-                                    f64::from(wc) >= f_min * f64::from(l),
-                                    "{ride:?} {mode:?} f={fam} λ={lambda} taste={}: chain {c} = {wc} < {f_min} * {l}",
-                                    taste.is_some()
+                            let factor = |win: &crate::Window, check: bool| {
+                                let wt = WindowTeam::build_with_taste(&e, win, &team, taste.as_ref());
+                                let v = &win.v;
+                                let w = Weighter::new(
+                                    v,
+                                    Some(TeamCtx { data: &team, win: &wt }),
+                                    *ride,
+                                    mode,
+                                    fam,
+                                    lambda,
                                 );
+                                let s_snap =
+                                    e.snap(win, r.start, &|c| w.chain(c) != u32::MAX, 0).unwrap().unwrap();
+                                let sa: Anchor = make_anchor(&e, v, &w, s_snap);
+                                let s_e7 = r.start.to_e7();
+                                let disc = Disc::new(s_e7, s_e7, r.distance_m, true);
+                                let forb = Forbidden::default();
+                                let esc = Cell::new(false);
+                                let cx =
+                                    Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+                                let mut ws = Workspace::new();
+                                let t1 = &mut ws.views[vi].t1;
+                                tree_forward(&cx, t1, &mut || false).unwrap();
+                                let f_min = t1_min_factor(&cx, t1);
+                                if check {
+                                    for &f in &t1.settled {
+                                        let c = f >> 1;
+                                        let (wc, l) = (w.chain(c), v.len_dm[c as usize]);
+                                        if wc == u32::MAX || l == 0 {
+                                            continue;
+                                        }
+                                        assert!(
+                                            f64::from(wc) >= f_min * f64::from(l),
+                                            "{ride:?} {mode:?} f={fam} λ={lambda} taste={}: chain {c} = {wc} < {f_min} * {l}",
+                                            taste.is_some()
+                                        );
+                                    }
+                                }
+                                f_min
+                            };
+                            let f_full = factor(&full, true);
+                            if mode != Mode::Strict {
+                                assert!(f_full > 0.0, "facteur nul");
                             }
+                            assert_eq!(
+                                f_full.to_bits(),
+                                factor(&need, false).to_bits(),
+                                "le facteur dépend de la fenêtre"
+                            );
+                            checked += 1;
                         }
                     }
                 }
             }
         }
     }
+    assert!(checked > 100);
 }
 
 /// Aller de 20 km vers le nord (x = 0), retour par une parallèle à 200 m ou par une route à 3 km, 1,28 fois plus longue
@@ -495,7 +531,6 @@ fn a_comb_apex_is_a_spike_and_is_repaired_at_the_last_junction_500_m_back() {
             o: &o,
             d,
             tail_dm: 0,
-            f_min: 0.0,
         };
         assert!(crate::figures::is_spike(&fx, &arr, &dep), "le retour par la même route est un épi");
         let prefix = crate::figures::repair_prefix(&fx, &arr);

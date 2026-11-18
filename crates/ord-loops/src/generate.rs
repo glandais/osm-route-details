@@ -320,7 +320,6 @@ fn generate_inner<B: AsRef<[u8]>>(
     }
     // Couloir de la lentille : demi-largeur en mètres, 0 sans couloir.
     let cor_w_m = org.map_or(0.0, |o| f64::from(o.tune.corridor_w_milli) / 1000.0 * d);
-    let f_min = w.min_factor();
     let mut scored: Vec<Scored> = Vec::new();
     let mut rejected: BTreeMap<Violation, u32> = BTreeMap::new();
     let mut exhausted = false;
@@ -532,19 +531,7 @@ fn generate_inner<B: AsRef<[u8]>>(
         if let (Some(o), Some(st)) = (org.as_ref(), tri.as_mut()) {
             if !st.done && !exhausted {
                 let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc };
-                let fx = Fixed {
-                    e,
-                    win,
-                    team,
-                    r,
-                    cx: &cx,
-                    s_snap: &s_snap,
-                    e_snap: &e_snap,
-                    o,
-                    d,
-                    tail_dm,
-                    f_min,
-                };
+                let fx = Fixed { e, win, team, r, cx: &cx, s_snap: &s_snap, e_snap: &e_snap, o, d, tail_dm };
                 let mut sc = Scratch { ta, ban, ban_gen, cor };
                 figures::triangle_phase(
                     &fx,

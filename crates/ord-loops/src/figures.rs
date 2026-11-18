@@ -13,8 +13,8 @@ use crate::engine::{Engine, Snap, ViewData};
 use crate::generate::{overlap_share, scored_route, steps_of, Scored};
 use crate::geo::{heading_deg, turn_angle_deg};
 use crate::search::{
-    astar, astar_p2p, retro_ok, turn_cost, Ban, CorGrid, Ctx, P2pEnd, P2pTarget, Tree, BAN, NONE, P2P_SLACK,
-    TAIL,
+    astar, astar_p2p, retro_ok, t1_min_factor, turn_cost, Ban, CorGrid, Ctx, P2pEnd, P2pTarget, Tree, BAN,
+    NONE, P2P_SLACK, TAIL,
 };
 use crate::team::TeamCtx;
 use crate::verify::{check_route_in, Violation};
@@ -98,8 +98,6 @@ pub(crate) struct Fixed<'a, B: AsRef<[u8]>> {
     pub o: &'a Organic,
     pub d: f64,
     pub tail_dm: u32,
-    /// Plus petit coût par décimètre (`Weighter::min_factor`).
-    pub f_min: f64,
 }
 
 /// Les tableaux de travail de la vue : arbre de recherche, interdits, couloir.
@@ -293,6 +291,7 @@ fn run_leg2<B: AsRef<[u8]>>(
     sc: &mut Scratch<'_>,
     leg1: &[u32],
     n2: u32,
+    f_min: f64,
     budget: &mut u64,
     fig: &mut FigureDiagnostics,
     stop: &mut dyn FnMut() -> bool,
@@ -319,7 +318,7 @@ fn run_leg2<B: AsRef<[u8]>>(
         xy: cx.disc.xy_of(v.pos[n2 as usize]),
         t1: t1.node_best(n2).map_or(0, |x| t1.get(x)),
         t2: t2.node_best(n2).map_or(0, |x| t2.get(x)),
-        f_min: fx.f_min,
+        f_min,
         slack: P2P_SLACK,
     };
     let cap = t1.settled.len() as u64;
@@ -446,6 +445,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
     stop: &mut dyn FnMut() -> bool,
 ) -> Result<(), Failure> {
     let (v, tune) = (fx.cx.v, &fx.o.tune);
+    // Le facteur minimal de la passe, lu sur son arbre aller à la première recherche (§15.19 : ni la fenêtre, ni une
+    // marge d'arrondi).
+    let mut f_min_cell: Option<f64> = None;
     let cands = candidates(fx, t1, t2);
     fig.candidates += cands.len() as u32;
     let pairs = pairs_of(fx, t1, t2, &cands, st.draw.clockwise);
@@ -497,8 +499,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
             };
             st.searched.push((pair.n1, pair.n2));
             fig.searched += 1;
+            let f_min = *f_min_cell.get_or_insert_with(|| t1_min_factor(fx.cx, t1));
             let mut leg1 = t1.path_to(pair.b1);
-            let mut leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, budget, fig, stop)? {
+            let mut leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, f_min, budget, fig, stop)? {
                 Leg::Found(l) => l,
                 Leg::None => continue,
                 Leg::OutOfBudget => return Ok(()),
@@ -511,7 +514,7 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                     continue;
                 };
                 leg1.truncate(i);
-                leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, budget, fig, stop)? {
+                leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, f_min, budget, fig, stop)? {
                     Leg::Found(l) => l,
                     Leg::None => {
                         fig.spikes_dropped += 1;

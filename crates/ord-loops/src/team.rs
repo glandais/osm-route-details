@@ -360,8 +360,6 @@ pub struct WindowTeam {
     /// Sonde du goût (lot 4, §12) : poids sans équipe de chaque chaîne **au goût**, par type ; vide = pas de goût.
     w_taste: [Vec<u32>; 3],
     taste: Option<Box<Taste>>,
-    /// Plus petit `w_taste / len_dm` par type, avec goût (lot 4, 4c) ; 0 sans.
-    min_w: [f64; 3],
 }
 
 impl WindowTeam {
@@ -434,11 +432,7 @@ impl WindowTeam {
             per[ride.index()] = chains;
             w_taste[ride.index()] = wt;
         }
-        let mut min_w = [0.0f64; 3];
-        for &ride in rides_of_view(win.vi) {
-            min_w[ride.index()] = crate::window::min_ratio(&w_taste[ride.index()], &v.len_dm);
-        }
-        Self { per, w_taste, taste: taste.map(|t| Box::new(t.clone())), min_w }
+        Self { per, w_taste, taste: taste.map(|t| Box::new(t.clone())) }
     }
 
     /// Octets que tiendront les agrégats de `win` (une `ChainTeam` par chaîne et par type de sortie de la vue) : de
@@ -459,11 +453,6 @@ impl WindowTeam {
     pub fn bytes(&self) -> usize {
         self.per.iter().map(|c| c.capacity() * std::mem::size_of::<ChainTeam>()).sum::<usize>()
             + self.w_taste.iter().map(|w| w.capacity() * std::mem::size_of::<u32>()).sum::<usize>()
-    }
-
-    /// Plus petit poids au goût par décimètre des chaînes pour `ride`, `None` sans goût (la fenêtre donne alors le sien).
-    pub fn min_w_per_dm(&self, ride: RideType) -> Option<f64> {
-        (!self.w_taste[ride.index()].is_empty()).then(|| self.min_w[ride.index()])
     }
 
     /// `(poids au goût des chaînes, table du type)` si un goût a été donné et que la vue sert ce type.

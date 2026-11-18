@@ -14,27 +14,6 @@ use crate::engine::{rides_of_view, Engine, Snap, ViewData};
 use crate::geo::{haversine_m, point_segment, LatLon, Local, M_PER_DEG};
 use crate::{Request, RideType};
 
-/// Marge d'arrondi du poids d'une chaîne : `Weighter::chain` arrondit deux produits à l'entier (`+ 128 >> 8`), donc
-/// pèse au plus 1 de moins que le produit exact ; 16 unités de poids couvrent ce défaut tant que le facteur de la requête
-/// reste au moins 0,1 (`Weighter::min_factor` rend 0 en dessous).
-pub(crate) const ROUND_MARGIN: u32 = 16;
-
-/// Plus petit `(w − ROUND_MARGIN) / len_dm` sur les chaînes de longueur non nulle (poids ramené à 0 au plus bas) ; 0 si
-/// `w` est vide ou si aucune chaîne n'a de longueur. Borne du poids par décimètre, arrondis compris.
-pub(crate) fn min_ratio(w: &[u32], len_dm: &[u32]) -> f64 {
-    let mut m = f64::INFINITY;
-    for (&x, &l) in w.iter().zip(len_dm) {
-        if l > 0 {
-            m = m.min(f64::from(x.saturating_sub(ROUND_MARGIN)) / f64::from(l));
-        }
-    }
-    if m.is_finite() {
-        m
-    } else {
-        0.0
-    }
-}
-
 /// Octets par chaîne d'une fenêtre : tableaux (≈ 69), grilles d'accroche et marge.
 const WINDOW_BYTES_PER_CHAIN: usize = 84;
 
@@ -64,12 +43,6 @@ impl Window {
 
     pub fn n_chains(&self) -> usize {
         self.v.n_chains
-    }
-
-    /// Plus petit `(poids − marge d'arrondi) / len_dm` des chaînes de la fenêtre pour `ride`, sans goût d'équipe (0 si la
-    /// vue ne sert pas ce type) : calculé une fois, à la construction (lot 4, 4c).
-    pub fn min_w_per_dm(&self, ride: RideType) -> f64 {
-        self.v.min_w_per_dm[ride.index()]
     }
 
     pub fn tiles(&self) -> &[u32] {
@@ -459,10 +432,6 @@ impl<B: AsRef<[u8]>> Engine<B> {
         let complete: Vec<bool> =
             pos.iter().map(|p| tiles.binary_search(&tile_key_of(p, zoom)).is_ok()).collect();
 
-        let mut min_w_per_dm = [0.0f64; 3];
-        for &r in rides {
-            min_w_per_dm[r.index()] = min_ratio(&w_osm[r.index()], &len_dm);
-        }
         let v = ViewData {
             n_nodes,
             n_chains: n,
@@ -479,7 +448,6 @@ impl<B: AsRef<[u8]>> Engine<B> {
             head,
             deg,
             w_osm,
-            min_w_per_dm,
             gid,
             ngid,
             complete,

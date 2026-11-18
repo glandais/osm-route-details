@@ -124,9 +124,6 @@ pub(crate) struct ViewData {
     pub deg: Vec<u8>,
     /// Poids sans équipe par type servi par la vue, indexé par `RideType::index` (vide si non servi).
     pub w_osm: [Vec<u32>; 3],
-    /// Plus petit `w_osm / len_dm` des chaînes de longueur non nulle, par type (0 si `w_osm` est vide) : la borne du
-    /// facteur minimal de coût des triangles (lot 4, 4c, §15.0 point 11).
-    pub min_w_per_dm: [f64; 3],
     /// Id global de chaque chaîne et de chaque nœud de vue (croissants).
     pub gid: Vec<u32>,
     pub ngid: Vec<u32>,
