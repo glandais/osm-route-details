@@ -13,6 +13,7 @@ mod input;
 mod likeness;
 mod record;
 mod report;
+mod shape_common;
 mod taste_common;
 mod teams;
 mod windows;
@@ -55,6 +56,8 @@ enum Command {
     Likeness(likeness::LikenessArgs),
     /// Exporte la table de goût commune du moteur depuis les rapports de la chaîne commune rejouée (lot 4, 3b).
     TasteCommon(taste_common::TasteCommonArgs),
+    /// Exporte la répartition générale des figures du moteur depuis le rapport `base` (lot 4, 4c).
+    ShapeCommon(shape_common::ShapeCommonArgs),
 }
 
 /// Le goût de base du moteur d'un banc (`--base-taste`).
@@ -280,6 +283,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Command::Likeness(a)) => likeness::run(&a),
         Some(Command::TasteCommon(a)) => taste_common::run(&a),
+        Some(Command::ShapeCommon(a)) => shape_common::run(&a),
         None => run_bench(cli.bench),
     }
 }

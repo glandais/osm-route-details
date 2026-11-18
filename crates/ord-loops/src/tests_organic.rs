@@ -566,3 +566,22 @@ fn the_choice_prefers_the_drawn_figure_then_an_absent_one_at_a_close_score() {
     assert_eq!(crate::figures::choose(&e, only_lens, true, 1.0).len(), 1);
     let _ = (Mode::Strict, ZOOMS);
 }
+
+/// Les constantes générales (écrites par `shape-common`) : MTB sans triangle, les deux autres types avec une part et une
+/// loi croissantes.
+#[test]
+fn the_general_mix_has_triangles_for_road_and_gravel_and_none_for_mtb() {
+    assert_eq!(FigureMix::general(RideType::Mtb), FigureMix::LENS_ONLY);
+    // Les constantes sont la répartition des comptes : ROAD 1 098 triangles sur 1 936 boucles à k ≤ 2.
+    let counts = crate::shape_common::SHAPE_COUNTS;
+    for (ty, ride) in [RideType::Road, RideType::Gravel].into_iter().enumerate() {
+        let want =
+            (256.0 * f64::from(counts[ty][1]) / f64::from(counts[ty][0] + counts[ty][1])).round() as u16;
+        assert_eq!(FigureMix::general(ride).tri_q8, want);
+    }
+    for ride in [RideType::Road, RideType::Gravel] {
+        let m = FigureMix::general(ride);
+        assert!(m.tri_q8 > 64 && m.tri_q8 < 192, "{ride:?} : {}", m.tri_q8);
+        assert!(m.rd_tri_milli.windows(2).all(|w| w[0] < w[1]), "{ride:?} : {:?}", m.rd_tri_milli);
+    }
+}
