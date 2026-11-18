@@ -2,7 +2,9 @@
 //! Wasserstein. **Aucune dépendance au graphe** ; tout est testé sur des figures synthétiques (§11.5 et §11.7 de
 //! `docs/design/technique/ord-loops-lot4.md`).
 
-pub use ord_graph_match::plane::{cumulative, dist, heading_deg, length, point_at, Pt};
+pub use ord_graph_match::plane::{
+    dist, douglas_peucker, far_of, heading_deg, length, point_at, vertex_indices, vertices, Pt,
+};
 
 /// Forme d'une trace ouverte au départ, `pts[0]` étant le départ.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,16 +44,7 @@ pub fn shape(pts: &[Pt]) -> Shape {
             sinuosity_10: None,
         };
     }
-    let cum = cumulative(pts);
-    let o = pts[0];
-    let (mut rmax, mut at) = (0.0f64, 0usize);
-    for (i, p) in pts.iter().enumerate().skip(1) {
-        let d = dist(*p, o);
-        if d > rmax {
-            rmax = d;
-            at = i;
-        }
-    }
+    let (r_over_d, far_pos) = far_of(pts);
     let a = gauss_area(pts).abs();
     let kept = vertex_indices(pts, 0.10);
     let perimeter = if kept.len() >= 2 {
@@ -63,13 +56,13 @@ pub fn shape(pts: &[Pt]) -> Shape {
     };
     Shape {
         l_poly: l,
-        r_over_d: rmax / l,
-        far_pos: cum[at] / l,
+        r_over_d,
+        far_pos,
         compactness: 4.0 * std::f64::consts::PI * a / (l * l),
         vertices: vertices(pts, 0.05),
         vertices_10: vertices(pts, 0.10),
         vertices_legacy: vertices_legacy(pts, 0.05),
-        detour_far: (rmax > 0.0).then(|| cum[at] / l / (rmax / l)),
+        detour_far: (r_over_d > 0.0).then(|| far_pos / r_over_d),
         sinuosity_10: (perimeter > 0.0).then(|| l / perimeter),
     }
 }
@@ -88,17 +81,6 @@ pub fn gauss_area(pts: &[Pt]) -> f64 {
     s / 2.0
 }
 
-/// Distance d'un point au segment `a b` (projection bornée) ; segment dégénéré : distance au point.
-fn dist_to_segment(p: Pt, a: Pt, b: Pt) -> f64 {
-    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-    let l2 = dx * dx + dy * dy;
-    if l2 <= 0.0 {
-        return dist(p, a);
-    }
-    let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0);
-    dist(p, [a[0] + t * dx, a[1] + t * dy])
-}
-
 /// Distance d'un point à la **droite** `a b` ; droite dégénérée : distance au point (celle de `shapes.py`).
 fn dist_to_line(p: Pt, a: Pt, b: Pt) -> f64 {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
@@ -108,76 +90,6 @@ fn dist_to_line(p: Pt, a: Pt, b: Pt) -> f64 {
     } else {
         dist(p, a)
     }
-}
-
-/// Douglas-Peucker itératif (pile) sur les indices `a..b` : rend les indices gardés, triés. La première coupe de
-/// chaque morceau est le point le plus loin ; le premier maximum strict gagne.
-fn douglas_peucker(
-    pts: &[Pt],
-    seeds: &[usize],
-    tol: f64,
-    far: impl Fn(Pt, Pt, Pt) -> f64,
-) -> std::collections::BTreeSet<usize> {
-    let mut keep: std::collections::BTreeSet<usize> = seeds.iter().copied().collect();
-    let mut stack: Vec<(usize, usize)> = seeds.windows(2).map(|w| (w[0], w[1])).collect();
-    while let Some((a, b)) = stack.pop() {
-        if b <= a + 1 {
-            continue;
-        }
-        let (mut best, mut bi) = (-1.0f64, a);
-        for (i, p) in pts.iter().enumerate().take(b).skip(a + 1) {
-            let d = far(*p, pts[a], pts[b]);
-            if d > best {
-                best = d;
-                bi = i;
-            }
-        }
-        if best > tol {
-            keep.insert(bi);
-            stack.push((a, bi));
-            stack.push((bi, b));
-        }
-    }
-    keep
-}
-
-/// **Sommets d'une trace, la définition figée** (§11.5.3). Sur la polyligne **ouverte au départ** `p[0..n]` (arrivée
-/// non refermée) et `tol = tol_share × D` (`D` = longueur de la polyligne ; 0,05 pour `vertices`, 0,10 pour
-/// `vertices_10`) :
-/// 1. `f` = indice du sommet le plus éloigné du départ (premier maximum strict) ; si `|p[f]| < tol`, 0 sommet ;
-/// 2. garder `{0, f, n − 1}`, puis Douglas-Peucker récursif sur `[0, f]` et `[f, n − 1]`, avec la distance d'un point
-///    **au segment** (projection bornée ; segment dégénéré : distance au point), coupe si `distance > tol` ;
-/// 3. `vertices = |gardés| − 2` (le départ et son double ne comptent pas).
-///
-/// Aller-retour = 1, triangle = 2, quadrilatère partant d'un coin = 3 ; cercle = 3 ; lentille = 1 + un par côté
-/// dont la flèche dépasse `tol`.
-pub fn vertices(pts: &[Pt], tol_share: f64) -> u32 {
-    (vertex_indices(pts, tol_share).len() as u32).saturating_sub(2)
-}
-
-/// Les indices gardés par la règle de [`vertices`] (le départ, les sommets, l'arrivée), triés ; vide si la règle ne
-/// garde rien (moins de trois points, ou point le plus éloigné sous la tolérance). `vertices = len − 2`.
-pub fn vertex_indices(pts: &[Pt], tol_share: f64) -> Vec<usize> {
-    let n = pts.len();
-    if n < 3 {
-        return Vec::new();
-    }
-    let tol = tol_share * length(pts);
-    let o = pts[0];
-    let (mut rmax, mut f) = (0.0f64, 0usize);
-    for (i, p) in pts.iter().enumerate().skip(1) {
-        let d = dist(*p, o);
-        if d > rmax {
-            rmax = d;
-            f = i;
-        }
-    }
-    if rmax < tol || f == 0 {
-        return Vec::new();
-    }
-    let mut seeds = vec![0, f, n - 1];
-    seeds.dedup();
-    douglas_peucker(pts, &seeds, tol, dist_to_segment).into_iter().collect()
 }
 
 /// La règle de `shapes.py` (`dp`) portée exactement : corde `p[0] → p[n − 1]`, distance à la **droite** (au point si
@@ -417,6 +329,7 @@ pub fn wasserstein1_normalised(real: &[f64], generated: &[f64]) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ord_graph_match::plane::cumulative;
 
     /// Polyligne densifiée : un point tous les 10 m au plus, les sommets gardés.
     fn dense(corners: &[Pt]) -> Vec<Pt> {
