@@ -111,6 +111,8 @@ pub fn run(args: &BuildArgs) -> anyhow::Result<BuildReport> {
             mem_budget: args.mem_budget_mb.saturating_mul(1 << 20),
             tmp_parent: args.tmp_dir.clone().unwrap_or_else(|| out_dir.clone()),
         };
+        // Lots de blobs plafonnés à 1/64 du budget en octets compressés (≈ 1/4 du budget une fois décodés).
+        src = src.with_batch_bytes((opts.mem_budget / 64) as u64);
         let r = build_external(
             &mut src,
             &opts,

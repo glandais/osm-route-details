@@ -1,21 +1,21 @@
 # Graphe vélo OSM — construction hors mémoire : relevés
 
 > Relevés du 17 novembre 2026, protocole de [`ord-graph-build-hors-memoire.md`](ord-graph-build-hors-memoire.md) §10.
-> Binaire `release` de `4b08e99`. **[mesuré]** partout, sauf mention.
+> Binaire `release` de `4b08e99`, plus le plafond des lots en octets pour la seconde planète (§5.1). **[mesuré]** partout, sauf mention.
 
 ## 1. En bref
 
 | Critère (§10) | Relevé | Verdict |
 |---|---|---|
 | Mêmes octets qu'en mémoire | Région à 16, 256 et 1024 Mo ; France à 1024 Mo : **identiques** de la fin de l'en-tête au début de `STATS` | **Tenu** |
-| Pic ≤ budget + 0,3 Go | Budget 1 Gio : France **1,10 Gio**, Europe **1,25 Gio**, planète **2,86 Gio** avant la relecture | Tenu jusqu'à l'Europe ; **dépassé sur la planète** (§5) |
+| Pic ≤ budget + 0,3 Go | Budget 1 Gio : France **1,10 Gio**, Europe **1,25 Gio**, planète **2,86 Gio**, puis **1,49 Gio** avec le plafond des lots (§5.1), avant la relecture | Tenu jusqu'à l'Europe ; planète **+ 0,19 Gio** au-delà |
 | Mur ≤ 2 × en mémoire (France) | 104 s contre 69 s : **× 1,50** | **Tenu** |
 | Disque temporaire (§6) | France 5,67 Gio (estimé ≈ 5 Go) ; Europe **46,4 Gio** (estimé ≈ 35 Go) ; planète **139,6 Gio** | Europe **+ 33 %** : réseau 8,0 × la France, et non 6,5 × |
 | France en mémoire (calculé au lot 0 : 4,8 à 6,3 Go) | **4,53 Gio** à 16 fils | Sous la fourchette |
 
 La construction hors mémoire tient l'Europe dans **1,25 Gio** sur ce poste de 15 Gio, là où la construction en mémoire en
-demanderait ≈ 36 Go **[calculé : 4,53 Gio × 191,2 / 24,0 M arêtes]**. La planète passe en 1 h 48 sous 2,9 Gio (≈ 104 Go
-en mémoire **[calculé, même règle]**), mais au-dessus du budget : un écart encore inexpliqué (§5).
+demanderait ≈ 36 Go **[calculé : 4,53 Gio × 191,2 / 24,0 M arêtes]**. La planète passe en 1 h 42 sous 1,49 Gio, une fois
+les lots de blobs plafonnés en octets (§5.1). En mémoire, il faudrait ≈ 104 Go **[calculé, même règle]**.
 
 ## 2. Conditions
 
@@ -113,15 +113,43 @@ sur six tris (de 87 à 178 séries).
   PBF (× 3,5). E2–E4 croissent bien plus vite (× 9 à × 10,6). Dans E4, le CPU n'occupe plus que 873 s sur 1 644 s :
   le reste est de l'attente d'entrées-sorties. Les flux à fusionner ne tiennent plus en cache de pages, et six tris
   font une fusion à deux niveaux.
-- **Mémoire : budget dépassé.** Le pic avant la relecture est de **2,86 Gio**, contre 1,25 Gio pour l'Europe. Le
-  dépassement apparaît dès E1 : 2,78 Gio de pic, et 2,59 Gio encore résidents en fin de phase, contre 0,78 Gio pour
-  l'Europe. Ces ≈ 1,8 Gio restent résidents jusqu'à la fin d'E7. Ils retombent à 0,13 Gio quand les flux sont
-  fermés. Les tampons de tri d'E1 sont bornés à 1/2 + 1/8 du budget, et le lot de blobs à 64 blobs. **Cause non
-  établie.** Hypothèses à départager : la fragmentation des arènes de `malloc` (blocs décodés sur les fils `rayon`,
-  libérés sur le fil principal), ou une structure qui grandit avec le nombre de ways. Diagnostic proposé : reprendre
-  la planète avec `MALLOC_ARENA_MAX=2`, puis avec un profil de tas (`heaptrack`) limité à E1.
+- **Mémoire : budget dépassé, cause trouvée (§5.1).** Le pic avant la relecture est de **2,86 Gio**, contre 1,25 Gio
+  pour l'Europe. Le dépassement apparaît dès E1 : 2,78 Gio de pic, et 2,59 Gio encore résidents en fin de phase,
+  contre 0,78 Gio pour l'Europe.
 - **Pic `time -v`** : 13,2 Gio. Ce sont les pages du fichier projeté par `mmap` lors de la relecture, comme pour
   l'Europe (§4).
 
-Sur ce poste (15 Gio), la planète se construit donc. Le critère « budget + 0,3 Go » n'est pas tenu à cette échelle
-tant que l'écart n'est pas expliqué.
+### 5.1 Cause et correctif : lots de blobs plafonnés en octets
+
+- **`MALLOC_ARENA_MAX=2` est écarté.** La construction ainsi relancée donne le même graphe en 1 h 57. Son pic avant
+  relecture est de 3,07 Gio, et 2,57 Gio restent résidents en fin d'E1 : l'allocateur n'y est pour rien.
+- **Les blobs de la planète sont 27 × plus gros.** `planet-dump-ng` écrit 53 331 blobs de 1,79 Mo compressés en
+  moyenne (3,98 Mo au plus). L'extrait Europe de Geofabrik en compte 545 883, de 65 Ko en moyenne.
+- **Le lot de blobs n'était borné qu'en nombre.** Il comptait 64 blobs (4 par fil), soit ≈ 115 Mo compressés pour la
+  planète, et ≈ 1,5 Gio une fois décodés, hors de tout budget.
+- **La sonde le confirme.** Sur les 4 premières minutes de la planète, avant que les tampons de tri ne se
+  remplissent, le pic est de 1 790 Mio avec 16 fils et de 432 Mio avec 4 fils (lots de 16 blobs).
+- **Le correctif** (`PbfSource::with_batch_bytes`) plafonne aussi le lot en octets du fichier, avec au moins un blob
+  par lot. La construction hors mémoire fixe ce plafond à 1/64 du budget, soit 16 Mo pour 1 Gio. Pour les extraits
+  Geofabrik, rien ne change (64 blobs ≈ 4 Mo). Andorre construite avec le plafond reste identique à develop.
+
+**Planète avec le plafond** (même PBF, budget 1 Gio, 16 fils) :
+
+| | Sans plafond | Avec plafond |
+|---|---|---|
+| Mur | 1 h 47 min 43 s | **1 h 42 min 10 s** |
+| CPU (utilisateur + système) | 7 798 s | 6 887 s |
+| Pic avant relecture | 2,86 Gio | **1,49 Gio** |
+| Pic en E1 / en fin d'E1 | 2,78 / 2,59 Gio | 1,21 / 0,84 Gio |
+| Arêtes, sommets, disque temporaire | 553 241 291, 430 003 277, 139,6 Gio | identiques |
+
+Le pic restant (1,49 Gio) est atteint en E2–E3. La fusion de `waynode` y tient la moitié du budget, et le tri de
+`waynodec` l'autre moitié, comme pour l'Europe (1,25 Gio). S'y ajoutent les nœuds décodés du lot : 16 Mo compressés,
+contre ≈ 4 Mo pour Geofabrik. Le critère « budget + 0,3 Go » (1,3 Gio) est donc dépassé de **0,19 Gio**. Deux façons
+de le tenir : un plafond de 1/256 du budget (4 Mo, autant qu'un lot Geofabrik), ou compter le lot décodé dans le
+budget des tris d'E2. La première ne réduit que le parallélisme du décodage. **[à mesurer]**
+
+Le plafond ne ralentit rien. Le mur baisse même de 5 %, et le CPU de 12 %. Moins de blobs décodés d'avance, cela
+veut dire moins de pages à toucher.
+
+Sur ce poste (15 Gio), la planète se construit en 1 h 42 sous 1,5 Gio, avec ≈ 200 Go de disque libre.

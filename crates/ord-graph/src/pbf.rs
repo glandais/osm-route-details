@@ -23,6 +23,10 @@ pub struct PbfSource {
     meta: SourceMeta,
     /// Blobs décodés par lot ; `None` : 4 par fil de rayon.
     batch_len: Option<usize>,
+    /// Plafond d'un lot en octets du fichier (blobs compressés) ; `None` : pas de plafond. Un lot décodé pèse
+    /// ≈ 14 × ses octets compressés, et les blobs vont de ≈ 65 Ko (Geofabrik) à ≈ 1,8 Mo (`planet-dump-ng`) :
+    /// sans plafond, 64 blobs de la planète décodés tiennent ≈ 1,5 Gio hors de tout budget.
+    batch_bytes: Option<u64>,
 }
 
 fn err(e: impl std::fmt::Display) -> BuildError {
@@ -60,7 +64,7 @@ impl PbfSource {
             meta.size += n as u64;
         }
         meta.xxh3 = hasher.digest();
-        Ok(Self { path: path.to_path_buf(), meta, batch_len: None })
+        Ok(Self { path: path.to_path_buf(), meta, batch_len: None, batch_bytes: None })
     }
 
     /// Fixe la taille des lots de blobs (au moins 1) : les tests la réduisent pour que même un PBF de trois
@@ -71,15 +75,38 @@ impl PbfSource {
         self
     }
 
+    /// Plafonne un lot à `n` octets du fichier (au moins un blob par lot), en plus du nombre de blobs : la
+    /// construction hors mémoire y met une part de son budget.
+    #[must_use]
+    pub fn with_batch_bytes(mut self, n: u64) -> Self {
+        self.batch_bytes = Some(n.max(1));
+        self
+    }
+
     /// Lots de blobs de données, dans l'ordre ; `f` rend `false` pour arrêter.
     fn batches(&self, mut f: impl FnMut(Vec<Blob>) -> Result<bool, BuildError>) -> Result<(), BuildError> {
         let batch_len = self.batch_len.unwrap_or_else(|| rayon::current_num_threads() * 4);
         let reader = BlobReader::from_path(&self.path).map_err(err)?;
         let mut batch = Vec::with_capacity(batch_len);
+        // Position dans le fichier du premier blob du lot (`from_path` donne la position de chaque blob).
+        let mut start = 0u64;
         for blob in reader {
             let blob = blob.map_err(err)?;
             if !matches!(blob.get_type(), BlobType::OsmData) {
                 continue;
+            }
+            let at = blob.offset().map_or(0, |o| o.0);
+            // Les blobs déjà dans le lot couvrent `at - start` octets : au plafond, le lot part sans ce blob.
+            if let Some(cap) = self.batch_bytes {
+                if !batch.is_empty()
+                    && at.saturating_sub(start) >= cap
+                    && !f(std::mem::replace(&mut batch, Vec::with_capacity(batch_len)))?
+                {
+                    return Ok(());
+                }
+            }
+            if batch.is_empty() {
+                start = at;
             }
             batch.push(blob);
             if batch.len() == batch_len && !f(std::mem::replace(&mut batch, Vec::with_capacity(batch_len)))? {

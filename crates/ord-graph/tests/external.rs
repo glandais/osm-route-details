@@ -338,10 +338,14 @@ fn mini_pbf_same_bytes() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/mini.osm.pbf");
     let dir = tempfile::tempdir().unwrap();
     let (mem, mem_stats) = in_memory(&mut PbfSource::open(&path).unwrap(), 11, dir.path());
-    for batch in [None, Some(1)] {
+    // Lots par défaut, d'un blob, ou plafonnés en octets (1 : un blob par lot ; 100 : coupure en cours de lot).
+    for (len, bytes) in [(None, None), (Some(1), None), (None, Some(1)), (None, Some(100))] {
         let mut src = PbfSource::open(&path).unwrap();
-        if let Some(n) = batch {
+        if let Some(n) = len {
             src = src.with_batch_len(n);
+        }
+        if let Some(n) = bytes {
+            src = src.with_batch_bytes(n);
         }
         let (ext, report) = external(&mut src, 11, 1, dir.path());
         assert_same_graph(&mem, &ext);
