@@ -468,6 +468,22 @@ Appliquées telles quelles, sans les rediscuter ; ce qui est codé est au §14.1
    références re-bénies (même point), puis séance en conteneur rejouée une fois (décision 8 du §9.5, faite : §14.16,
    point 33). La fusion elle-même se fait après, hors de ce travail.
 
+### 9.7 Décisions (2026-11-18, avant le 4c)
+
+Réponses du propriétaire aux questions du §15.18 (la spécification du 4c les prend comme recommandées, sauf les points 2 et 5,
+tranchés par l'orchestrateur du travail, comme la spécification le recommandait) :
+
+1. **Temps** : jugé **en conteneur** (C3 : P50 ≤ 0,56 s à 4 clients, ≤ 0,29 s en série) et **relatif au banc** (C1 : P50 ≤
+   1,15 × `svc`). On ne réduit pas le nombre de figures pour le temps.
+2. **Paires** : **4** par requête, lentille en repli ; `pairs:8` mesuré, retenu seulement s'il gagne 0,05 de W1 / IQR de r / D
+   sans manquer C1 (tranché par l'orchestrateur, recommandation de la spécification).
+3. **Réserve du fait (d)** : **levée** si `svc-org − common-org` ≤ +0,03 aux deux curseurs ; **maintenue** jusqu'à +0,054 ; au-delà,
+   pas de bascule, et la table commune organique est proposée au propriétaire (le codeur ne la fait pas).
+4. **Bascule** : **oui**, le défaut passe à `organic` dans un **commit à part** de la branche si A1 à A4, B1, B2, C1, C2 et D
+   tiennent, suivi de la séance en conteneur ; commit annulé (`git revert`) si C3 manque. La fusion reste au propriétaire.
+5. **Strict et aller simple** : lentille seule (`organic` sans effet), à rouvrir avec un banc strict (tranché par l'orchestrateur).
+6. **Après le 4c** : 4d si A1 tient ; sinon une étape « lentille au ρ* » avant le 4d.
+
 ---
 
 ## 10. Étapes, dans l'ordre
