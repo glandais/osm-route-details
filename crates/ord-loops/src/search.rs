@@ -832,8 +832,9 @@ pub(crate) struct CorGrid {
     cell: f64,
     half: f64,
     bits: Vec<u64>,
-    /// Gabarit de la dilatation : les décalages `(dx, dy)` en cases d'un disque de rayon `⌈w / cell⌉`.
+    /// Gabarit de la dilatation : les décalages `(dx, dy)` en cases d'un disque de rayon `radius = ⌈w / cell⌉`.
     stencil: Vec<(i32, i32)>,
+    radius: i32,
 }
 
 impl CorGrid {
@@ -859,7 +860,11 @@ impl CorGrid {
         } else {
             self.bits.clear();
             self.bits.resize(words, 0);
-            let r = (w_m / cell).ceil() as i32;
+        }
+        // Le gabarit suit le rayon, pas la trame : deux requêtes à la même trame (case bornée à 500 m, côté égal) peuvent
+        // demander deux rayons ; le garder d'une requête à l'autre ferait dépendre la sortie de la précédente.
+        let r = (w_m / cell).ceil() as i32;
+        if self.stencil.is_empty() || self.radius != r {
             self.stencil.clear();
             for dy in -r..=r {
                 for dx in -r..=r {
@@ -868,6 +873,7 @@ impl CorGrid {
                     }
                 }
             }
+            self.radius = r;
         }
         self.side = side;
         self.cell = cell;
@@ -1138,4 +1144,30 @@ pub(crate) fn astar_p2p(
         return Err(Stopped);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod cor_tests {
+    use super::CorGrid;
+
+    /// Une trame réutilisée rend ce que rend une trame neuve, même quand la case (bornée à 500 m) et le côté ne changent
+    /// pas d'une requête à l'autre et que le rayon de la dilatation change (D = 66,6 km puis 66,7 km, w = 0,03 D : 142
+    /// cases de côté, rayon 4 puis 5).
+    #[test]
+    fn a_reused_grid_dilates_with_the_radius_of_its_request() {
+        let marks = |g: &mut CorGrid| {
+            g.mark_point((0.0, 0.0));
+            (0..80).map(|k| g.hit((f64::from(k) * 50.0, 0.0))).collect::<Vec<bool>>()
+        };
+        let mut fresh = CorGrid::default();
+        fresh.begin(66_700.0, 2_001.0);
+        let want = marks(&mut fresh);
+        let mut reused = CorGrid::default();
+        reused.begin(66_600.0, 1_998.0);
+        let first = marks(&mut reused);
+        assert_eq!((reused.side, reused.cell), (fresh.side, fresh.cell), "même trame");
+        reused.begin(66_700.0, 2_001.0);
+        assert_eq!(marks(&mut reused), want);
+        assert_ne!(first, want, "les deux rayons diffèrent : le test ne prouve rien");
+    }
 }
