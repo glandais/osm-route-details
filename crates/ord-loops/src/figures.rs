@@ -454,10 +454,17 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
     let admissible = |st: &TriState, p: &Pair| (st.beta * p.est_m - fx.d).abs() <= est_tol * fx.d;
     fig.pairs_admissible += pairs.iter().filter(|p| admissible(st, p)).count() as u32;
     let mut rejected: BTreeMap<Violation, u32> = fig.tri_rejected.iter().copied().collect();
+    // Paires dont le triangle a été refusé pour un virage trop serré dans cette passe : le contrôle a ajouté des transitions
+    // interdites, la passe suivante peut les trouver autrement. Elles ne sont pas « cherchées » au sens de `max_pairs`
+    // pour la requête (écart au §15.7, §15.19), mais comptent pour la passe.
+    let mut sharp_now: Vec<(u32, u32)> = Vec::new();
     let res = (|| -> Result<(), Failure> {
         loop {
             if st.searched.len() >= usize::from(tune.max_pairs) || st.kept >= u32::from(tune.tri_keep) {
                 st.done = true;
+                return Ok(());
+            }
+            if st.searched.len() + sharp_now.len() >= usize::from(tune.max_pairs) {
                 return Ok(());
             }
             if *budget == 0 {
@@ -469,7 +476,11 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
             // Le rang : l'écart du r / D de la paire au r / D visé (par pas de 0,02), l'agrément, puis les ids.
             let best = pairs
                 .iter()
-                .filter(|p| !st.searched.contains(&(p.n1, p.n2)) && admissible(st, p))
+                .filter(|p| {
+                    !st.searched.contains(&(p.n1, p.n2))
+                        && !sharp_now.contains(&(p.n1, p.n2))
+                        && admissible(st, p)
+                })
                 .min_by(|a, b| {
                     let rank = |p: &Pair| ((p.r_pair - st.draw.rho).abs() / 0.02).floor() as i64;
                     rank(a)
@@ -479,7 +490,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         .then(a.n2.cmp(&b.n2))
                 });
             let Some(&pair) = best else {
-                st.done = true;
+                // Plus de paire admissible : fini, sauf celles qu'un virage serré a fait refuser, que la passe suivante
+                // reprend avec les transitions interdites en plus.
+                st.done = sharp_now.is_empty();
                 return Ok(());
             };
             st.searched.push((pair.n1, pair.n2));
@@ -574,10 +587,15 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                 for vcode in &chk.violations {
                     *rejected.entry(*vcode).or_insert(0) += 1;
                 }
+                let forb_before = new_forb.len();
                 for &i in &chk.sharp_at {
                     if i + 1 < step_field.len() && step_field[i] != step_field[i + 1] {
                         new_forb.push((step_field[i], step_field[i + 1]));
                     }
+                }
+                if new_forb.len() > forb_before {
+                    st.searched.retain(|&q| q != (pair.n1, pair.n2));
+                    sharp_now.push((pair.n1, pair.n2));
                 }
                 continue;
             }
