@@ -9,7 +9,7 @@ use std::time::Instant;
 use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph_match::profile::collect::Cap;
-use ord_graph_match::profile::learn::{Common, LearnParams, Learned, Mix};
+use ord_graph_match::profile::learn::{Common, LearnFigures, LearnParams, Learned, Mix};
 use ord_graph_match::profile::{first_kept_class_meters, Player, Stopped};
 use ord_loops::{
     generate_with_diagnostics_in, Failure, Request, Taste, TeamCtx, TeamData, Workspace, TASTE_CLASSES,
@@ -18,7 +18,7 @@ use ord_loops_check::Checker;
 use serde::Serialize;
 
 use super::play::{Eng, SharedWindows};
-use super::variants::{Svc, SvcCap};
+use super::variants::{Org, Svc, SvcCap};
 
 /// Première clé d'équipe des pas d'apprentissage : au-delà des `2t` et `2t + 1` des jeux (une clé neuve par pas).
 const FIRST_LEARN_KEY: u64 = 1 << 32;
@@ -35,6 +35,9 @@ pub struct BenchPlayer<'a> {
     pub next_key: &'a AtomicU64,
     /// Nanosecondes cumulées des jeux (temps de calcul des pas).
     pub cpu_ns: &'a AtomicU64,
+    /// Variante organique qui apprend organique (hors `lc`) : ses options réécrivent les figures des requêtes de
+    /// l'apprentissage, pour que l'équipe apprenne ce qu'on lui servira (`Org::rewrite`).
+    pub org: Option<Org>,
 }
 
 impl std::fmt::Debug for BenchPlayer<'_> {
@@ -55,6 +58,14 @@ impl BenchPlayer<'_> {
         req: &Request,
         taste: &Taste,
     ) -> Option<[f64; TASTE_CLASSES]> {
+        let rewritten;
+        let req = match &self.org {
+            Some(o) => {
+                rewritten = Request { figures: o.rewrite(req.figures), ..req.clone() };
+                &rewritten
+            }
+            None => req,
+        };
         let call = |ws: &mut Workspace, win: &ord_loops::Window, wt: &ord_loops::WindowTeam| {
             catch_unwind(AssertUnwindSafe(|| {
                 let tc = TeamCtx { data: self.team, win: wt };
@@ -165,8 +176,10 @@ pub fn learn_params(
     retain: ord_graph_match::profile::collect::RetainParams,
     cursors: [u32; 2],
     seed: u64,
+    figures: LearnFigures,
 ) -> LearnParams {
     LearnParams {
+        figures,
         normalize: svc.norm,
         cap: cap_of(svc),
         cursors,

@@ -15,8 +15,8 @@ use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_loops::{
-    generate_with_diagnostics_in, Engine, Failure, Request, RideType, Route, Taste, TeamCtx, TeamData,
-    Window, WindowCache, WindowTeam, Workspace,
+    generate_with_figures_in, Engine, Failure, FigureDiagnostics, Request, RideType, Route, Taste, TeamCtx,
+    TeamData, Window, WindowCache, WindowTeam, Workspace,
 };
 use ord_loops_check::{team_edge, Checker, TypeIndex};
 use serde::Serialize;
@@ -259,6 +259,90 @@ pub struct GenRoute {
     pub route_xxh3: String,
 }
 
+/// Ce que la génération organique a fait pour un jeu (lot 4, 4c, §15.11.3) : les compteurs de `FigureDiagnostics`, rien
+/// de privé.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct FigAgg {
+    pub applied: bool,
+    pub tri_first: bool,
+    pub rho_target: f64,
+    pub candidates: u32,
+    pub pairs: u32,
+    pub pairs_admissible: u32,
+    pub searched: u32,
+    pub leg2_found: u32,
+    pub leg2_capped: u32,
+    pub leg3_t2: u32,
+    pub leg3_astar: u32,
+    pub leg3_failed: u32,
+    pub complete: u32,
+    pub within_tol: u32,
+    pub spikes: u32,
+    pub spikes_repaired: u32,
+    pub spikes_dropped: u32,
+    /// Triangles refusés par le contrôle interne du moteur, par code.
+    pub tri_rejected: BTreeMap<String, u32>,
+    pub tri_scored: u32,
+    pub p2p_settled: u64,
+    pub leg3_settled: u64,
+    pub beta_final: f64,
+    /// Épis dans les triangles **gardés** (relevés sur la polyligne, §15.5) : le contrôle de l'angle sur les parcours rendus.
+    pub spikes_kept: u32,
+}
+
+impl FigAgg {
+    pub fn of(d: &FigureDiagnostics) -> Self {
+        Self {
+            applied: d.applied,
+            tri_first: d.tri_first,
+            rho_target: d.rho_target,
+            candidates: d.candidates,
+            pairs: d.pairs,
+            pairs_admissible: d.pairs_admissible,
+            searched: d.searched,
+            leg2_found: d.leg2_found,
+            leg2_capped: d.leg2_capped,
+            leg3_t2: d.leg3_t2,
+            leg3_astar: d.leg3_astar,
+            leg3_failed: d.leg3_failed,
+            complete: d.complete,
+            within_tol: d.within_tol,
+            spikes: d.spikes,
+            spikes_repaired: d.spikes_repaired,
+            spikes_dropped: d.spikes_dropped,
+            tri_rejected: d.tri_rejected.iter().map(|(v, n)| (v.code().to_string(), *n)).collect(),
+            tri_scored: d.tri_scored,
+            p2p_settled: d.p2p_settled,
+            leg3_settled: d.leg3_settled,
+            beta_final: d.beta_final,
+            spikes_kept: 0,
+        }
+    }
+}
+
+/// Épis d'une polyligne plane ouverte au départ (§15.5, lue sur le parcours rendu) : à chaque sommet gardé à 10 % de D
+/// (hors départ et arrivée), l'angle entre le cap des `spike_m` mètres d'arrivée et celui des `spike_m` mètres de départ
+/// atteint `spike_deg`.
+pub fn spikes_of(pts: &[ord_graph_match::plane::Pt], spike_m: f64, spike_deg: f64) -> u32 {
+    use ord_graph_match::plane::{cumulative, heading_deg};
+    let kept = ord_graph_match::plane::vertex_indices(pts, 0.10);
+    if kept.len() < 3 {
+        return 0;
+    }
+    let cum = cumulative(pts);
+    let mut n = 0;
+    for &i in &kept[1..kept.len() - 1] {
+        let before = (0..i).rev().find(|&j| cum[i] - cum[j] >= spike_m).unwrap_or(0);
+        let after = (i + 1..pts.len()).find(|&j| cum[j] - cum[i] >= spike_m).unwrap_or(pts.len() - 1);
+        let (h_in, h_out) = (heading_deg(pts[before], pts[i]), heading_deg(pts[i], pts[after]));
+        let d = (h_out - h_in + 540.0).rem_euclid(360.0) - 180.0;
+        if d.abs() >= spike_deg {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// Un jeu : une boucle, une valeur du curseur, une surcouche.
 #[derive(Clone, Debug, Serialize)]
 pub struct PlayRec {
@@ -279,6 +363,9 @@ pub struct PlayRec {
     /// Mètres par classe de goût du **premier** parcours gardé (sonde du goût, §12.2) ; en mémoire seulement.
     #[serde(skip)]
     pub first_class_m: Option<Vec<f64>>,
+    /// Génération organique (4c) : absent pour `Classic`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fig: Option<FigAgg>,
 }
 
 /// Une tâche : jouer la requête de la boucle `loop_idx` à la valeur `cursor` sur la surcouche de l'environnement.
@@ -377,11 +464,16 @@ pub fn play_one(
         best_shape: None,
         best_recovered: None,
         first_class_m: None,
+        fig: None,
     };
+    // Les compteurs de la génération organique, pris dans l'appel qui a rendu le résultat.
+    let fig_cell = std::cell::RefCell::new(FigureDiagnostics::default());
     let call = |ws: &mut Workspace, win: &Window, wt: &WindowTeam| {
         catch_unwind(AssertUnwindSafe(|| {
             let tc = TeamCtx { data: env.team, win: wt };
-            generate_with_diagnostics_in(ctx.engine, win, Some(tc), req, ws, &mut || false).0
+            let (res, _, fig) = generate_with_figures_in(ctx.engine, win, Some(tc), req, ws, &mut || false);
+            *fig_cell.borrow_mut() = fig;
+            res
         }))
     };
     let (mut win, mut wt) = ctx.wins.acquire(env.key, env.team, req, env.taste);
@@ -413,6 +505,9 @@ pub fn play_one(
         );
     }
     drop((win, wt));
+    if fig_cell.borrow().applied {
+        rec.fig = Some(FigAgg::of(&fig_cell.borrow()));
+    }
     let generation = match res {
         Err(_) => {
             rec.outcome = "PANIC".into();
@@ -437,6 +532,12 @@ pub fn play_one(
         let walk = Walk::from_route(gf, route);
         let trace = walk.trace(gf);
         let m = measure(gf, &walk, &trace, Some(rep.crossings));
+        if route.family == ord_loops::Family::Triangle {
+            if let Some(f) = rec.fig.as_mut() {
+                let t = ord_loops::OrganicTune::default();
+                f.spikes_kept += spikes_of(&trace.pts, f64::from(t.spike_m), f64::from(t.spike_deg));
+            }
+        }
         let rc = recovered(gf, real, &edge_set(&walk), env.overlay, &env.types, task.ride);
         if rec.routes.is_empty() {
             rec.first_class_m = Some(class_lengths(gf, &walk, &trace).to_vec());
@@ -525,4 +626,41 @@ pub fn run_tasks(
 /// Case de 0,05° du départ d'une tâche, pour la localité du cache de fenêtres.
 pub fn locality_key(t: &Task) -> (usize, i64, i64) {
     (t.ride.view_index(), (t.req.start.lat / 0.05).floor() as i64, (t.req.start.lon / 0.05).floor() as i64)
+}
+
+#[cfg(test)]
+mod spike_tests {
+    use super::*;
+
+    /// Polyligne densifiée : un point tous les 10 m au plus.
+    fn dense(corners: &[[f64; 2]]) -> Vec<[f64; 2]> {
+        let mut out = vec![corners[0]];
+        for w in corners.windows(2) {
+            let n = (ord_graph_match::plane::dist(w[0], w[1]) / 10.0).ceil().max(1.0) as usize;
+            for k in 1..=n {
+                let t = k as f64 / n as f64;
+                out.push([w[0][0] + t * (w[1][0] - w[0][0]), w[0][1] + t * (w[1][1] - w[0][1])]);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_triangle_has_no_spike_and_a_comb_apex_has_one() {
+        let tri = dense(&[[0.0, 0.0], [4000.0, 1500.0], [4000.0, -1500.0], [0.0, 0.0]]);
+        assert_eq!(spikes_of(&tri, 500.0, 150.0), 0);
+        // Une branche de 4 km sur laquelle on revient presque par le même chemin, à 30 m près : le sommet est un épi.
+        let comb = dense(&[
+            [0.0, 0.0],
+            [4000.0, 0.0],
+            [4000.0, 1500.0],
+            [4030.0, 1500.0],
+            [4030.0, 0.0],
+            [0.0, 30.0],
+            [0.0, 0.0],
+        ]);
+        assert!(spikes_of(&comb, 500.0, 150.0) >= 1, "{}", spikes_of(&comb, 500.0, 150.0));
+        // Un aller-retour est un épi par nature (son sommet repart par où il est venu) : on ne compte que les triangles.
+        assert_eq!(spikes_of(&dense(&[[0.0, 0.0], [5000.0, 0.0], [0.0, 0.0]]), 500.0, 150.0), 1);
+    }
 }

@@ -88,6 +88,67 @@ pub struct Svc {
     pub sonde: bool,
 }
 
+/// Les figures organiques d'une variante (lot 4, 4c, §15.11.2) : `org` et ses options.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct Org {
+    /// `w:<x>` : demi-largeur du couloir en millièmes de D (0 : sans couloir).
+    pub w_milli: Option<u16>,
+    /// `k:<x>` : κ en 256es.
+    pub kappa_q8: Option<u16>,
+    /// `tri:0` : aucun triangle (la lentille au couloir seule).
+    pub tri0: bool,
+    /// `pairs:<n>`.
+    pub pairs: Option<u8>,
+    /// `wide` : bande [0,25 ; 0,43], écart [25° ; 90°], 4 sous-bandes.
+    pub wide: bool,
+    /// `boost:<x>` : multiplicateur de la part de triangles, en 256es.
+    pub boost_q8: Option<u16>,
+    /// `lc` : apprentissage `Classic`, service organique.
+    pub lc: bool,
+}
+
+impl Org {
+    /// Les réglages fins : ceux du service (`OrganicTune::default()`) puis les options.
+    pub fn tune(&self) -> ord_loops::OrganicTune {
+        let mut t = ord_loops::OrganicTune::default();
+        if let Some(w) = self.w_milli {
+            t.corridor_w_milli = w;
+        }
+        if let Some(k) = self.kappa_q8 {
+            t.kappa_q8 = k;
+        }
+        if let Some(p) = self.pairs {
+            t.max_pairs = p;
+        }
+        if self.wide {
+            t.band_milli = [250, 430];
+            t.sep_deg = [25, 90];
+            t.sub_bands = 4;
+        }
+        if let Some(b) = self.boost_q8 {
+            t.tri_boost_q8 = b;
+        }
+        t
+    }
+
+    /// Les figures d'une requête de la variante : le mélange `mix` de l'équipe (ou le général) sans triangle sous `tri:0`,
+    /// et les réglages fins de la variante.
+    pub fn figures(&self, mix: ord_loops::FigureMix) -> ord_loops::Figures {
+        let mix = if self.tri0 { ord_loops::FigureMix { tri_q8: 0, ..mix } } else { mix };
+        ord_loops::Figures::Organic(ord_loops::Organic { mix, tune: self.tune() })
+    }
+
+    /// Réécrit les figures d'une requête de l'apprentissage (`LearnFigures::Organic` : mélange de l'équipe, réglages du
+    /// service) avec les options de la variante, pour que l'équipe apprenne ce qu'on lui servira (hors `lc`, où
+    /// l'apprentissage est classique et n'est pas touché).
+    pub fn rewrite(&self, f: ord_loops::Figures) -> ord_loops::Figures {
+        match f {
+            ord_loops::Figures::Organic(o) => self.figures(o.mix),
+            ord_loops::Figures::Classic => f,
+        }
+    }
+}
+
 /// Une variante : `base`, ou la familiarité et/ou un goût.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Variant {
@@ -103,11 +164,21 @@ pub struct Variant {
     pub chain: Option<Chain>,
     /// `Some` pour `common` et `svc` (3b) : ni goût du banc, ni familiarité.
     pub svc: Option<Svc>,
+    /// `Some` avec `org` (4c) : figures organiques, sur `common` ou `svc`.
+    pub org: Option<Org>,
 }
 
 impl Variant {
     pub fn base() -> Self {
-        Self { name: "base".into(), fam: None, fam_road_only: false, taste: None, chain: None, svc: None }
+        Self {
+            name: "base".into(),
+            fam: None,
+            fam_road_only: false,
+            taste: None,
+            chain: None,
+            svc: None,
+            org: None,
+        }
     }
 
     pub fn is_base(&self) -> bool {
@@ -117,6 +188,17 @@ impl Variant {
     /// Variante de recalé (commun ou par équipe).
     pub fn is_recal(&self) -> bool {
         matches!(self.taste, Some((TasteSource::Recal | TasteSource::RecalTeam, _)))
+    }
+}
+
+/// Pose une option à valeur d'`org` (`w`, `k`, `tri`, `pairs`, `boost`).
+fn set_option(o: &mut Org, key: &str, x: f64) {
+    match key {
+        "w" => o.w_milli = Some((x * 1000.0).round() as u16),
+        "k" => o.kappa_q8 = Some((x * 256.0).round() as u16),
+        "tri" => o.tri0 = true,
+        "pairs" => o.pairs = Some(x as u8),
+        _ => o.boost_q8 = Some((x * 256.0).round() as u16),
     }
 }
 
@@ -140,9 +222,26 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     // Le chemin du service (3b) : `common` ou `svc`, `norm`, `cap:<n>`, `capt:<n>`.
     let (mut kind, mut norm, mut cap): (Option<SvcKind>, bool, Option<SvcCap>) = (None, false, None);
     let mut sonde = false;
+    // Les figures organiques (4c) : `org`, puis ses options, dans l'ordre donné pour le nom.
+    let mut org: Option<Org> = None;
+    // Options données avant `org` : posées quand il paraît.
+    let mut pending: Vec<(String, f64)> = Vec::new();
+    let mut org_opt: Vec<&str> = Vec::new();
     ensure!(!spec.is_empty(), "variante vide");
     for comp in spec.split('+') {
         match comp {
+            "org" => {
+                ensure!(org.is_none(), "variante « {spec} » : deux `org`");
+                org = Some(Org::default());
+                names.push("org".into());
+                continue;
+            }
+            "wide" | "lc" => {
+                ensure!(!org_opt.contains(&comp), "variante « {spec} » : deux `{comp}`");
+                org_opt.push(comp);
+                names.push(comp.into());
+                continue;
+            }
             "common" | "svc" => {
                 ensure!(kind.is_none(), "variante « {spec} » : `common` et `svc` ne vont pas ensemble");
                 kind = Some(if comp == "svc" { SvcKind::Svc } else { SvcKind::Common });
@@ -160,6 +259,43 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         let (key, val) =
             comp.split_once(':').ok_or_else(|| anyhow!("variante : composant inconnu : « {comp} »"))?;
         match key {
+            "w" | "k" | "tri" | "pairs" | "boost" => {
+                ensure!(!org_opt.contains(&key), "variante « {spec} » : deux `{key}`");
+                org_opt.push(key);
+                let x = number(&format!("`{key}`"), val)?;
+                let name = match key {
+                    "w" => {
+                        ensure!((0.0..=0.2).contains(&x), "variante : `w` hors de [0, 0,2] : « {val} »");
+                        format!("w{:03}", (x * 100.0).round() as u32)
+                    }
+                    "k" => {
+                        ensure!((1.0..=8.0).contains(&x), "variante : `k` hors de [1, 8] : « {val} »");
+                        format!("k{:02}", (x * 10.0).round() as u32)
+                    }
+                    "tri" => {
+                        ensure!(x == 0.0, "variante : `tri` ne vaut que 0 (aucun triangle) : « {val} »");
+                        "tri0".to_string()
+                    }
+                    "pairs" => {
+                        ensure!(
+                            x.fract() == 0.0 && (1.0..=32.0).contains(&x),
+                            "variante : `pairs` est un entier de 1 à 32 : « {val} »"
+                        );
+                        format!("pairs{}", x as u32)
+                    }
+                    _ => {
+                        ensure!((0.1..=4.0).contains(&x), "variante : `boost` hors de [0,1 ; 4] : « {val} »");
+                        format!("b{:03}", (x * 100.0).round() as u32)
+                    }
+                };
+                names.push(name);
+                // L'option elle-même est posée plus bas, quand `org` est connu.
+                if let Some(o) = org.as_mut() {
+                    set_option(o, key, x);
+                } else {
+                    pending.push((key.to_string(), x));
+                }
+            }
             "cap" | "capt" => {
                 ensure!(cap.is_none(), "variante « {spec} » : `cap` et `capt` ne vont pas ensemble");
                 let n: usize =
@@ -219,6 +355,27 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     }
     ensure!(!norm || kind.is_some(), "variante « {spec} » : `norm` demande `common` ou `svc`");
     ensure!(
+        org.is_some() || org_opt.is_empty(),
+        "variante « {spec} » : `{}` demande `org`",
+        org_opt.join("`, `")
+    );
+    ensure!(org.is_none() || kind.is_some(), "variante « {spec} » : `org` demande `common` ou `svc`");
+    if let Some(o) = org.as_mut() {
+        for (k, x) in &pending {
+            set_option(o, k, *x);
+        }
+        for flag in &org_opt {
+            match *flag {
+                "wide" => o.wide = true,
+                "lc" => {
+                    ensure!(kind == Some(SvcKind::Svc), "variante « {spec} » : `lc` demande `svc`");
+                    o.lc = true;
+                }
+                _ => {}
+            }
+        }
+    }
+    ensure!(
         cap.is_none() || kind == Some(SvcKind::Svc),
         "variante « {spec} » : `cap` et `capt` demandent `svc`"
     );
@@ -239,7 +396,8 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         names.insert(taste_pos.map_or(names.len(), |p| p + 1), "me".into());
     }
     let stem = names.join("-");
-    let mk = |name: String, chain: Option<Chain>| Variant { name, fam, fam_road_only, taste, chain, svc };
+    let mk =
+        |name: String, chain: Option<Chain>| Variant { name, fam, fam_road_only, taste, chain, svc, org };
     if !recal {
         return Ok(vec![mk(stem, None)]);
     }
@@ -541,6 +699,90 @@ mod tests {
             vec!["common", "base"],
             vec!["base", "svc", "svc"],
             vec!["base", "svc+norm", "svc+norm"],
+        ] {
+            assert!(parse(&bad).is_err(), "{bad:?} aurait dû être refusée");
+        }
+    }
+
+    #[test]
+    fn the_organic_variants_parse_name_and_refuse_what_cannot_mix() {
+        let v = parse(&[
+            "base",
+            "common",
+            "svc",
+            "common+org",
+            "svc+org",
+            "svc+org+w:0",
+            "svc+org+w:0.05+k:1.5",
+            "svc+org+tri:0",
+            "svc+org+pairs:8",
+            "svc+org+wide",
+            "svc+org+boost:1.3",
+            "svc+org+lc",
+            "svc+org+tri:0+w:0",
+        ])
+        .unwrap();
+        let names: Vec<&str> = v.iter().map(|x| x.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "base",
+                "common",
+                "svc",
+                "common-org",
+                "svc-org",
+                "svc-org-w000",
+                "svc-org-w005-k15",
+                "svc-org-tri0",
+                "svc-org-pairs8",
+                "svc-org-wide",
+                "svc-org-b130",
+                "svc-org-lc",
+                "svc-org-tri0-w000"
+            ]
+        );
+        assert!(v[..3].iter().all(|x| x.org.is_none()));
+        let o = |i: usize| v[i].org.expect("org");
+        assert_eq!(o(3), Org::default());
+        assert_eq!(o(5).tune().corridor_w_milli, 0);
+        assert_eq!((o(6).tune().corridor_w_milli, o(6).tune().kappa_q8), (50, 384));
+        assert!(o(7).tri0 && o(7).tune() == ord_loops::OrganicTune::default());
+        assert_eq!(o(8).tune().max_pairs, 8);
+        let wide = o(9).tune();
+        assert_eq!((wide.band_milli, wide.sep_deg, wide.sub_bands), ([250, 430], [25, 90], 4));
+        assert_eq!(o(10).tune().tri_boost_q8, 333);
+        assert!(o(11).lc && !o(4).lc);
+        // `tri:0` retire la part de triangles du mélange, `org` la laisse.
+        let mix = ord_loops::FigureMix { tri_q8: 145, rd_tri_milli: [1, 2, 3, 4, 5] };
+        let tri = |f: ord_loops::Figures| match f {
+            ord_loops::Figures::Organic(x) => x.mix.tri_q8,
+            ord_loops::Figures::Classic => 999,
+        };
+        assert_eq!((tri(o(4).figures(mix)), tri(o(7).figures(mix))), (145, 0));
+        // La réécriture de l'apprentissage applique les options ; un apprentissage classique reste classique.
+        assert_eq!(tri(o(7).rewrite(o(4).figures(mix))), 0);
+        assert_eq!(tri(o(7).rewrite(ord_loops::Figures::Classic)), 999);
+        for bad in [
+            vec!["base", "org"],
+            vec!["base", "svc+org+org"],
+            vec!["base", "svc", "w:0.03"],
+            vec!["base", "svc+w:0.03"],
+            vec!["base", "svc+wide"],
+            vec!["base", "svc+lc"],
+            vec!["base", "common+org+lc"],
+            vec!["base", "svc+org+w:0.03+w:0.05"],
+            vec!["base", "svc+org+wide+wide"],
+            vec!["base", "svc+org+lc+lc"],
+            vec!["base", "svc+org+tri:1"],
+            vec!["base", "svc+org+pairs:0"],
+            vec!["base", "svc+org+pairs:2.5"],
+            vec!["base", "svc+org+k:0.5"],
+            vec!["base", "svc+org+w:0.9"],
+            vec!["base", "svc+org+boost:0"],
+            vec!["base", "svc+org+fam:1"],
+            vec!["base", "rc:0.5+org"],
+            vec!["base", "svc+org", "svc+org"],
+            vec!["base", "fam:1+org"],
         ] {
             assert!(parse(&bad).is_err(), "{bad:?} aurait dû être refusée");
         }

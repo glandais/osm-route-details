@@ -811,6 +811,7 @@ mod tests {
             best_shape: None,
             best_recovered: None,
             first_class_m: None,
+            fig: None,
         }
     }
 
@@ -902,6 +903,7 @@ mod tests {
             taste: Some((TasteSource::RecalTeam, 0.5)),
             chain: Some(Chain { stem: "rt05".into(), step: k, steps: 3, dims: Dims::D72 }),
             svc: None,
+            org: None,
         };
         let cm = ChainMeta {
             stem: "rt05".into(),

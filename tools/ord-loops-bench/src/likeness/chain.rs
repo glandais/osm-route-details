@@ -994,6 +994,7 @@ mod tests {
             best_shape: None,
             best_recovered: None,
             first_class_m: fc,
+            fig: None,
         }
     }
 

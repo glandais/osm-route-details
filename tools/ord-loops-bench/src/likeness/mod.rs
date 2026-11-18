@@ -10,6 +10,7 @@
 pub mod chain;
 pub mod compare;
 pub mod compare_chain;
+pub mod compare_org;
 pub mod compare_svc;
 pub mod export;
 #[cfg(test)]
@@ -160,6 +161,10 @@ pub struct LikenessArgs {
 /// L'empreinte de résultat de `base` au 4a (relevé `ord-loops-lot4-mesures.md`) : le crochet du goût est neutre si la
 /// variante `base` la redonne, bit pour bit, aux défauts.
 pub const BASE_4A_FINGERPRINT: &str = "55c3b065dc085f42";
+/// Empreintes de `base` et de `svc` de la sonde point à point (lot 4, 4c, `ord-loops-lot4c-sonde.md` §1), à `--holdout-share
+/// 0.25`, toutes équipes : le moteur d'aujourd'hui (`Classic`) doit les rejouer au bit près.
+pub const SONDE_4C_BASE_FINGERPRINT: &str = "4686c904975302e7";
+pub const SONDE_4C_SVC_FINGERPRINT: &str = "384f003c0bd19b7f";
 
 /// Le premier pas d'une chaîne `rc` à γ = 0,5, 72 cases, sans familiarité, doit redonner `rc05` de la première sonde
 /// (relevé `ord-loops-lot4-sonde.md`, §2), bit pour bit, aux réglages du 4a : empreinte de résultat et `taste_xxh3`.
@@ -659,7 +664,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             l1_after,
             team_times,
             class_meters,
-            svc: v.svc.map(|sv| svc_meta(&sv, a, retain, run_svc_teams)),
+            svc: v.svc.map(|sv| svc_meta(&sv, v.org, a, retain, run_svc_teams)),
         });
         let mut meta =
             meta_lines(a, &engine, &ing, threads, &load0, &letter_of, t_all.elapsed().as_secs_f64(), &ph);
@@ -727,6 +732,25 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
                  chercher, ne pas lire la suite",
                 v.name,
                 report.fingerprint
+            );
+        }
+        // 4c : à 25 % de mise à l'écart, toutes équipes, `base` et `svc` sont ceux de la sonde point à point.
+        let at_sonde = a.at_4a_defaults_but_holdout_share() && (a.holdout_share - 0.25).abs() < 1e-9;
+        if at_sonde && v.is_base() {
+            let ok = report.fingerprint == SONDE_4C_BASE_FINGERPRINT;
+            eprintln!(
+                "« `base` = sonde 4c : {SONDE_4C_BASE_FINGERPRINT} » : {}",
+                if ok { "oui" } else { "NON" }
+            );
+            anyhow::ensure!(
+                ok,
+                "l'empreinte de `base` n'est pas celle de la sonde 4c ({SONDE_4C_BASE_FINGERPRINT}) : le moteur                  `Classic` n'est plus celui de 1.10 ; chercher, ne pas lire la suite"
+            );
+        }
+        if at_sonde && v.name == "svc" {
+            eprintln!(
+                "« `svc` = sonde 4c : {SONDE_4C_SVC_FINGERPRINT} » : {}",
+                if report.fingerprint == SONDE_4C_SVC_FINGERPRINT { "oui" } else { "NON" }
             );
         }
         if v.is_base() && a.at_4a_defaults() {
@@ -850,7 +874,7 @@ impl Bench<'_> {
             // `svc` : le profil de l'équipe, appris une fois (sur la surcouche « écart »), servi aux deux surcouches.
             let learned_taste: Option<Taste> = match v.svc {
                 Some(sv) if sv.kind == variants::SvcKind::Svc => {
-                    let (taste, meta) = self.learn_team(t, &sv)?;
+                    let (taste, meta) = self.learn_team(t, &sv, v.org)?;
                     tables.extend(taste_tables(&self.letter_of[t], "full", &taste));
                     svc_teams.push(meta);
                     Some(taste)
@@ -867,11 +891,21 @@ impl Bench<'_> {
                 let mut tasks: Vec<play::Task> = Vec::new();
                 for &i in ids {
                     for &c in &a.cursors {
-                        let req = variants::adapt_request(
+                        let mut req = variants::adapt_request(
                             play::request_of(gf, &self.loops[i], c, a.seed)?,
                             v.fam,
                             v.fam_road_only,
                         );
+                        // 4c : le mélange de l'équipe (ses formes au dépôt) avec `svc`, le général avec `common`.
+                        if let Some(o) = &v.org {
+                            let shapes = v
+                                .svc
+                                .filter(|s| s.kind == variants::SvcKind::Svc)
+                                .and_then(|_| self.learn_sets[t].as_ref())
+                                .map(|s| &s.shapes);
+                            req.figures =
+                                o.figures(ord_graph_match::profile::shape::mix_for(shapes, req.ride_type));
+                        }
                         tasks.push(play::Task {
                             loop_idx: i,
                             cursor: c,
@@ -965,7 +999,12 @@ impl Bench<'_> {
 impl Bench<'_> {
     /// L'apprentissage d'une équipe par le code du dépôt (§14.12.2) : ses boucles non mises à l'écart (plafonnées comme le
     /// service), le joueur du banc sur la surcouche « écart » (la complète sans mise à l'écart), `learn`.
-    fn learn_team(&self, t: usize, sv: &variants::Svc) -> Result<(Taste, svc::SvcTeam)> {
+    fn learn_team(
+        &self,
+        t: usize,
+        sv: &variants::Svc,
+        org: Option<variants::Org>,
+    ) -> Result<(Taste, svc::SvcTeam)> {
         use ord_server::generator::cursor;
         let a = self.args;
         let hs: Vec<u32> = a
@@ -975,7 +1014,8 @@ impl Bench<'_> {
             .collect::<Result<_>>()?;
         let hs: [u32; 2] =
             hs.try_into().map_err(|_| anyhow!("`svc` joue exactement deux curseurs (`--cursors`)"))?;
-        let lp = svc::learn_params(sv, self.retain, hs, a.seed);
+        let learn_organic = org.is_some_and(|o| !o.lc);
+        let lp = svc::learn_params(sv, self.retain, hs, a.seed, learn_figures(learn_organic));
         let cursors: Vec<(ord_loops::Mode, f32, u32)> = lp
             .cursors
             .iter()
@@ -1009,6 +1049,7 @@ impl Bench<'_> {
             threads: self.threads,
             next_key: &keys,
             cpu_ns: &cpu,
+            org: org.filter(|o| !o.lc),
         };
         let learned =
             ord_graph_match::profile::learn::learn(&set, &cursors, &player, &svc::common_of(sv.norm), &lp);
@@ -1026,9 +1067,19 @@ impl Bench<'_> {
     }
 }
 
+/// Les figures que joue l'apprentissage d'une variante : organiques avec `org` (hors `lc`), sinon classiques.
+fn learn_figures(organic: bool) -> ord_graph_match::profile::learn::LearnFigures {
+    if organic {
+        ord_graph_match::profile::learn::LearnFigures::Organic
+    } else {
+        ord_graph_match::profile::learn::LearnFigures::Classic
+    }
+}
+
 /// Ce que `common` et `svc` écrivent sur eux-mêmes (§14.12.2).
 fn svc_meta(
     sv: &variants::Svc,
+    org: Option<variants::Org>,
     a: &LikenessArgs,
     retain: ord_graph_match::profile::collect::RetainParams,
     teams: Vec<svc::SvcTeam>,
@@ -1036,7 +1087,7 @@ fn svc_meta(
     let hs: Vec<u32> =
         a.cursors.iter().filter_map(|&c| ord_server::generator::cursor::hundredths(c)).collect();
     let cursors = [hs.first().copied().unwrap_or(25), hs.get(1).copied().unwrap_or(100)];
-    let lp = svc::learn_params(sv, retain, cursors, a.seed);
+    let lp = svc::learn_params(sv, retain, cursors, a.seed, learn_figures(org.is_some_and(|o| !o.lc)));
     svc::SvcMeta {
         common: ord_graph_match::profile::format::hex16(svc::common_of(sv.norm).hash_for(lp.mix)),
         learn: ord_graph_match::profile::format::hex16(lp.hash()),

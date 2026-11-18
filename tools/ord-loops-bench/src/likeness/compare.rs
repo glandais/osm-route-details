@@ -164,7 +164,7 @@ pub(super) fn ratio_cell(r: Option<f64>) -> String {
     }
 }
 
-fn getter(name: &str) -> Getter {
+pub(super) fn getter(name: &str) -> Getter {
     MEASURES.iter().find(|(n, _)| *n == name).expect("mesure connue").1
 }
 
@@ -178,7 +178,7 @@ fn s_measures(ty: &str) -> &'static [&'static str] {
 
 /// Les boucles d'un groupe : type, équipe éventuelle, lecture ; avec leur jeu (curseur, surcouche de la lecture) et le
 /// premier parcours gardé s'il est `OK`.
-fn group<'a>(
+pub(super) fn group<'a>(
     loops: &'a [LoopRec],
     ty: &str,
     team: Option<&str>,
@@ -197,7 +197,7 @@ fn group<'a>(
 }
 
 /// Les IQR du réel de **toutes** les boucles retenues du type, par mesure.
-fn type_iqrs(loops: &[LoopRec], ty: &str) -> BTreeMap<&'static str, f64> {
+pub(super) fn type_iqrs(loops: &[LoopRec], ty: &str) -> BTreeMap<&'static str, f64> {
     MEASURES
         .iter()
         .filter_map(|(n, g)| {
@@ -308,6 +308,8 @@ pub struct Compare {
     pub all_check: Option<AllCheck>,
     /// Le 3b (§14.12.3) : règle de la normalisation et faits sur le chemin du service ; `None` sans `common` ni `svc`.
     pub three_b: Option<super::compare_svc::ThreeB>,
+    /// Le 4c (§15.11.4) : figures organiques contre `svc` ; `None` sans variante `org`.
+    pub org: Option<super::compare_org::OrgSection>,
 }
 
 const NAMED: [(&str, &[&str]); 2] =
@@ -529,8 +531,10 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
         team_cost: team_cost(done, &conds.cursors),
         all_check,
         three_b: None,
+        org: None,
     };
     cmp.three_b = super::compare_svc::three_b(&cmp, done);
+    cmp.org = super::compare_org::org_section(&cmp, done);
     cmp
 }
 
@@ -847,6 +851,7 @@ pub fn markdown(cmp: &Compare, done: &[Done]) -> String {
     s.push('\n');
     chains_reading_md(&mut s, cmp, done);
     super::compare_svc::section_md(&mut s, cmp, done);
+    super::compare_org::section_md(&mut s, cmp);
     s
 }
 
