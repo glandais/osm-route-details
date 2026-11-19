@@ -223,7 +223,8 @@ impl<B: AsRef<[u8]>> Engine<B> {
     /// par chaîne mesuré à la construction (§4.2 : 66 à 69 o, plus les grilles d'accroche et 12 o par chaîne et par
     /// type pour l'équipe). Sert à réserver la place avant de construire.
     pub fn estimate_window_bytes(&self, vi: usize, tiles: &[u32]) -> usize {
-        self.window_chain_count(vi, tiles) * WINDOW_BYTES_PER_CHAIN
+        // Un octet de plus par chaîne avec un fichier d'attracteurs (le masque d'un nœud ; au plus un nœud par chaîne).
+        self.window_chain_count(vi, tiles) * (WINDOW_BYTES_PER_CHAIN + usize::from(self.attr[vi].is_some()))
     }
 
     /// Nombre de chaînes de la fenêtre de `tiles` (celles que possèdent les cellules, plus les étrangères : un
@@ -432,6 +433,34 @@ impl<B: AsRef<[u8]>> Engine<B> {
         let complete: Vec<bool> =
             pos.iter().map(|p| tiles.binary_search(&tile_key_of(p, zoom)).is_ok()).collect();
 
+        // 7. Attracteurs (lot 4, 4d) : le masque de chaque nœud, lu dans la cellule du nœud (jamais « dans les tuiles de la
+        // fenêtre » : un nœud qui sort des tuiles garde le même masque, I4). Les `ngid` d'une même cellule se suivent.
+        let attr: Vec<u8> = match &self.attr[vi] {
+            None => Vec::new(),
+            Some(file) => {
+                let mut masks = vec![0u8; n_nodes];
+                let (mut nfirst, mut nend) = (1u32, 0u32);
+                let mut zone: (&[ord_graph::attract::U32], &[u8]) = (&[], &[]);
+                let mut zi = 0usize;
+                for (k, &g) in ngid.iter().enumerate() {
+                    if g < nfirst || g >= nend {
+                        let ci = view.node_cell(g);
+                        let info = view.cell_info(ci);
+                        (nfirst, nend) = (info.first_node, info.first_node + info.n_nodes);
+                        zone = file.zone_of_cell(ci);
+                        zi = zone.0.partition_point(|x| x.get() < g);
+                    }
+                    while zi < zone.0.len() && zone.0[zi].get() < g {
+                        zi += 1;
+                    }
+                    if zi < zone.0.len() && zone.0[zi].get() == g {
+                        masks[k] = zone.1[zi];
+                    }
+                }
+                masks
+            }
+        };
+
         let v = ViewData {
             n_nodes,
             n_chains: n,
@@ -451,6 +480,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
             gid,
             ngid,
             complete,
+            attr,
         };
         let grids = (0..tiles.len()).map(|_| OnceLock::new()).collect();
         Some(Window { vi, v, tiles: tiles.to_vec(), grids })

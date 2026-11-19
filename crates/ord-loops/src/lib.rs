@@ -12,6 +12,7 @@
 //! Lot 6 : la recherche ne lit pas le graphe entier mais une [`Window`], les cellules d'une zone relues à plat
 //! (`docs/design/technique/ord-loops-lot6.md`).
 
+mod attract;
 mod cache;
 mod cost;
 mod engine;
@@ -36,6 +37,8 @@ mod window;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_attract;
+#[cfg(test)]
 mod tests_index;
 #[cfg(test)]
 mod tests_organic;
@@ -48,6 +51,7 @@ mod tests_turns;
 #[cfg(test)]
 mod tests_window;
 
+pub use attract::AttrWeights;
 pub use cache::{CacheStats, WindowCache};
 pub use cost::{
     common_gen_dm_per_loop, common_loops, common_source, common_step_gen_dm, common_step_loops,
@@ -140,6 +144,8 @@ pub enum Figures {
 pub struct Organic {
     pub mix: FigureMix,
     pub tune: OrganicTune,
+    /// Poids des attracteurs OSM (lot 4, 4d) : [`AttrWeights::NONE`] (ou aucun fichier chargé) rend exactement 1.12.
+    pub attr: AttrWeights,
 }
 
 /// La répartition des figures d'une requête : la part des triangles et la loi du r / D des triangles.
@@ -198,6 +204,12 @@ pub struct OrganicTune {
     /// Aucune jambe ne repasse sur une de ses chaînes dans l'autre sens, et la jambe 2 ne reprend rien de la jambe 1, queue
     /// comprise (§16.4 de la note) ; `false` : l'organique d'avant l'étape « virages ».
     pub no_reuse: bool,
+    /// Tolérance (millièmes de D) de l'écart `e(n)` d'un demi-tour attracteur à celui de la lentille de 1.12 (§17.7) ; 0 :
+    /// la lentille de 1.12.
+    pub attr_lens_tol_milli: u16,
+    /// Les poids des attracteurs entrent dans la clé de rang des paires de sommets (un point de poids vaut une case de
+    /// 0,02 de r / D) ; `false` : les attracteurs sont des candidats sans clé de rang.
+    pub attr_rank: bool,
 }
 
 impl Default for OrganicTune {
@@ -221,6 +233,8 @@ impl Default for OrganicTune {
             turns: true,
             turn_margin_deg: 5,
             no_reuse: true,
+            attr_lens_tol_milli: 50,
+            attr_rank: true,
         }
     }
 }
@@ -295,6 +309,11 @@ pub struct FigureDiagnostics {
     pub turn_evals: u64,
     /// Relaxations refusées parce qu'elles reprenaient en sens inverse une chaîne du chemin (aller-retour dans une jambe).
     pub reuse_cut: u64,
+    /// Attracteurs (lot 4, 4d) : sommets candidats ajoutés pour leur poids, paires de poids non nul cherchées, demi-tours de
+    /// la lentille remplacés par un attracteur.
+    pub attr_candidates: u32,
+    pub attr_pairs_searched: u32,
+    pub attr_lens_picks: u32,
 }
 
 #[derive(Clone, Debug)]

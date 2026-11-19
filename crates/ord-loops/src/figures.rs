@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use ord_graph::util::SplitMix64;
 use rustc_hash::FxHashSet;
 
+use crate::attract::attr_w;
 use crate::engine::{Engine, Snap, ViewData};
 use crate::generate::{overlap_share, scored_route, steps_of, Scored};
 use crate::geo::{heading_deg, turn_angle_deg};
@@ -139,36 +140,65 @@ impl Scratch<'_> {
 
 /// Un sommet lointain.
 #[derive(Clone, Copy, Debug)]
-struct Cand {
-    node: u32,
+pub(crate) struct Cand {
+    pub(crate) node: u32,
     /// Cap du départ au nœud.
-    ang: f64,
+    pub(crate) ang: f64,
     /// Agrément : coût T1 / mètres T1.
-    ratio: f64,
+    pub(crate) ratio: f64,
     /// Meilleurs états du nœud dans T1 et T2.
-    b1: u32,
-    b2: u32,
+    pub(crate) b1: u32,
+    pub(crate) b2: u32,
+    /// Poids d'attracteur du nœud (lot 4, 4d) ; 0 quand les attracteurs ne sont pas actifs.
+    pub(crate) w: u8,
 }
 
 /// Une paire de sommets admissible à un biais donné.
 #[derive(Clone, Copy, Debug)]
-struct Pair {
-    n1: u32,
-    n2: u32,
-    b1: u32,
-    est_m: f64,
-    r_pair: f64,
-    agr: f64,
+pub(crate) struct Pair {
+    pub(crate) n1: u32,
+    pub(crate) n2: u32,
+    pub(crate) b1: u32,
+    pub(crate) est_m: f64,
+    pub(crate) r_pair: f64,
+    pub(crate) agr: f64,
+    /// Somme des poids d'attracteur des deux sommets (0 quand les attracteurs ne sont pas actifs).
+    pub(crate) wsum: u8,
+}
+
+/// Rang d'une paire : l'écart de son r / D au r / D visé (par cases de 0,02), moins la somme des poids d'attracteur de ses
+/// sommets quand `attr_rank` (un point de poids vaut une case, §17.7) ; poids nuls : le rang de 1.12.
+fn pair_rank(p: &Pair, rho: f64, attr_rank: bool) -> i64 {
+    ((p.r_pair - rho).abs() / 0.02).floor() as i64 - if attr_rank { i64::from(p.wsum) } else { 0 }
+}
+
+/// L'ordre des paires : le rang, l'agrément, puis les ids des sommets.
+pub(crate) fn pair_order(a: &Pair, b: &Pair, rho: f64, attr_rank: bool) -> std::cmp::Ordering {
+    pair_rank(a, rho, attr_rank)
+        .cmp(&pair_rank(b, rho, attr_rank))
+        .then(a.agr.total_cmp(&b.agr))
+        .then(a.n1.cmp(&b.n1))
+        .then(a.n2.cmp(&b.n2))
+}
+
+/// Les attracteurs jouent pour cette requête : poids non nuls, et la fenêtre porte les masques du fichier (§17.7).
+pub(crate) fn attr_active(v: &ViewData, o: &Organic) -> bool {
+    !o.attr.is_none() && !v.attr.is_empty()
 }
 
 /// Sommets lointains (§15.4) : nœud atteint par T1 et T2, degré de vue ≥ 3, mètres T1 dans la bande, secteur dans le
-/// cap ; par secteur et par sous-bande, le plus agréable (départage par id de nœud).
-fn candidates<B: AsRef<[u8]>>(fx: &Fixed<'_, B>, t1: &Tree, t2: &Tree) -> Vec<Cand> {
+/// cap ; par secteur et par sous-bande, le plus agréable (départage par id de nœud). Avec des attracteurs actifs (§17.7), un
+/// second tableau garde par case le nœud de poids non nul le meilleur selon `(poids décroissant, agrément, id)` : la sortie,
+/// case par case, est le plus agréable puis l'attracteur s'il existe et diffère. Rend aussi le nombre d'attracteurs ajoutés.
+pub(crate) fn candidates<B: AsRef<[u8]>>(fx: &Fixed<'_, B>, t1: &Tree, t2: &Tree) -> (Vec<Cand>, u32) {
     let (v, disc, t) = (fx.cx.v, fx.cx.disc, &fx.o.tune);
     let nb = usize::from(t.sub_bands.max(1));
     let (lo, hi) = (f64::from(t.band_milli[0]) / 1000.0, f64::from(t.band_milli[1]) / 1000.0);
     let d_dm = fx.d * 10.0;
+    let attr_on = attr_active(v, fx.o);
     let mut best: Vec<Option<Cand>> = vec![None; SECTORS_PER_TURN * nb];
+    let mut best_attr: Vec<Option<Cand>> =
+        if attr_on { vec![None; SECTORS_PER_TURN * nb] } else { Vec::new() };
     for &node in &t1.reached {
         if v.deg[node as usize] < 3 {
             continue;
@@ -189,12 +219,38 @@ fn candidates<B: AsRef<[u8]>>(fx: &Fixed<'_, B>, t1: &Tree, t2: &Tree) -> Vec<Ca
         }
         let sb = (((s - lo) / (hi - lo) * nb as f64) as usize).min(nb - 1);
         let ratio = f64::from(t1.get(b1)) / m1.max(1.0);
+        let w = if attr_on { attr_w(v.attr[node as usize], &fx.o.attr.w) } else { 0 };
+        let cand = Cand { node, ang, ratio, b1, b2, w };
         let slot = &mut best[sec * nb + sb];
         if slot.is_none_or(|c| ratio < c.ratio || (ratio == c.ratio && node < c.node)) {
-            *slot = Some(Cand { node, ang, ratio, b1, b2 });
+            *slot = Some(cand);
+        }
+        if w > 0 {
+            let slot = &mut best_attr[sec * nb + sb];
+            let better =
+                |c: &Cand| w > c.w || (w == c.w && (ratio < c.ratio || (ratio == c.ratio && node < c.node)));
+            if slot.as_ref().is_none_or(better) {
+                *slot = Some(cand);
+            }
         }
     }
-    best.into_iter().flatten().collect()
+    if !attr_on {
+        return (best.into_iter().flatten().collect(), 0);
+    }
+    let mut out = Vec::with_capacity(best.len());
+    let mut added = 0u32;
+    for (pleasant, attractor) in best.into_iter().zip(best_attr) {
+        if let Some(p) = pleasant {
+            out.push(p);
+        }
+        if let Some(a) = attractor {
+            if pleasant.is_none_or(|p| p.node != a.node) {
+                out.push(a);
+                added += 1;
+            }
+        }
+    }
+    (out, added)
 }
 
 /// Les paires de sommets écartées de `sep_deg` vu du départ, ordonnées selon le sens tiré, avec l'estimation de la
@@ -232,6 +288,7 @@ fn pairs_of<B: AsRef<[u8]>>(
                 est_m: m1 + phi * crow + m3,
                 r_pair: r1.max(r2) / fx.d,
                 agr: (a.ratio + b.ratio) / 2.0,
+                wsum: a.w + b.w,
             });
         }
     }
@@ -477,8 +534,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
     // Le facteur minimal de la passe, lu sur son arbre aller à la première recherche (§15.19 : ni la fenêtre, ni une
     // marge d'arrondi).
     let mut f_min_cell: Option<f64> = None;
-    let cands = candidates(fx, t1, t2);
+    let (cands, attr_added) = candidates(fx, t1, t2);
     fig.candidates += cands.len() as u32;
+    fig.attr_candidates += attr_added;
     let pairs = pairs_of(fx, t1, t2, &cands, st.draw.clockwise);
     fig.pairs += pairs.len() as u32;
     let est_tol = f64::from(tune.est_tol_milli) / 1000.0;
@@ -515,14 +573,7 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                         && ((fresh && !st.searched.contains(&k)) || retry_now.contains(&k))
                         && admissible(st, p)
                 })
-                .min_by(|a, b| {
-                    let rank = |p: &Pair| ((p.r_pair - st.draw.rho).abs() / 0.02).floor() as i64;
-                    rank(a)
-                        .cmp(&rank(b))
-                        .then(a.agr.total_cmp(&b.agr))
-                        .then(a.n1.cmp(&b.n1))
-                        .then(a.n2.cmp(&b.n2))
-                });
+                .min_by(|a, b| pair_order(a, b, st.draw.rho, tune.attr_rank));
             let Some(&pair) = best else {
                 return Ok(());
             };
@@ -534,6 +585,9 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                 st.searched.push(key);
             }
             fig.searched += 1;
+            if pair.wsum > 0 {
+                fig.attr_pairs_searched += 1;
+            }
             let f_min = *f_min_cell.get_or_insert_with(|| t1_min_factor(fx.cx, t1));
             let mut leg1 = t1.path_to(pair.b1);
             let mut leg2 = match run_leg2(fx, t1, t2, sc, &leg1, pair.n2, f_min, budget, fig, stop)? {

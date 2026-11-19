@@ -316,8 +316,11 @@ fn a_u_turn_through_a_median_opening_is_found_without_the_model_and_never_with_i
 fn sharp_refusals(gap: f64, turns: bool) -> (u32, usize) {
     let e = engine_of(&mut dual_carriageway(gap));
     let win = e.full_window(0);
-    let figures =
-        Figures::Organic(Organic { mix: test_mix(), tune: OrganicTune { turns, ..OrganicTune::default() } });
+    let figures = Figures::Organic(Organic {
+        mix: test_mix(),
+        tune: OrganicTune { turns, ..OrganicTune::default() },
+        attr: crate::AttrWeights::NONE,
+    });
     let mut ws = Workspace::new();
     let (mut sharp, mut routes) = (0u32, 0usize);
     for k in 0..50u64 {
@@ -511,6 +514,7 @@ fn the_organic_reference_is_replayed_with_turns_and_no_reuse_off() {
     let off = Figures::Organic(Organic {
         mix: test_mix(),
         tune: OrganicTune { turns: false, no_reuse: false, ..OrganicTune::default() },
+        attr: crate::AttrWeights::NONE,
     });
     crate::tests_reference::assert_matches_fixture(
         &|e, team, r, ws| {

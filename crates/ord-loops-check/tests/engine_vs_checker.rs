@@ -2,6 +2,7 @@
 //! (trous courts compris), tout parcours que le moteur rend, **dans les trois modes**, passe le contrôleur
 //! indépendant. Le moteur n'est appelé que comme producteur de parcours (et pour construire `TeamData`).
 
+use ord_graph::attract::{build_attr, encode_attr, AttrFile, AttrWrite, Object};
 use ord_graph::build::{build_graph, BuildOptions, MemSource};
 use ord_graph::format::{write_graph, GraphFile};
 use ord_graph::overlay::{encode, Overlay, OverlayMeta};
@@ -86,23 +87,57 @@ fn organic() -> Figures {
     Figures::Organic(Organic {
         mix: FigureMix { tri_q8: 256, rd_tri_milli: [230, 270, 318, 360, 420] },
         tune: OrganicTune::default(),
+        attr: ord_loops::AttrWeights::NONE,
     })
 }
 
 #[test]
 fn every_route_the_engine_returns_passes_the_independent_checker() {
-    check_all(Figures::Classic);
+    check_all(Figures::Classic, false);
 }
 
 /// Test 12 du 4c (I3) : tout parcours rendu en organique, triangles compris, passe le contrôleur indépendant.
 #[test]
 fn every_organic_route_passes_the_independent_checker_and_triangles_are_among_them() {
-    let triangles = check_all(organic());
+    let triangles = check_all(organic(), false);
     assert!(triangles > 0, "aucun triangle rendu : le test ne prouve rien pour eux");
 }
 
+/// Test 17 du 4d (I3) : avec un fichier d'attracteurs et les poids généraux, tout parcours organique rendu passe encore
+/// le contrôleur indépendant.
+#[test]
+fn every_organic_route_with_attractors_passes_the_independent_checker() {
+    let Figures::Organic(o) = organic() else { unreachable!() };
+    let with = Figures::Organic(Organic { attr: ord_loops::AttrWeights::general(RideType::Road), ..o });
+    let triangles = check_all(with, true);
+    assert!(triangles > 0, "aucun triangle rendu : le test ne prouve rien pour eux");
+}
+
+/// Un fichier d'attracteurs tiré pour une vue : 60 objets sur les 4 km de la grille, catégories au hasard.
+fn attractors_of(base: &GraphFile<Vec<u8>>, view: &GraphFile<Vec<u8>>, seed: u64) -> AttrFile<Vec<u8>> {
+    let mut rng = SplitMix64(seed ^ 0xa77);
+    let m_lon = M_LAT * LAT0.to_radians().cos();
+    let mut objs: Vec<Object> = (0..60)
+        .map(|i| {
+            let lat = LAT0 + (rng.below(4000) as f64) / M_LAT;
+            let lon = LON0 + (rng.below(4000) as f64) / m_lon;
+            Object {
+                cat: rng.below(7) as u8,
+                lat: (lat * 1e7).round() as i32,
+                lon: (lon * 1e7).round() as i32,
+                kind: 0,
+                id: i,
+            }
+        })
+        .collect();
+    objs.sort_unstable();
+    let data = build_attr(view, &objs, 300, 300);
+    let w = AttrWrite { snap_m: 300, reach_m: 300, meta: b"{}", built_epoch: 0 };
+    AttrFile::open(encode_attr(base.header(), view, &data, &w).unwrap()).unwrap()
+}
+
 /// Rend le nombre de triangles contrôlés.
-fn check_all(figures: Figures) -> usize {
+fn check_all(figures: Figures, attractors: bool) -> usize {
     let mut triangles = 0usize;
     let mut returned = [0usize; 3];
     let mut refused: Vec<String> = Vec::new();
@@ -117,7 +152,13 @@ fn check_all(figures: Figures) -> usize {
             open(build_view(&base, &ViewSpec::parse("gravel").unwrap()).unwrap(), dir.path(), "gravel.ordv");
         // Surcouche tirée avant de passer le graphe au moteur : 85 % des arêtes roulées, le reste en trous.
         let overlay = random_overlay(&base, seed, 85);
-        let engine = Engine::new(base, road, gravel, Params::default()).unwrap();
+        let files =
+            attractors.then(|| (attractors_of(&base, &road, seed), attractors_of(&base, &gravel, seed)));
+        let mut engine = Engine::new(base, road, gravel, Params::default()).unwrap();
+        if let Some((fr, fg)) = files {
+            engine.set_attractors(0, fr).unwrap();
+            engine.set_attractors(1, fg).unwrap();
+        }
         let team = TeamData::build(&engine, &overlay).unwrap();
         let checker = Checker::new(engine.base(), Some(&overlay), Config::default());
         let mut ws = Workspace::new();

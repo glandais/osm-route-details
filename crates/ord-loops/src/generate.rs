@@ -10,6 +10,7 @@ use ord_graph::format::GraphFile;
 use ord_graph::util::SplitMix64;
 use rustc_hash::FxHashSet;
 
+use crate::attract::attr_w;
 use crate::engine::{Engine, Snap, ViewData};
 use crate::figures::{self, Fixed, Scratch, TriState, FIGURE_SALT};
 use crate::geo::{heading_deg, turn_angle_deg, LatLon, Local};
@@ -275,6 +276,47 @@ pub fn generate_with_figures_in<B: AsRef<[u8]>>(
     }
 }
 
+/// Les attracteurs lus par le demi-tour de la lentille (lot 4, 4d, §17.7).
+pub(crate) struct LensAttr<'a> {
+    /// Masque de chaque nœud local de la fenêtre.
+    pub masks: &'a [u8],
+    pub w: &'a [u8; 8],
+    /// Tolérance de `e(n)` (dm) : `attr_lens_tol_milli / 1000 · D`.
+    pub tol_dm: f64,
+}
+
+/// Le demi-tour d'un secteur : parmi les nœuds `(nœud, mètres T1, mètres T2)` non essayés, celui qui minimise
+/// `e(n) = |T1m + ρ · T2m − D|` (départage par id), le choix de 1.12 ; avec des attracteurs, un nœud de poids non nul à
+/// `e(n) ≤ tol` (le plus lourd, puis `e`, puis id) le remplace s'il existe. Rend `(e, nœud, T1m, T2m)` et si l'attracteur a
+/// remplacé le choix de 1.12 par un autre nœud.
+pub(crate) fn lens_pick(
+    list: &[(u32, u32, u32)],
+    tried: &FxHashSet<u32>,
+    rho: f64,
+    d_dm: f64,
+    attr: Option<&LensAttr<'_>>,
+) -> (Option<(f64, u32, u32, u32)>, bool) {
+    let pick0 = list
+        .iter()
+        .filter(|x| !tried.contains(&x.0))
+        .map(|&(n, o, b)| ((f64::from(o) + rho * f64::from(b) - d_dm).abs(), n, o, b))
+        .min_by(|x, y| x.0.partial_cmp(&y.0).expect("fini").then(x.1.cmp(&y.1)));
+    let Some(a) = attr else { return (pick0, false) };
+    let weighted = list
+        .iter()
+        .filter(|x| !tried.contains(&x.0))
+        .filter_map(|&(n, om, b)| {
+            let w = attr_w(a.masks[n as usize], a.w);
+            let e = (f64::from(om) + rho * f64::from(b) - d_dm).abs();
+            (w > 0 && e <= a.tol_dm).then_some((w, e, n, om, b))
+        })
+        .min_by(|x, y| y.0.cmp(&x.0).then(x.1.partial_cmp(&y.1).expect("fini")).then(x.2.cmp(&y.2)));
+    match weighted {
+        Some((_, e, n, om, b)) => (Some((e, n, om, b)), pick0.is_none_or(|p| p.1 != n)),
+        None => (pick0, false),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn generate_inner<B: AsRef<[u8]>>(
     e: &Engine<B>,
@@ -329,6 +371,8 @@ fn generate_inner<B: AsRef<[u8]>>(
         _ => None,
     };
     let org_search = org.and(org_search);
+    // La lentille lit les attracteurs : organique, tolérance non nulle, poids non nuls et un masque dans la fenêtre.
+    let attr_lens = org.is_some_and(|o| o.tune.attr_lens_tol_milli > 0 && figures::attr_active(v, &o));
     let mut tri = org.map(|o| TriState::new(figures::draw(r.seed ^ fingerprint(r) ^ FIGURE_SALT, &o), &o));
     if let (Some(o), Some(st)) = (org.as_ref(), tri.as_ref()) {
         fig.applied = true;
@@ -399,11 +443,13 @@ fn generate_inner<B: AsRef<[u8]>>(
             // longueur, quel que soit ρ (campagne du lot 2 : 5 à 18 candidats identiques sur les réseaux stricts).
             let mut tried: FxHashSet<u32> = FxHashSet::default();
             for _ in 0..e.params.tries_per_sector {
-                let pick = list
-                    .iter()
-                    .filter(|x| !tried.contains(&x.0))
-                    .map(|&(n, o, b)| ((f64::from(o) + rho * f64::from(b) - d_dm).abs(), n, o, b))
-                    .min_by(|x, y| x.0.partial_cmp(&y.0).expect("fini").then(x.1.cmp(&y.1)));
+                let lens_attr = org.as_ref().filter(|_| attr_lens).map(|o| LensAttr {
+                    masks: &v.attr,
+                    w: &o.attr.w,
+                    tol_dm: f64::from(o.tune.attr_lens_tol_milli) / 1000.0 * d_dm,
+                });
+                let (pick, replaced) = lens_pick(list, &tried, rho, d_dm, lens_attr.as_ref());
+                fig.attr_lens_picks += u32::from(replaced);
                 let Some((_, tnode, _, back_dm)) = pick else { break };
                 tried.insert(tnode);
                 let out_fields = t1.path_to(t1.node_best(tnode).expect("atteint"));

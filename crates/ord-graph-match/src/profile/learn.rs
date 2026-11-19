@@ -74,6 +74,8 @@ impl LearnFigures {
             Self::Organic => Figures::Organic(Organic {
                 mix: mix_for(Some(&set.shapes), super::collect::ride_of(ty)),
                 tune: OrganicTune::default(),
+                // L′ (§17.9) : l'apprentissage ne lit pas les attracteurs (voir `LearnParams::attractors`).
+                attr: ord_loops::AttrWeights::NONE,
             }),
         }
     }

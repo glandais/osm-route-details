@@ -156,7 +156,11 @@ impl Org {
     /// et les réglages fins de la variante.
     pub fn figures(&self, mix: ord_loops::FigureMix) -> ord_loops::Figures {
         let mix = if self.tri0 { ord_loops::FigureMix { tri_q8: 0, ..mix } } else { mix };
-        ord_loops::Figures::Organic(ord_loops::Organic { mix, tune: self.tune() })
+        ord_loops::Figures::Organic(ord_loops::Organic {
+            mix,
+            tune: self.tune(),
+            attr: ord_loops::AttrWeights::NONE,
+        })
     }
 
     /// Réécrit les figures d'une requête de l'apprentissage (`LearnFigures::Organic` : mélange de l'équipe, réglages du

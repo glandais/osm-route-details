@@ -332,7 +332,11 @@ pub(crate) fn test_mix() -> FigureMix {
 }
 
 pub(crate) fn organic() -> Figures {
-    Figures::Organic(Organic { mix: test_mix(), tune: OrganicTune::default() })
+    Figures::Organic(Organic {
+        mix: test_mix(),
+        tune: OrganicTune::default(),
+        attr: crate::AttrWeights::NONE,
+    })
 }
 
 fn with_figures(r: &Request, figures: Figures) -> Request {
@@ -349,6 +353,7 @@ fn an_organic_request_without_triangles_or_corridor_is_the_classic_one() {
     let lens_only = Figures::Organic(Organic {
         mix: FigureMix::LENS_ONLY,
         tune: OrganicTune { corridor_w_milli: 0, turns: false, no_reuse: false, ..OrganicTune::default() },
+        attr: crate::AttrWeights::NONE,
     });
     assert_matches_reference(&|e, team, r, ws| {
         generate_with_diagnostics(e, team, &with_figures(r, lens_only), ws, &mut stop())
@@ -462,6 +467,7 @@ fn the_figure_draw_follows_the_mix() {
     let o = Organic {
         mix: FigureMix { tri_q8: 115, rd_tri_milli: [230, 270, 318, 360, 420] },
         tune: OrganicTune::default(),
+        attr: crate::AttrWeights::NONE,
     };
     let n = 10_000;
     let (mut tri, mut cw) = (0, 0);
@@ -475,12 +481,14 @@ fn the_figure_draw_follows_the_mix() {
     assert!((p - 115.0 / 256.0).abs() < 0.02, "part de triangles {p}");
     assert!((cw as f64 / n as f64 - 0.5).abs() < 0.02);
     // Aucun triangle : jamais `tri_first`.
-    let none = Organic { mix: FigureMix::LENS_ONLY, tune: OrganicTune::default() };
+    let none =
+        Organic { mix: FigureMix::LENS_ONLY, tune: OrganicTune::default(), attr: crate::AttrWeights::NONE };
     assert!((0..1000).all(|s| !crate::figures::draw(s, &none).tri_first));
     // Au-delà du minimum, le multiplicateur plafonne à 256.
     let boosted = Organic {
         mix: FigureMix { tri_q8: 200, ..test_mix() },
         tune: OrganicTune { tri_boost_q8: 512, ..OrganicTune::default() },
+        attr: crate::AttrWeights::NONE,
     };
     assert_eq!(crate::figures::tri_q8_eff(&boosted), 256);
 }
@@ -532,7 +540,7 @@ fn a_comb_apex_is_a_spike_and_is_repaired_at_the_last_junction_500_m_back() {
         let arr = t1.path_to(t1.node_best(apex).unwrap());
         let mut dep = t2.path_to(t2.node_best(apex).unwrap());
         dep.reverse();
-        let o = Organic { mix: test_mix(), tune: OrganicTune::default() };
+        let o = Organic { mix: test_mix(), tune: OrganicTune::default(), attr: crate::AttrWeights::NONE };
         let (s_snap2, e_snap) = (s_snap, s_snap);
         let fx = crate::figures::Fixed {
             e: &e,

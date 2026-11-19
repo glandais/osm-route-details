@@ -7,6 +7,7 @@
 
 use std::fmt;
 
+use ord_graph::attract::{AttrError, AttrFile};
 use ord_graph::attrs::Attrs;
 use ord_graph::format::{GraphFile, DIR_BIT};
 use ord_graph::view::ViewKind;
@@ -129,6 +130,9 @@ pub(crate) struct ViewData {
     pub ngid: Vec<u32>,
     /// Un nœud est complet quand sa tuile est dans la fenêtre : toutes ses chaînes sont chargées (note §5.2).
     pub complete: Vec<bool>,
+    /// Masque d'attracteurs de chaque nœud local (lot 4, 4d) : **vide** si la vue n'a pas de fichier, sinon `n_nodes` octets.
+    /// Un nœud a le même masque dans toute fenêtre qui le contient.
+    pub attr: Vec<u8>,
 }
 
 impl ViewData {
@@ -198,6 +202,7 @@ impl ViewData {
             + self.head.capacity() * 4
             + self.deg.capacity()
             + self.complete.capacity()
+            + self.attr.capacity()
     }
 }
 
@@ -318,6 +323,8 @@ pub struct Engine<B> {
     pub(crate) kinds: [ViewKind; 2],
     pub(crate) idx: [ViewIndex; 2],
     pub(crate) params: Params,
+    /// Fichiers d'attracteurs des deux vues (lot 4, 4d), s'ils sont posés.
+    pub(crate) attr: [Option<AttrFile<B>>; 2],
 }
 
 impl<B: AsRef<[u8]> + Sync> Engine<B> {
@@ -347,7 +354,7 @@ impl<B: AsRef<[u8]> + Sync> Engine<B> {
         } else {
             [ViewIndex::build(&road, &params, 1), ViewIndex::build(&gravel, &params, 1)]
         };
-        Ok(Self { base, views_files: [road, gravel], kinds, idx, params })
+        Ok(Self { base, views_files: [road, gravel], kinds, idx, params, attr: [None, None] })
     }
 }
 
@@ -381,6 +388,20 @@ fn check_view<B: AsRef<[u8]>>(
 }
 
 impl<B: AsRef<[u8]>> Engine<B> {
+    /// Range le fichier d'attracteurs de la vue `vi` (0 `road`, 1 `gravel`) après l'avoir confronté au graphe de base et à la
+    /// vue (`AttrFile::check_for`) ; en cas d'erreur rien n'est rangé. À poser avant de construire des fenêtres : celles qui
+    /// existent déjà n'ont pas de masque (les attracteurs y sont inactifs).
+    pub fn set_attractors(&mut self, vi: usize, f: AttrFile<B>) -> Result<(), AttrError> {
+        f.check_for(self.base.header(), &self.views_files[vi])?;
+        self.attr[vi] = Some(f);
+        Ok(())
+    }
+
+    /// La vue `vi` a un fichier d'attracteurs.
+    pub fn has_attractors(&self, vi: usize) -> bool {
+        self.attr[vi].is_some()
+    }
+
     /// Poids d'une arête de base pour un type : `⌈len × K × q8 / (64 × 256)⌉` avec la table du goût de base
     /// (`Params::base_taste`). Avec [`Taste::neutral`], exactement [`cost::edge_weight`].
     #[inline]

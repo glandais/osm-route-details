@@ -17,7 +17,8 @@ use std::cmp::Ordering;
 use std::path::Path;
 
 use xxhash_rust::xxh3::xxh3_64;
-use zerocopy::little_endian::{I64, U16, U32, U64};
+pub use zerocopy::little_endian::U32;
+use zerocopy::little_endian::{I64, U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::build::{haversine_m, BuildError, ElementSink, OsmRelation, OsmSource, OsmWay};

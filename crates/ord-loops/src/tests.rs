@@ -64,7 +64,12 @@ pub(crate) fn engine_zoomed(src: &mut MemSource, zoom: u8, params: Params) -> En
         v
     };
     let (road, gravel) = (view("road"), view("gravel"));
-    Engine::new(base, road, gravel, params).expect("moteur")
+    let mut e = Engine::new(base, road, gravel, params).expect("moteur");
+    // Les tests de non-régression du 4d rejouent leurs références avec un fichier d'attracteurs chargé.
+    if crate::tests_attract::ATTACH.with(std::cell::Cell::get) {
+        crate::tests_attract::attach_synthetic(&mut e);
+    }
+    e
 }
 
 /// Les paramètres par défaut avec le poids de base de 1.9.2 : les tests d'arithmétique et de non-régression ne doivent

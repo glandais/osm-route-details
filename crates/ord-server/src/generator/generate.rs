@@ -378,6 +378,7 @@ impl Ready {
                         input.ride,
                     ),
                     tune: ord_loops::OrganicTune::default(),
+                    attr: ord_loops::AttrWeights::NONE,
                 }),
             },
         };
