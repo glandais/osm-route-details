@@ -310,6 +310,8 @@ pub struct Compare {
     pub three_b: Option<super::compare_svc::ThreeB>,
     /// Le 4c (§15.11.4) : figures organiques contre `svc` ; `None` sans variante `org`.
     pub org: Option<super::compare_org::OrgSection>,
+    /// Le 4d (§17.11) : attracteurs OSM contre `svc-org` ; `None` sans variante `attr` ni `svc-org`.
+    pub attr: Option<super::compare_attr::AttrSection>,
 }
 
 const NAMED: [(&str, &[&str]); 2] =
@@ -532,9 +534,11 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
         all_check,
         three_b: None,
         org: None,
+        attr: None,
     };
     cmp.three_b = super::compare_svc::three_b(&cmp, done);
     cmp.org = super::compare_org::org_section(&cmp, done);
+    cmp.attr = super::compare_attr::attr_section(&cmp, done);
     cmp
 }
 
@@ -852,13 +856,15 @@ pub fn markdown(cmp: &Compare, done: &[Done]) -> String {
     chains_reading_md(&mut s, cmp, done);
     super::compare_svc::section_md(&mut s, cmp, done);
     super::compare_org::section_md(&mut s, cmp);
+    super::compare_attr::section_md(&mut s, cmp);
     s
 }
 
 /// Écrit `<label>-compare.json` et `<label>-compare.md`.
-pub fn write(dir: &Path, label: &str, conds: &Conditions, done: &[Done]) -> Result<()> {
+/// Écrit la comparaison ; rend les contrôles du 4d (§17.11) qui manquent, vide s'ils tiennent tous : la campagne s'arrête.
+pub fn write(dir: &Path, label: &str, conds: &Conditions, done: &[Done]) -> Result<Vec<String>> {
     if done.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let cmp = compare(conds, done);
     std::fs::create_dir_all(dir)?;
@@ -866,7 +872,7 @@ pub fn write(dir: &Path, label: &str, conds: &Conditions, done: &[Done]) -> Resu
     std::fs::write(&json, serde_json::to_vec_pretty(&cmp)?)?;
     std::fs::write(&md, markdown(&cmp, done))?;
     eprintln!("comparaison : {}\ncomparaison : {}", json.display(), md.display());
-    Ok(())
+    Ok(cmp.attr.map(|a| a.controls.stop).unwrap_or_default())
 }
 
 #[cfg(test)]

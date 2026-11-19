@@ -292,6 +292,10 @@ pub struct FigAgg {
     pub turn_cut: u64,
     pub turn_evals: u64,
     pub reuse_cut: u64,
+    /// Attracteurs (lot 4, 4d) : candidats ajoutés, paires de poids non nul cherchées, demi-tours remplacés.
+    pub attr_candidates: u32,
+    pub attr_pairs_searched: u32,
+    pub attr_lens_picks: u32,
     /// Épis dans les triangles **gardés** (relevés sur la polyligne, §15.5) : le contrôle de l'angle sur les parcours rendus.
     pub spikes_kept: u32,
 }
@@ -325,6 +329,9 @@ impl FigAgg {
             turn_cut: d.turn_cut,
             turn_evals: d.turn_evals,
             reuse_cut: d.reuse_cut,
+            attr_candidates: d.attr_candidates,
+            attr_pairs_searched: d.attr_pairs_searched,
+            attr_lens_picks: d.attr_lens_picks,
             spikes_kept: 0,
         }
     }
@@ -410,6 +417,8 @@ pub struct PlayCtx<'a> {
     pub real_shape: &'a [[f64; 3]],
     /// `E(R)` de chaque boucle réelle : les arêtes que le dépôt compte pour elle (`measure::taken_edges`).
     pub real_edges: &'a [BTreeSet<u32>],
+    /// Grilles d'ancrages des attracteurs (lot 4, 4d) : vides sans fichier.
+    pub grids: &'a super::measure::AttrGrids,
 }
 
 pub use ord_graph_match::profile::collect::ride_of;
@@ -541,7 +550,8 @@ pub fn play_one(
         }
         let walk = Walk::from_route(gf, route);
         let trace = walk.trace(gf);
-        let m = measure(gf, &walk, &trace, Some(rep.crossings));
+        let mut m = measure(gf, &walk, &trace, Some(rep.crossings));
+        m.attr = super::measure::attr_masks(gf, ctx.grids, task.ride, &walk, &trace);
         if route.family == ord_loops::Family::Triangle {
             if let Some(f) = rec.fig.as_mut() {
                 let t = ord_loops::OrganicTune::default();

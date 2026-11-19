@@ -109,6 +109,14 @@ fn frame_of(gf: &MappedGraph, edge: u32) -> Frame {
     Frame::new(f64::from(p.0) * 1e-7, f64::from(p.1) * 1e-7)
 }
 
+/// Un point de la polyligne plane d'une marche (`Walk::trace`), ramené en décimicro-degrés `(lat, lon)` : le repère de la
+/// trace est celui du premier nœud de sa première arête. `None` pour une marche sans jambe.
+pub fn plane_to_e7(gf: &MappedGraph, walk: &Walk, p: Pt) -> Option<(i32, i32)> {
+    let first = walk.legs.first()?;
+    let (lat, lon) = frame_of(gf, first.edge).latlon(p);
+    Some(((lat * 1e7).round() as i32, (lon * 1e7).round() as i32))
+}
+
 /// Sous-polyligne de `pts` entre les abscisses `s0 ≤ s1`.
 fn cut(pts: &[Pt], s0: f64, s1: f64) -> Vec<Pt> {
     let cum = plane::cumulative(pts);

@@ -14,8 +14,9 @@ use super::play::{GenRoute, PlayRec};
 use super::shape::{median, quantile_sorted, sorted};
 
 /// Les groupes : type × curseur.
-const GROUPS: [(&str, f64); 4] = [("ROAD", 0.25), ("ROAD", 1.0), ("GRAVEL", 0.25), ("GRAVEL", 1.0)];
-const TYPES: [&str; 2] = ["ROAD", "GRAVEL"];
+pub(super) const GROUPS: [(&str, f64); 4] =
+    [("ROAD", 0.25), ("ROAD", 1.0), ("GRAVEL", 0.25), ("GRAVEL", 1.0)];
+pub(super) const TYPES: [&str; 2] = ["ROAD", "GRAVEL"];
 /// Les mesures de forme lues (§15.11.4, point 1).
 const FORM_MEASURES: [&str; 8] = [
     "r_over_d",
@@ -51,22 +52,29 @@ fn scope_name(s: Option<&str>) -> String {
     s.unwrap_or("toutes").to_string()
 }
 
-fn has(done: &[Done], name: &str) -> bool {
+pub(super) fn has(done: &[Done], name: &str) -> bool {
     done.iter().any(|d| d.variant.name == name)
 }
 
-fn find<'a>(done: &'a [Done], name: &str) -> Option<&'a Done> {
+pub(super) fn find<'a>(done: &'a [Done], name: &str) -> Option<&'a Done> {
     done.iter().find(|d| d.variant.name == name)
 }
 
-fn f3(x: Option<f64>) -> String {
+pub(super) fn f3(x: Option<f64>) -> String {
     x.map_or("—".to_string(), |v| format!("{v:.3}"))
 }
 
 // --- Mesures ------------------------------------------------------------------------------------------------------------
 
 /// Les valeurs de la mesure `m` du **premier** parcours gardé du groupe.
-fn gen_vals(d: &Done, ty: &str, scope: Option<&str>, reading: Reading, cursor: f64, m: &str) -> Vec<f64> {
+pub(super) fn gen_vals(
+    d: &Done,
+    ty: &str,
+    scope: Option<&str>,
+    reading: Reading,
+    cursor: f64,
+    m: &str,
+) -> Vec<f64> {
     let get = getter(m);
     group(&d.loops, ty, scope, reading, cursor)
         .iter()
@@ -74,13 +82,20 @@ fn gen_vals(d: &Done, ty: &str, scope: Option<&str>, reading: Reading, cursor: f
         .collect()
 }
 
-fn real_vals(base: &Done, ty: &str, scope: Option<&str>, reading: Reading, cursor: f64, m: &str) -> Vec<f64> {
+pub(super) fn real_vals(
+    base: &Done,
+    ty: &str,
+    scope: Option<&str>,
+    reading: Reading,
+    cursor: f64,
+    m: &str,
+) -> Vec<f64> {
     let get = getter(m);
     group(&base.loops, ty, scope, reading, cursor).iter().filter_map(|(l, _)| get(&l.real)).collect()
 }
 
 /// `W1 / IQR` d'une variante sur une mesure, IQR du réel de tout le type.
-fn w1(
+pub(super) fn w1(
     base: &Done,
     d: &Done,
     iqrs: &BTreeMap<&'static str, f64>,
@@ -140,7 +155,7 @@ pub struct ShareRow {
     pub cells: Vec<ShareCell>,
 }
 
-fn share_cell(d: &Done, g: &[(&LoopRec, Option<&GenRoute>)]) -> ShareCell {
+pub(super) fn share_cell(d: &Done, g: &[(&LoopRec, Option<&GenRoute>)]) -> ShareCell {
     let firsts: Vec<&GenRoute> = g.iter().filter_map(|(_, r)| *r).collect();
     let n = firsts.len();
     let part = |k: usize| (n > 0).then(|| k as f64 / n as f64);
@@ -449,14 +464,14 @@ pub struct Verdict {
     pub reserve_d: Option<String>,
 }
 
-fn all_hold(v: &[Option<bool>]) -> Option<bool> {
+pub(super) fn all_hold(v: &[Option<bool>]) -> Option<bool> {
     if v.iter().any(Option::is_none) {
         return None;
     }
     Some(v.iter().all(|x| *x == Some(true)))
 }
 
-fn verdict(cmp: &Compare, done: &[Done], cand: &Done) -> Verdict {
+pub(super) fn verdict(cmp: &Compare, done: &[Done], cand: &Done) -> Verdict {
     let b = super::compare::base_index(done);
     let (base, svc) = (&done[b], find(done, "svc"));
     let name = cand.variant.name.clone();

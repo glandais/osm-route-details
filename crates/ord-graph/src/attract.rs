@@ -941,8 +941,13 @@ impl AnchorGrid {
     }
 
     pub fn hits(&self, lat_e7: i32, lon_e7: i32) -> u8 {
+        self.hits_within(lat_e7, lon_e7, self.reach_m)
+    }
+
+    /// Comme `hits`, à `radius_m` (le banc rapporte aussi la part à 1 km).
+    pub fn hits_within(&self, lat_e7: i32, lon_e7: i32, radius_m: f64) -> u8 {
         let mut mask = 0u8;
-        self.grid.within(lat_e7, lon_e7, self.reach_m, |e| mask |= 1 << e.tag);
+        self.grid.within(lat_e7, lon_e7, radius_m, |e| mask |= 1 << e.tag);
         mask
     }
 }

@@ -88,6 +88,71 @@ pub struct Svc {
     pub sonde: bool,
 }
 
+/// Les attracteurs OSM d'une variante (lot 4, 4d, §17.11) : `attr` et ses options. Les poids de départ sont ceux de
+/// `AttrWeights::general` ; `rvue` et `gvue` fixent le poids du point de vue **et** ceux des cols et des sommets (décision 2
+/// du §9.10 : au poids du point de vue de chaque type).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Attr {
+    /// `attr:0` : poids nuls, fichier chargé (contrôle I5).
+    pub zero: bool,
+    /// `rcom:<n>` : poids ROAD de `cafe` et `bakery`.
+    pub rcom: Option<u8>,
+    /// `rvue:<n>` : poids ROAD de `viewpoint`, `mountain_pass` et `peak`.
+    pub rvue: Option<u8>,
+    /// `rbourg:<n>` : poids ROAD de `town` et `village`.
+    pub rbourg: Option<u8>,
+    /// `gvue:<n>` : poids GRAVEL de `viewpoint`, `mountain_pass` et `peak`.
+    pub gvue: Option<u8>,
+    /// `gcom:<n>` : poids GRAVEL de `cafe` et `bakery`.
+    pub gcom: Option<u8>,
+    /// `ltol:<milli>` : `attr_lens_tol_milli` (0 : la lentille de 1.12).
+    pub ltol_milli: Option<u16>,
+    /// `rank:0` : `attr_rank = false`.
+    pub rank0: bool,
+    /// `la` : apprentissage avec attracteurs (`LearnParams::attractors = true`).
+    pub la: bool,
+}
+
+impl Attr {
+    /// Les poids d'un type pour cette variante.
+    pub fn weights(&self, ride: RideType) -> ord_loops::AttrWeights {
+        if self.zero {
+            return ord_loops::AttrWeights::NONE;
+        }
+        let mut w = ord_loops::AttrWeights::general(ride);
+        let set = |w: &mut ord_loops::AttrWeights, bits: &[usize], n: Option<u8>| {
+            if let Some(n) = n {
+                for &b in bits {
+                    w.w[b] = n;
+                }
+            }
+        };
+        match ride {
+            RideType::Road => {
+                set(&mut w, &[0, 1], self.rcom);
+                set(&mut w, &[2, 5, 6], self.rvue);
+                set(&mut w, &[3, 4], self.rbourg);
+            }
+            RideType::Gravel => {
+                set(&mut w, &[2, 5, 6], self.gvue);
+                set(&mut w, &[0, 1], self.gcom);
+            }
+            RideType::Mtb => {}
+        }
+        w
+    }
+
+    /// Les réglages fins de la variante par-dessus ceux du service.
+    pub fn tune(&self, t: &mut ord_loops::OrganicTune) {
+        if let Some(m) = self.ltol_milli {
+            t.attr_lens_tol_milli = m;
+        }
+        if self.rank0 {
+            t.attr_rank = false;
+        }
+    }
+}
+
 /// Les figures organiques d'une variante (lot 4, 4c, §15.11.2) : `org` et ses options.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 pub struct Org {
@@ -114,6 +179,8 @@ pub struct Org {
     pub reuse0: bool,
     /// `margin:<deg>` : marge du modèle des virages (`turn_margin_deg`).
     pub margin_deg: Option<u8>,
+    /// `attr` et ses options (lot 4, 4d) : les attracteurs OSM.
+    pub attr: Option<Attr>,
 }
 
 impl Org {
@@ -149,26 +216,43 @@ impl Org {
         if let Some(m) = self.margin_deg {
             t.turn_margin_deg = m;
         }
+        if let Some(a) = &self.attr {
+            a.tune(&mut t);
+        }
         t
+    }
+
+    /// Les poids d'attracteurs d'une requête de ce type.
+    pub fn weights(&self, ride: RideType) -> ord_loops::AttrWeights {
+        self.attr.map_or(ord_loops::AttrWeights::NONE, |a| a.weights(ride))
     }
 
     /// Les figures d'une requête de la variante : le mélange `mix` de l'équipe (ou le général) sans triangle sous `tri:0`,
     /// et les réglages fins de la variante.
-    pub fn figures(&self, mix: ord_loops::FigureMix) -> ord_loops::Figures {
+    pub fn figures(&self, mix: ord_loops::FigureMix, ride: RideType) -> ord_loops::Figures {
         let mix = if self.tri0 { ord_loops::FigureMix { tri_q8: 0, ..mix } } else { mix };
-        ord_loops::Figures::Organic(ord_loops::Organic {
-            mix,
-            tune: self.tune(),
-            attr: ord_loops::AttrWeights::NONE,
-        })
+        ord_loops::Figures::Organic(ord_loops::Organic { mix, tune: self.tune(), attr: self.weights(ride) })
     }
 
     /// Réécrit les figures d'une requête de l'apprentissage (`LearnFigures::Organic` : mélange de l'équipe, réglages du
     /// service) avec les options de la variante, pour que l'équipe apprenne ce qu'on lui servira (hors `lc`, où
     /// l'apprentissage est classique et n'est pas touché).
-    pub fn rewrite(&self, f: ord_loops::Figures) -> ord_loops::Figures {
+    pub fn rewrite(&self, f: ord_loops::Figures, ride: RideType) -> ord_loops::Figures {
         match f {
-            ord_loops::Figures::Organic(o) => self.figures(o.mix),
+            // L′ (§17.9) : sans `la`, la requête de l'apprentissage ne porte aucun poids (`LearnParams::attractors = false`) ;
+            // avec `la`, elle porte ceux de la variante.
+            ord_loops::Figures::Organic(o) => {
+                let learned = self.figures(o.mix, ride);
+                match learned {
+                    ord_loops::Figures::Organic(l) if o.attr.is_none() => {
+                        ord_loops::Figures::Organic(ord_loops::Organic {
+                            attr: ord_loops::AttrWeights::NONE,
+                            ..l
+                        })
+                    }
+                    other => other,
+                }
+            }
             ord_loops::Figures::Classic => f,
         }
     }
@@ -253,6 +337,10 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     let mut pending: Vec<(String, f64)> = Vec::new();
     let mut org_opt: Vec<&str> = Vec::new();
     let mut margin: Option<u8> = None;
+    // Les attracteurs (4d) : `attr`, `attr:0`, `la` et leurs options.
+    let mut attr: Option<Attr> = None;
+    let mut attr_present = false;
+    let mut attr_opts: Vec<&str> = Vec::new();
     ensure!(!spec.is_empty(), "variante vide");
     for comp in spec.split('+') {
         match comp {
@@ -266,6 +354,20 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 ensure!(!org_opt.contains(&comp), "variante « {spec} » : deux `{comp}`");
                 org_opt.push(comp);
                 names.push(comp.into());
+                continue;
+            }
+            "attr" => {
+                ensure!(!attr_present, "variante « {spec} » : deux `attr`");
+                attr_present = true;
+                attr.get_or_insert_with(Attr::default);
+                names.push("attr".into());
+                continue;
+            }
+            "la" => {
+                ensure!(!attr_opts.contains(&comp), "variante « {spec} » : deux `la`");
+                attr_opts.push("la");
+                attr.get_or_insert_with(Attr::default).la = true;
+                names.push("la".into());
                 continue;
             }
             "common" | "svc" => {
@@ -321,6 +423,53 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 } else {
                     pending.push((key.to_string(), x));
                 }
+            }
+            "attr" => {
+                ensure!(!attr_present, "variante « {spec} » : deux `attr`");
+                ensure!(
+                    val == "0",
+                    "variante : `attr` ne vaut que 0 (poids nuls, fichier chargé) : « {val} »"
+                );
+                attr_present = true;
+                attr.get_or_insert_with(Attr::default).zero = true;
+                names.push("attr0".into());
+            }
+            "rcom" | "rvue" | "rbourg" | "gvue" | "gcom" => {
+                ensure!(!attr_opts.contains(&key), "variante « {spec} » : deux `{key}`");
+                attr_opts.push(key);
+                let x = number(&format!("`{key}`"), val)?;
+                ensure!(
+                    x.fract() == 0.0 && (0.0..=3.0).contains(&x),
+                    "variante : `{key}` est un poids entier de 0 à 3 : « {val} »"
+                );
+                let n = x as u8;
+                let a = attr.get_or_insert_with(Attr::default);
+                match key {
+                    "rcom" => a.rcom = Some(n),
+                    "rvue" => a.rvue = Some(n),
+                    "rbourg" => a.rbourg = Some(n),
+                    "gvue" => a.gvue = Some(n),
+                    _ => a.gcom = Some(n),
+                }
+                names.push(format!("{key}{n}"));
+            }
+            "ltol" => {
+                ensure!(!attr_opts.contains(&key), "variante « {spec} » : deux `ltol`");
+                attr_opts.push(key);
+                let x = number("`ltol`", val)?;
+                ensure!(
+                    x.fract() == 0.0 && (0.0..=500.0).contains(&x),
+                    "variante : `ltol` est un entier de 0 à 500 millièmes de D : « {val} »"
+                );
+                attr.get_or_insert_with(Attr::default).ltol_milli = Some(x as u16);
+                names.push(format!("ltol{}", x as u16));
+            }
+            "rank" => {
+                ensure!(!attr_opts.contains(&key), "variante « {spec} » : deux `rank`");
+                ensure!(val == "0", "variante : `rank` ne vaut que 0 (la clé de rang de 1.12) : « {val} »");
+                attr_opts.push(key);
+                attr.get_or_insert_with(Attr::default).rank0 = true;
+                names.push("rank0".into());
             }
             "turns" | "reuse" => {
                 ensure!(!org_opt.contains(&key), "variante « {spec} » : deux `{key}`");
@@ -401,6 +550,25 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         org_opt.join("`, `")
     );
     ensure!(org.is_none() || kind.is_some(), "variante « {spec} » : `org` demande `common` ou `svc`");
+    ensure!(
+        attr_present || attr_opts.is_empty(),
+        "variante « {spec} » : `{}` demande `attr`",
+        attr_opts.join("`, `")
+    );
+    ensure!(
+        attr.is_none() || org.is_some(),
+        "variante « {spec} » : `attr` demande `org` (avec `common` ou `svc`)"
+    );
+    if let Some(a) = &attr {
+        ensure!(!a.la || kind == Some(SvcKind::Svc), "variante « {spec} » : `la` demande `svc`");
+        ensure!(
+            !a.zero || attr_opts.is_empty(),
+            "variante « {spec} » : `attr:0` (poids nuls) n'accepte aucune autre option d'attracteurs"
+        );
+    }
+    if let (Some(o), Some(a)) = (org.as_mut(), attr) {
+        o.attr = Some(a);
+    }
     if let Some(o) = org.as_mut() {
         for (k, x) in &pending {
             set_option(o, k, *x);
@@ -806,10 +974,11 @@ mod tests {
             ord_loops::Figures::Organic(x) => x.mix.tri_q8,
             ord_loops::Figures::Classic => 999,
         };
-        assert_eq!((tri(o(4).figures(mix)), tri(o(7).figures(mix))), (145, 0));
+        let road = RideType::Road;
+        assert_eq!((tri(o(4).figures(mix, road)), tri(o(7).figures(mix, road))), (145, 0));
         // La réécriture de l'apprentissage applique les options ; un apprentissage classique reste classique.
-        assert_eq!(tri(o(7).rewrite(o(4).figures(mix))), 0);
-        assert_eq!(tri(o(7).rewrite(ord_loops::Figures::Classic)), 999);
+        assert_eq!(tri(o(7).rewrite(o(4).figures(mix, road), road)), 0);
+        assert_eq!(tri(o(7).rewrite(ord_loops::Figures::Classic, road)), 999);
         for bad in [
             vec!["base", "org"],
             vec!["base", "svc+org+org"],
@@ -964,6 +1133,73 @@ mod tests {
         // Sans `fam`, la requête n'est pas touchée.
         let r = adapt_request(of(1.0), None, false);
         assert_eq!((r.mode, r.off_team_cost_q8), (Mode::Discovery, 256));
+    }
+
+    /// Test 19 du 4d : les options d'attracteurs se lisent, se nomment, règlent les poids et le réglage fin, et se refusent hors
+    /// de `org`, en double ou sans `attr`.
+    #[test]
+    fn the_attractor_variants_parse_name_set_the_weights_and_refuse_what_cannot_mix() {
+        let base = || "base".to_string();
+        let one = |spec: &str| -> Variant {
+            let v = parse_variants(&[base(), spec.to_string()]).unwrap_or_else(|e| panic!("{spec} : {e}"));
+            v.into_iter().nth(1).unwrap()
+        };
+        let err = |spec: &str| parse_variants(&[base(), spec.to_string()]).unwrap_err().to_string();
+        // Noms.
+        assert_eq!(one("svc+org+attr").name, "svc-org-attr");
+        assert_eq!(one("svc+org+attr:0").name, "svc-org-attr0");
+        assert_eq!(one("common+org+attr").name, "common-org-attr");
+        assert_eq!(one("svc+org+attr+ltol:20").name, "svc-org-attr-ltol20");
+        assert_eq!(one("svc+org+attr+rank:0").name, "svc-org-attr-rank0");
+        assert_eq!(one("svc+org+attr+la").name, "svc-org-attr-la");
+        assert_eq!(one("svc+org+attr+rcom:2+gvue:2").name, "svc-org-attr-rcom2-gvue2");
+        // Poids : généraux par défaut (point de vue, col et sommet ensemble), fixés par option, nuls avec `attr:0`.
+        let general = one("svc+org+attr").org.unwrap();
+        assert_eq!(general.weights(RideType::Road), ord_loops::AttrWeights::general(RideType::Road));
+        assert_eq!(general.weights(RideType::Gravel), ord_loops::AttrWeights::general(RideType::Gravel));
+        assert!(general.weights(RideType::Mtb).is_none());
+        let tuned = one("svc+org+attr+rcom:2+rvue:3+rbourg:1+gvue:2+gcom:1").org.unwrap();
+        assert_eq!(tuned.weights(RideType::Road).w, [2, 2, 3, 1, 1, 3, 3, 0]);
+        assert_eq!(tuned.weights(RideType::Gravel).w, [1, 1, 2, 0, 0, 2, 2, 0]);
+        assert!(one("svc+org+attr:0").org.unwrap().weights(RideType::Road).is_none());
+        // Réglages fins et apprentissage.
+        let t = one("svc+org+attr+ltol:20+rank:0").org.unwrap().tune();
+        assert_eq!((t.attr_lens_tol_milli, t.attr_rank), (20, false));
+        let d = general.tune();
+        assert_eq!((d.attr_lens_tol_milli, d.attr_rank), (50, true));
+        assert!(one("svc+org+attr+la").org.unwrap().attr.unwrap().la);
+        // Sans `attr`, aucun poids.
+        assert!(one("svc+org").org.unwrap().weights(RideType::Road).is_none());
+        // La requête de la variante porte les poids de son type ; l'apprentissage les garde seulement avec `la`.
+        let mix = ord_loops::FigureMix::general(RideType::Road);
+        let ord_loops::Figures::Organic(o) = general.figures(mix, RideType::Road) else {
+            panic!("organique")
+        };
+        assert_eq!(o.attr, ord_loops::AttrWeights::general(RideType::Road));
+        let learn_none =
+            ord_loops::Figures::Organic(ord_loops::Organic { attr: ord_loops::AttrWeights::NONE, ..o });
+        let ord_loops::Figures::Organic(r) = general.rewrite(learn_none, RideType::Road) else {
+            panic!("organique")
+        };
+        assert!(r.attr.is_none(), "sans `la`, l'apprentissage ne lit pas les attracteurs");
+        let ord_loops::Figures::Organic(r) =
+            general.rewrite(general.figures(mix, RideType::Road), RideType::Road)
+        else {
+            panic!("organique")
+        };
+        assert!(!r.attr.is_none(), "la requête de l'apprentissage porte les poids quand elle les porte");
+        // Refus.
+        assert!(err("svc+attr").contains("`attr` demande `org`"));
+        assert!(err("svc+org+rcom:2").contains("demande `attr`"));
+        assert!(err("svc+org+attr+attr").contains("deux `attr`"));
+        assert!(err("svc+org+attr+rcom:2+rcom:1").contains("deux `rcom`"));
+        assert!(err("svc+org+attr+rcom:4").contains("poids entier de 0 à 3"));
+        assert!(err("svc+org+attr+ltol:900").contains("de 0 à 500"));
+        assert!(err("svc+org+attr+rank:1").contains("ne vaut que 0"));
+        assert!(err("svc+org+attr:1").contains("ne vaut que 0"));
+        assert!(err("svc+org+attr:0+rcom:2").contains("aucune autre option"));
+        assert!(err("common+org+attr+la").contains("`la` demande `svc`"));
+        assert!(err("svc+org+la").contains("demande `attr`") || err("svc+org+la").contains("`la`"));
     }
 
     #[test]

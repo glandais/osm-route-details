@@ -61,7 +61,7 @@ impl BenchPlayer<'_> {
         let rewritten;
         let req = match &self.org {
             Some(o) => {
-                rewritten = Request { figures: o.rewrite(req.figures), ..req.clone() };
+                rewritten = Request { figures: o.rewrite(req.figures, req.ride_type), ..req.clone() };
                 &rewritten
             }
             None => req,
@@ -177,9 +177,11 @@ pub fn learn_params(
     cursors: [u32; 2],
     seed: u64,
     figures: LearnFigures,
+    attractors: bool,
 ) -> LearnParams {
     LearnParams {
         figures,
+        attractors,
         normalize: svc.norm,
         cap: cap_of(svc),
         cursors,

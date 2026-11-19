@@ -42,6 +42,75 @@ pub struct Measures {
     pub destination: f64,
     /// Trous / D (0 pour le généré).
     pub gap_share: f64,
+    /// Attracteurs OSM (lot 4, 4d, §17.11) : masques seulement, jamais une position. `None` sans fichier ni pour le MTB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attr: Option<AttrMasks>,
+}
+
+/// Les grilles d'ancrages des vues `road` et `gravel` (le VTT n'a pas d'attracteur).
+#[derive(Debug, Default)]
+pub struct AttrGrids {
+    pub road: Option<ord_graph::attract::AnchorGrid>,
+    pub gravel: Option<ord_graph::attract::AnchorGrid>,
+}
+
+impl AttrGrids {
+    pub fn for_ride(&self, ride: ord_loops::RideType) -> Option<&ord_graph::attract::AnchorGrid> {
+        match ride {
+            ord_loops::RideType::Road => self.road.as_ref(),
+            ord_loops::RideType::Gravel => self.gravel.as_ref(),
+            ord_loops::RideType::Mtb => None,
+        }
+    }
+}
+
+/// Les catégories d'attracteurs sous le point lointain (le sommet le plus loin du départ) et sous les sommets intérieurs à
+/// 10 % de D : à 300 m (`reach_m` du fichier), et à 1 km pour le point lointain. Des masques de bits, pas de coordonnées.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct AttrMasks {
+    pub far: u8,
+    pub far_1k: u8,
+    /// Un masque par sommet à 10 % de D (départ et arrivée exclus, point lointain compris).
+    pub v10: Vec<u8>,
+}
+
+/// L'indice du premier point le plus éloigné du départ (`shape::far_of` : le premier maximum strict gagne).
+pub fn far_index(pts: &[shape::Pt]) -> Option<usize> {
+    let o = *pts.first()?;
+    let (mut best, mut at) = (0.0f64, 0usize);
+    for (i, p) in pts.iter().enumerate().skip(1) {
+        let d = shape::dist(*p, o);
+        if d > best {
+            best = d;
+            at = i;
+        }
+    }
+    (at > 0).then_some(at)
+}
+
+/// Les masques d'attracteurs d'une marche et de sa polyligne ; `None` sans grille pour ce type.
+pub fn attr_masks(
+    gf: &MappedGraph,
+    grids: &AttrGrids,
+    ride: ord_loops::RideType,
+    walk: &Walk,
+    t: &Trace,
+) -> Option<AttrMasks> {
+    let grid = grids.for_ride(ride)?;
+    let e7 = |p: shape::Pt| ord_graph_match::walk::plane_to_e7(gf, walk, p);
+    let far_at = far_index(&t.pts)?;
+    let (lat, lon) = e7(t.pts[far_at])?;
+    let kept = shape::vertex_indices(&t.pts, 0.10);
+    let v10: Vec<u8> = if kept.len() >= 3 {
+        kept[1..kept.len() - 1]
+            .iter()
+            .filter_map(|&i| e7(t.pts[i]))
+            .map(|(la, lo)| grid.hits(la, lo))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(AttrMasks { far: grid.hits(lat, lon), far_1k: grid.hits_within(lat, lon, 1000.0), v10 })
 }
 
 /// Classe de voie (§3.2) : la définition est celle du moteur, `ord_loops::taste_way`.
@@ -159,6 +228,7 @@ pub fn measure(gf: &MappedGraph, walk: &Walk, t: &Trace, crossings: Option<u32>)
         marked: norm(marked),
         destination: norm(destination),
         gap_share: if t.d_graph > 0.0 { t.holes_m / t.d_graph } else { 0.0 },
+        attr: None,
     }
 }
 

@@ -9,6 +9,7 @@
 
 pub mod chain;
 pub mod compare;
+pub mod compare_attr;
 pub mod compare_chain;
 pub mod compare_org;
 pub mod compare_svc;
@@ -119,6 +120,16 @@ pub struct LikenessArgs {
     /// Fils de génération (défaut : `available_parallelism()`).
     #[arg(long)]
     pub threads: Option<usize>,
+    /// Fichier d'attracteurs de la vue `road` (lot 4, 4d ; défaut : `G/lot6/france-20261115-z11.road.orda`, puis
+    /// `G/lot4/4d/orda/`, s'il existe).
+    #[arg(long)]
+    pub attractors_road: Option<PathBuf>,
+    /// Fichier d'attracteurs de la vue `gravel` (même défaut).
+    #[arg(long)]
+    pub attractors_gravel: Option<PathBuf>,
+    /// Ne charge aucun fichier d'attracteurs (le contrôle « sans fichier » de I1 et I5) ; refuse une variante `attr`.
+    #[arg(long)]
+    pub no_attractors: bool,
     /// Budget du cache de fenêtres partagé, en Mo.
     #[arg(long, default_value_t = 6000)]
     pub budget_mb: usize,
@@ -169,6 +180,24 @@ pub const SONDE_4C_SVC_FINGERPRINT: &str = "384f003c0bd19b7f";
 /// `--holdout-share 0.25` : toutes équipes (campagne 4 du 4c), et l'essai `--teams B,C --limit 20`.
 pub const I2P_FULL_FINGERPRINT: &str = "c48118447315c118";
 pub const I2P_TRIAL_FINGERPRINT: &str = "27952d4befd451f4";
+/// I1 (§17.8 de la note du lot 4) : `common` à 25 % de mise à l'écart, toutes équipes (le `base` et le `svc` sont ceux de la sonde
+/// 4c ci-dessus).
+pub const SONDE_4C_COMMON_FINGERPRINT: &str = "07b62287e64fa258";
+/// I5 (§17.8) : l'organique **sans attracteurs actifs** (`svc+org` sans fichier, `svc+org+attr:0` avec) rend 1.12 : toutes équipes
+/// à 25 %, et l'essai `--teams B,C --limit 20`.
+pub const I5_FULL_FINGERPRINT: &str = "6324bdfdabf62f38";
+pub const I5_TRIAL_FINGERPRINT: &str = "50adca52ef713d18";
+
+/// L'empreinte de I5 attendue pour la portée de la campagne ; `None` pour toute autre portée.
+pub fn i5_expected(a: &LikenessArgs) -> Option<&'static str> {
+    if !a.at_4a_defaults_but_scope() || (a.holdout_share - 0.25).abs() > 1e-9 {
+        return None;
+    }
+    if a.limit.is_none() && a.teams.is_empty() {
+        return Some(I5_FULL_FINGERPRINT);
+    }
+    (a.limit == Some(20) && a.teams == ["B", "C"]).then_some(I5_TRIAL_FINGERPRINT)
+}
 
 /// Le premier pas d'une chaîne `rc` à γ = 0,5, 72 cases, sans familiarité, doit redonner `rc05` de la première sonde
 /// (relevé `ord-loops-lot4-sonde.md`, §2), bit pour bit, aux réglages du 4a : empreinte de résultat et `taste_xxh3`.
@@ -263,6 +292,8 @@ pub struct Paths {
     pub letters: PathBuf,
     pub overlays: Option<PathBuf>,
     pub out: PathBuf,
+    /// Fichiers d'attracteurs `[road, gravel]` : donnés, ou ceux du défaut s'ils existent ; `None` avec `--no-attractors`.
+    pub attractors: [Option<PathBuf>; 2],
 }
 
 impl LikenessArgs {
@@ -275,7 +306,22 @@ impl LikenessArgs {
             Some(p) => Some(p.clone()),
             None => Some(lot6.join("overlays")).filter(|p| p.is_dir()),
         };
+        let attr_default = |view: &str| {
+            [lot6.clone(), g.join("lot4/4d/orda")]
+                .into_iter()
+                .map(|d| d.join(format!("france-20261115-z11.{view}.orda")))
+                .find(|p| p.is_file())
+        };
+        let attractors = if self.no_attractors {
+            [None, None]
+        } else {
+            [
+                self.attractors_road.clone().or_else(|| attr_default("road")),
+                self.attractors_gravel.clone().or_else(|| attr_default("gravel")),
+            ]
+        };
         Ok(Paths {
+            attractors,
             graph: pick(&self.graph, lot6.join("france-20261115-z11.ordg")),
             road: pick(&self.road, lot6.join("france-20261115-z11.road.ordv")),
             gravel: pick(&self.gravel, lot6.join("france-20261115-z11.gravel.ordv")),
@@ -345,6 +391,14 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     let listed = variants::parse_variants(&a.variants)?;
     let legacy = listed.is_empty();
     let variants = if legacy { vec![Variant::base()] } else { listed };
+    // Les attracteurs (4d) : une variante `attr` sans les deux fichiers est refusée avant toute phase lourde.
+    if variants.iter().any(|v| v.org.is_some_and(|o| o.attr.is_some())) {
+        anyhow::ensure!(
+            !a.no_attractors && paths.attractors.iter().all(Option::is_some),
+            "une variante `attr` demande les deux fichiers d'attracteurs (`--attractors-road`, `--attractors-gravel`) et pas \
+             `--no-attractors`"
+        );
+    }
     let tp = a.taste_params();
     let t_all = std::time::Instant::now();
     let load0 = crate::load_avg();
@@ -360,7 +414,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     let mut ph = Phases::new();
 
     // 1. Le moteur fenêtré et l'index du contrôleur.
-    let engine = Engine::new(
+    let mut engine = Engine::new(
         open_graph(&paths.graph)?,
         open_graph(&paths.road)?,
         open_graph(&paths.gravel)?,
@@ -369,6 +423,32 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         Params { base_taste: Taste::neutral(), ..Params::default() },
     )
     .map_err(|e| anyhow!("moteur : {e}"))?;
+    // Les fichiers d'attracteurs (4d), chargés dans le moteur quel que soit le jeu de variantes (I1 et I5 se lisent fichier
+    // chargé) et en grilles d'ancrages pour les mesures.
+    let mut grids = measure::AttrGrids::default();
+    for (vi, path) in paths.attractors.iter().enumerate() {
+        let Some(path) = path else { continue };
+        let file =
+            ord_graph::attract::AttrFile::open_mmap(path).map_err(|e| anyhow!("{} : {e}", path.display()))?;
+        engine.set_attractors(vi, file).map_err(|e| anyhow!("{} : {e}", path.display()))?;
+        let again =
+            ord_graph::attract::AttrFile::open_mmap(path).map_err(|e| anyhow!("{} : {e}", path.display()))?;
+        let view = open_graph(if vi == 0 { &paths.road } else { &paths.gravel })?;
+        let grid = ord_graph::attract::AnchorGrid::new(&again, &view);
+        if vi == 0 {
+            grids.road = Some(grid);
+        } else {
+            grids.gravel = Some(grid);
+        }
+        eprintln!(
+            "attracteurs {} : {} ({} ancrages, zone {})",
+            ["road", "gravel"][vi],
+            path.display(),
+            again.n_anchors(),
+            again.n_zone()
+        );
+    }
+    let engine = engine;
     let gf: &MappedGraph = engine.base();
     let graph_index = GraphIndex::build(gf);
     ph.end("moteur et index du contrôleur");
@@ -505,7 +585,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     // 7. Les mesures du réel : la forme, et le contrôleur sur les marches continues.
     let checker0 = Checker::with_tables(gf, None, Config::default(), &graph_index, None);
     let reals: Vec<(Measures, Option<Vec<String>>)> =
-        loops.par_iter().map(|l| measure_real(gf, &checker0, l)).collect();
+        loops.par_iter().map(|l| measure_real(gf, &checker0, &grids, l)).collect();
     let real_shape: Vec<[f64; 3]> =
         reals.iter().map(|(m, _)| [m.r_over_d, m.far_pos, m.compactness]).collect();
     let real_edges: Vec<std::collections::BTreeSet<u32>> =
@@ -546,8 +626,14 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
 
     // 8. Les jeux : les variantes l'une après l'autre ; équipe par équipe dans l'ordre des lettres.
     let wins = play::SharedWindows::new(&engine, a.budget_mb * 1_000_000, a.radius_step_m);
-    let ctx =
-        play::PlayCtx { engine: &engine, wins: &wins, iqr, real_shape: &real_shape, real_edges: &real_edges };
+    let ctx = play::PlayCtx {
+        engine: &engine,
+        wins: &wins,
+        iqr,
+        real_shape: &real_shape,
+        real_edges: &real_edges,
+        grids: &grids,
+    };
     let mut workspaces: Vec<Workspace> = (0..threads).map(|_| Workspace::new()).collect();
     let bench = Bench {
         args: a,
@@ -768,10 +854,39 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             );
         }
         if at_sonde && v.name == "svc" {
+            let ok = report.fingerprint == SONDE_4C_SVC_FINGERPRINT;
             eprintln!(
                 "« `svc` = sonde 4c : {SONDE_4C_SVC_FINGERPRINT} » : {}",
-                if report.fingerprint == SONDE_4C_SVC_FINGERPRINT { "oui" } else { "NON" }
+                if ok { "oui" } else { "NON" }
             );
+            anyhow::ensure!(
+                ok,
+                "l'empreinte de `svc` n'est pas celle de la sonde 4c ({SONDE_4C_SVC_FINGERPRINT}) : I1 manque ; chercher, ne pas lire la suite"
+            );
+        }
+        if at_sonde && v.name == "common" {
+            let ok = report.fingerprint == SONDE_4C_COMMON_FINGERPRINT;
+            eprintln!(
+                "« `common` = sonde 4c : {SONDE_4C_COMMON_FINGERPRINT} » : {}",
+                if ok { "oui" } else { "NON" }
+            );
+            anyhow::ensure!(
+                ok,
+                "l'empreinte de `common` n'est pas celle de la sonde 4c ({SONDE_4C_COMMON_FINGERPRINT}) : I1 manque ; chercher, ne pas lire la suite"
+            );
+        }
+        // 4d (§17.8) : I5, l'organique sans attracteurs actifs rend 1.12 (fichier chargé ou non), arrêt si elle manque.
+        if v.name == "svc-org" || v.name == "svc-org-attr0" {
+            if let Some(want) = i5_expected(a) {
+                let ok = report.fingerprint == want;
+                eprintln!("« `{}` = 1.12 (I5 : {want}) » : {}", v.name, if ok { "oui" } else { "NON" });
+                anyhow::ensure!(
+                    ok,
+                    "`{}` ({}) n'est pas l'organique de 1.12 ({want}) : I5 manque ; chercher, ne pas lire la suite",
+                    v.name,
+                    report.fingerprint
+                );
+            }
         }
         // 4c, étape « virages » (§16.8) : I2 et I2′, arrêt si l'un manque.
         if let Some(o) = v.org {
@@ -838,7 +953,12 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             // changerait les boucles ou les requêtes, et le contrôle échouerait à tort.
             all_check_applies: !a.at_4a_defaults() && a.at_4a_defaults_but_holdout_share(),
         };
-        compare::write(&paths.out, &a.label, &conds, &done)?;
+        let stop = compare::write(&paths.out, &a.label, &conds, &done)?;
+        anyhow::ensure!(
+            stop.is_empty(),
+            "un contrôle du 4d manque : {} ; chercher, ne pas lire la suite",
+            stop.join(" ; ")
+        );
     }
     Ok(())
 }
@@ -961,8 +1081,10 @@ impl Bench<'_> {
                                 .filter(|s| s.kind == variants::SvcKind::Svc)
                                 .and_then(|_| self.learn_sets[t].as_ref())
                                 .map(|s| &s.shapes);
-                            req.figures =
-                                o.figures(ord_graph_match::profile::shape::mix_for(shapes, req.ride_type));
+                            req.figures = o.figures(
+                                ord_graph_match::profile::shape::mix_for(shapes, req.ride_type),
+                                req.ride_type,
+                            );
                         }
                         tasks.push(play::Task {
                             loop_idx: i,
@@ -1073,7 +1195,9 @@ impl Bench<'_> {
         let hs: [u32; 2] =
             hs.try_into().map_err(|_| anyhow!("`svc` joue exactement deux curseurs (`--cursors`)"))?;
         let learn_organic = org.is_some_and(|o| !o.lc);
-        let lp = svc::learn_params(sv, self.retain, hs, a.seed, learn_figures(learn_organic));
+        let learn_attractors = org.is_some_and(|o| !o.lc && o.attr.is_some_and(|x| x.la));
+        let lp =
+            svc::learn_params(sv, self.retain, hs, a.seed, learn_figures(learn_organic), learn_attractors);
         let cursors: Vec<(ord_loops::Mode, f32, u32)> = lp
             .cursors
             .iter()
@@ -1145,7 +1269,15 @@ fn svc_meta(
     let hs: Vec<u32> =
         a.cursors.iter().filter_map(|&c| ord_server::generator::cursor::hundredths(c)).collect();
     let cursors = [hs.first().copied().unwrap_or(25), hs.get(1).copied().unwrap_or(100)];
-    let lp = svc::learn_params(sv, retain, cursors, a.seed, learn_figures(org.is_some_and(|o| !o.lc)));
+    let learn_attractors = org.is_some_and(|o| !o.lc && o.attr.is_some_and(|x| x.la));
+    let lp = svc::learn_params(
+        sv,
+        retain,
+        cursors,
+        a.seed,
+        learn_figures(org.is_some_and(|o| !o.lc)),
+        learn_attractors,
+    );
     svc::SvcMeta {
         common: ord_graph_match::profile::format::hex16(svc::common_of(sv.norm).hash_for(lp.mix)),
         learn: ord_graph_match::profile::format::hex16(lp.hash()),
@@ -1201,6 +1333,17 @@ fn build_team(
 /// Mesures d'une boucle réelle, et le contrôleur sur sa marche si elle est continue (découverte : aucune règle
 /// d'équipe).
 fn measure_real(
+    gf: &MappedGraph,
+    checker: &Checker<'_, memmap2::Mmap>,
+    grids: &measure::AttrGrids,
+    l: &export::Loop,
+) -> (Measures, Option<Vec<String>>) {
+    let (mut m, codes) = measure_real_plain(gf, checker, l);
+    m.attr = measure::attr_masks(gf, grids, play::ride_of(l.ty), &l.walk, &l.trace);
+    (m, codes)
+}
+
+fn measure_real_plain(
     gf: &MappedGraph,
     checker: &Checker<'_, memmap2::Mmap>,
     l: &export::Loop,
