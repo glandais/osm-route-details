@@ -9,6 +9,7 @@
 //! Tout est en `f64`, sans table ni état caché : même résultat en natif et en WASM, mêmes sorties à 1 et 16 fils.
 
 use std::cell::{Cell, RefCell};
+use std::sync::OnceLock;
 
 use ord_graph::view::{HEADING_FAR_M, HEADING_NEAR_M};
 
@@ -17,7 +18,7 @@ use ord_graph::view::{HEADING_FAR_M, HEADING_NEAR_M};
 const NEAR_M: f64 = if HEADING_NEAR_M < HEADING_FAR_M / 2.0 { HEADING_NEAR_M } else { HEADING_FAR_M / 2.0 };
 
 use crate::engine::ViewData;
-use crate::geo::{heading_deg, turn_angle_deg, Local};
+use crate::geo::Local;
 use crate::search::{angle16, in_head, out_head, Ctx, Tree, NONE};
 use crate::verify::{CLUSTER_FREE_ENDS_M, CLUSTER_M};
 
@@ -33,7 +34,9 @@ const MAX_STATES: usize = 48;
 /// Le modèle : seuil du refus (150° moins la marge), grappe et bouts libres du contrôle, en dm.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TurnModel {
-    max_deg: f64,
+    /// Carré du cosinus du seuil : un virage de `max_deg` ou plus est un produit scalaire négatif de carré au moins
+    /// `cos2 × |u|² × |v|²` (le seuil est au-dessus de 90°).
+    cos2: f64,
     /// Seuil de la voie rapide, sur l'angle `u16` des caps stockés (360/65536 degrés).
     max16: u32,
     cluster_dm: u32,
@@ -44,7 +47,7 @@ impl TurnModel {
     pub fn new(max_turn_deg: f64, margin_deg: u8) -> Self {
         let max_deg = max_turn_deg - f64::from(margin_deg);
         Self {
-            max_deg,
+            cos2: max_deg.to_radians().cos().powi(2),
             max16: (max_deg / 180.0 * 32_768.0).ceil() as u32,
             cluster_dm: (CLUSTER_M * 10.0) as u32,
             free_end_dm: (CLUSTER_FREE_ENDS_M * 10.0) as u32,
@@ -153,10 +156,20 @@ impl OrgSearch {
                 return cut;
             }
         }
+        if lf > CLUSTER_DM_FAST {
+            // Chaîne longue puis chaîne courte : le seul virage est le virage simple en `b0`, de cap avant celui de la
+            // chaîne et de cap après celui de la corde de `fo` (la fenêtre de 25 à 50 m le dépasse : son dernier segment est
+            // prolongé). Même angle que `eval`, sans remonter le chemin.
+            let cut = model.simple_turn(v, f, fo);
+            if cut {
+                self.turn_cut.set(self.turn_cut.get() + 1);
+            }
+            return cut;
+        }
         self.turn_evals.set(self.turn_evals.get() + 1);
         let mut s = self.scratch.borrow_mut();
         s.clear();
-        collect_before(&mut s, v, t, lead, f, in_tree, if lf > CLUSTER_DM_FAST { LONG_DM } else { NEED_DM });
+        collect_before(&mut s, v, t, lead, f, in_tree, NEED_DM);
         s.push(fo);
         let cut = model.eval(v, &s, lead.dm + m, lead.aux);
         if cut {
@@ -200,10 +213,17 @@ impl OrgSearch {
                 return cut;
             }
         }
+        if lf > CLUSTER_DM_FAST {
+            let cut = model.simple_turn_back(v, fg, f);
+            if cut {
+                self.turn_cut.set(self.turn_cut.get() + 1);
+            }
+            return cut;
+        }
         self.turn_evals.set(self.turn_evals.get() + 1);
         let mut s = self.scratch.borrow_mut();
         s.clear();
-        collect_after(&mut s, v, t, lead, f, in_tree, if lf > CLUSTER_DM_FAST { LONG_DM } else { NEED_DM });
+        collect_after(&mut s, v, t, lead, f, in_tree, NEED_DM);
         s.push(fg ^ 1);
         let cut = model.eval(v, &s, lead.dm + m, lead.aux);
         if cut {
@@ -361,7 +381,7 @@ impl TurnModel {
         let mut ib = fi;
         loop {
             if junction(ib) {
-                let mut hout: Option<f64> = None;
+                let mut hout: Option<V> = None;
                 let mut run = 0u32;
                 let mut ia = ib;
                 loop {
@@ -372,8 +392,8 @@ impl TurnModel {
                                     t.node_best(v.tgt(s[ia])).is_some_and(|b| t.meters(b) <= self.free_end_dm)
                                 }));
                         if !exempt {
-                            let ho = *hout.get_or_insert_with(|| head_after(v, s, ib));
-                            if turn_angle_deg(head_before(v, s, ia), ho) >= self.max_deg {
+                            let vo = *hout.get_or_insert_with(|| vec_after(v, s, ib));
+                            if self.turns_back(vec_before(v, s, ia), vo) {
                                 return true;
                             }
                         }
@@ -405,110 +425,181 @@ impl TurnModel {
 /// `s[ib]` (`ia ≤ ib`, `ib + 1 < s.len()`). Pour les tests.
 #[cfg(test)]
 pub(crate) fn pair_angle(v: &ViewData, s: &[u32], ia: usize, ib: usize) -> f64 {
-    turn_angle_deg(head_before(v, s, ia), head_after(v, s, ib))
+    let (u, w) = (vec_before(v, s, ia), vec_after(v, s, ib));
+    let (dot, cross) = (u.0 * w.0 + u.1 * w.1, u.0 * w.1 - u.1 * w.0);
+    cross.abs().atan2(dot).to_degrees()
 }
 
-fn unit(h: u16) -> (f64, f64) {
-    let r = f64::from(h) * (std::f64::consts::TAU / 65_536.0);
-    (r.sin(), r.cos())
+type V = (f64, f64);
+
+impl TurnModel {
+    /// L'angle entre les vecteurs `u` (cap avant) et `w` (cap après) atteint-il le seuil ? Produit scalaire négatif et
+    /// carré au moins `cos² × |u|² × |w|²` : pas de `atan2`, pas de `fmod`.
+    #[inline]
+    fn turns_back(&self, u: V, w: V) -> bool {
+        let dot = u.0 * w.0 + u.1 * w.1;
+        dot < 0.0 && dot * dot >= self.cos2 * (u.0 * u.0 + u.1 * u.1) * (w.0 * w.0 + w.1 * w.1)
+    }
+
+    /// Virage simple en `tgt(f)` quand `f` fait plus de 100 m : cap avant celui de `f` (sa fenêtre de 25 à 50 m est droite le
+    /// long de son cap de bout), cap après celui de la corde de `fo` (longueur plus petite que 50 m).
+    fn simple_turn(&self, v: &ViewData, f: u32, fo: u32) -> bool {
+        let loc = Local::new(v.pos[v.tgt(f) as usize]);
+        let (a, b) = (loc.xy(v.pos[v.src(fo) as usize]), loc.xy(v.pos[v.tgt(fo) as usize]));
+        self.turns_back(unit(in_head(v, f)), (b.0 - a.0, b.1 - a.1))
+    }
+
+    /// Le même, à rebours : `f` (après le nœud `src(f)`) fait plus de 100 m, `fg` le précède.
+    fn simple_turn_back(&self, v: &ViewData, fg: u32, f: u32) -> bool {
+        let loc = Local::new(v.pos[v.src(f) as usize]);
+        let (a, b) = (loc.xy(v.pos[v.src(fg) as usize]), loc.xy(v.pos[v.tgt(fg) as usize]));
+        // Cap avant : celui de la corde de `fg` ; cap après : celui de `f` au départ.
+        self.turns_back((b.0 - a.0, b.1 - a.1), unit(out_head(v, f)))
+    }
 }
 
-/// Le segment d'un état vu **en remontant** depuis son nœud d'arrivée : `(début, arrivée, longueur)`. Une chaîne de 50 m ou
-/// plus est droite le long de son cap d'arrivée, une plus courte est la corde entre ses nœuds.
-fn seg_back(v: &ViewData, loc: &Local, f: u32) -> ((f64, f64), (f64, f64), f64) {
-    let to = loc.xy(v.pos[v.tgt(f) as usize]);
+/// Vecteurs unitaires des 65 536 caps stockés (f32 : 512 Ko, relus plus vite qu'un `sincos`).
+fn unit_table() -> &'static [[f32; 2]] {
+    static T: OnceLock<Vec<[f32; 2]>> = OnceLock::new();
+    T.get_or_init(|| {
+        (0..65_536u32)
+            .map(|h| {
+                let r = f64::from(h) * (std::f64::consts::TAU / 65_536.0);
+                [r.sin() as f32, r.cos() as f32]
+            })
+            .collect()
+    })
+}
+
+#[inline]
+fn unit(h: u16) -> V {
+    let [x, y] = unit_table()[usize::from(h)];
+    (f64::from(x), f64::from(y))
+}
+
+#[inline]
+fn norm(d: V) -> f64 {
+    (d.0 * d.0 + d.1 * d.1).sqrt()
+}
+
+/// Le segment d'un état vu **en remontant** depuis son nœud d'arrivée `to` : `(début, longueur)`. Une chaîne de 50 m ou plus
+/// est droite le long de son cap d'arrivée, une plus courte est la corde entre ses nœuds (`from`, déjà dans le repère).
+#[inline]
+fn seg_back(v: &ViewData, f: u32, to: V, src_xy: impl FnOnce() -> V) -> (V, f64) {
     let l = v.len_dm[(f >> 1) as usize];
     if l >= LONG_DM {
         let len = f64::from(l) / 10.0;
         let u = unit(in_head(v, f));
-        ((to.0 - len * u.0, to.1 - len * u.1), to, len)
+        ((to.0 - len * u.0, to.1 - len * u.1), len)
     } else {
-        let from = loc.xy(v.pos[v.src(f) as usize]);
-        (from, to, (to.0 - from.0).hypot(to.1 - from.1))
+        let from = src_xy();
+        (from, norm((to.0 - from.0, to.1 - from.1)))
     }
 }
 
-/// Le segment d'un état vu en avançant depuis son nœud de départ.
-fn seg_fwd(v: &ViewData, loc: &Local, f: u32) -> ((f64, f64), (f64, f64), f64) {
-    let from = loc.xy(v.pos[v.src(f) as usize]);
-    let l = v.len_dm[(f >> 1) as usize];
-    if l >= LONG_DM {
-        let len = f64::from(l) / 10.0;
-        let u = unit(out_head(v, f));
-        (from, (from.0 + len * u.0, from.1 + len * u.1), len)
-    } else {
-        let to = loc.xy(v.pos[v.tgt(f) as usize]);
-        (from, to, (to.0 - from.0).hypot(to.1 - from.1))
-    }
-}
-
-/// Point situé à `d` mètres avant le nœud d'arrivée de `s[ia]`, dans le repère `loc` ; au-delà du chemin connu, le dernier
-/// segment est prolongé.
-fn pt_back(v: &ViewData, loc: &Local, s: &[u32], ia: usize, d: f64) -> (f64, f64) {
+/// Points situés à `d1` puis `d2 ≥ d1` mètres avant le nœud d'arrivée de `s[ia]` (origine du repère `loc`) ; au-delà du
+/// chemin connu, le dernier segment est prolongé.
+fn points_back(v: &ViewData, loc: &Local, s: &[u32], ia: usize, d1: f64, d2: f64) -> (V, V) {
     let mut acc = 0.0;
-    let mut last: Option<((f64, f64), (f64, f64))> = None;
+    let mut to: V = (0.0, 0.0);
+    let mut last: Option<(V, V)> = None;
+    let (mut p1, mut p2): (Option<V>, Option<V>) = (None, None);
     for k in (0..=ia).rev() {
-        let (from, to, len) = seg_back(v, loc, s[k]);
-        if len > 0.0 && d <= acc + len {
-            let t = (d - acc) / len;
-            return (to.0 + t * (from.0 - to.0), to.1 + t * (from.1 - to.1));
+        let f = s[k];
+        let (from, len) = seg_back(v, f, to, || loc.xy(v.pos[v.src(f) as usize]));
+        if len > 0.0 {
+            let at = |d: f64| {
+                let t = (d - acc) / len;
+                (to.0 + t * (from.0 - to.0), to.1 + t * (from.1 - to.1))
+            };
+            if p1.is_none() && d1 <= acc + len {
+                p1 = Some(at(d1));
+            }
+            if d2 <= acc + len {
+                p2 = Some(at(d2));
+                break;
+            }
         }
         acc += len;
         last = Some((from, to));
+        // Le nœud de départ de cet état est celui d'arrivée du précédent ; après une chaîne longue, `from` est un point
+        // extrapolé, pas le nœud : on relit le nœud.
+        to = if v.len_dm[(f >> 1) as usize] >= LONG_DM { loc.xy(v.pos[v.src(f) as usize]) } else { from };
     }
-    match last {
-        Some((from, to)) => {
-            let (dx, dy) = (from.0 - to.0, from.1 - to.1);
-            let norm = dx.hypot(dy);
-            if norm < 1e-9 {
+    let extend = |d: f64| match last {
+        Some((from, end)) => {
+            let (dx, dy) = (from.0 - end.0, from.1 - end.1);
+            let n = norm((dx, dy));
+            if n < 1e-9 {
                 from
             } else {
-                (from.0 + dx / norm * (d - acc), from.1 + dy / norm * (d - acc))
+                (from.0 + dx / n * (d - acc), from.1 + dy / n * (d - acc))
             }
         }
         None => (0.0, 0.0),
-    }
+    };
+    (p1.unwrap_or_else(|| extend(d1)), p2.unwrap_or_else(|| extend(d2)))
 }
 
-/// Point situé à `d` mètres après le nœud d'arrivée de `s[ib]`.
-fn pt_fwd(v: &ViewData, loc: &Local, s: &[u32], ib: usize, d: f64) -> (f64, f64) {
+/// Points situés à `d1` puis `d2 ≥ d1` mètres après le nœud d'arrivée de `s[ib]`.
+fn points_fwd(v: &ViewData, loc: &Local, s: &[u32], ib: usize, d1: f64, d2: f64) -> (V, V) {
     let mut acc = 0.0;
-    let mut last: Option<((f64, f64), (f64, f64))> = None;
+    let mut from: V = (0.0, 0.0);
+    let mut last: Option<(V, V)> = None;
+    let (mut p1, mut p2): (Option<V>, Option<V>) = (None, None);
     for &f in &s[ib + 1..] {
-        let (from, to, len) = seg_fwd(v, loc, f);
-        if len > 0.0 && d <= acc + len {
-            let t = (d - acc) / len;
-            return (from.0 + t * (to.0 - from.0), from.1 + t * (to.1 - from.1));
+        let l = v.len_dm[(f >> 1) as usize];
+        let (to, len) = if l >= LONG_DM {
+            let len = f64::from(l) / 10.0;
+            let u = unit(out_head(v, f));
+            ((from.0 + len * u.0, from.1 + len * u.1), len)
+        } else {
+            let to = loc.xy(v.pos[v.tgt(f) as usize]);
+            (to, norm((to.0 - from.0, to.1 - from.1)))
+        };
+        if len > 0.0 {
+            let at = |d: f64| {
+                let t = (d - acc) / len;
+                (from.0 + t * (to.0 - from.0), from.1 + t * (to.1 - from.1))
+            };
+            if p1.is_none() && d1 <= acc + len {
+                p1 = Some(at(d1));
+            }
+            if d2 <= acc + len {
+                p2 = Some(at(d2));
+                break;
+            }
         }
         acc += len;
         last = Some((from, to));
+        from = if l >= LONG_DM { loc.xy(v.pos[v.tgt(f) as usize]) } else { to };
     }
-    match last {
-        Some((from, to)) => {
-            let (dx, dy) = (to.0 - from.0, to.1 - from.1);
-            let norm = dx.hypot(dy);
-            if norm < 1e-9 {
-                to
+    let extend = |d: f64| match last {
+        Some((start, end)) => {
+            let (dx, dy) = (end.0 - start.0, end.1 - start.1);
+            let n = norm((dx, dy));
+            if n < 1e-9 {
+                end
             } else {
-                (to.0 + dx / norm * (d - acc), to.1 + dy / norm * (d - acc))
+                (end.0 + dx / n * (d - acc), end.1 + dy / n * (d - acc))
             }
         }
         None => (0.0, 0.0),
-    }
+    };
+    (p1.unwrap_or_else(|| extend(d1)), p2.unwrap_or_else(|| extend(d2)))
 }
 
-/// Cap avant le nœud d'arrivée de `s[ia]` : des points à 50 m et 25 m avant, dans un repère centré au nœud.
-fn head_before(v: &ViewData, s: &[u32], ia: usize) -> f64 {
+/// Vecteur du cap avant le nœud d'arrivée de `s[ia]` : du point à 50 m avant à celui à 25 m avant, dans un repère centré au
+/// nœud.
+fn vec_before(v: &ViewData, s: &[u32], ia: usize) -> V {
     let loc = Local::new(v.pos[v.tgt(s[ia]) as usize]);
-    let far = pt_back(v, &loc, s, ia, HEADING_FAR_M);
-    let near = pt_back(v, &loc, s, ia, NEAR_M);
-    heading_deg(near.0 - far.0, near.1 - far.1)
+    let (near, far) = points_back(v, &loc, s, ia, NEAR_M, HEADING_FAR_M);
+    (near.0 - far.0, near.1 - far.1)
 }
 
-/// Cap après le nœud d'arrivée de `s[ib]` : des points à 25 m et 50 m après, dans un repère centré au nœud.
-fn head_after(v: &ViewData, s: &[u32], ib: usize) -> f64 {
+/// Vecteur du cap après le nœud d'arrivée de `s[ib]` : du point à 25 m après à celui à 50 m après.
+fn vec_after(v: &ViewData, s: &[u32], ib: usize) -> V {
     let loc = Local::new(v.pos[v.tgt(s[ib]) as usize]);
-    let near = pt_fwd(v, &loc, s, ib, NEAR_M);
-    let far = pt_fwd(v, &loc, s, ib, HEADING_FAR_M);
-    heading_deg(far.0 - near.0, far.1 - near.1)
+    let (near, far) = points_fwd(v, &loc, s, ib, NEAR_M, HEADING_FAR_M);
+    (far.0 - near.0, far.1 - near.1)
 }
