@@ -532,6 +532,26 @@ l'orchestrateur du travail :
 3. **4c fusionné dans `develop` en option** (fait par l'orchestrateur, `16652cc`) : la bascule se fait sur une branche à part,
    `feat/ord-loops-lot4c-bascule`, partie de `develop`.
 
+### 9.10 Décisions (2026-11-19, avant le 4d)
+
+Réponses du propriétaire aux questions du §17.19, transmises par l'orchestrateur du travail ; elles remplacent l'option
+recommandée là où elles diffèrent.
+
+1. **Catégories et poids, recommandation retenue** : ROAD, commerce (café, boulangerie) et point de vue, chacun avec un poids ;
+   bourgs écrits dans le fichier à poids 0 ; GRAVEL, point de vue seul ; aucun poids négatif au 4d ; MTB, rien ; **poids généraux**
+   (pas par équipe), réglés au banc dans {1, 2}.
+2. **Cols et sommets : le même poids que le point de vue, dès le 4d** (l'option de la question 2, et non la recommandation « poids
+   0 ») : écrits dans le fichier **et actifs**, en ROAD et en GRAVEL, au poids du point de vue de chaque type. Leur effet n'est pas
+   mesurable au banc (équipes de plaine) : le relevé le **rapporte** (part des premiers parcours près d'un col ou d'un sommet),
+   sans critère d'effet ; ils restent soumis aux critères de non-régression (formes, goût, temps, refus).
+3. **Critère d'effet** : celui recommandé à la question 3 (fermer au moins la moitié de l'écart au réel, ne pas dépasser le réel de
+   plus de 0,03, commerce GRAVEL pas plus haut qu'en 1.12 + 0,005, formes et goût gardés contre 1.12).
+4. **Temps jugé contre 1.12** : P50 ≤ × 1,05 de `svc-org` au banc à chaque curseur, P90 ≤ × 1,10 ; en conteneur, ≤ × 1,05 d'une
+   1.12 jouée dans la même séance.
+5. **Bascule par le codeur** : oui. `attractors = on` dans un commit à part si E1 à E4, A, B, C1, C2 et D tiennent, suivi de la
+   séance en conteneur (les deux fichiers `.orda` posés) ; `git revert` si elle manque. L'apprentissage reste sans attracteurs sauf
+   règle L′ (aucun profil invalidé). La fusion et la pose des fichiers en production restent au propriétaire.
+
 ---
 
 ## 10. Étapes, dans l'ordre
