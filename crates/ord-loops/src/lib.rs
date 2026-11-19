@@ -60,7 +60,9 @@ pub use geo::LatLon;
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
-pub use verify::{check_route, check_route_in, Check, Violation};
+pub use verify::{
+    check_route, check_route_aligned, check_route_aligned_in, check_route_in, Check, Violation,
+};
 pub use window::{tiles_cover, tiles_union, Window, WindowPlan};
 
 /// Les huit caps possibles d'une requête.
@@ -184,6 +186,9 @@ pub struct OrganicTune {
     /// Une paire dont le triangle est refusé pour un virage serré est reprise une fois à la passe suivante, avec les
     /// transitions que le refus interdit (§15.19 de la note) ; elle ne prend pas une seconde place parmi `max_pairs`.
     pub sharp_retry: bool,
+    /// Le contrôle interne prend ses caps comme le contrôleur indépendant (repère centré au nœud) ; `false` : celui de
+    /// l'organique d'avant l'étape « virages » (§16.3 de la note du lot 4).
+    pub turns: bool,
 }
 
 impl Default for OrganicTune {
@@ -204,6 +209,7 @@ impl Default for OrganicTune {
             spike_deg: 150,
             spike_m: 500,
             sharp_retry: true,
+            turns: true,
         }
     }
 }

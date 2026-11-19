@@ -19,7 +19,7 @@ use crate::search::{
     Weighter, Workspace, BAN, INF, NONE, TAIL,
 };
 use crate::team::{TeamCtx, TeamData, WindowTeam};
-use crate::verify::{check_route_in, trim_piece, Check, Violation};
+use crate::verify::{check_route_aligned_in, check_route_in, trim_piece, Check, Violation};
 use crate::window::Window;
 use crate::{
     Diagnostics, Failure, Family, FigureDiagnostics, Figures, Generation, Mode, NoRouteDetail, Organic,
@@ -501,7 +501,11 @@ fn generate_inner<B: AsRef<[u8]>>(
                     familiarity: r.familiarity,
                     family: Family::Turnaround,
                 };
-                let chk = check_route_in(e, win, team.map(|t| t.data), r, &route);
+                let chk = if org.is_some_and(|o| o.tune.turns) {
+                    check_route_aligned_in(e, win, team.map(|t| t.data), r, &route)
+                } else {
+                    check_route_in(e, win, team.map(|t| t.data), r, &route)
+                };
                 if !chk.violations.is_empty() {
                     for vcode in &chk.violations {
                         *rejected.entry(*vcode).or_insert(0) += 1;

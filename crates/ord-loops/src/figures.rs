@@ -17,7 +17,7 @@ use crate::search::{
     NONE, P2P_SLACK, TAIL,
 };
 use crate::team::TeamCtx;
-use crate::verify::{check_route_in, Violation};
+use crate::verify::{check_route_aligned_in, check_route_in, Violation};
 use crate::window::Window;
 use crate::{Failure, Family, FigureDiagnostics, Organic, Position, Request, Route};
 
@@ -613,7 +613,11 @@ pub(crate) fn triangle_phase<B: AsRef<[u8]>>(
                 familiarity: fx.r.familiarity,
                 family: Family::Triangle,
             };
-            let chk = check_route_in(fx.e, fx.win, fx.team.map(|t| t.data), fx.r, &route);
+            let chk = if tune.turns {
+                check_route_aligned_in(fx.e, fx.win, fx.team.map(|t| t.data), fx.r, &route)
+            } else {
+                check_route_in(fx.e, fx.win, fx.team.map(|t| t.data), fx.r, &route)
+            };
             if !chk.violations.is_empty() {
                 for vcode in &chk.violations {
                     *rejected.entry(*vcode).or_insert(0) += 1;

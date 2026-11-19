@@ -300,6 +300,18 @@ pub fn check_route<B: AsRef<[u8]>>(
     check_route_in(e, &win, team, req, route)
 }
 
+/// Comme [`check_route`], avec les caps pris au nœud comme le fait [`check_route_aligned_in`].
+pub fn check_route_aligned<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    team: Option<&TeamData>,
+    req: &Request,
+    route: &Route,
+) -> Check {
+    let plan = e.plan(req, 0.0);
+    let win = e.build_window(plan.view, &plan.need, &mut || false).expect("jamais coupée");
+    check_route_aligned_in(e, &win, team, req, route)
+}
+
 /// Comme [`check_route`], dans une fenêtre déjà construite.
 pub fn check_route_in<B: AsRef<[u8]>>(
     e: &Engine<B>,
@@ -307,6 +319,32 @@ pub fn check_route_in<B: AsRef<[u8]>>(
     team: Option<&TeamData>,
     req: &Request,
     route: &Route,
+) -> Check {
+    check_route_with(e, win, team, req, route, false)
+}
+
+/// Comme [`check_route_in`], mais les caps du virage simple et des grappes sont pris dans un repère centré **au nœud**
+/// (le nœud entre les morceaux, comme le contrôleur indépendant) et la corde de l'épingle dans un repère centré au
+/// nœud `a` ; [`check_route_in`] les prend dans un repère centré au départ du parcours. Les deux repères ne divergent
+/// que de 0,04° à 1,34° sur 10 à 80 km, assez pour qu'un virage de 150,02° passe l'un et pas l'autre (lot 4, 4c, §16.0
+/// point 1). Réservé à la génération organique : en `Classic`, aligner changerait les parcours de 1.10.
+pub fn check_route_aligned_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<&TeamData>,
+    req: &Request,
+    route: &Route,
+) -> Check {
+    check_route_with(e, win, team, req, route, true)
+}
+
+fn check_route_with<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<&TeamData>,
+    req: &Request,
+    route: &Route,
+    node_frame: bool,
 ) -> Check {
     let mut viol: BTreeSet<Violation> = BTreeSet::new();
     let mut out = Check::default();
@@ -349,6 +387,9 @@ pub fn check_route_in<B: AsRef<[u8]>>(
     let s_e7 = req.start.to_e7();
     let end_pt = req.end.unwrap_or(req.start).to_e7();
     let loc = Local::new(s_e7);
+    // Repère des caps : celui du départ, ou celui du nœud (`node_frame`).
+    let frame = |p: (i32, i32)| if node_frame { Local::new(p) } else { loc };
+    let last_of = |p: &Piece| *p.pts.last().expect("morceau non vide");
     if haversine_m(s_e7, pieces[0].pts[0]) > e.params.snap_m + 1.0 {
         viol.insert(Violation::WrongStart);
     }
@@ -400,8 +441,8 @@ pub fn check_route_in<B: AsRef<[u8]>>(
         if a.edge == b.edge && a.rev != b.rev {
             viol.insert(Violation::UTurn);
         } else if admitted_degree(e, win, node) >= 3 {
-            let hin = route_heading(&pieces, i, false, &loc);
-            let hout = route_heading(&pieces, i + 1, true, &loc);
+            let hin = route_heading(&pieces, i, false, &frame(last_of(a)));
+            let hout = route_heading(&pieces, i + 1, true, &frame(b.pts[0]));
             if turn_angle_deg(hin, hout) >= e.params.max_turn_deg {
                 viol.insert(Violation::SharpTurn);
                 out.sharp_at.push(i);
@@ -426,10 +467,10 @@ pub fn check_route_in<B: AsRef<[u8]>>(
         while j + 1 < n && cum[j + 1] - cum[i + 1] <= CLUSTER_M {
             let at_an_end = cum[j + 1] <= CLUSTER_FREE_ENDS_M || cum[n] - cum[i + 1] <= CLUSTER_FREE_ENDS_M;
             if !at_an_end && admitted_degree(e, win, pieces[j].to) >= 3 {
-                let hin = route_heading(&pieces, i, false, &loc);
-                let hout = route_heading(&pieces, j + 1, true, &loc);
+                let hin = route_heading(&pieces, i, false, &frame(last_of(&pieces[i])));
+                let hout = route_heading(&pieces, j + 1, true, &frame(pieces[j + 1].pts[0]));
                 if turn_angle_deg(hin, hout) >= e.params.max_turn_deg
-                    && !hairpin(e, &pieces, i, j, hin, hout, &loc)
+                    && !hairpin(e, &pieces, i, j, hin, hout, &frame(last_of(&pieces[i])))
                 {
                     viol.insert(Violation::SharpTurn);
                     out.sharp_at.push(i);
