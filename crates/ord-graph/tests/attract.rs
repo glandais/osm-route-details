@@ -227,6 +227,12 @@ fn a_damaged_file_is_refused() {
     refix(&mut b);
     assert!(matches!(open(b), AttrError::Corrupt(m) if m.contains("ZONE_MASK")));
 
+    // Table des catégories renumérotée (boulangerie au bit du café) : refusée.
+    let mut b = good.clone();
+    b[128..128 + 16].copy_from_slice(b"bakery\0\0\0\0\0\0\0\0\0\0");
+    refix(&mut b);
+    assert!(matches!(open(b), AttrError::Corrupt(m) if m.contains("CATS")));
+
     // Catégorie d'ancrage hors table.
     let mut b = good.clone();
     b[a_cat] = 9;

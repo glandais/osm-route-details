@@ -628,6 +628,11 @@ pub fn write_attr<B: AsRef<[u8]>>(
 ) -> Result<u64, AttrError> {
     let bytes = encode_attr(base, view, data, w)?;
     let tmp = path.with_extension("orda.tmp");
+    // Un temporaire laissé par une écriture interrompue est en 0444 : `write` ne pourrait pas l'ouvrir.
+    match std::fs::remove_file(&tmp) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+        _ => {}
+    }
     std::fs::write(&tmp, &bytes)?;
     #[cfg(unix)]
     {
@@ -782,6 +787,12 @@ impl<B: AsRef<[u8]>> AttrFile<B> {
             if i > 0 && zn[i - 1].get() >= zn[i].get() {
                 return Err(corrupt("nœuds de zone non strictement croissants"));
             }
+        }
+        // La table des catégories est figée par le format 1 : un bit connu doit porter le nom de `CATS` (un `minor` plus grand
+        // peut en ajouter après, jamais renuméroter), sinon le moteur pèserait une catégorie pour une autre.
+        let names = self.cats();
+        if names.iter().zip(CATS).any(|(got, want)| got != want) {
+            return Err(corrupt(format!("CATS : table {names:?}, attendue {CATS:?}")));
         }
         if serde_json::from_slice::<serde::de::IgnoredAny>(self.meta()).is_err() {
             return Err(corrupt("META n'est pas du JSON"));
