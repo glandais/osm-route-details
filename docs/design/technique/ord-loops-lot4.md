@@ -624,8 +624,15 @@ recommandée là où elles diffèrent.
    1.12, bascule par le codeur. **Codé** le même jour (commits 1 à 6 du §17.14, écarts au §17.20) : fichier `.orda` et sous-commande
    `attractors`, attracteurs dans le moteur organique, apprentissage sans attracteurs (règle L′), banc, service api 1.13 (paquet
    1.13.0, défaut `off`). Fichiers de la France construits (44 s, 1,2 Go, 9,8 et 11,9 Mo) ; invariants I1, I3, I4, I5 tenus ; essai
-   de fumée B et C (relevé : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md)). **Reste** : les campagnes 1 à 5 du §17.15,
-   puis, si les critères tiennent, la bascule (commit 7) et la séance en conteneur.
+   de fumée B et C (relevé : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md)). **Campagnes faites** le 19 novembre au
+   soir (campagnes 1 à 4 du §17.15 et un second tirage, §2 à §12 du relevé ; écarts au §17.20, points 20 à 27) : I1, I5, I3 et D
+   tiennent, la métrique est celle de la sonde. L'effet est net et **dépasse** : commerce ROAD 0,147 · 0,125 (1.12) → 0,272 · 0,290
+   aux réglages par défaut pour un réel de 0,200, la lentille faisant l'essentiel (0,164 · 0,167 sans elle). **Pas de bascule** :
+   pour chacun des sept réglages essayés manquent E4 (commerce GRAVEL) et A5, et pour tous sauf l'apprentissage avec attracteurs
+   B1 (goût ROAD au curseur 1, par les grandes routes des bourgs) et le P90 de C1 (× 1,13 à × 1,18 au curseur 1) ; E3 manque dès
+   que la lentille joue. `generator.attractors` reste `off`, pas de commit 7 ni de séance en conteneur. Cols et sommets : aucun
+   effet lisible au banc (§6 du relevé). **Prêt à fusionner**, attracteurs en option. **Reste**, au propriétaire : garder `off`, ou
+   relâcher des seuils, ou une étape de plus (§17.20, point 27).
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
 
@@ -4947,3 +4954,28 @@ fichiers de la France : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.m
     vérifiée avant l'extraction, rang des paires et lentille conformes au §17.7, cols et sommets au poids du point de vue
     (`general`, `rvue`, `gvue`), budget et note inchangés, contrôleur intouché, `graph_id`, `params_hash` et profils inchangés,
     aucune donnée privée dans le dépôt.
+
+**Campagnes** (19 novembre au soir, binaire `release` de `63b160a` ; relevé : §2 à §12 de
+[`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md)) :
+
+20. **Campagne 1, première passe** : non rejouée sous le label `4d-essai` ; c'est la passe `4d-relecture` de la relecture, même
+    binaire et mêmes variantes (I1 et I5 tenus). La seconde passe (`--no-attractors`, `base,svc+org`) est jouée sous `4d-essai-sans`.
+21. **`<r*>` de la campagne 4 choisi à la main** : `chosen` vaut « aucun » (aucun réglage ne tient A, B1, C1, C2 et E3), cas que le
+    §17.15 ne couvre pas pour la campagne 4. Tranché par prudence : `ltol:0`, le plus doux et le seul qui tient E3, pour lire B2, la
+    règle L′ et un second tirage des temps ; la bascule était déjà exclue (B1, C1 et A5 manquaient pour tous). `rank:0` et des poids
+    plus forts ne sont pas joués.
+22. **`ltol:10` ajouté au second tirage** (levier `ltol` du §17.17, poids dans {1, 2}) pour savoir s'il existe une tolérance qui
+    tienne E1 et E3 ensemble : non à 10 ‰ (commerce 0,230 · 0,234 pour un plafond de 0,230), et B1, C1 et A5 y manquent aussi.
+23. **A3 GRAVEL** : le banc le juge (≤ `svc` + 0,05), le §16.11 le rapporte seulement. Lu à la main sur ROAD ; le verdict ne change
+    pas (A5, B1, C1 et E4 manquent de toute façon).
+24. **Règle L′** : le banc la dit « indéterminée », B2 de `-la` ne se lisant pas (la campagne 4 du §17.15 n'a pas de
+    `common+org+attr…+la`). Lue à la main : le candidat appris sans attracteurs manque B1 ; `-la` tient B1, mais manque E4, A2 et A5 :
+    pas de bascule dans les deux branches.
+25. **Pas de séance C3** : elle suit la bascule. Protocole préparé (jetable, hors dépôt) : 18 dépôts sous 1.13, puis 1.12, 1.13,
+    1.12, 1.13 sur le même volume, chauffe non comptée, série et 4 clients au millième, les deux `.orda` posés à côté des vues ;
+    image 1.12 `osm-route-details:lot4-4c-bascule` (`d5dac61`, le code de `b288206`).
+26. **Pas de commit 7** : `generator.attractors = off`, `AttrWeights::general` (poids 1 du §17.20 point 1) et
+    `OrganicTune::default()` (`attr_lens_tol_milli` 50, `attr_rank` vrai) inchangés ; `LearnParams::attractors = false`.
+27. **Reste au propriétaire** : garder `off` (1.13 fusionnable, attracteurs en option) ; ou relâcher E4, A5, B1 et le P90 de C1 et
+    basculer `ltol:0` appris avec attracteurs (E4, A2, A5 y manquent ; tous les profils `incompatible`, une nuit de redépôt) ; ou une
+    étape de plus sur la lentille (entre 0 et 10 ‰ de D) et sur la zone des bourgs, qui porte le recul du goût (`way_major`).
