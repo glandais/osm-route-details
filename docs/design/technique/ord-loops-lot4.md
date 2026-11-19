@@ -505,6 +505,19 @@ l'orchestrateur du travail ; la spécification qui les applique est au §16 :
 6. **Point 15 du §15.19** (`REUSE_OUTSIDE_TAIL`) : traité dans la même étape si sa cause s'établit. Elle s'établit (§16.0) ;
    le remède est au §16.4.
 
+**Réponses au §16.14, 19 novembre 2026** (propriétaire, transmises par l'orchestrateur du travail) :
+
+1. **Marge** `turn_margin_deg` = **5°** (le modèle refuse à ≥ 145°).
+2. **Virages modélisés aussi dans les arbres T1 et T2, en organique seulement** : les heuristiques ne sont plus garanties
+   admissibles en organique, accepté ; le `Classic` reste intact.
+3. **A4 en absolu pour `shared_share` seul** ; les quatre autres mesures (`far_pos`, `detour_far`, `sinuosity_10`,
+   `turns_per_10km`) gardent la W1 / IQR ≤ `svc` + 0,10.
+4. **Si C1 manque encore** : la bascule se fait quand même **jusqu'à P50 ≤ × 1,25 de `svc` au banc**, à condition que tous les
+   autres critères tiennent, **C3 compris** (≤ 0,56 s à 4 clients, ≤ 0,29 s en série, en conteneur). Au-delà de × 1,25 : pas de
+   bascule, et le relevé décompose le temps (couloir, jambes, arbres).
+5. **Points de prudence du §16.12 confirmés** : alignement sur les caps et l'épingle, épingle non modélisée, exemption d'arrivée
+   lue sur T2, instrumentation de diagnostic non commitée (elle écrit des positions privées).
+
 ---
 
 ## 10. Étapes, dans l'ordre
