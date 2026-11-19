@@ -4,9 +4,11 @@
 //! Le contrôle des garanties refuse un virage de 150° ou plus à un nœud de degré 3 ou plus, seul ou sur une **grappe** de
 //! nœuds distants de 100 m au plus le long du parcours. Les recherches ne voient qu'un nœud à la fois : elles produisaient
 //! des triangles refusés après coup. Le [`TurnModel`] refait ce contrôle **à la relaxation**, sur le chemin courant, avec
-//! des caps pris sur un chemin approché (les mêmes fenêtres de 30 à 50 m que le contrôle, sur les chaînes droites).
+//! des caps pris sur un chemin approché (les fenêtres de 25 à 50 m que le contrôle prend sur 50 m de chemin, exactes sur
+//! les chaînes droites, §16.13 de la note).
 //!
-//! Tout est en `f64`, sans table ni état caché : même résultat en natif et en WASM, mêmes sorties à 1 et 16 fils.
+//! Tout est en `f64`, hormis la table des vecteurs unitaires des caps stockés (`f32`, construite une fois, sans état
+//! propre à une requête) : mêmes sorties à 1 et 16 fils, et la même dépendance à la libm que la géométrie du contrôle.
 
 use std::cell::{Cell, RefCell};
 use std::sync::OnceLock;
@@ -30,6 +32,10 @@ const CLUSTER_DM_FAST: u32 = 1_000;
 const NEED_DM: u32 = 2_000;
 /// Au plus ce nombre d'états du chemin sont relus.
 const MAX_STATES: usize = 48;
+/// Jonction d'un chemin d'arbre (dm) : les états qui commencent à moins de 200 m du nœud de jonction sont rejoués. Une paire
+/// dont la fenêtre d'avant `a` déborde sur les jambes posées a son `a` à moins de 50 m après la jonction, son `b` à moins de
+/// 150 m ; elle n'est lue avec sa fenêtre d'après entière qu'à l'état qui commence moins de 50 m après `b`.
+const JUNCTION_DM: u32 = 2_000;
 
 /// Le modèle : seuil du refus (150° moins la marge), grappe et bouts libres du contrôle, en dm.
 #[derive(Clone, Copy, Debug)]
@@ -233,7 +239,7 @@ impl OrgSearch {
     }
 
     /// Jonction d'un chemin d'arbre posé après des jambes déjà fixées (§16.2) : le modèle rejoué sur chaque état de `ret`
-    /// dont le début est à moins de 160 m du nœud de jonction, avec `ctx` (les jambes) pour contexte. `base_dm` : mètres du
+    /// dont le début est à moins de 200 m du nœud de jonction (`JUNCTION_DM`), avec `ctx` (les jambes) pour contexte. `base_dm` : mètres du
     /// parcours à la jonction ; `aux` : l'arbre retour. Vrai si aucun virage n'est refusé.
     pub fn junction_ok(
         &self,
@@ -250,7 +256,7 @@ impl OrgSearch {
         full.extend_from_slice(ctx);
         let mut along = 0u32;
         for &x in ret {
-            if along >= 1_600 {
+            if along >= JUNCTION_DM {
                 break;
             }
             full.push(x);
