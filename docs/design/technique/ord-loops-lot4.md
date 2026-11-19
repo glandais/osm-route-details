@@ -4925,3 +4925,25 @@ fichiers de la France : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.m
     20 boucles), le relevé complet, et donc **ni le commit 7 (bascule) ni la séance C3** : `attractors` reste `off`. L'essai de
     fumée montre déjà un dépassement du réel sur le commerce en ROAD (E3 ne tient pas sur 21 requêtes), que le §17.17 prévoyait
     (leviers : `ltol`, puis les poids) ; la campagne 3 est faite pour ça.
+
+**Relecture indépendante** (19 novembre, commits 1 à 6 relus contre le §17 ; corrections en commits séparés) :
+
+15. **Test 9 sans re-bénédiction** : il rejouait `window_reference.txt` et `team_reference.txt` par les assertions qui **écrivent**
+    la référence sous `ORD_LOOPS_BLESS` ; un `ORD_LOOPS_BLESS=1 cargo test` aurait donc pu figer une sortie `Classic` moteur
+    **avec** fichier (et faire la course avec les tests sans fichier, qui écrivent les mêmes références). Les trois références
+    sont désormais relues seulement, quel que soit l'environnement (I1 ne se re-bénit jamais).
+16. **Table `CATS` contrôlée à l'ouverture** : `AttrFile::open` refuse un fichier dont un bit connu ne porte pas le nom de
+    `CATS` (le §17.3 la fige au format 1 ; un `minor` plus grand peut ajouter un bit après, jamais renuméroter). Sans ce contrôle,
+    un fichier étranger au bon en-tête aurait fait peser une catégorie pour une autre. Test 1 : table renumérotée refusée.
+17. **Choix du réglage de la campagne 3** (§17.15) : le code gardait le premier de la liste tant qu'un suivant ne le dépassait pas
+    de plus de 0,05, donc `attr` (`ltol` 50) devant `ltol:20` ou `ltol:0` à égalité, à rebours du « à 0,05 près, la plus douce ».
+    `chosen` prend désormais, parmi les réglages à 0,05 au plus de la plus grande part fermée, le plus doux : somme des poids ROAD
+    et GRAVEL, puis `ltol`, puis l'ordre de la liste. Test dédié dans `compare_attr.rs`.
+18. **Écriture du `.orda`** : un temporaire `.orda.tmp` laissé en 0444 par une écriture interrompue est supprimé avant la
+    suivante (sinon `write` échouait sur la permission).
+19. Relus sans écart : I5 (chemins de 1.12 littéraux à poids nuls ou fichier absent, `fingerprint` de la requête sans les poids),
+    I4 (masque lu par nœud dans sa cellule, `ngid` triés, fusion exacte), format (en-tête lié à la base et à la vue, refus d'un autre
+    type, d'une vue reconstruite, d'un nœud hors de sa cellule, empreinte de fin, absence tolérée par le service), empreinte du PBF
+    vérifiée avant l'extraction, rang des paires et lentille conformes au §17.7, cols et sommets au poids du point de vue
+    (`general`, `rvue`, `gvue`), budget et note inchangés, contrôleur intouché, `graph_id`, `params_hash` et profils inchangés,
+    aucune donnée privée dans le dépôt.

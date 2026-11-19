@@ -147,6 +147,7 @@ $B likeness --holdout-share 0.25 --variants base,common,svc,common+org,svc+org,c
 $B likeness --holdout-share 0.25 --variants base,svc,svc+org,svc+org+attr<r*> --label lot4-4d-t2 --out $G/lot4/4d
 ```
 
-`<r*>` : le réglage de la section 11 du rapport de la campagne 3 (champ `chosen`). Sans variante `common` en campagne 3, B2 ne se
+`<r*>` : le réglage de la section 11 du rapport de la campagne 3 (champ `chosen` : parmi les réglages qui tiennent A, B1, C1, C2
+et E3, ceux à 0,05 au plus de la plus grande part fermée, le plus doux, §17.20 point 17). Sans variante `common` en campagne 3, B2 ne se
 lit pas : l'ajouter, ou lire la campagne 4. Campagne 5 (conteneur, après le commit de bascule) : images `b288206` puis 1.13.0, les deux
 `.orda` posés à côté des vues du volume, méthode du §16.3 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md).
