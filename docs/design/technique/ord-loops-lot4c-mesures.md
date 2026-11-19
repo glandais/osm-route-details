@@ -526,3 +526,17 @@ les parcours des triangles refusés ; B et C, `svc+org`, apprentissage compris, 
 - **Propositions au propriétaire** : (1) lancer la campagne 3 malgré l'arrêt de l'essai pour lire les critères sur le tirage
   complet, ou la remettre à un réglage de marge (10° ou 15°) ; (2) un modèle plus fidèle sur les chaînes courtes courbes
   (arc entre les deux caps de bout `v.head`) coûterait un peu de temps pour réduire le 85 % ci-dessus.
+
+### 14.6 Après la relecture : l'essai rejoué
+
+La relecture indépendante corrige trois écarts du côté qui refuse davantage (§16.13 de la note, points 14 à 16 : aucune
+exemption au départ dans T2, aucune exemption à l'arrivée dans la jambe 2, la jonction d'un chemin d'arbre rejouée sur 200 m).
+L'essai est rejoué avec la même commande, sous le label `virages-essai-relecture` (même dossier, 6 min, pic de 15,6 Go) [mesuré] :
+
+- **Empreintes toutes inchangées** : `base` `93149ec262198e9e`, `svc` `87e04a7ce10a564f`, `svc-org` `50adca52ef713d18`,
+  `svc-org-reuse0` `2b88ab9aaa71e707`, I2′ `27952d4befd451f4`, I2 = `svc`. Les mêmes triangles sont refusés (`SHARP_TURN`
+  24 sur 105 en ROAD, 27 sur 76 en GRAVEL) : sur ce tirage, les corrections ne changent que des étapes internes des
+  recherches (`turn_cut` par requête : 105 404 contre 105 401 en ROAD). L'arrêt du §14.4 tient.
+- Le contrôleur indépendant ne refuse toujours aucun parcours rendu.
+- Temps, indicatif : `svc-org` à × 1,72 · × 1,54 de `svc` (P50, curseurs 0,25 · 1), contre × 1,54 · × 1,79 au premier
+  essai : le bruit de l'échantillon est de cet ordre, et C1 reste loin du × 1,25 de la réponse 4.

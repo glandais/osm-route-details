@@ -4174,6 +4174,33 @@ couvraient pas (les détails ci-dessous) est tranché prudemment, du côté qui 
     (`svc+org+turns:0+reuse:0` = `c48118447315c118` toutes équipes, `27952d4befd451f4` à `--teams B,C --limit 20`) manque.
     La section « 4c » du résumé affiche `turn_cut`, `turn_evals`, `reuse_cut` par requête et les refus du contrôleur par code.
 
+**Relecture indépendante (19 novembre 2026, commits de `1e732c1` à `3c68940`).** Tenus à la lecture et aux tests : l'invariant
+`Classic` (`Ctx.org` vaut `None` hors boucle organique non stricte, contrôle aligné réservé à l'organique avec `turns`, sonde
+intouchée) ; les paires `(a, b)`, la grappe (`run`, somme des `len_dm` des chaînes entières entre `a` et `b`, coupée à `> 1 000`
+comme `run > cluster_m`), les degrés, le seuil `≥ 150 − marge` (test vectoriel et voie rapide `ceil` exacts au bord) et
+l'exemption des seules grappes, celles du contrôleur ; le retournement à rebours ; l'interdiction de l'aller-retour, qui ne
+remonte que les ancêtres ; le déterminisme et la fenêtre (le modèle ne lit que la vue, les arbres et le chemin) ;
+`ord-loops-check` n'a gagné que le test 10, sous `tests/`. Trois écarts corrigés, du côté qui refuse davantage :
+
+14. **T2 n'a plus d'exemption au départ** (commit `fix(loops)`, `tree_backward` reprend sa signature d'avant l'étape). Le §16.2
+    la lisait sur `t1.meters` ; or un chemin de T2 est toujours la **fin** du parcours. Dans une boucle, il repasse près du
+    départ à l'approche de l'arrivée, à des kilomètres du départ le long du parcours : l'exemption y laissait passer les grappes
+    dont `b` est à moins de 200 m de l'arrivée et `a` au-delà, que le contrôle refuse. C'est le symétrique de T1, qui n'a pas
+    d'exemption à l'arrivée. `astar_back` la garde, lue sur T1 : l'aller qu'il cherche est bien le début du parcours.
+15. **La jambe 2 n'a plus d'exemption à l'arrivée** (même commit). Aucun de ses nœuds n'est à 200 m de l'arrivée le long du
+    parcours, même quand elle passe près du départ ; l'exemption lue sur T2 (point de prudence 4 du §16.12, confirmé par le
+    propriétaire) reste celle des recherches qui finissent à l'arrivée, le retour de la lentille et la jambe 3.
+16. **Jonction d'un chemin d'arbre rejouée sur 200 m** (commit `fix(loops)`, `JUNCTION_DM`, au lieu de 160 m, point 8). Une
+    paire dont la fenêtre d'avant `a` déborde sur les jambes posées a son `a` à moins de 50 m de la jonction et son `b` à moins
+    de 150 m ; sa fenêtre d'après n'est lue entière qu'à l'état qui commence moins de 50 m après `b`.
+17. **Constaté, non corrigé** : l'A* rouvre un état fixé quand l'heuristique n'est plus cohérente (T2 porte le modèle, réponse 2 du
+    §9.8). Un état rouvert garde ses successeurs déjà étiquetés, que le modèle avait jugés sur son ancien chemin : « tout chemin
+    rendu respecte le modèle » (§16.2) n'est vrai qu'en l'absence de réouverture. `turn_cost` et `retro_ok` ont la même
+    dépendance depuis 1.10. Le contrôle interne aligné reste le filet, et le contrôleur ne refuse rien à l'essai.
+
+Mêmes références (organique comprise, sans re-bénédiction), mêmes empreintes à l'essai de fumée rejoué (relevé, §14.6) :
+sur ce tirage, les trois corrections ne changent que des étapes internes des recherches.
+
 ### 16.14 Questions au propriétaire
 
 Chaque question a une option recommandée, appliquée par défaut ; une autre réponse change un réglage, pas l'architecture.
