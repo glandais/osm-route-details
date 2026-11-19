@@ -27,8 +27,21 @@ const FORM_MEASURES: [&str; 8] = [
     "turns_per_10km",
     "shared_share",
 ];
-/// Les mesures du critère A4 (le reste de la forme).
-const A4_MEASURES: [&str; 5] = ["far_pos", "detour_far", "sinuosity_10", "turns_per_10km", "shared_share"];
+/// Les mesures du critère A4 (le reste de la forme) : ces quatre-ci en W1 / IQR ≤ `svc` + 0,10, et `shared_share` en
+/// absolu (décision 2 du §9.8, réponse 3 du §16.14 : le partage de route seul).
+const A4_W1_MEASURES: [&str; 4] = ["far_pos", "detour_far", "sinuosity_10", "turns_per_10km"];
+/// A4 en absolu pour `shared_share` : médiane et P90 du premier parcours gardé.
+const SHARED_MEDIAN_MAX: f64 = 0.05;
+const SHARED_P90_MARGIN: f64 = 0.05;
+
+/// A4, `shared_share` : la médiane de la variante ≤ 0,05 **et** son P90 ≤ P90 de `svc` + 0,05, sur les premiers parcours
+/// gardés d'un type et d'un curseur. `None` si l'un des deux échantillons est vide.
+fn shared_share_holds(cand: &[f64], svc: &[f64]) -> Option<bool> {
+    let (c, s) = (sorted(cand), sorted(svc));
+    let (median, p90, svc_p90) =
+        (quantile_sorted(&c, 0.5)?, quantile_sorted(&c, 0.9)?, quantile_sorted(&s, 0.9)?);
+    Some(median <= SHARED_MEDIAN_MAX && p90 <= svc_p90 + SHARED_P90_MARGIN)
+}
 const SCOPES: [Option<&str>; 3] = [None, Some("A"), Some("B")];
 
 /// Les valeurs de classes à la borne de la table commune (`[1/4, 4]` de 256).
@@ -307,6 +320,50 @@ pub struct TriRow {
     pub leg3_settled_mean: f64,
     /// β final : P10 · P50 · P90.
     pub beta: [Option<f64>; 3],
+    /// Par requête (moyenne) : relaxations refusées par le modèle des virages, évaluées hors voie rapide (le coût), allers-retours
+    /// refusés.
+    pub turn_cut_mean: f64,
+    pub turn_evals_mean: f64,
+    pub reuse_cut_mean: f64,
+}
+
+/// Les refus du **contrôleur indépendant** sur les parcours rendus, par code, pour une variante et un type (tous les jeux) :
+/// ce que le contrôle interne du moteur a laissé passer.
+#[derive(Clone, Debug, Serialize)]
+pub struct CtrlRow {
+    pub variant: String,
+    pub ty: String,
+    /// Parcours rendus par le moteur, et refusés par le contrôleur (au moins un code).
+    pub rendered: u64,
+    pub refused: u64,
+    pub by_code: BTreeMap<String, u64>,
+}
+
+fn ctrl_rows(done: &[Done]) -> Vec<CtrlRow> {
+    let mut out = Vec::new();
+    for d in done {
+        for ty in TYPES {
+            let plays: Vec<&PlayRec> =
+                d.loops.iter().filter(|l| l.ty == ty).flat_map(|l| l.plays.iter()).collect();
+            if plays.is_empty() {
+                continue;
+            }
+            let mut by_code: BTreeMap<String, u64> = BTreeMap::new();
+            for p in &plays {
+                for (k, v) in &p.dropped {
+                    *by_code.entry(k.clone()).or_default() += u64::from(*v);
+                }
+            }
+            out.push(CtrlRow {
+                variant: d.variant.name.clone(),
+                ty: ty.into(),
+                rendered: plays.iter().map(|p| p.n_routes as u64).sum(),
+                refused: plays.iter().map(|p| (p.n_routes - p.n_kept) as u64).sum(),
+                by_code,
+            });
+        }
+    }
+    out
 }
 
 fn tri_rows(done: &[Done]) -> Vec<TriRow> {
@@ -362,6 +419,9 @@ fn tri_rows(done: &[Done]) -> Vec<TriRow> {
                 p2p_settled_mean: mean(&|f| f.p2p_settled as f64),
                 leg3_settled_mean: mean(&|f| f.leg3_settled as f64),
                 beta: [quantile_sorted(&sb, 0.1), quantile_sorted(&sb, 0.5), quantile_sorted(&sb, 0.9)],
+                turn_cut_mean: mean(&|f| f.turn_cut as f64),
+                turn_evals_mean: mean(&|f| f.turn_evals as f64),
+                reuse_cut_mean: mean(&|f| f.reuse_cut as f64),
             });
         }
     }
@@ -460,9 +520,9 @@ fn verdict(cmp: &Compare, done: &[Done], cand: &Done) -> Verdict {
     }
     let a3_road = all_hold(&[a3[0], a3[1]]);
     push("A3", "compacité : ROAD ≤ 0,80 × `svc`, GRAVEL ≤ `svc` + 0,05", all_hold(&a3), d3.join(" ; "));
-    // A4 : le reste.
+    // A4 : le reste. Quatre mesures en W1 / IQR ≤ `svc` + 0,10, `shared_share` en absolu.
     let (mut a4, mut d4) = (Vec::new(), Vec::new());
-    for m in A4_MEASURES {
+    for m in A4_W1_MEASURES {
         for g in GROUPS {
             let (c, s) = (w(cand, g, Reading::All, m), w(svc, g, Reading::All, m));
             let ok = c.zip(s).map(|(c, s)| c <= s + 0.10);
@@ -472,9 +532,25 @@ fn verdict(cmp: &Compare, done: &[Done], cand: &Done) -> Verdict {
             a4.push(ok);
         }
     }
+    for g in GROUPS {
+        let vals = |d: &Done| gen_vals(d, g.0, None, Reading::All, g.1, "shared_share");
+        let (c, s) = (vals(cand), vals(svc));
+        let ok = shared_share_holds(&c, &s);
+        if ok != Some(true) {
+            d4.push(format!(
+                "shared_share {} {} : médiane {} (≤ {SHARED_MEDIAN_MAX}), P90 {} contre `svc` {} (+ {SHARED_P90_MARGIN})",
+                g.0,
+                g.1,
+                f3(median(&c)),
+                f3(quantile_sorted(&sorted(&c), 0.9)),
+                f3(quantile_sorted(&sorted(&s), 0.9)),
+            ));
+        }
+        a4.push(ok);
+    }
     push(
         "A4",
-        "le reste de la forme ≤ `svc` + 0,10 (cinq mesures, quatre groupes)",
+        "le reste de la forme : quatre mesures ≤ `svc` + 0,10 (W1 / IQR) ; `shared_share` en absolu, médiane ≤ 0,05 et P90 ≤ P90 de `svc` + 0,05 (quatre groupes)",
         all_hold(&a4),
         if d4.is_empty() { "toutes dans la marge".into() } else { d4.join(" ; ") },
     );
@@ -628,8 +704,13 @@ pub struct Neutrality {
     pub svc_fingerprint: Option<String>,
     pub neutral_variant: Option<String>,
     pub neutral_fingerprint: Option<String>,
-    /// `svc+org+tri:0+w:0` rend l'empreinte de `svc` (I2 au banc).
+    /// `svc+org+tri:0+w:0+turns:0+reuse:0` rend l'empreinte de `svc` (I2 au banc).
     pub equal: Option<bool>,
+    /// `svc+org+turns:0+reuse:0` rend l'organique d'avant l'étape « virages » (I2′) : sa variante, son empreinte, et si elle est
+    /// l'une des deux relevées (toutes équipes, ou l'essai B et C ; la portée exacte est contrôlée à l'exécution).
+    pub i2p_variant: Option<String>,
+    pub i2p_fingerprint: Option<String>,
+    pub i2p_equal: Option<bool>,
     pub base_fingerprint: Option<String>,
     pub base_is_sonde: Option<bool>,
     pub svc_is_sonde: Option<bool>,
@@ -645,15 +726,28 @@ pub struct OrgSection {
     pub borne: Vec<BorneRow>,
     pub bound_profiles: Vec<BorneProfile>,
     pub triangles: Vec<TriRow>,
+    /// Refus du contrôleur indépendant sur les parcours rendus (attendu : aucun `SHARP_TURN` en organique).
+    pub controller: Vec<CtrlRow>,
     pub verdicts: Vec<Verdict>,
     pub rule_l: Option<Check>,
 }
 
 fn neutrality(done: &[Done]) -> Neutrality {
     let fp = |n: &str| find(done, n).map(|d| d.fingerprint.clone());
-    let neutral = done.iter().find(|d| d.variant.org.is_some_and(|o| o.tri0 && o.w_milli == Some(0)));
+    let neutral = done
+        .iter()
+        .find(|d| d.variant.org.is_some_and(|o| o.tri0 && o.w_milli == Some(0) && o.turns0 && o.reuse0));
+    let i2p = done.iter().find(|d| {
+        d.variant.org.is_some_and(|o| o.turns0 && o.reuse0 && !o.tri0 && o.w_milli.is_none() && !o.lc)
+            && d.variant.svc.is_some_and(|s| s.kind == super::variants::SvcKind::Svc)
+    });
     let svc = fp("svc");
     Neutrality {
+        i2p_variant: i2p.map(|d| d.variant.name.clone()),
+        i2p_fingerprint: i2p.map(|d| d.fingerprint.clone()),
+        i2p_equal: i2p.map(|d| {
+            d.fingerprint == super::I2P_FULL_FINGERPRINT || d.fingerprint == super::I2P_TRIAL_FINGERPRINT
+        }),
         equal: neutral.zip(svc.as_ref()).map(|(n, s)| &n.fingerprint == s),
         neutral_variant: neutral.map(|d| d.variant.name.clone()),
         neutral_fingerprint: neutral.map(|d| d.fingerprint.clone()),
@@ -736,6 +830,7 @@ pub fn org_section(cmp: &Compare, done: &[Done]) -> Option<OrgSection> {
         borne,
         bound_profiles: bound_profiles(done),
         triangles: tri_rows(done),
+        controller: ctrl_rows(done),
         rule_l: rule_l(cmp, done),
         verdicts,
         candidates,
@@ -769,11 +864,20 @@ pub fn section_md(s: &mut String, cmp: &Compare) {
     );
     let _ = writeln!(
         s,
-        "- `{}` (`svc+org+tri:0+w:0`) rend l'empreinte de `svc` : {} (`{}` contre `{}`)\n",
+        "- I2 : `{}` (`svc+org+tri:0+w:0+turns:0+reuse:0`) rend l'empreinte de `svc` : {} (`{}` contre `{}`)",
         n.neutral_variant.as_deref().unwrap_or("absent"),
         n.equal.map_or("sans objet", |b| if b { "oui" } else { "NON" }),
         n.neutral_fingerprint.as_deref().unwrap_or("-"),
         n.svc_fingerprint.as_deref().unwrap_or("-"),
+    );
+    let _ = writeln!(
+        s,
+        "- I2′ : `{}` (`svc+org+turns:0+reuse:0`) rend l'organique d'avant l'étape, `{}` (toutes équipes) ou `{}` (essai B et C) : {} (`{}`)\n",
+        n.i2p_variant.as_deref().unwrap_or("absent"),
+        super::I2P_FULL_FINGERPRINT,
+        super::I2P_TRIAL_FINGERPRINT,
+        n.i2p_equal.map_or("sans objet", |b| if b { "oui" } else { "NON" }),
+        n.i2p_fingerprint.as_deref().unwrap_or("-"),
     );
     // 1. Formes.
     let _ = writeln!(
@@ -898,12 +1002,12 @@ pub fn section_md(s: &mut String, cmp: &Compare) {
     let _ = writeln!(s, "### 4. Triangles : compteurs par requête\n");
     let _ = writeln!(
         s,
-        "| variante | type | requêtes | `tri_first` | paires admissibles | cherchées (reprises) | jambes 2 trouvées · au plafond | jambes 3 : T2 · A* · échec | complets | à ±10 % | gardés | requêtes avec triangle | refus | épis · réparés · jetés · gardés | états jambe 2 · jambe 3 | β P10 · P50 · P90 |\n|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---|---|"
+        "| variante | type | requêtes | `tri_first` | paires admissibles | cherchées (reprises) | jambes 2 trouvées · au plafond | jambes 3 : T2 · A* · échec | complets | à ±10 % | gardés | requêtes avec triangle | refus | épis · réparés · jetés · gardés | états jambe 2 · jambe 3 | β P10 · P50 · P90 | virages refusés · évalués · allers-retours refusés |\n|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---|---|---|"
     );
     for t in &o.triangles {
         let _ = writeln!(
             s,
-            "| {} | {} | {} | {:.3} | {:.2} | {:.2} ({:.2}) | {:.2} · {:.2} | {} · {} · {} | {} | {} | {} | {:.3} | {} | {} · {} · {} · {} | {:.0} · {:.0} | {} · {} · {} |",
+            "| {} | {} | {} | {:.3} | {:.2} | {:.2} ({:.2}) | {:.2} · {:.2} | {} · {} · {} | {} | {} | {} | {:.3} | {} | {} · {} · {} · {} | {:.0} · {:.0} | {} · {} · {} | {:.1} · {:.1} · {:.2} |",
             t.variant,
             t.ty,
             t.requests,
@@ -934,6 +1038,30 @@ pub fn section_md(s: &mut String, cmp: &Compare) {
             f3(t.beta[0]),
             f3(t.beta[1]),
             f3(t.beta[2]),
+            t.turn_cut_mean,
+            t.turn_evals_mean,
+            t.reuse_cut_mean,
+        );
+    }
+    s.push('\n');
+    // 4 bis. Contrôleur indépendant.
+    let _ = writeln!(
+        s,
+        "#### Refus du contrôleur indépendant sur les parcours rendus, par code (tous les jeux)\n\n| variante | type | rendus | refusés | par code |\n|---|---|---:|---:|---|"
+    );
+    for r in &o.controller {
+        let _ = writeln!(
+            s,
+            "| {} | {} | {} | {} | {} |",
+            r.variant,
+            r.ty,
+            r.rendered,
+            r.refused,
+            if r.by_code.is_empty() {
+                "-".to_string()
+            } else {
+                r.by_code.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")
+            }
         );
     }
     s.push('\n');
@@ -969,11 +1097,34 @@ mod tests {
         assert_eq!((yes(Some(true)), yes(Some(false)), yes(None)), ("tient", "NE TIENT PAS", "non évalué"));
     }
 
+    /// Test 13 du §16.7 : A4 en absolu pour `shared_share` (médiane ≤ 0,05 et P90 ≤ P90 de `svc` + 0,05).
+    #[test]
+    fn the_shared_share_is_judged_in_absolute_terms() {
+        // 20 valeurs : médiane 0,02, P90 vers 0,08.
+        let svc: Vec<f64> = (0..20).map(|i| if i < 18 { 0.02 } else { 0.10 }).collect();
+        let cand = |lo: f64, hi: f64, n_hi: usize| -> Vec<f64> {
+            (0..20).map(|i| if i < 20 - n_hi { lo } else { hi }).collect()
+        };
+        // Médiane et P90 dans les bornes.
+        assert_eq!(shared_share_holds(&cand(0.03, 0.12, 2), &svc), Some(true));
+        // Médiane à 0,06 : trop de partage, même si `svc` en a autant.
+        assert_eq!(shared_share_holds(&cand(0.06, 0.06, 0), &svc), Some(false));
+        // Médiane de 0,05 exactement : tient (borne incluse).
+        assert_eq!(shared_share_holds(&cand(0.05, 0.05, 0), &svc), Some(true));
+        // P90 au-delà de celui de `svc` + 0,05 (0,10 + 0,05 = 0,15).
+        assert_eq!(shared_share_holds(&cand(0.01, 0.30, 4), &svc), Some(false));
+        // Un échantillon vide : non évalué.
+        assert_eq!(shared_share_holds(&[], &svc), None);
+        assert_eq!(shared_share_holds(&svc, &[]), None);
+        // L'absolu ne dépend pas de l'IQR : une variante au partage nul tient toujours.
+        assert_eq!(shared_share_holds(&[0.0; 20], &[0.0; 20]), Some(true));
+    }
+
     #[test]
     fn the_bounds_are_the_cumulated_quarter_and_four() {
         assert_eq!(BOUNDS, [256 / 4, 256 * 4]);
         assert_eq!(SCOPES.len(), 3);
-        for m in FORM_MEASURES.iter().chain(&A4_MEASURES) {
+        for m in FORM_MEASURES.iter().chain(&A4_W1_MEASURES) {
             assert!(super::super::out::MEASURES.iter().any(|(n, _)| n == m), "{m}");
         }
     }

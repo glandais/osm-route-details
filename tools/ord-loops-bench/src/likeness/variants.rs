@@ -107,6 +107,13 @@ pub struct Org {
     pub lc: bool,
     /// `noretry` : une paire refusée pour un virage serré n'est pas reprise (`sharp_retry = false`, la lettre du §15.7).
     pub noretry: bool,
+    /// `turns:0` : ni modèle des virages dans la recherche ni contrôle interne aligné (l'organique d'avant l'étape
+    /// « virages », §16.6, I2′).
+    pub turns0: bool,
+    /// `reuse:0` : l'aller-retour dans une jambe n'est pas interdit, et la jambe 2 garde la queue de la jambe 1 (`TAIL`).
+    pub reuse0: bool,
+    /// `margin:<deg>` : marge du modèle des virages (`turn_margin_deg`).
+    pub margin_deg: Option<u8>,
 }
 
 impl Org {
@@ -132,6 +139,15 @@ impl Org {
         }
         if self.noretry {
             t.sharp_retry = false;
+        }
+        if self.turns0 {
+            t.turns = false;
+        }
+        if self.reuse0 {
+            t.no_reuse = false;
+        }
+        if let Some(m) = self.margin_deg {
+            t.turn_margin_deg = m;
         }
         t
     }
@@ -232,6 +248,7 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     // Options données avant `org` : posées quand il paraît.
     let mut pending: Vec<(String, f64)> = Vec::new();
     let mut org_opt: Vec<&str> = Vec::new();
+    let mut margin: Option<u8> = None;
     ensure!(!spec.is_empty(), "variante vide");
     for comp in spec.split('+') {
         match comp {
@@ -300,6 +317,21 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 } else {
                     pending.push((key.to_string(), x));
                 }
+            }
+            "turns" | "reuse" => {
+                ensure!(!org_opt.contains(&key), "variante « {spec} » : deux `{key}`");
+                ensure!(val == "0", "variante : `{key}` ne vaut que 0 (l'option coupée) : « {val} »");
+                org_opt.push(key);
+                names.push(format!("{key}0"));
+            }
+            "margin" => {
+                ensure!(margin.is_none(), "variante « {spec} » : deux `margin`");
+                let m: u8 = val.parse().ok().filter(|m| *m <= 30).ok_or_else(|| {
+                    anyhow!("variante : `margin` est un entier de 0 à 30 degrés : « {val} »")
+                })?;
+                margin = Some(m);
+                org_opt.push(key);
+                names.push(format!("m{m}"));
             }
             "cap" | "capt" => {
                 ensure!(cap.is_none(), "variante « {spec} » : `cap` et `capt` ne vont pas ensemble");
@@ -373,6 +405,9 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
             match *flag {
                 "wide" => o.wide = true,
                 "noretry" => o.noretry = true,
+                "turns" => o.turns0 = true,
+                "reuse" => o.reuse0 = true,
+                "margin" => o.margin_deg = margin,
                 "lc" => {
                     ensure!(kind == Some(SvcKind::Svc), "variante « {spec} » : `lc` demande `svc`");
                     o.lc = true;
@@ -794,6 +829,56 @@ mod tests {
             vec!["base", "rc:0.5+org"],
             vec!["base", "svc+org", "svc+org"],
             vec!["base", "fam:1+org"],
+        ] {
+            assert!(parse(&bad).is_err(), "{bad:?} aurait dû être refusée");
+        }
+    }
+
+    /// Test 12 du §16.7 : `turns:0`, `reuse:0` et `margin:<deg>` se nomment, posent le réglage, et ne vont qu'avec `org`.
+    #[test]
+    fn the_turn_options_parse_name_set_the_tune_and_need_org() {
+        let v = parse(&[
+            "base",
+            "svc",
+            "svc+org+turns:0+reuse:0",
+            "svc+org+tri:0+w:0+turns:0+reuse:0",
+            "svc+org+margin:0",
+            "svc+org+margin:10+turns:0",
+            "svc+org+reuse:0",
+        ])
+        .unwrap();
+        let names: Vec<&str> = v.iter().map(|x| x.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "base",
+                "svc",
+                "svc-org-turns0-reuse0",
+                "svc-org-tri0-w000-turns0-reuse0",
+                "svc-org-m0",
+                "svc-org-m10-turns0",
+                "svc-org-reuse0"
+            ]
+        );
+        let t = |i: usize| v[i].org.expect("org").tune();
+        let d = ord_loops::OrganicTune::default();
+        assert!(d.turns && d.no_reuse && d.turn_margin_deg == 5, "les défauts du service");
+        assert!(!t(2).turns && !t(2).no_reuse && t(2).turn_margin_deg == 5);
+        assert!(!t(3).turns && !t(3).no_reuse && t(3).corridor_w_milli == 0);
+        assert_eq!((t(4).turn_margin_deg, t(4).turns, t(4).no_reuse), (0, true, true));
+        assert_eq!((t(5).turn_margin_deg, t(5).turns), (10, false));
+        assert!(t(6).turns && !t(6).no_reuse);
+        for bad in [
+            vec!["base", "svc", "turns:0"],
+            vec!["base", "svc+reuse:0"],
+            vec!["base", "svc+margin:5"],
+            vec!["base", "svc+org+turns:1"],
+            vec!["base", "svc+org+reuse:2"],
+            vec!["base", "svc+org+margin:31"],
+            vec!["base", "svc+org+margin:x"],
+            vec!["base", "svc+org+turns:0+turns:0"],
+            vec!["base", "svc+org+reuse:0+reuse:0"],
+            vec!["base", "svc+org+margin:5+margin:6"],
         ] {
             assert!(parse(&bad).is_err(), "{bad:?} aurait dû être refusée");
         }

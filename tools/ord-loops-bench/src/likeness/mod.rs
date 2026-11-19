@@ -165,6 +165,10 @@ pub const BASE_4A_FINGERPRINT: &str = "55c3b065dc085f42";
 /// 0.25`, toutes équipes : le moteur d'aujourd'hui (`Classic`) doit les rejouer au bit près.
 pub const SONDE_4C_BASE_FINGERPRINT: &str = "4686c904975302e7";
 pub const SONDE_4C_SVC_FINGERPRINT: &str = "384f003c0bd19b7f";
+/// I2′ (§16.6 de la note du lot 4) : `svc+org+turns:0+reuse:0` rend l'organique d'avant l'étape « virages » (`ea6ef63`), à
+/// `--holdout-share 0.25` : toutes équipes (campagne 4 du 4c), et l'essai `--teams B,C --limit 20`.
+pub const I2P_FULL_FINGERPRINT: &str = "c48118447315c118";
+pub const I2P_TRIAL_FINGERPRINT: &str = "27952d4befd451f4";
 
 /// Le premier pas d'une chaîne `rc` à γ = 0,5, 72 cases, sans familiarité, doit redonner `rc05` de la première sonde
 /// (relevé `ord-loops-lot4-sonde.md`, §2), bit pour bit, aux réglages du 4a : empreinte de résultat et `taste_xxh3`.
@@ -180,6 +184,18 @@ pub const RECAL_EQUIPE_CHECKS: [(&str, &str, &str); 4] = [
     ("rc05-p2", "ad57882c3ed75c10", "2f57dc10b00d143d"),
     ("rc05-p3", "2c563b8bbe8059ae", "66ee08d3eb9c910c"),
 ];
+
+/// L'empreinte de I2′ attendue pour la portée de la campagne : toutes équipes à 25 % de mise à l'écart, ou l'essai
+/// `--teams B,C --limit 20` ; `None` pour toute autre portée (aucun contrôle).
+pub fn i2p_expected(a: &LikenessArgs) -> Option<&'static str> {
+    if !a.at_4a_defaults_but_scope() || (a.holdout_share - 0.25).abs() > 1e-9 {
+        return None;
+    }
+    if a.limit.is_none() && a.teams.is_empty() {
+        return Some(I2P_FULL_FINGERPRINT);
+    }
+    (a.limit == Some(20) && a.teams == ["B", "C"]).then_some(I2P_TRIAL_FINGERPRINT)
+}
 
 /// Le contrôle de la campagne 2 pour une variante, s'il s'applique : `Some((empreinte, taste_xxh3))` attendus.
 pub fn recal_equipe_expected(a: &LikenessArgs, name: &str) -> Option<(&'static str, &'static str)> {
@@ -214,9 +230,13 @@ impl LikenessArgs {
     /// Les réglages du 4a hormis la part mise à l'écart : la lecture « toutes » de `base` (surcouche complète, toutes
     /// les boucles) n'en dépend pas, ses `S_base` se comparent alors à ceux du 4a (contrôle « toutes », §13.6).
     pub fn at_4a_defaults_but_holdout_share(&self) -> bool {
-        self.limit.is_none()
-            && self.max_km.is_none()
-            && self.teams.is_empty()
+        self.limit.is_none() && self.teams.is_empty() && self.at_4a_defaults_but_scope()
+    }
+
+    /// Les réglages du 4a hormis la part mise à l'écart, les équipes et la limite par équipe (l'essai de fumée du §16.10 :
+    /// `--teams B,C --limit 20`).
+    pub fn at_4a_defaults_but_scope(&self) -> bool {
+        self.max_km.is_none()
             && self.cursors == [0.25, 1.0]
             && !self.no_holdout
             && self.min_km == 5.0
@@ -752,6 +772,44 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
                 "« `svc` = sonde 4c : {SONDE_4C_SVC_FINGERPRINT} » : {}",
                 if report.fingerprint == SONDE_4C_SVC_FINGERPRINT { "oui" } else { "NON" }
             );
+        }
+        // 4c, étape « virages » (§16.8) : I2 et I2′, arrêt si l'un manque.
+        if let Some(o) = v.org {
+            if o.tri0 && o.w_milli == Some(0) && o.turns0 && o.reuse0 {
+                if let Some(svc) = done.iter().find(|d| d.variant.name == "svc") {
+                    let ok = report.fingerprint == svc.fingerprint;
+                    eprintln!(
+                        "« `{}` = `svc` (I2 : {}) » : {}",
+                        v.name,
+                        svc.fingerprint,
+                        if ok { "oui" } else { "NON" }
+                    );
+                    anyhow::ensure!(
+                        ok,
+                        "`{}` ({}) n'est pas `svc` ({}) : I2 manque, l'organique coupé n'est plus le `Classic` ; chercher, ne pas lire la suite",
+                        v.name,
+                        report.fingerprint,
+                        svc.fingerprint
+                    );
+                }
+            }
+            let is_svc = v.svc.is_some_and(|s| s.kind == variants::SvcKind::Svc);
+            if is_svc && o.turns0 && o.reuse0 && !o.tri0 && o.w_milli.is_none() && !o.lc {
+                if let Some(want) = i2p_expected(a) {
+                    let ok = report.fingerprint == want;
+                    eprintln!(
+                        "« `{}` = organique d'avant l'étape (I2′ : {want}) » : {}",
+                        v.name,
+                        if ok { "oui" } else { "NON" }
+                    );
+                    anyhow::ensure!(
+                        ok,
+                        "`{}` ({}) n'est pas l'organique d'avant l'étape ({want}) : I2′ manque ; chercher, ne pas lire la suite",
+                        v.name,
+                        report.fingerprint
+                    );
+                }
+            }
         }
         if v.is_base() && a.at_4a_defaults() {
             eprintln!("« `base` = 4a : {BASE_4A_FINGERPRINT} » : {}", if same { "oui" } else { "NON" });

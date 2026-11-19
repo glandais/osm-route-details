@@ -6,8 +6,9 @@ use std::time::Instant;
 
 use ord_graph::format::GraphFile;
 use ord_loops::{
-    check_route_in, generate_with_diagnostics_in, route_geometry, Diagnostics, Engine, Failure, Generation,
-    Mode, NoRouteDetail, Request, Route, TeamCtx, TeamData, Window, WindowTeam, Workspace,
+    check_route_aligned_in, check_route_in, generate_with_diagnostics_in, route_geometry, Diagnostics,
+    Engine, Failure, Generation, Mode, NoRouteDetail, Request, Route, TeamCtx, TeamData, Window, WindowTeam,
+    Workspace,
 };
 use ord_loops_check::Checker;
 use serde::Serialize;
@@ -153,7 +154,15 @@ fn internal_violations<B: AsRef<[u8]>>(
     req: &Request,
     r: &Route,
 ) -> Vec<String> {
-    let c = check_route_in(e, win, Some(team), req, r);
+    // Le contrôle que le moteur applique à ce qu'il rend : aligné sur le contrôleur pour une boucle organique (§16.3).
+    let aligned = req.end.is_none()
+        && req.mode != Mode::Strict
+        && matches!(req.figures, ord_loops::Figures::Organic(o) if o.tune.turns);
+    let c = if aligned {
+        check_route_aligned_in(e, win, Some(team), req, r)
+    } else {
+        check_route_in(e, win, Some(team), req, r)
+    };
     let s = format!("{:?}", c.violations);
     s.trim_matches(|c| c == '[' || c == ']')
         .split(',')

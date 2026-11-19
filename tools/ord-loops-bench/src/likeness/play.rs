@@ -287,6 +287,11 @@ pub struct FigAgg {
     pub p2p_settled: u64,
     pub leg3_settled: u64,
     pub beta_final: f64,
+    /// Relaxations refusées par le modèle des virages, relaxations évaluées hors voie rapide (le coût), allers-retours refusés
+    /// (§16.6 de la note) : toute la requête.
+    pub turn_cut: u64,
+    pub turn_evals: u64,
+    pub reuse_cut: u64,
     /// Épis dans les triangles **gardés** (relevés sur la polyligne, §15.5) : le contrôle de l'angle sur les parcours rendus.
     pub spikes_kept: u32,
 }
@@ -317,6 +322,9 @@ impl FigAgg {
             p2p_settled: d.p2p_settled,
             leg3_settled: d.leg3_settled,
             beta_final: d.beta_final,
+            turn_cut: d.turn_cut,
+            turn_evals: d.turn_evals,
+            reuse_cut: d.reuse_cut,
             spikes_kept: 0,
         }
     }
