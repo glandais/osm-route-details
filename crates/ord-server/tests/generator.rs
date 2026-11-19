@@ -599,7 +599,7 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     // Capacités : ce qui est couvert, avec ses limites.
     let c = w.send(get("/v1/capabilities")).await.json();
     let g = &c["generator"];
-    assert_eq!(c["api_version"], "1.11");
+    assert_eq!(c["api_version"], "1.12");
     assert_eq!(g["enabled"], true);
     assert!(g["graph"]["data_date"].as_str().unwrap().ends_with("Z"));
     assert!(g["graph"]["id"].as_str().unwrap().len() == 16);
@@ -617,8 +617,8 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     assert_eq!(g["limits"]["deposit"]["queue_wait_s"], 120);
     assert_eq!(g["overlay_ttl_days"], 14);
     assert_eq!(g["ascent"], false);
-    // 4c : les figures offertes et celle d'une requête qui n'en nomme pas.
-    assert_eq!(g["figures"], json!({"default": "classic", "values": ["classic", "organic"]}));
+    // 4c : les figures offertes et celle d'une requête qui n'en nomme pas (organique depuis 1.12).
+    assert_eq!(g["figures"], json!({"default": "organic", "values": ["classic", "organic"]}));
     assert!(g["matcher_hash"].as_str().unwrap().len() == 16);
 }
 
@@ -697,7 +697,7 @@ async fn a_stored_overlay_of_the_graph_is_not_the_one_of_the_contract_version_al
     let names: Vec<&str> =
         put["parameters"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ord-Namespace-Key", "Ord-Team", "Ord-Source-Digest"]);
-    assert_eq!(doc["info"]["version"], "1.11");
+    assert_eq!(doc["info"]["version"], "1.12");
 }
 
 // --- Revue : file, budget, équité, quotas -----------------------------------------------------------------------------

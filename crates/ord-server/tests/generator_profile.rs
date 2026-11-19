@@ -176,7 +176,11 @@ async fn the_service_learns_what_the_reference_player_learns_on_the_same_loops()
     let open = |p: &std::path::Path| MappedGraph::open_mmap(p).unwrap();
     let base = open(&w.files.graph);
     let poly = ord_graph::util::Poly::read(&w.files.poly).unwrap();
-    let mut learn_params = LearnParams::default();
+    // Les figures d'apprentissage du service par défaut (organiques depuis 1.12) ; celles du moteur restent classiques.
+    let mut learn_params = LearnParams {
+        figures: ord_graph_match::profile::learn::LearnFigures::Organic,
+        ..LearnParams::default()
+    };
     let (max_km, margin_m) = w.state.generator().test_limits().unwrap();
     learn_params.retain.max_km = Some(max_km);
     let seg = SegIndex::build(&base);
@@ -434,9 +438,9 @@ async fn a_request_names_its_figures_or_takes_the_service_setting_and_the_answer
         let (w, k) = (&w, k.clone());
         async move { w.send(generate(Some(&k), Some("team-a"), &b)).await }
     };
-    // Absent : le réglage du service (classique par défaut) ; nommé : ce qu'il dit.
+    // Absent : le réglage du service (organique par défaut depuis 1.12) ; nommé : ce qu'il dit.
     let r = run(body(None, 0)).await;
-    assert_eq!((r.status, r.json()["figures"].as_str()), (StatusCode::OK, Some("classic")), "{}", r.text);
+    assert_eq!((r.status, r.json()["figures"].as_str()), (StatusCode::OK, Some("organic")), "{}", r.text);
     let r = run(body(Some("organic"), 0)).await;
     assert_eq!((r.status, r.json()["figures"].as_str()), (StatusCode::OK, Some("organic")), "{}", r.text);
     for route in r.json()["routes"].as_array().unwrap() {
@@ -460,12 +464,12 @@ async fn a_request_names_its_figures_or_takes_the_service_setting_and_the_answer
     let r = run(body(Some("quadrilateral"), 0)).await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST, "{}", r.text);
     // Le réglage du service change le défaut, la requête garde la main.
-    let w2 = World::with(|c| c.generator.figures = GeneratorFigures::Organic);
+    let w2 = World::with(|c| c.generator.figures = GeneratorFigures::Classic);
     assert_eq!(w2.deposit(&k, "team-a", loops_deposit(&RINGS)).await.status, StatusCode::OK);
     let r = w2.send(generate(Some(&k), Some("team-a"), &body(None, 0))).await;
-    assert_eq!(r.json()["figures"], "organic", "{}", r.text);
-    let r = w2.send(generate(Some(&k), Some("team-a"), &body(Some("classic"), 0))).await;
     assert_eq!(r.json()["figures"], "classic", "{}", r.text);
+    let r = w2.send(generate(Some(&k), Some("team-a"), &body(Some("organic"), 0))).await;
+    assert_eq!(r.json()["figures"], "organic", "{}", r.text);
     let caps = w2.send(get("/v1/capabilities")).await.json();
-    assert_eq!(caps["generator"]["figures"]["default"], "organic");
+    assert_eq!(caps["generator"]["figures"]["default"], "classic");
 }
