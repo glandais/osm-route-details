@@ -354,7 +354,7 @@ fn generate_inner<B: AsRef<[u8]>>(
             vws.ban_gen = 0;
         }
         tree_forward(&cx, &mut vws.t1, stop).map_err(|_| halted())?;
-        tree_backward(&cx, &mut vws.t2, Some(&vws.t1), stop).map_err(|_| halted())?;
+        tree_backward(&cx, &mut vws.t2, stop).map_err(|_| halted())?;
         let ViewWs { t1, t2, ta, ban, ban_gen, cor } = vws;
         let (t1, t2) = (&*t1, &*t2);
         if pass == 0 {

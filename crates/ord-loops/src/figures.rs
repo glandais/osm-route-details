@@ -327,7 +327,9 @@ fn run_leg2<B: AsRef<[u8]>>(
         slack: P2P_SLACK,
     };
     let cap = t1.settled.len() as u64;
-    let lead = Lead { path: leg1, dm: t1.meters(last), aux: Some(t2) };
+    // Aucune exemption à l'arrivée : la jambe 3 suit la jambe 2, dont aucun nœud n'est à 200 m de l'arrivée le long du
+    // parcours, même quand la jambe passe près du départ ; lue sur T2, l'exemption y laisserait des grappes refusées.
+    let lead = Lead { path: leg1, dm: t1.meters(last), aux: None };
     let out = astar_p2p(cx, sc.ta, t1, t2, last, last_pred, &tgt, &ban, &lead, true, cap, budget, stop)
         .map_err(|_| halted(cx))?;
     fig.p2p_settled += out.settled;

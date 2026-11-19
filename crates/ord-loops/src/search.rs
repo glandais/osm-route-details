@@ -601,7 +601,6 @@ pub(crate) fn tree_forward(
 pub(crate) fn tree_backward(
     cx: &Ctx<'_>,
     t: &mut Tree,
-    t1: Option<&Tree>,
     stop: &mut dyn FnMut() -> bool,
 ) -> Result<(), Stopped> {
     let v = cx.v;
@@ -641,8 +640,11 @@ pub(crate) fn tree_backward(
             let hout_over = (t.pred(f) == NONE).then(|| cx.e.in_head[(f & 1) as usize]);
             let Some(tc) = turn_cost(v, cx.forb, fg, NONE, f, None, hout_over) else { continue };
             if let Some(o) = cx.org {
-                let lead = Lead { path: &[], dm: 0, aux: t1 };
-                if o.refuses_bwd(cx, t, &lead, fg, f, m, d, true) {
+                // Aucune exemption au départ : un chemin de T2 est toujours la fin du parcours, à des kilomètres du départ
+                // le long du parcours, même quand il en passe près (boucle) ; lue sur T1, l'exemption laisserait passer
+                // des grappes que le contrôle refuse à l'approche de l'arrivée. Le symétrique de T1, qui n'a pas
+                // d'exemption à l'arrivée (§16.13 de la note).
+                if o.refuses_bwd(cx, t, &Lead::NONE, fg, f, m, d, true) {
                     continue;
                 }
             }

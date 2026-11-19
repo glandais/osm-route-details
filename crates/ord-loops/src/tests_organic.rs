@@ -63,7 +63,7 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
         let mut ws = Workspace::new();
         let ViewWs { t1, t2, ta, .. } = &mut ws.views[0];
         tree_forward(&cx, t1, &mut || false).unwrap();
-        tree_backward(&cx, t2, None, &mut || false).unwrap();
+        tree_backward(&cx, t2, &mut || false).unwrap();
         let (t1, t2) = (&*t1, &*t2);
         let both: Vec<u32> = t1.reached.iter().copied().filter(|&n| t2.node_best(n).is_some()).collect();
         assert!(both.len() > 50, "trop peu de nœuds atteints");
@@ -261,7 +261,7 @@ fn a_corridor_sends_the_return_off_the_parallel_road_and_leaves_the_tail_and_the
     let mut ws = Workspace::new();
     let ViewWs { t1, t2, ta, ban, ban_gen, cor } = &mut ws.views[0];
     tree_forward(&cx, t1, &mut || false).unwrap();
-    tree_backward(&cx, t2, None, &mut || false).unwrap();
+    tree_backward(&cx, t2, &mut || false).unwrap();
     let (t1, t2) = (&*t1, &*t2);
     // Le demi-tour : le nœud le plus au nord de l'aller (x = 0, repère du départ).
     let north = |n: u32| disc.xy_of(v.pos[n as usize]);
@@ -521,7 +521,7 @@ fn a_comb_apex_is_a_spike_and_is_repaired_at_the_last_junction_500_m_back() {
         let mut ws = Workspace::new();
         let ViewWs { t1, t2, .. } = &mut ws.views[0];
         tree_forward(&cx, t1, &mut stop()).unwrap();
-        tree_backward(&cx, t2, None, &mut stop()).unwrap();
+        tree_backward(&cx, t2, &mut stop()).unwrap();
         let (t1, t2) = (&*t1, &*t2);
         let apex = *t1
             .reached

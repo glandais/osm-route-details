@@ -156,7 +156,7 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
     let t0 = Instant::now();
     let halted = |_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
     tree_forward(&cx, &mut vws.t1, &mut || false).map_err(halted)?;
-    tree_backward(&cx, &mut vws.t2, None, &mut || false).map_err(halted)?;
+    tree_backward(&cx, &mut vws.t2, &mut || false).map_err(halted)?;
     out.trees_us = t0.elapsed().as_secs_f64() * 1e6;
     let ViewWs { t1, t2, ta, ban, ban_gen, .. } = vws;
     let (t1, t2) = (&*t1, &*t2);

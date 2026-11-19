@@ -369,7 +369,7 @@ fn reached(with_model: bool, start_north: f64, start_east: f64) -> (bool, bool) 
         Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: with_model.then_some(&os) };
     let (mut t1, mut t2) = (Tree::default(), Tree::default());
     tree_forward(&cx, &mut t1, &mut stop()).unwrap();
-    tree_backward(&cx, &mut t2, Some(&t1), &mut stop()).unwrap();
+    tree_backward(&cx, &mut t2, &mut stop()).unwrap();
     let h = gap / 2.0;
     let (eb0, eb1) = (node_at(v, h, 0.0), node_at(v, h, 400.0));
     let (wb1, wb0) = (node_at(v, -h, 400.0), node_at(v, -h, 0.0));
