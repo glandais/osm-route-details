@@ -597,6 +597,9 @@ l'orchestrateur du travail :
    100 km. En ROAD, le point lointain réel est à moins de 300 m d'un attracteur dans 26 % des boucles, 11 % au hasard, 19 · 17 %
    en 1.12 ; ce qui manque à 1.12, ce sont les commerces et les points de vue, pas les bourgs. En GRAVEL, le point de vue seul.
    Cols et sommets non mesurables sur le banc. Cinq questions au §9 du relevé.
+   **Spécifié** le 19 novembre (§17) : fichier `.orda` par vue (ancrages et zone de 300 m, ≈ 10 et 12 Mo), sous-commande
+   `ord-graph-build attractors`, attracteurs en organique seulement (candidats du triangle, rang des paires, demi-tour de la
+   lentille), api 1.13, critères chiffrés au §17.12 ; cinq questions au §17.19, leur option recommandée appliquée par défaut.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
 
@@ -4304,3 +4307,540 @@ Décisions du §9.9 appliquées. Points techniques que les décisions ne couvrai
    0,348 s (entrées d'équipe chargées à la première requête), rapporté et non jugé, la méthode du §14.13 mesurant après les dépôts.
    Une instance qui redémarre sert donc ses premières générations plus lentement, comme en classique.
 9. **Une seule séance de C3**, comme le prévoyait le §16.10 ; le second tirage des temps n'est fait qu'au banc.
+
+## 17. 4d : spécification
+
+Écrit le 19 novembre 2026 sur la branche `feat/ord-loops-lot4d` (depuis `develop` à `b288206`, 1.12.0), après la sonde des
+attracteurs ([`ord-loops-lot4d-sonde.md`](ord-loops-lot4d-sonde.md)) et les décisions des §9.1 (point 4 : **destinations OSM
+seules**), §9.7 (point 6) et §9.9, à la lecture de `ord-loops` (`generate.rs`, `figures.rs`, `window.rs`, `engine.rs`,
+`lib.rs`), d'`ord-graph` (`format.rs`, `view.rs`, `pbf.rs`, `build.rs`), d'`ord-graph-build` (`main.rs`, `views_cmd.rs`),
+d'`ord-graph-match/src/profile/learn.rs`, d'`ord-server/src/generator` (`mod.rs`, `generate.rs`) et de `config.rs`, du banc
+(`likeness/variants.rs`) et du relevé de la bascule (§16 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md)).
+Cette section **suffit au codeur** : ce qu'elle ne dit pas est laissé à son jugement, à condition de tenir les invariants
+du §17.8 et le §17.18. Les sections antérieures ne sont pas réécrites ; leurs erreurs sont signalées au §17.0 (points 12 à
+15). Les questions du §9 du relevé de la sonde sont reprises au §17.19 ; leur option recommandée est **appliquée par
+défaut** ici, une autre réponse change un poids ou un seuil, pas l'architecture.
+
+**Ce que livre le 4d** : (1) un **fichier d'attracteurs** par vue, `<graphe>.road.orda` et `<graphe>.gravel.orda`, écrit par
+une nouvelle sous-commande `ord-graph-build attractors` qui relit le PBF du graphe ; (2) dans `ord-loops`, en **organique
+seulement**, des attracteurs comme **candidats** des sommets du triangle, comme **clé de rang** des paires et comme
+**préférence** du demi-tour de la lentille ; (3) le **service** en api 1.13 (capacités, réglage, fichier facultatif) ; (4) le
+**banc** : la part des points lointains sur un attracteur, et les critères chiffrés de la mise en service par défaut ; (5) si
+ces critères tiennent, la bascule du réglage et une séance en conteneur.
+
+### 17.0 Ce que la lecture a établi
+
+1. **La lentille choisit son demi-tour** dans `generate_inner` (`generate.rs`, boucle des secteurs) : parmi les nœuds du
+   secteur atteints par T1 et T2 (`sectors[k]`, **aucun filtre de degré**), non encore essayés, celui qui minimise
+   `e(n) = |T1m(n) + ρ · T2m(n) − D|` (dm), départage par id ; au plus `tries_per_sector` (6) essais, le premier parcours
+   gardé arrête le secteur. Ce code est **commun à `Classic` et à l'organique** : y toucher sans garde casse I1.
+2. **Les sommets du triangle** viennent de `figures::candidates` : degré de vue ≥ 3, bande de mètres T1, secteur dans le cap,
+   **un nœud par case** (secteur × sous-bande, 12 × 3 au plus), le plus agréable (`coût T1 / mètres T1`). Les paires
+   (`pairs_of`, écart 40° à 90°) sont classées par `(⌊|r_pair − ρ*| / 0,02⌋, agrément moyen, id P1, id P2)` dans
+   `triangle_phase`. Aucun de ces codes ne lit un attribut de nœud autre que position, degré et arbres.
+3. **La note d'un parcours** (`scored_route` : écart de longueur × 20, partage, croisements, cap, équipe) ne connaît pas la
+   destination ; le premier parcours est le mieux noté de la figure tirée (`figures::choose`). Le 4d **ne touche pas la
+   note** : il change les parcours essayés, pas leur classement.
+4. **Les nœuds de vue sont numérotés par cellule**, cellules dans l'ordre de Morton (`GraphFile::find_cell`,
+   `first_node`, `node_cell`) : trier par id de nœud, c'est trier par cellule puis par nœud. Une table de décalages par
+   **cellule de la vue** (≈ 3 300 en France) suffit à trouver les enregistrements d'un nœud.
+5. **Une fenêtre contient des nœuds hors de ses tuiles** : les bouts des chaînes étrangères (`idx.foreign_of`) et des chaînes
+   possédées qui sortent de la tuile (`ngid`, étape 3 de `build_window_opts`). Lire les attracteurs « des tuiles de la
+   fenêtre » (point 4 du §6 du relevé de la sonde) donnerait à un tel nœud un attracteur dans une grande fenêtre et pas dans
+   une petite : **I4 casserait**. La lecture se fait donc **par nœud, dans la cellule du nœud** (§17.6).
+6. **L'ancrage seul ne suffit pas au moteur.** La mesure de la sonde est « point lointain à moins de 300 m d'un ancrage » ;
+   le moteur, lui, choisit des **nœuds**. Le fichier porte donc, en plus des ancrages, la **zone** : chaque nœud de vue à
+   moins de 300 m d'un ancrage, avec le masque des catégories. Compté sur les sorties de la sonde (script jetable, hors
+   dépôt) [mesuré], pour les sept catégories écrites (§17.3) :
+
+   | Vue | Nœuds de vue | Ancrages (nœuds) | Zone 150 m | **Zone 300 m** | dont degré ≥ 3 (part des nœuds de degré ≥ 3) |
+   |---|---:|---:|---:|---:|---:|
+   | road | 6 423 851 | 93 551 | 884 455 | **1 860 162** (29 %) | 1 420 777 (31 %) |
+   | gravel | 10 203 966 | 115 275 | 1 039 311 | **2 244 994** (22 %) | 1 739 875 (23 %) |
+
+   Zone des seules catégories à poids non nul (§17.3) [mesuré] : road (café, boulangerie, point de vue) 1 282 777 nœuds,
+   dont 986 901 de degré ≥ 3 (22 % de ceux de la vue) ; gravel (point de vue) 258 315, dont 191 693 (2,5 %). Cols et sommets
+   ajoutent 21 396 nœuds de zone en road, 90 265 en gravel.
+   À 5 octets par nœud de zone (id `u32`, masque `u8`) et 5 par ancrage : **≈ 9,8 Mo (road) et ≈ 11,8 Mo (gravel)**
+   [calculé], au lieu des 1,1 et 1,4 Mo du prototype (ancrages seuls) ; 1,1 % de la vue road. Par fenêtre de 100 km,
+   ≈ 33 000 nœuds de zone [calculé : 1,77 % des ancrages par fenêtre, §5 du relevé, appliqué à la zone], une fusion de deux
+   listes triées : **moins de 1 ms** [estimé] à côté des 95 ms d'une fenêtre construite à froid. Le temps de génération ne
+   change que par les parcours essayés (§17.7).
+7. **`OsmSource::nodes` ne rend pas les étiquettes** (`(id, lat, lon)`) : l'extraction des nœuds étiquetés demande une
+   méthode de plus (§17.5). Le PBF est trié `Type_then_ID` (refus sinon) : les ways suivent tous les nœuds.
+8. **L'empreinte du graphe** (`check_view`, `ViewMeta`) compare `nodes`, `edges`, `pbf_xxh3`, `build_epoch` de la base ; une
+   vue a de plus son propre `build_epoch` (en-tête écrit par `write_graph`) et ses comptes. Un `.orda` se lie aux deux.
+9. **`graph_id`** se calcule sur l'identité du graphe de base (`generator/mod.rs`, `graph_id(&identity)`) : un fichier voisin
+   ne le change pas, aucune surcouche ni aucun profil ne devient `stale`.
+10. **L'apprentissage du profil** joue des requêtes `Organic` construites par `loop_request` (`learn.rs`) : si le moteur du
+    service lit les attracteurs, l'apprentissage les lirait aussi sans le vouloir. Il faut un choix explicite (§17.9).
+11. **Le `Debug` de `Request` et `FigureDiagnostics` n'entrent pas dans les références figées** (§15.0, point 3) : `Organic`
+    peut gagner un champ, `FigureDiagnostics` des compteurs. `Generation`, `Diagnostics`, `Route`, `Family` ne gagnent rien.
+    `Organic { … }` est construit littéralement en sept fichiers (`lib.rs`, `tests_organic.rs`, `tests_turns.rs`,
+    `engine_vs_checker.rs`, `learn.rs`, `generator/generate.rs`, `likeness/variants.rs`).
+12. **La marge de temps est mince** (§16.2 du relevé du 4c) : au curseur 1, C1 vaut × 1,369 à × 1,395 de `svc` selon le tirage,
+    pour un seuil de × 1,40, et C3 en série 0,30 s **au seuil** (0,274 s à chaud au millième, 0,348 s à froid). Le bruit entre
+    deux tirages de `svc` est de 1 à 2 %. Un seuil absolu ferait échouer le 4d sur le bruit : question 4 du §17.19.
+
+**Erreurs des sections antérieures et du relevé, corrigées ici** (le texte d'origine reste) :
+
+13. *§5, point 2* : « fichier voisin `.orda`, **par tuile** » → enregistrements **par nœud**, triés par id, avec une table de
+    décalages par cellule de la vue (point 4) ; la cellule est la tuile z11, la lecture est par nœud (point 5).
+14. *§5, point 1, et dernier alinéa* : destinations d'équipe et poids « compte de traces » hors du 4d (§9.1, point 4).
+15. *Relevé de la sonde, §6, point 2* : enregistrement `(nœud, catégorie, classe, 2 octets)` d'ancrage seul → deux tables
+    (ancrages, zone), §17.4 ; *point 4* : « mêmes tuiles ⇒ même ensemble » → lecture par nœud (point 5) ; *point 3* : passes
+    « 1 les ways, 2 les nœuds » gardées, les relations ignorées.
+
+### 17.1 Choix tranchés
+
+| # | Question | Tranché | Raison |
+|---|---|---|---|
+| 1 | Sources | **OSM seul** : café, boulangerie, point de vue, bourg (town, village), col, sommet | §9.1, point 4 ; plans d'eau (multipolygones) et eau potable sans effet propre (§4 du relevé) |
+| 2 | Poids | Entiers 0 à 3 par (type, catégorie), **constants** du moteur (`AttrWeights::general`), généraux et non par équipe | §17.19, questions 1 et 2 ; 84 % des boucles sont de A |
+| 3 | Ce que le fichier porte | **Ancrages** (pour le banc et le contrôle) et **zone** à 300 m (pour le moteur) | §17.0, point 6 |
+| 4 | Un fichier par vue | Oui, lié au graphe de base **et** à la vue (comptes, empreinte du PBF, époques) | Accroche différente par vue (cols : 30 % contre 89 %) |
+| 5 | Lecture | Par nœud, dans la cellule du nœud, une fois par fenêtre, rangée dans la fenêtre | I4 (§17.0, point 5) |
+| 6 | Usage moteur | **Organique seulement** ; candidats du triangle, rang des paires, demi-tour de la lentille | §4.2 ; `Classic` intact (I1) |
+| 7 | Poids dans le rang | Un point de poids vaut **une case de 0,02 de r / D** : `rang = ⌊\|r_pair − ρ*\| / 0,02⌋ − (w₁ + w₂)` | Un seul réglage lisible ; poids nuls = rang de 1.12 |
+| 8 | Lentille | Parmi les nœuds à `e(n) ≤ 0,05 · D`, le plus lourd, puis `e`, puis id ; sinon le choix de 1.12 | §4.2 ; tolérance réglable (`attr_lens_tol_milli`) |
+| 9 | Note, `max_pairs`, `tri_keep`, budget | **Inchangés** | Le temps ne bouge que par les parcours essayés |
+| 10 | Fichier absent ou refusé | Service démarré, `attractors.available = false`, moteur 1.12 **au bit près** | §5 ; I5 |
+| 11 | Apprentissage | **Sans attracteurs** (profils valides, aucun redépôt), sauf règle L′ (§17.9) | Comme la règle L du 4c |
+| 12 | Défaut du service | Réglage `generator.attractors = off` au commit du service ; `on` dans un commit à part si les critères tiennent | §17.12, §17.19 question 5 |
+| 13 | API | **1.13**, ajouts seulement ; paquet **1.13.0** | Capacité nouvelle ; défaut changé à la bascule |
+| 14 | Strict, aller simple, MTB, sans boucle | Aucun attracteur (l'organique n'y joue pas ; poids MTB nuls) | §15.1, point 14 |
+
+### 17.2 Où vit chaque morceau
+
+| Morceau | Où | |
+|---|---|---|
+| Format `.orda` (écriture, lecture `AttrFile`, contrôle d'identité), catégories, accroche, zone, grille des ancrages | `ord-graph` : `attract.rs` (nouveau), `lib.rs` | nouveau |
+| Extraction des objets du PBF (ways puis nœuds étiquetés) | `ord-graph` : `attract.rs` (`#[cfg(feature = "pbf")]`), `pbf.rs` et `build.rs` (`OsmSource::tagged_nodes`, `MemSource::node_tags`) | nouveau, changé |
+| Sous-commande | `ord-graph-build` : `attractors_cmd.rs` (nouveau), `main.rs` | nouveau |
+| Fichier dans le moteur, masque de la fenêtre | `ord-loops` : `engine.rs` (`Engine::set_attractors`), `window.rs`, `engine.rs` (`ViewData::attr`) | changé |
+| Poids, candidats, rang, lentille | `ord-loops` : `attract.rs` (nouveau : `AttrWeights`, `attr_w`), `lib.rs`, `figures.rs`, `generate.rs` | nouveau, changé |
+| Apprentissage | `ord-graph-match` : `profile/learn.rs` (`LearnParams::attractors`) | changé |
+| Service | `ord-server` : `config.rs`, `generator/{mod,generate}.rs`, contrat, `CHANGELOG.md`, `lib.rs` | changé |
+| Banc | `tools/ord-loops-bench` : `likeness/{mod,variants,play,measure,svc,out}.rs`, `likeness/compare_attr.rs` (nouveau) | changé, nouveau |
+
+### 17.3 Catégories et poids
+
+**Catégories écrites**, dans l'ordre des bits du masque (table `CATS` du fichier, figée par le format 1) :
+
+| Bit | Nom | Étiquettes OSM (valeur exacte) | Objets | Point d'un objet |
+|---:|---|---|---|---|
+| 0 | `cafe` | `amenity=cafe` | nœuds, ways | nœud ; way : barycentre de ses nœuds distincts |
+| 1 | `bakery` | `shop=bakery` | nœuds, ways | idem |
+| 2 | `viewpoint` | `tourism=viewpoint` | nœuds, ways | idem |
+| 3 | `town` | `place=town` | nœuds, ways | idem |
+| 4 | `village` | `place=village` | nœuds, ways | idem |
+| 5 | `mountain_pass` | `mountain_pass=yes` | nœuds, ways | idem |
+| 6 | `peak` | `natural=peak` | nœuds | nœud |
+| 7 | — | réservé (0) | | |
+
+Relations ignorées (aucun multipolygone). Un objet qui porte deux catégories donne deux objets. Aucun filtre par polygone : un
+objet hors du graphe ne s'accroche à rien. Écarts attendus avec la sonde (qui gardait les relations et filtrait par
+`france.poly`) : quelques dixièmes de point sur les comptes de bourgs, rapportés au relevé.
+
+**Poids** (`ord_loops::AttrWeights::general(ride)`, `w: [u8; 8]` dans l'ordre des bits ; recommandés, §17.19) :
+
+| Type | `cafe` | `bakery` | `viewpoint` | `town` | `village` | `mountain_pass` | `peak` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ROAD | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| GRAVEL | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| MTB | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+`attr_w(mask, w) = max { w[b] : bit b de mask }` (0 si aucun). `AttrWeights::NONE` : tous nuls. Les poids réglés au banc
+(§17.15, campagne 3) remplacent ces valeurs dans `general` au commit de bascule ; aucun poids négatif au 4d.
+
+### 17.4 Le fichier `.orda`
+
+Petit-boutiste, lu par `zerocopy` comme les autres formats (`U16`, `U32`, `U64`), chaque section alignée sur 8 octets (octets de
+bourrage nuls). Nom : `<radical du graphe>.<vue>.orda` (`france-20261115-z11.road.orda`), à côté des `.ordv`.
+
+**En-tête** (`#[repr(C)]`, 128 octets) :
+
+| Champ | Type | Valeur |
+|---|---|---|
+| `magic` | `[u8; 8]` | `b"ORDATTR\0"` |
+| `major`, `minor` | `u16`, `u16` | 1, 0 (un lecteur refuse un `major` inconnu, accepte un `minor` plus grand) |
+| `view_kind` | `u8` | 0 `road`, 1 `gravel` |
+| `n_cats` | `u8` | 7 |
+| `snap_m`, `reach_m` | `u16`, `u16` | 300, 300 |
+| `base_nodes`, `base_edges` | `u64`, `u64` | en-tête du graphe de base |
+| `base_pbf_size`, `base_pbf_xxh3` | `u64`, `u64` | idem (égaux à l'extrait relu, §17.5) |
+| `base_build_epoch` | `i64` | idem |
+| `view_nodes`, `view_edges` | `u64`, `u64` | en-tête de la vue |
+| `view_build_epoch` | `i64` | en-tête de la vue |
+| `view_cells` | `u32` | `n_cells()` de la vue |
+| `n_anchors`, `n_zone`, `meta_len` | `u32` × 3 | tailles des sections |
+| `built_epoch` | `i64` | date d'écriture (provenance, hors identité) |
+| réservé | | nuls jusqu'à 128 |
+
+**Sections**, dans l'ordre : `CATS` (`n_cats` × 16 octets, ASCII complété de NUL) ; `ANCHOR_OFF` (`u32`, `view_cells + 1`,
+décalage du premier ancrage de chaque cellule de la vue, dernier = `n_anchors`) ; `ANCHOR_NODE` (`u32`) et `ANCHOR_CAT`
+(`u8`, numéro de bit), triés par `(nœud, catégorie)`, sans doublon ; `ZONE_OFF` (`u32`, `view_cells + 1`) ; `ZONE_NODE`
+(`u32`, strictement croissants) et `ZONE_MASK` (`u8`, non nul, bits `< n_cats`) ; `META` (JSON de `meta_len` octets :
+`tool_version`, nom de fichier de l'extrait, comptes par catégorie de l'étape d'extraction, pour le rapport) ; **fin** :
+`u64`, xxh3-64 de tous les octets qui précèdent.
+
+**Lecture** : `ord_graph::attract::AttrFile<B: AsRef<[u8]>>` (`open(data) -> Result<Self, AttrError>`, `open_mmap(path)`
+sous `mmap`). `open` vérifie magie, `major`, tailles, alignement, décalages croissants qui commencent à 0 et finissent aux
+comptes, tri strict, masques, et l'empreinte de fin (≈ 2 ms pour 12 Mo [estimé]). `check_for(&self, base: &Header, view:
+&GraphFile<_>) -> Result<(), AttrError>` compare les cinq champs de base à l'en-tête du graphe, `view_kind` à
+`view_meta().kind` (vue non élaguée), `view_nodes`, `view_edges`, `view_build_epoch`, `view_cells` à l'en-tête de la vue,
+puis que les nœuds du segment de chaque cellule sont dans `[first_node, first_node + n_nodes)` de cette cellule. Accès :
+`zone_mask(cell, gid) -> u8` (dichotomie dans le segment de la cellule), `zone_of_cell(cell) -> (&[U32], &[u8])`,
+`anchors() -> impl Iterator<Item = (u32, u8)>`, `reach_m()`, `cats()`.
+
+**Grille des ancrages** (`AnchorGrid::new(&AttrFile, &GraphFile vue)` : positions par `node_pos`, cases de 0,005° de côté) :
+`hits(lat_e7, lon_e7) -> u8`, masque des catégories dont un ancrage est à `reach_m` au plus (haversine). Sert au banc
+(§17.11) et à `--check`.
+
+### 17.5 La sous-commande `ord-graph-build attractors`
+
+```text
+ord-graph-build attractors --pbf <extrait>.osm.pbf --graph <g>.ordg [--views road,gravel] [--views-dir D]
+                           [--out-dir D] [--snap-m 300] [--reach-m 300] [--check] [--report r.json]
+```
+
+1. **Identité** : `GraphFile::open_mmap(graph)` ; `PbfSource::open(pbf)` (taille et xxh3, ≈ 7 s en France) ; **refus** (code de
+   sortie 1, message « l'extrait n'est pas celui du graphe : taille ou empreinte ») si `(size, xxh3)` diffère de
+   `(pbf_size, pbf_xxh3)` de l'en-tête. Vues `<radical>.<vue>.ordv` dans `--views-dir` (défaut : dossier du graphe) ;
+   contrôle de `check_view` (base, type, non élaguée) ; refus sinon.
+2. **Ways** (`scan`, une passe) : les ways dont une étiquette est dans la table du §17.3 donnent `(id, catégories, refs)` ;
+   les ids de nœuds demandés, triés sans doublon.
+3. **Nœuds** (`tagged_nodes`, une passe, nouvelle méthode d'`OsmSource` : `f(id, lat, lon, tags)` ; `PbfSource` décode les
+   étiquettes des nœuds denses et simples, `MemSource` gagne `node_tags: Vec<(i64, Vec<(String, String)>)>`) : un nœud
+   étiqueté donne ses objets ; un nœud demandé, ses coordonnées, rangées **par rang dans la liste triée** (sortie
+   indépendante du nombre de fils et des lots). Point d'une way : moyenne entière (`i64`, arrondie vers zéro) des E7 de ses
+   nœuds distincts connus ; way sans nœud connu : écartée, comptée.
+4. **Objets** triés par `(catégorie, lat, lon, type OSM, id)`.
+5. **Accroche** par vue : grille des nœuds de vue (toutes les positions, tout degré : ce sont les nœuds de la sonde) ; nœud le
+   plus proche à `snap_m` au plus (haversine d'`ord_graph::build`, rendue `pub(crate)`, rayon 6 371 008,8 m), égalité au plus
+   petit id ; ancrages = couples `(nœud, catégorie)` sans doublon.
+6. **Zone** : pour chaque ancrage, tous les nœuds de vue à `reach_m` au plus de la position du nœud d'ancrage (lui compris) ;
+   `mask |= 1 << catégorie`.
+7. **Écriture** dans `--out-dir` (défaut : dossier du graphe) par fichier temporaire puis `rename` ; mode des autres sorties.
+   `--check` relit chaque fichier (`open`, `check_for`), recalcule la zone depuis les ancrages et compare, octet pour octet.
+8. **Rapport** (JSON sur la sortie standard et `--report`) : par vue et par catégorie, objets, accrochés, ancrages, nœuds de
+   zone ; taille, durée, pic de mémoire. Données OSM publiques : rien de privé.
+
+Coût [estimé] : xxh3 7 s, deux passes de décodage du PBF de France de l'ordre de 30 à 40 s chacune (le graphe entier se
+construit en 80 s), accroche et zone ≈ 10 s : **2 à 3 min, moins de 4 Go**. Hors service, sur un poste, comme les vues.
+
+### 17.6 Lecture dans le moteur : fichier, fenêtre
+
+- `Engine` gagne `attr: [Option<AttrFile<B>>; 2]` et
+  `pub fn set_attractors(&mut self, vi: usize, f: AttrFile<B>) -> Result<(), AttrError>` (appelle `check_for` contre
+  `self.base` et `self.views_files[vi]`, range le fichier ; erreur : rien n'est rangé), `pub fn has_attractors(&self, vi) ->
+  bool`. `Engine::new` ne change pas : aucun appelant à reprendre.
+- `ViewData` gagne `attr: Vec<u8>` : **vide** si la vue n'a pas de fichier, sinon un masque par nœud local (`n_nodes` octets).
+  Rempli dans `build_window_opts` après l'étape 3 : les `ngid` triés se découpent en suites d'une même cellule
+  (`view.node_cell`, nœuds contigus par cellule) ; pour chaque suite, `zone_of_cell(cell)` et une fusion des deux listes
+  triées. Un nœud a donc le **même masque dans toute fenêtre qui le contient** (I4).
+- `ViewData::bytes` compte `attr` ; `estimate_window_bytes` ajoute 1 octet par chaîne quand la vue a un fichier.
+- `Classic` ne lit jamais `attr`.
+
+### 17.7 Points lointains : candidats du triangle, rang des paires, lentille
+
+`Organic` gagne `pub attr: AttrWeights` ; `OrganicTune` gagne `attr_lens_tol_milli: u16` (50) et `attr_rank: bool` (vrai).
+**Attracteurs actifs** pour une requête : `org` actif (boucle, hors strict), `win.v.attr` non vide, `o.attr.w` non tout nul.
+Sinon chacun des trois codes ci-dessous suit **littéralement** son chemin de 1.12.
+
+1. **Candidats** (`figures::candidates`) : à côté du tableau des plus agréables, un second tableau par case (secteur ×
+   sous-bande) garde le nœud de poids `w = attr_w(v.attr[n], o.attr.w) > 0` le meilleur selon `(w décroissant, ratio,
+   id)`, avec les mêmes filtres (degré ≥ 3, T1 et T2, bande, cap). Sortie, case par case : le plus agréable, puis
+   l'attracteur s'il existe et diffère. `Cand` gagne `w: u8` (renseigné aussi pour le plus agréable). Au plus 72 candidats,
+   ≈ 2 500 paires : rien à compter.
+2. **Rang des paires** (`triangle_phase`) : `Pair` gagne `wsum = w(P1) + w(P2)` ; la clé devient
+   `(⌊|r_pair − ρ*| / 0,02⌋ − wsum, agrément moyen, id P1, id P2)` (entiers signés), `wsum` compté **seulement** si
+   `tune.attr_rank`. Admissibilité, sécante, `max_pairs` (4), `tri_keep` (2) et budget inchangés.
+3. **Lentille** (`generate_inner`, choix du demi-tour, organique et attracteurs actifs) : `pick₀` = le choix de 1.12 ;
+   `tol = attr_lens_tol_milli / 1000 · D` (dm) ; parmi les nœuds non essayés du secteur avec `e(n) ≤ tol` et `w(n) > 0`, le
+   meilleur selon `(w décroissant, e, id)` ; s'il existe il remplace `pick₀`, sinon `pick₀`. `attr_lens_tol_milli = 0` : la
+   lentille de 1.12. La sécante sur ρ, les essais, les interdits et le couloir sont inchangés.
+4. **Compteurs** (`FigureDiagnostics`) : `attr_candidates` (candidats ajoutés), `attr_pairs_searched` (paires cherchées de
+   `wsum > 0`), `attr_lens_picks` (demi-tours remplacés).
+
+Le sommet le plus lointain d'un triangle est le plus lointain des deux : les deux poids comptent (les sommets à 10 % de D
+réels sont sur un attracteur comme le point lointain, §3.3 du relevé). Nombres en entiers ; `e`, `tol` et la clé de rang en
+`f64` comme aujourd'hui (même résultat natif et WASM).
+
+### 17.8 Interface du moteur et invariants
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttrWeights { pub w: [u8; 8] }                  // AttrWeights::NONE, AttrWeights::general(ride)
+pub struct Organic { pub mix: FigureMix, pub tune: OrganicTune, pub attr: AttrWeights }   // littéraux : attr: AttrWeights::NONE
+pub struct OrganicTune { /* …, */ pub attr_lens_tol_milli: u16 /* 50 */, pub attr_rank: bool /* true */ }
+pub struct FigureDiagnostics { /* …, */ pub attr_candidates: u32, pub attr_pairs_searched: u32, pub attr_lens_picks: u32 }
+impl<B: AsRef<[u8]>> Engine<B> {
+    pub fn set_attractors(&mut self, vi: usize, f: ord_graph::attract::AttrFile<B>) -> Result<(), AttrError>;
+    pub fn has_attractors(&self, vi: usize) -> bool;
+}
+```
+
+- **I1** : `Figures::Classic` rend 1.10 au bit près, **fichier chargé ou non** : `window_reference.txt`,
+  `window_reference_192.txt`, `team_reference.txt`, `team_check_reference.txt` sans re-bénédiction ; au banc, `base`
+  `4686c904975302e7`, `common` `07b62287e64fa258`, `svc` `384f003c0bd19b7f`.
+- **I5 (nouveau)** : l'organique **sans attracteurs actifs** rend 1.12 au bit près, dans les trois cas : pas de fichier ;
+  fichier et `AttrWeights::NONE` ; fichier et poids MTB. `organic_reference.txt` passe sans re-bénédiction ; au banc,
+  `svc+org` (sans fichier) et `svc+org+attr:0` (fichier, poids nuls) rendent `6324bdfdabf62f38` (toutes équipes) et
+  `50adca52ef713d18` (`--teams B,C --limit 20`).
+- **I2, I2′** : inchangés (`attr` nul dans leurs requêtes).
+- **I3** : tout parcours organique rendu avec attracteurs passe `check_route_in` et le contrôleur indépendant.
+- **I4** : même graine, même sortie ; toute fenêtre qui couvre les tuiles nécessaires rend la même sortie, attracteurs actifs.
+- `graph_id`, `params_hash`, `Common::hash`, le format du graphe et des vues, `ord-loops-check` : **inchangés**.
+
+### 17.9 Apprentissage du profil : règle L′
+
+`LearnParams` gagne `attractors: bool`, défaut `false`, écrit dans le texte canonique **seulement** s'il vaut `true`
+(`;attractors=<xxh3 des poids général ROAD et GRAVEL, 16 hex>`), comme `figures`. À `false`, `loop_request` construit
+`Organic { attr: AttrWeights::NONE, .. }` : l'apprentissage est celui de 1.12, **les profils écrits restent valides**, la
+bascule ne demande aucun redépôt. Règle L′ (banc, campagne 4) : si le candidat (`svc+org+attr`, appris sans attracteurs) tient
+B1 et B2 (§17.12), `attractors = false` reste ; sinon, si `svc+org+attr+la` (appris avec) les tient, `true` au commit de
+bascule (tous les profils `incompatible`, une nuit de redépôt, ~10 min pour la plus grosse équipe) ; sinon pas de bascule.
+
+### 17.10 Service (api 1.13, paquet 1.13.0)
+
+- **Réglages** (`GeneratorConfig`, `serde(default)`) : `attractors: off | on` (défaut **`off`** au commit du service, `on` au
+  commit de bascule ; variable `ORD_GENERATOR__ATTRACTORS`) ; `attractors_road`, `attractors_gravel: Option<PathBuf>`
+  (`ORD_GENERATOR__ATTRACTORS_ROAD`, `…_GRAVEL`) ; **absents, déduits de la vue** : `x.road.ordv` → `x.road.orda` dans le
+  même dossier. Aucune variable à ajouter à la pile de Pédalons.
+- **Démarrage** : pour chaque vue, fichier absent → journal `info`, raison `missing` ; illisible ou refusé par `open` →
+  `warn`, `unreadable` ; refusé par `check_for` → `warn`, `mismatch`. Dans les trois cas le générateur démarre (le service
+  aussi) ; les attracteurs ne sont **disponibles** que si les deux vues ont leur fichier.
+- **`/v1/capabilities`** : `generator.attractors: { available: bool, enabled: bool, reason?: missing | unreadable | mismatch
+  }` ; `enabled = available && attractors = on`.
+- **Génération** : `Organic { mix, tune: OrganicTune::default(), attr }` avec `attr = AttrWeights::general(ride)` si
+  `enabled`, sinon `AttrWeights::NONE`. Aucun champ de requête nouveau (Pédalons n'en enverrait pas ; le banc et l'exploitation
+  passent par le réglage).
+- **Métriques** : jauge `ord_generator_attractors_available` (0 ou 1) ; rien d'autre, aucune position dans les journaux.
+- **Versions** : `API_VERSION` 1.13, paquet 1.13.0, contrat régénéré (test `contract`), `CHANGELOG.md` : « Ajouté »
+  (fichier `.orda`, sous-commande, capacité, réglage) ; « Compatibilité » (fichier facultatif ; sans lui, 1.12 au bit près ;
+  `graph_id` et profils inchangés ; déploiement roulant sûr, une 1.12 ignore le fichier) ; « Changé » au commit de bascule
+  seulement (`attractors = on` : les parcours changent quand le fichier est posé).
+
+### 17.11 Banc
+
+**Fichiers** : `likeness` gagne `--attractors-road`, `--attractors-gravel` (défaut :
+`$G/lot4/4d/orda/france-20261115-z11.{road,gravel}.orda` s'ils existent) et `--no-attractors`. Les fichiers sont chargés dans
+le moteur du banc (`set_attractors`) ; une variante `attr` sans fichiers est refusée avant toute phase lourde.
+
+**Variantes** : composant `attr`, combinable avec `svc+org` ou `common+org` seulement (refus sinon, refus d'une option en
+double ou sans `attr`) :
+
+| Option | Effet | Nom |
+|---|---|---|
+| `attr` | `AttrWeights::general(ride)`, réglages par défaut ; apprentissage sans attracteurs | `-attr` |
+| `attr:0` | poids nuls, fichier chargé (contrôle I5) | `-attr0` |
+| `rcom:<n>`, `rvue:<n>`, `rbourg:<n>` | poids ROAD de `cafe` et `bakery` ensemble, de `viewpoint`, de `town` et `village` | `-rcom2` … |
+| `gvue:<n>`, `gcom:<n>` | poids GRAVEL de `viewpoint`, de `cafe` et `bakery` | `-gvue2` … |
+| `ltol:<milli>` | `attr_lens_tol_milli` (0 : lentille de 1.12) | `-ltol20` |
+| `rank:0` | `attr_rank = false` (attracteurs candidats, sans clé de rang) | `-rank0` |
+| `la` | apprentissage avec attracteurs (`LearnParams::attractors = true`) | `-la` |
+
+**Mesure** (`measure.rs`) : pour chaque boucle réelle et chaque parcours généré gardé, sur la polyligne de la marche
+(`trace.pts`), le point le plus éloigné du départ (celui de `r / D`), ramené en latitude et longitude (`Frame`), puis
+`AnchorGrid::hits` : un masque `far_attr: u8`. Idem pour les sommets intérieurs à 10 % de D (`vertex_indices(…, 0,10)`) : nombre
+de sommets et nombre sur un attracteur, par groupe. **Seuls les masques et les comptes sont écrits** dans le rapport, jamais une
+position (le rapport reste privé de toute façon, sous `~/.cache`).
+
+**Section « 4d »** (`compare_attr.rs`, dans `<label>-compare.{md,json}`), premier parcours gardé, quatre groupes (ROAD · GRAVEL ×
+curseurs 0,25 · 1), lecture « toutes », toutes équipes puis A et hors A :
+1. **Parts** des points lointains à `reach_m` d'un ancrage, par groupe de catégories (`commerce` = café ou boulangerie,
+   `viewpoint`, `bourg` = town ou village, `mountain_pass`, `peak`, `retenus` = poids non nul du type), pour le réel et chaque
+   variante ; écart à `svc-org` et IC à 90 % de cet écart par rééchantillonnage **apparié** des requêtes (300 tirages, graine
+   fixe) ; **part de l'écart fermée** `(variante − svc-org) / (réel − svc-org)` quand `réel − svc-org > 0,005`.
+2. Les mêmes parts sur les sommets à 10 % de D.
+3. Compteurs du §17.7, par requête.
+4. **Contrôles** affichés au résumé, **arrêt** de la campagne si l'un manque : I1 et I5 (empreintes du §17.8) ; métrique contre
+   la sonde, ROAD, toutes équipes : réel `commerce` 0,199 et `viewpoint` 0,046, `svc-org` au curseur 0,25 `commerce` 0,146 et
+   `viewpoint` 0,033, chacun à **±0,006** (l'écart dû au recalage sur nœud, §1.2 du relevé ; une campagne partielle n'a pas ce
+   contrôle).
+5. **Critères** du §17.12, chacun « tient » ou « ne tient pas » avec ses chiffres.
+
+### 17.12 Critères
+
+Candidat : `svc+org+attr` aux réglages retenus ; références : `svc-org` (1.12) et `svc` du même tirage ; lecture « toutes »,
+toutes équipes, premier parcours gardé, sauf mention. Valeurs attendues entre crochets [calculé sur le relevé de la sonde] ;
+les seuils se calculent sur les parts **mesurées au même tirage**.
+
+**Effet** (§17.19, question 3)
+- **E1, ROAD, commerce** : part ≥ `svc-org + 0,5 × (réel − svc-org)` **à chaque curseur** [≥ 0,173 · ≥ 0,164].
+- **E2, ROAD, point de vue** : même règle sur la **moyenne des deux curseurs** [1.12 0,0255, réel 0,046 : ≥ 0,036] ; la part à
+  1 km est rapportée.
+- **E3, pas de dépassement** : chaque groupe à poids non nul et `bourg`, ROAD, ≤ réel + 0,03 à chaque curseur [`commerce` ≤
+  0,229, `viewpoint` ≤ 0,076, `bourg` ≤ 0,209].
+- **E4, GRAVEL** : `viewpoint` ≥ `svc-org + 0,5 × (réel − svc-org)` en moyenne des deux curseurs [1.12 0,030, réel 0,041 :
+  ≥ 0,036] ; `commerce` ≤ `svc-org` + 0,005 à chaque curseur [≤ 0,100 · ≤ 0,122].
+
+**Garde des formes et du goût**
+- **A1 à A4** contre `svc`, aux seuils du §16.11 (A4 : `shared_share` en absolu) ; de plus, W1 / IQR de r / D et de la compacité
+  ≤ `svc-org` + 0,03 dans chaque groupe, part des premiers à 2 sommets à ±0,03 de `svc-org`.
+- **B1** : `S / S_base` ≤ `svc-org` + 0,02 dans les quatre groupes, « toutes » et « écart », et ≤ 0,5. **B2** : A ROAD,
+  `svc-org-attr − common-org-attr` ≤ +0,054 aux deux curseurs.
+
+**Service**
+- **C1** (§17.19, question 4) : P50 par appel ≤ **1,05 ×** `svc-org` à chaque curseur, P90 ≤ 1,10 × ; entre 1,04 et 1,06 au premier
+  tirage, second tirage des temps et moyenne. Rapporté : le rapport à `svc` (× 1,40 au §9.9).
+- **C2** : `OK` ≥ `svc-org` − 0,5 point ; aucune `PANIC` ni `WINDOW_ESCAPE` ; `VIOLATION` ≤ `svc-org` ; refus du contrôleur
+  indépendant sur les parcours rendus : 0.
+- **D** : mêmes empreintes à 1 et 16 fils.
+- **C3** (après la bascule, conteneur de 3 Gio) : dans **la même séance**, l'image 1.12 (`b288206`) puis l'image 1.13 aux
+  défauts (fichiers posés) sur le même protocole (§16.3 du relevé du 4c) ; P50 en série et à 4 clients ≤ **1,05 ×** ceux de la
+  1.12 ; pic `anon` ≤ 2,4 Gio ; `oom` 0 ; dépôts en 200 ; `generator.attractors.enabled = true`.
+- **Règle L′** : §17.9.
+
+**Bascule** (`attractors = on`) : E1 à E4, A1 à A4, B1, B2, C1, C2 et D tiennent → commit à part, puis C3 ; si C3 manque, `git
+revert` et le relevé le dit. Sinon le réglage reste `off` et le relevé nomme les critères manqués. Pas de critère de
+reconstruction (§9.1, point 3). La fusion revient au propriétaire.
+
+### 17.13 Tests (synthétiques, aucune donnée de production)
+
+**`ord-graph`**
+1. Format : écriture puis `open`, aller-retour exact (en-tête, catégories, ancrages, zone, méta) ; refus : magie, `major` 2,
+   fichier tronqué, décalage décroissant, nœuds non triés, masque nul ou bit ≥ `n_cats`, empreinte de fin fausse.
+2. `check_for` : fichier d'une vue refusé pour l'autre type ; pour une vue reconstruite (autre `view_build_epoch`) ; pour un
+   graphe d'autre empreinte de PBF ; nœud hors de sa cellule.
+3. Accroche : nœud le plus proche à 299 m gardé, à 301 m rien ; égalité → plus petit id ; doublons `(nœud, catégorie)` fondus.
+4. Zone : sur 2 000 points aléatoires, ensemble égal à une recherche exhaustive ; masques en OU ; l'ancrage dans sa zone.
+5. Objets (`MemSource` avec `node_tags`) : barycentre d'une way fermée (nœud répété compté une fois) ; café en nœud et en
+   bâtiment ; `place=hamlet`, `mountain_pass=no`, `natural=peak` en way et relations : ignorés.
+6. Déterminisme : `mini.osm.pbf`, `with_batch_len(1)` contre défaut, 1 et 4 fils : mêmes octets.
+7. `AnchorGrid::hits` contre une recherche exhaustive.
+
+**`ord-graph-build`** : 8. bout en bout sur `mini.osm.pbf` (`build`, `views`, `attractors --check`) : fichiers relus,
+`check_for` tenu ; un extrait différent (copie modifiée d'un octet) → refus, code 1.
+
+**`ord-loops`**
+9. I1 : les quatre références `Classic` passent, moteur **avec** fichier synthétique.
+10. I5 : `organic_reference.txt` rejouée (a) sans fichier, (b) fichier et `NONE`, (c) fichier et poids MTB (requêtes MTB) ;
+    `attr_lens_tol_milli = 0` et `attr_rank = false` avec poids nuls : idem.
+11. Masque de fenêtre : pour 50 sous-ensembles aléatoires de tuiles, chaque nœud a le masque de `AttrFile::zone_mask` (nœuds de
+    chaînes étrangères compris) ; nœud d'une cellule sans nœud de zone : 0.
+12. I4 : déterminisme et fenêtre plus grande, attracteurs actifs (tests existants rejoués avec `general(Road)`).
+13. Candidats : grille où une case a un attracteur moins agréable que son meilleur nœud → deux candidats ; poids nuls → un ;
+    attracteur = plus agréable → un.
+14. Rang : deux paires à une case de 0,02 d'écart, la plus lointaine de poids 1 → passe devant ; `attr_rank = false` → ordre
+    de 1.12.
+15. Lentille : attracteur à `e ≤ tol` → choisi, `attr_lens_picks` = 1 ; à `e > tol` → choix de 1.12.
+16. Effet (garde) : grille avec zones d'attracteurs dans la bande, 50 graines : part des premiers parcours dont le point
+    lointain est en zone plus haute avec `general(Road)` qu'avec `NONE`.
+
+**`ord-loops-check`** : 17. `engine_vs_checker` organique avec attracteurs (I3).
+
+**`ord-graph-match`** : 18. `LearnParams::hash` inchangé à `attractors = false`, changé à `true` ; `loop_request` rend `NONE`
+à `false`.
+
+**`ord-loops-bench`** : 19. `parse_variants` : options du §17.11 et refus ; 20. section « 4d » sur un rapport synthétique
+(parts, part fermée, IC apparié déterministe, arrêt sur contrôle manqué).
+
+**`ord-server`** : 21. réglages : chemins déduits, `on` / `off`, variables ; 22. capacités : fichiers présents, absents, refusés
+(raisons) — le générateur sert dans les trois cas ; 23. génération : `off` ou fichier absent → la requête porte `NONE` (crochet
+de test qui lit le `Request`), `on` → `general(ride)` ; 24. contrat régénéré (1.13).
+
+### 17.14 Commits
+
+Chacun passe `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` et les tests des crates
+touchés ; avant le dernier, `cargo test --workspace`. Fin de message : ligne vide, puis `Co-Authored-By` du modèle qui code.
+
+1. `feat(graph): fichier d'attracteurs par vue, format, accroche et zone (lot 4, 4d)` — §17.4, §17.5 points 3 à 6 (sans la
+   sous-commande), `OsmSource::tagged_nodes` ; tests 1 à 7.
+2. `feat(graph-build): sous-commande attractors (lot 4, 4d)` — §17.5 ; test 8. Puis la campagne 0 (fichiers de France).
+3. `feat(loops): attracteurs OSM dans les points lointains organiques (lot 4, 4d)` — §17.6 à §17.8 ; tests 9 à 17.
+4. `feat(graph-match): apprentissage sans attracteurs par défaut, règle L′ (lot 4, 4d)` — §17.9 ; test 18.
+5. `feat(bench): likeness, attracteurs et part des points lointains (lot 4, 4d)` — §17.11 ; tests 19, 20. Puis les campagnes 1
+   à 4.
+6. `feat(server): attracteurs OSM en option (api 1.13, 1.13.0)` — §17.10 (réglage `off`) ; tests 21 à 24.
+7. Si les critères tiennent : `feat(server): attracteurs OSM par défaut (lot 4, 4d)` — `attractors = on`, poids retenus dans
+   `AttrWeights::general`, `LearnParams::attractors` selon L′, `CHANGELOG` « Changé » ; puis la séance C3 ; `git revert` si C3
+   manque.
+8. `docs(ord-loops): relevé du 4d, attracteurs OSM (lot 4)` — `ord-loops-lot4d-mesures.md` (style des relevés, marques de
+   l'en-tête, lettres d'équipes, agrégats par catégorie OSM seulement), §17.20 « Écarts du codage », étape 5 du §10 marquée.
+
+### 17.15 Campagnes, temps, mémoire
+
+Une à la fois, la machine pour elle seule (16 cœurs, 30 Go) ; `B=./target/release/ord-loops-bench`,
+`G=~/.cache/osm-route-details/graph`, sorties sous `$G/lot4/4d/` seulement, binaire reconstruit après chaque commit qui le
+touche. Le `.orda` est écrit sous `$G/lot4/4d/orda/` (rien dans `$G/lot6/`).
+
+| # | Après | Commande | [estimé] |
+|---|---|---|---|
+| 0 | commit 2 | `ord-graph-build attractors --pbf $G/lot6/france-261115.osm.pbf --graph $G/lot6/france-20261115-z11.ordg --out-dir $G/lot4/4d/orda --check --report $G/lot4/4d/orda/report.json` | 3 min, ≤ 4 Go |
+| 1 | commit 5 | `$B likeness --teams B,C --limit 20 --holdout-share 0.25 --variants base,svc,svc+org,svc+org+attr:0,svc+org+attr --label 4d-essai --out $G/lot4/4d` : I1, I5 ; puis la même avec `--no-attractors --variants base,svc+org` | 6 + 3 min |
+| 2 | — | `--teams B,C --holdout-share 0.25 --variants base,svc+org+attr --threads 1 --label 4d-det1`, puis `--threads 16 --label 4d-det16` (D) | 13 + 3 min |
+| 3 | — | `--holdout-share 0.25 --variants base,svc,svc+org,svc+org+attr,svc+org+attr+ltol:20,svc+org+attr+ltol:0,svc+org+attr+rcom:2+gvue:2,svc+org+attr+rvue:2 --label lot4-4d` : contrôles, métrique contre la sonde, premier jugement | ~55 min, RSS ≤ 21 Gio |
+| 4 | — | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org,common+org+attr<r*>,svc+org+attr<r*>,svc+org+attr<r*>+la --label lot4-4d-final` (`<r*>` : réglage retenu), puis `--variants base,svc,svc+org,svc+org+attr<r*> --label lot4-4d-t2` | ~55 + 25 min |
+| 5 | commit 7 | séance en conteneur (C3), images 1.12 puis 1.13, mêmes fichiers, même volume, méthode du §16.3 du relevé du 4c | ~60 min |
+
+Estimations sur le §16.1 du relevé du 4c (6 variantes en 36 min, pic 18,9 Gio) et la sonde (12 min 39 pour `base` et `svc+org`).
+Total machine ≈ 4 h. **Choix du réglage** (campagne 3) : parmi les variantes qui tiennent A, B1, C1, C2 et E3, celle qui ferme la
+plus grande part moyenne de l'écart sur E1 et E2 (parts fermées plafonnées à 1) ; à 0,05 près, la plus douce (poids plus petits,
+puis `ltol` plus petit). Aucune ne tient E1 ou E2 : `rank:0` et `rcom:2+rvue:2` ne sont pas rejoués sans le propriétaire ; pas de
+bascule, le relevé dit ce qui manque.
+
+### 17.16 Mise en service
+
+Rien n'est déployé, poussé ni publié dans le 4d. Après la fusion, côté exploitation (pile partagée de Pédalons, parcours d'`OPS-61`
+et d'`OPS-64`, à reporter dans une entrée `OPS` du ledger de Pédalons au moment de la mise en service) :
+1. Sur un poste, `ord-graph-build attractors --pbf <extrait> --graph <nom>.ordg --check` avec **le même extrait** que le graphe en
+   service (refus sinon) : deux fichiers de 10 à 12 Mo.
+2. Les copier en 0444 **à côté du graphe**, sous le même radical (`<nom>.road.orda`, `<nom>.gravel.orda`), dans
+   `~/shared/data/osm-route-details-graph/`. Aucune variable de plus dans `docker-compose.shared.yml` : le service les déduit des
+   vues.
+3. Passer l'image à 1.13.0 et redéployer la pile partagée. `/v1/capabilities` doit rendre `generator.attractors.available =
+   true` (et `enabled = true` si la bascule est faite). Sans les fichiers, le service sert comme 1.12.
+4. **Aucun redépôt** : `graph_id`, `params_hash` et les profils sont inchangés (sauf règle L′ inverse, §17.9).
+5. **Nouveau graphe** (nouvel extrait) : les `.orda` se reconstruisent avec lui ; un ancien fichier posé à côté est refusé
+   (`mismatch`, journal `warn`, capacités) et le générateur sert sans attracteurs.
+
+### 17.17 Risques
+
+- **Dépassement** : la zone à poids non nul couvre 22 % des nœuds de degré ≥ 3 en road (§17.0, point 6) ; la lentille à 5 % de D trouvera presque toujours un
+  attracteur dans un secteur, et la part peut passer au-delà du réel. E3 le voit ; leviers dans l'ordre : `ltol`, puis poids.
+- **Bruit** : l'écart à fermer sur le point de vue est petit (0,013 au curseur 0,25, erreur type d'une part ≈ 0,004 sur 2 060
+  parcours [calculé]) ; d'où E2 sur la moyenne des curseurs et l'IC apparié.
+- **Forme** : un point de poids vaut 0,02 de r / D ; deux sommets de poids 1 décalent le rang de 0,04. A1 et la garde contre
+  `svc-org` le surveillent.
+- **Temps** : les parcours essayés traversent plus de bourgs (carrefours, chaînes courtes, modèle des virages) ; C1 relatif.
+- **Une équipe fait la statistique** (84 %) : hors A, la boulangerie seule n'attire pas (§3.4 du relevé) ; café et boulangerie
+  vont ensemble dans `rcom`. La section « 4d » montre « hors A ».
+- **OSM bouge** : un commerce ouvert ou fermé change un fichier, pas le graphe ; les fichiers vivent avec leur extrait.
+- **Le piège du `Debug`** (§15.0, point 3) : rien de nouveau dans `Generation`, `Diagnostics`, `Route` ; le test 9 le voit.
+
+### 17.18 Ce que le 4d ne fait pas
+
+Destinations et lieux d'équipe (§9.1, point 4) ; plans d'eau, eau potable, multipolygones ; poids négatifs (commerce en GRAVEL) ;
+poids par équipe ; attracteurs en `Classic`, en strict, en aller simple ; changement de la note, de `max_pairs`, de `tri_keep`, du
+budget, du contrôleur, du format du graphe et des vues, de `graph_id`, de `params_hash` ; champ de requête ; rien au backend de
+Pédalons ; **rien n'est poussé, aucune image publiée, aucun déploiement**, aucun accès à la production.
+
+### 17.19 Questions au propriétaire
+
+Chaque question a une option recommandée, **appliquée par défaut** dans cette spécification ; une autre réponse change un poids,
+un seuil ou un défaut, pas l'architecture.
+
+1. **Catégories et poids.** ROAD : commerce (café et boulangerie) réel 0,199, hasard 0,075, 1.12 0,146 · 0,128, Δβ +0,23 · +0,33,
+   stable hors de A ; point de vue 0,046, 0,014, 0,033 · 0,018, Δβ +0,27 · +0,68 ; bourg Δβ +0,08 · +0,04 (1.12 le rend déjà).
+   GRAVEL : point de vue +0,038 sur 1.12 à 1 km ; commerce **répulsif** (Δβ −0,43 · −0,59). **Recommandé** : ROAD commerce 1 et
+   point de vue 1, bourgs écrits à poids 0 ; GRAVEL point de vue 1 seul, aucun poids négatif au 4d ; MTB rien ; **poids généraux**
+   (l'équipe A fait 84 % des boucles, hors d'elle 211 boucles ROAD seulement), réglés au banc dans {1, 2}.
+2. **Cols et sommets**, non mesurables : 0 point lointain réel ROAD à moins de 1 km d'un col, 2 boucles GRAVEL ; accrochés à la vue
+   road à 30 % et 16 %. **Recommandé** : écrits dans le fichier (0,13 Mo de plus en road, 0,55 Mo en gravel [calculé sur la zone
+   mesurée, §17.0 point 6]), **poids 0** jusqu'à une
+   mesure sur une équipe de montagne. Option : le poids du point de vue a priori, pour l'effet « col » dès le 4d.
+3. **Critère d'effet.** **Recommandé** : fermer **au moins la moitié de l'écart au réel** sur les premiers parcours ROAD, commerce
+   à chaque curseur (≥ 0,173 · ≥ 0,164), point de vue sur la moyenne des deux curseurs (≥ 0,036 : à un curseur seul l'écart à
+   fermer, 0,0065 au curseur 0,25, vaut moins de deux erreurs types) ; ne pas dépasser le réel de plus de 0,03 ; GRAVEL point de
+   vue en hausse de la moitié de l'écart (≥ 0,036), commerce pas plus haut qu'en 1.12 (+0,005) ; formes et goût gardés contre 1.12.
+4. **Temps jugé contre 1.12.** Au curseur 1, C1 vaut × 1,369 à × 1,395 de `svc` selon le tirage (seuil × 1,40 : marge de 0,4 à
+   2,3 %) ;
+   C3 en série 0,30 s pour un seuil de 0,30 s ; le bruit d'un tirage est de 1 à 2 %. **Recommandé** : juger le 4d **relativement à
+   1.12** : P50 ≤ × 1,05 de `svc-org` au banc à chaque curseur (P90 ≤ × 1,10) ; en conteneur, ≤ × 1,05 d'une 1.12 jouée dans la
+   même séance. Option : garder les seuils absolus du §9.9 (× 1,40, 0,62 s et 0,30 s), au risque d'un refus par le bruit.
+5. **Bascule par le codeur.** **Recommandé** : oui, `attractors = on` dans un commit à part si E1 à E4, A, B, C1, C2 et D tiennent,
+   suivi de la séance C3 et annulé (`git revert`) si elle manque ; l'apprentissage reste sans attracteurs (aucun profil invalidé,
+   aucun redépôt) sauf règle L′. Le fichier lui-même reste à poser par l'exploitation (§17.16) : sans lui, 1.13 sert comme 1.12.
+   La fusion reste au propriétaire.
