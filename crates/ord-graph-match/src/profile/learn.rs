@@ -67,18 +67,41 @@ impl LearnFigures {
         }
     }
 
-    /// Les figures d'une requête de l'apprentissage, pour le type `ty` de l'équipe aux formes `set`.
+    /// Les figures d'une requête de l'apprentissage, pour le type `ty` de l'équipe aux formes `set`, sans attracteurs
+    /// (la règle L′ du §17.9, `LearnParams::attractors = false`).
     pub fn figures_of(self, set: &LearnSet, ty: u8) -> Figures {
+        self.figures_with(set, ty, false)
+    }
+
+    /// Comme [`LearnFigures::figures_of`] ; avec `attractors`, la requête organique porte les poids généraux du type (le
+    /// moteur du joueur doit alors avoir ses fichiers d'attracteurs). Sans effet en `Classic`.
+    pub fn figures_with(self, set: &LearnSet, ty: u8, attractors: bool) -> Figures {
         match self {
             Self::Classic => Figures::Classic,
-            Self::Organic => Figures::Organic(Organic {
-                mix: mix_for(Some(&set.shapes), super::collect::ride_of(ty)),
-                tune: OrganicTune::default(),
-                // L′ (§17.9) : l'apprentissage ne lit pas les attracteurs (voir `LearnParams::attractors`).
-                attr: ord_loops::AttrWeights::NONE,
-            }),
+            Self::Organic => {
+                let ride = super::collect::ride_of(ty);
+                Figures::Organic(Organic {
+                    mix: mix_for(Some(&set.shapes), ride),
+                    tune: OrganicTune::default(),
+                    attr: if attractors {
+                        ord_loops::AttrWeights::general(ride)
+                    } else {
+                        ord_loops::AttrWeights::NONE
+                    },
+                })
+            }
         }
     }
+}
+
+/// Empreinte des poids généraux d'attracteurs (ROAD, GRAVEL) : change quand un poids change, donc invalide les profils
+/// appris avec elles.
+pub fn attractor_weights_hash() -> u64 {
+    let mut bytes = Vec::with_capacity(16);
+    for ride in [ord_loops::RideType::Road, ord_loops::RideType::Gravel] {
+        bytes.extend_from_slice(&ord_loops::AttrWeights::general(ride).w);
+    }
+    xxh3_64(&bytes)
 }
 
 /// Seuil de kilomètres du réel sous lequel la cible commune d'un pas est neutre : le `min_km` des `TasteParams` du banc
@@ -116,6 +139,10 @@ pub struct LearnParams {
     /// Figures jouées pour apprendre (lot 4, 4c). Hors de l'empreinte tant qu'elles valent `Classic` : les profils écrits
     /// avant le 4c restent compatibles ; `Organic` entre dans l'empreinte (`;figures=organic`) et invalide tous les profils.
     pub figures: LearnFigures,
+    /// L'apprentissage organique joue les attracteurs OSM (lot 4, 4d, règle L′ du §17.9) : les requêtes portent les poids
+    /// généraux du type. Hors de l'empreinte tant que `false` (les profils écrits restent valides, aucun redépôt) ; dedans
+    /// dès `true` (`;attractors=<empreinte des poids>`). Sans effet en `LearnFigures::Classic`.
+    pub attractors: bool,
 }
 
 impl Default for LearnParams {
@@ -135,6 +162,7 @@ impl Default for LearnParams {
             retain: RetainParams { max_km: Some(200.0), ..RetainParams::default() },
             mix: Mix::Capped,
             figures: LearnFigures::Classic,
+            attractors: false,
         }
     }
 }
@@ -167,9 +195,14 @@ impl LearnParams {
             Mix::Capped => base,
             Mix::Sonde => format!("{base};mix=sonde"),
         };
-        match self.figures {
+        let base = match self.figures {
             LearnFigures::Classic => base,
             LearnFigures::Organic => format!("{base};figures=organic"),
+        };
+        if self.attractors {
+            format!("{base};attractors={:016x}", attractor_weights_hash())
+        } else {
+            base
         }
     }
 
@@ -537,7 +570,7 @@ pub fn learn(
                     fam,
                     q8,
                     l.key ^ p.seed,
-                    p.figures.figures_of(set, l.ty),
+                    p.figures.figures_with(set, l.ty, p.attractors),
                 )
             })
         })

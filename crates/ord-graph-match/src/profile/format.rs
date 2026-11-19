@@ -276,6 +276,41 @@ mod tests {
         assert_eq!(decode(&bytes, &common, &organic), Err(Incompatible::Settings));
     }
 
+    /// Test 18 du 4d : `attractors = false` laisse l'empreinte (et donc les profils écrits) intacte, `true` la change ;
+    /// la requête de l'apprentissage porte `NONE` à `false`, les poids généraux à `true`.
+    #[test]
+    fn learn_attractors_enter_the_hash_only_when_true() {
+        use super::super::collect::LearnSet;
+        use super::super::learn::LearnFigures;
+        let organic = LearnParams { figures: LearnFigures::Organic, ..LearnParams::default() };
+        assert!(!organic.attractors && !organic.canonical().contains("attractors"));
+        // L'empreinte d'avant le 4d : le texte canonique n'a rien de plus.
+        assert!(organic.canonical().ends_with(";figures=organic"));
+        let with = LearnParams { attractors: true, ..organic.clone() };
+        assert!(
+            with.canonical().starts_with(&organic.canonical()) && with.canonical().contains(";attractors=")
+        );
+        assert_ne!(with.hash(), organic.hash());
+        let classic_with = LearnParams { attractors: true, ..LearnParams::default() };
+        assert_ne!(classic_with.hash(), LearnParams::default().hash());
+        let (common, _, meta, taste) = fixture();
+        let bytes = encode(&meta, &taste);
+        assert_eq!(decode(&bytes, &common, &with), Err(Incompatible::Settings));
+        // La requête de l'apprentissage.
+        let set = LearnSet::default();
+        let weights = |f: ord_loops::Figures| match f {
+            ord_loops::Figures::Organic(o) => o.attr,
+            ord_loops::Figures::Classic => panic!("organique attendu"),
+        };
+        assert!(weights(LearnFigures::Organic.figures_with(&set, 0, false)).is_none());
+        assert!(weights(LearnFigures::Organic.figures_of(&set, 0)).is_none());
+        assert_eq!(
+            weights(LearnFigures::Organic.figures_with(&set, 0, true)),
+            ord_loops::AttrWeights::general(ord_loops::RideType::Road)
+        );
+        assert!(weights(LearnFigures::Organic.figures_with(&set, 2, true)).is_none(), "MTB : aucun poids");
+    }
+
     #[test]
     fn another_common_table_or_other_settings_are_settings_errors() {
         let (common, learn, meta, taste) = fixture();
