@@ -15,7 +15,8 @@
 > d'un même tirage, pas à un relevé à un fil ni au service.
 
 > **Mise à jour du 19 novembre 2026** : l'étape « virages » du §16 de la note de conception est codée ; son essai de fumée est
-> au **§14** (les §0 à §13 restent le relevé du 18 novembre, pris avant l'étape).
+> au **§14**, ses campagnes (déterminisme, complète, décomposition du temps) et une séance en conteneur indicative au **§15**
+> (les §0 à §13 restent le relevé du 18 novembre, pris avant l'étape). **Bascule : non** ; seul C1 manque (§15.6).
 
 ## 0. En bref
 
@@ -540,3 +541,159 @@ L'essai est rejoué avec la même commande, sous le label `virages-essai-relectu
 - Le contrôleur indépendant ne refuse toujours aucun parcours rendu.
 - Temps, indicatif : `svc-org` à × 1,72 · × 1,54 de `svc` (P50, curseurs 0,25 · 1), contre × 1,54 · × 1,79 au premier
   essai : le bruit de l'échantillon est de cet ordre, et C1 reste loin du × 1,25 de la réponse 4.
+
+## 15. Étape « virages » : campagnes, avant → après (19 novembre 2026)
+
+Relevé du 19 novembre 2026, branche `feat/ord-loops-lot4c`, binaire `release` de `4fca0b9` (dernier commit de code
+`47091c6`, après la relecture du §14.6). Les réponses du propriétaire (fin du §9.8 de la note) lèvent l'arrêt du §14.4 : les
+campagnes 2 et 3 du §16.10 sont jouées, plus une campagne courte qui décompose le temps (réponse 4). Sorties **privées et hors
+dépôt** sous `~/.cache/osm-route-details/graph/lot4/4c-virages/` (banc) et `…/lot4/4c-virages-conteneur/` (séance). Lettres
+d'équipes et agrégats seulement. **Avant** : l'organique d'avant l'étape, rejoué dans le même tirage par
+`svc+org+turns:0+reuse:0` (empreinte `c48118447315c118`, celle de `svc-org` à la campagne 4 du §4). **Après** : `svc-org`, aux
+défauts du §16.6 (marge 5°, modèle dans toutes les recherches organiques, T1 et T2 compris, `no_reuse`).
+
+### 15.1 Campagnes et contrôles
+
+| # | Commande (`$B likeness …`, `--out $G/lot4/4c-virages`) | Durée | Pic RSS |
+|---|---|---:|---:|
+| 2 | `--teams B,C --holdout-share 0.25 --variants base,svc+org --threads 1 --label virages-det1`, puis `--threads 16 --label virages-det16` | 12 min 54 · 2 min 18 | 10,4 · 15,0 Gio |
+| 3 | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org,svc+org+noretry,svc+org+lc,svc+org+turns:0+reuse:0,svc+org+margin:10,svc+org+margin:15 --label lot4-4c-virages` | 1 h 06 min | 19,3 Gio |
+| 3′ | `--holdout-share 0.25 --variants base,svc,svc+org,svc+org+tri:0,svc+org+tri:0+turns:0+reuse:0 --label lot4-4c-virages-temps` | 32 min | 18,8 Gio |
+
+Les deux variantes `margin:10` et `margin:15` sont rapportées, non jugées : la marge reste 5° (réponse 1). La campagne 3′ est le
+second tirage des temps et la décomposition demandée par la réponse 4 (§15.5).
+
+| Contrôle [mesuré] | Attendu | Obtenu | |
+|---|---|---|---|
+| I1 : `base`, `common`, `svc` (campagnes 3 et 3′) | `4686c904975302e7`, `07b62287e64fa258`, `384f003c0bd19b7f` | les mêmes | tient |
+| I2′ : `svc-org-turns0-reuse0` (campagne 3) | `c48118447315c118` | `c48118447315c118` | tient |
+| Couloir seul d'avant l'étape : `svc-org-tri0-turns0-reuse0` (3′) | `a6a90f2d9caf43d1` (`svc-org-tri0` de la campagne 4) | `a6a90f2d9caf43d1` | tient |
+| D : B et C, `base` à 1 et 16 fils | mêmes empreintes | `052224c85ef4145d` aux deux (celle du §5) | tient |
+| D : B et C, `svc-org` à 1 et 16 fils | mêmes empreintes | `bac9cbaec14dc42f` aux deux | **tient** |
+| `svc-org` aux campagnes 3 et 3′ | mêmes empreintes | `6324bdfdabf62f38` aux deux | tient |
+
+Autres empreintes de la campagne 3 : `common-org` `1024983e6cf5c1d2`, `svc-org-noretry` `416d7eb9ba602d54`, `svc-org-lc`
+`62cbcfb1b2ecc543`, `svc-org-m10` `a4160d27b6e22840`, `svc-org-m15` `a8e805027a56f558` ; campagne 3′ : `svc-org-tri0`
+`c44b7a791e330082`.
+
+### 15.2 Critères, avant → après
+
+Candidat contre `svc` du même tirage (campagne 3), toutes équipes, lecture « toutes », premier parcours gardé, quatre groupes
+(ROAD puis GRAVEL, curseurs 0,25 · 1) [mesuré ; rapports et `×` calculés par le banc] :
+
+| critère | seuil | avant (`svc-org-turns0-reuse0`) | après (`svc-org`) | |
+|---|---|---|---|---|
+| A1 : W1 / IQR de r / D, × `svc` | ≤ 0,75 (ROAD), ≤ 0,85 (GRAVEL) | 0,46 · 0,49 ; 0,66 · 0,72 | **0,35 · 0,37 ; 0,58 · 0,60** | tient |
+| A2 : part des premiers à 2 sommets | [0,40 ; 0,58] ROAD, [0,32 ; 0,50] GRAVEL | 0,507 · 0,491 ; 0,402 · **0,317** | 0,546 · 0,545 ; 0,475 · **0,427** | **tient** (manquait) |
+| A2 : W1 / IQR de `vertices_10`, × `svc` | ≤ 0,5 | 0,17 · 0,23 ; 0,13 · 0,32 | 0,06 · 0,11 ; 0,12 · 0,06 [calculé] | tient |
+| A3 : compacité ROAD (W1 / IQR) | ≤ 0,80 × `svc` (0,491 · 0,510) | 0,124 · 0,120 | 0,190 · 0,166 | tient (GRAVEL rapporté : 0,337 · 0,248 contre 0,203 · 0,349) |
+| A4 : `shared_share` en absolu | médiane ≤ 0,05, P90 ≤ P90 `svc` + 0,05 | médianes 0,002 ; 0,003 | médianes 0,002 ; 0,003 | tient (P90 dans la marge aux quatre groupes) |
+| A4 : `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km` | W1 / IQR ≤ `svc` + 0,10 | dans la marge | dans la marge | tient |
+| B1 : `S / S_base` | ≤ `svc` + 0,03 et ≤ 0,5 | au plus +0,028 (GRAVEL 0,25 « écart ») | au plus **+0,012** (GRAVEL 0,25 « écart » : 0,314 contre 0,302) | tient |
+| B2 : A ROAD, `svc-org − common-org` | ≤ +0,054 (réserve levée ≤ +0,03) | −0,069 · −0,056 | −0,067 · −0,054 | tient, réserve levée |
+| C1 : P50 × `svc` | ≤ 1,15 (≤ 1,25 par la réponse 4) | 1,31 · 1,44 | **1,24 · 1,40** (3′ : 1,26 · 1,37 ; moyenne 1,25 · 1,38) | **ne tient pas** |
+| C1 : P90 × `svc` | ≤ 1,25 | 1,32 · 1,28 | **0,96 · 0,97** | tient (manquait) |
+| C2 : `OK`, PANIC, WINDOW_ESCAPE, VIOLATION | `OK` ≥ `svc` − 0,5 ; 0 ; 0 ; ≤ `svc` (0) | 98,1 · 97,9 % ; 0 ; 0 ; **2** · 0 | **99,3 · 99,2 %** ; 0 ; 0 ; **0** · 0 | **tient** (manquait) |
+| D | mêmes empreintes à 1 et 16 fils | — | tenu (§15.1) | tient |
+
+- **Refus du contrôleur indépendant** sur les parcours rendus : **34 → 0** (avant : 1 ROAD et 33 GRAVEL, tous `SHARP_TURN`, sur
+  19 451 rendus ; après : 0 sur 20 280). L'alignement du contrôle interne et le modèle des virages ferment l'écart du §16.0
+  (point 1). En `Classic`, rien ne change : `base` 4 et `common` 5 refus `SHARP_TURN`, `svc` 0, comme à la campagne 4.
+- **`OK` passe de 1,1 et 1,3 point au-dessus de `svc`** (avant l'étape : 0,1 point en dessous et à égalité) [mesuré] ; la cause
+  n'est pas décomposée ici.
+
+### 15.3 Triangles : ce que l'étape retire
+
+Par requête organique jouée (4 130 ROAD, 1 560 GRAVEL), triangles complets (trois jambes), refus du contrôle interne [mesuré] :
+
+| type | variante | cherchées (reprises) | complets | gardés | requêtes avec un triangle gardé | `SHARP_TURN` (par complet) | `REUSE_OUTSIDE_TAIL` | `TOO_MANY_CROSSINGS` | états jambe 2 · jambe 3 |
+|---|---|---|---:|---:|---:|---|---:|---:|---|
+| ROAD | avant | 3,69 (0,73) | 13 775 | 4 403 | 0,634 | 6 147 (0,446) | 753 | 147 | 63 838 · 4 502 |
+| ROAD | **après** | **2,46 (0,02)** | 8 804 | **5 919** | **0,802** | **206 (0,023)** | **22** | 78 | 37 121 · 2 456 |
+| GRAVEL | avant | 4,28 (1,03) | 6 080 | 1 298 | 0,532 | 3 805 (0,626) | 105 | 237 | 101 753 · 10 432 |
+| GRAVEL | **après** | **2,83 (0,20)** | 3 772 | **2 069** | **0,739** | **685 (0,182)** | **3** | 164 | 70 706 · 6 482 |
+
+- `SHARP_TURN` par triangle complet [calculé] : ROAD **−95 %**, GRAVEL **−71 %**, les deux réunis 0,501 → 0,071 (**−86 %**) ; la
+  règle d'arrêt du §16.10 (moitié au moins), manquée à l'essai de fumée (−47 % sur 78 requêtes), est tenue sur le tirage complet.
+  `REUSE_OUTSIDE_TAIL` 858 → 25 (−97 %). Le virage serré fait encore **67 % (ROAD) et 80 % (GRAVEL)** des refus de triangles
+  (87 et 91 % avant), le reste est `TOO_MANY_CROSSINGS`.
+- Les reprises (`sharp_retry`) deviennent rares : 0,02 par requête ROAD et 0,20 en GRAVEL, contre 0,73 et 1,03. **`noretry` ne
+  change plus le temps** (`svc-org-noretry` × 1,24 · × 1,38) ; il perd un peu de rendement en GRAVEL (requêtes avec un triangle 0,690
+  contre 0,739, part à deux sommets au curseur 1 0,371 contre 0,427).
+- Compteurs du modèle, par requête (lentille, triangles et apprentissage) : ROAD `turn_cut` 48 000, `turn_evals` 376 000,
+  `reuse_cut` 13 600 ; GRAVEL 83 600, 611 000, 20 500. Sans triangles (`svc-org-tri0`, campagne 3′) : ROAD 43 300 · 336 000 · 12 200 :
+  l'essentiel des évaluations se fait dans les arbres et la lentille.
+- **Marges rapportées** (campagne 3) : `SHARP_TURN` par complet, ROAD · GRAVEL, 5° 0,023 · 0,182 ; 10° 0,022 · 0,169 ; 15° 0,034 ·
+  0,119 [calculé] ; requêtes avec un triangle gardé 0,802 · 0,739, 0,823 · 0,748, 0,815 · 0,753 ; P50 × `svc` 1,24 · 1,40, 1,26 ·
+  1,41, 1,24 · 1,41. Les deux autres marges tiennent les mêmes critères que 5° et manquent C1 de même : **aucune ne change le
+  temps**, contrairement à ce que suggérait l'essai (§14.4).
+
+### 15.4 Goût, règle L
+
+- `S / S_base`, lecture « toutes » (ROAD 0,25 · 1 ; GRAVEL 0,25 · 1) : `svc` 0,22 · 0,19 ; 0,29 · 0,21 ; `svc-org` 0,23 · 0,19 ;
+  0,28 · 0,22 ; avant 0,23 · 0,19 ; 0,27 · 0,23 [mesuré]. L'étape ne coûte rien au goût.
+- **Règle L non tenue** : `svc-org-lc` (appris en `Classic`, servi organique) est pire que `svc-org` de **+0,067** au pire groupe
+  (ROAD 0,25 : 0,29 contre 0,23 ; B1 de `lc` manque), B2 de `lc` −0,008 · −0,018. Une bascule apprendrait donc en `organic`
+  (`learn_figures = organic`), comme le disait le §7.
+
+### 15.5 Temps : décomposition (réponse 4)
+
+P50 × `svc` du même tirage, curseurs 0,25 · 1 [mesuré ; écarts calculés] :
+
+| variante (campagne 3′) | P50 × `svc` | P90 × `svc` | écart au rang précédent |
+|---|---|---|---|
+| `svc` (1.10) | 1 · 1 (320 · 272 ms) | 1 · 1 | — |
+| couloir, lentille seule, sans modèle (`svc-org-tri0-turns0-reuse0`) | 1,13 · 1,15 | 1,07 · 1,01 | **+0,13 · +0,15** (couloir) |
+| + modèle des virages et `no_reuse` dans les arbres et la lentille (`svc-org-tri0`) | 1,09 · 1,17 | 0,85 · 0,73 | −0,04 · +0,03 (arbres) |
+| + triangles : paires, jambes 2 et 3, choix (`svc-org`) | 1,26 · 1,37 | 0,97 · 0,96 | **+0,17 · +0,20** (jambes) |
+
+- **Le modèle ne coûte rien de net dans les arbres** : son prix y est payé par des passes et des reprises de la lentille en
+  moins (P90 à × 0,85 · × 0,73 sans triangles). Avant l'étape, l'organique coûtait 1,31 · 1,44 (campagne 3) : l'étape **gagne
+  0,04 à 0,08** sur le P50 et 0,31 à 0,36 sur le P90, mais ne suffit pas.
+- **Ce qui reste** : les jambes des triangles (+0,17 · +0,20) et le couloir (+0,13 · +0,15) [calculé]. Pour tenir × 1,25 au
+  curseur 1, il faudrait retirer 0,12 à 0,15, soit à peu près le couloir entier ou les trois quarts du coût des jambes.
+- Le temps du curseur 1 dépasse celui du curseur 0,25 dans les deux tirages (1,40 et 1,37 contre 1,24 et 1,26) : `svc` y est plus
+  rapide (272 ms contre 320), l'organique non (374 à 378 ms contre 403 à 404).
+
+### 15.7 Séance en conteneur de 3 Gio (indicative)
+
+**Indicative**, sans commit de bascule (point 21 du §16.13 de la note) : image `osm-route-details:lot4-4c-virages` construite
+sur `4fca0b9` (jamais poussée), **défauts organiques posés par variables d'environnement** (`ORD_GENERATOR__FIGURES=organic`,
+`ORD_GENERATOR__PROFILE__LEARN_FIGURES=organic`), ce que servirait la bascule. Méthode du §11 : `--memory=3g --memory-swap=3g`,
+fichiers France en lecture seule, volume neuf, `ORD_CACHE__OFFLINE=true`, mêmes départs, même volume de requêtes (18 dépôts sur
+deux clés en parallèle, 54 générations en série et 162 à 4 clients par figure, choisie par requête, puis 162 à 4 clients en
+organique pendant un dépôt de A, puis un redémarrage). Cache de pages non évincé (`sudo` indisponible sans mot de passe), comme
+au §11.
+
+| mesure [mesuré] | `classic` | `organic` | × `classic` [calculé] | seuil C3 | avant l'étape (§11), `organic` |
+|---|---|---|---:|---|---|
+| 54 générations en série : P50 · P90 · max (s) | 0,24 · 0,58 · 0,76 | **0,29** · 0,47 · 0,58 | 1,21 · 0,81 | ≤ 0,29 s : tiendrait, au seuil | 0,28 · 0,76 · 1,17 |
+| 162 générations à 4 clients : P50 · P90 · max (s) | 0,45 · 0,70 · 0,95 | **0,60** · 0,84 · 0,97 | 1,33 · 1,20 | ≤ 0,56 s : **ne tiendrait pas** | 0,66 · 1,33 · 1,91 |
+| 162 à 4 clients pendant un dépôt de A : P50 · P90 (s) | — | 0,61 · 0,88 | — | — | 0,84 · 1,52 |
+| codes des réponses | 200 : 48 et 144 ; 422 : 6 et 18 | mêmes nombres | — | — | mêmes |
+| premiers parcours `triangle` | 0 | 12 sur 48 (série), 36 sur 144 (4 clients) | — | — | 10 et 30 |
+
+- **Dépôts** : 18 sur 18 en 200, au premier essai ; le plus long en 580 s (519 s au §11, apprentissage en `classic`). Les
+  profils, appris en **organique**, sont `learned` en 3 pas pour 16 équipes et `empty` pour 2 ; l'apprentissage de A prend 261 s
+  et 443 s (les deux clés en parallèle), sous le budget de 720 s. Les 18 états sont `ready`, `profile.state = present`, 18
+  `.ordp.enc` sur le volume ; ils le restent au redémarrage. Le dépôt de A pendant 4 clients de génération passe en 200 (317 s).
+- **Mémoire** : pic `anon` **1,46 Gio** (dépôts 1,45 Gio, générations 1,46 Gio ; `memory.peak` 1,48 Gio), pour un seuil de 2,4 Gio ;
+  `oom` et `memory.events max` à 0, aucun redémarrage.
+- **Lecture** : l'étape retire la queue (P90 à 4 clients 1,33 → 0,84 s, max 1,91 → 0,97 s), et le P50 à 4 clients passe de
+  0,66 à 0,60 s, **encore au-dessus des 0,56 s** de C3. En série, le P50 est au seuil (0,29 s). Le surcoût au P50 (× 1,21 en série,
+  × 1,33 à 4 clients) est celui du banc (× 1,24 à × 1,40) : relâcher C1 seul ne suffirait pas, C3 manquerait aussi à 4 clients.
+  Comme le dit la réponse 4, C3 aurait de toute façon décidé de l'annulation d'une bascule faite sur ces chiffres.
+
+### 15.6 Ce que le relevé décide
+
+- **Bascule : non.** Tous les critères de la bascule tiennent **sauf C1** : P50 × 1,24 · × 1,40 (second tirage × 1,26 · × 1,37,
+  moyenne × 1,25 · × 1,38), au-delà du × 1,15 du §16.11 et, au curseur 1, de la tolérance × 1,25 de la réponse 4 (lue **à chaque
+  curseur**, comme C1). Le commit de bascule n'est pas fait ; `generator.figures` et `learn_figures` restent `classic`, la
+  référence organique n'est pas re-bénie. A2, C2 et le P90 de C1, qui manquaient avant l'étape, tiennent désormais.
+- **Prêt à fusionner** : le `Classic` rend 1.10 au bit près (I1, références figées sans re-bénédiction, `base`, `common` et `svc`
+  aux empreintes de la sonde), le déterminisme tient (D), l'API 1.11 n'a que des ajouts ; figures organiques en option.
+- **Au propriétaire** : la séance du §15.7 montre que relâcher C1 au curseur 1 (× 1,38 en moyenne de deux tirages) ne suffirait
+  pas : C3 manquerait à 4 clients (0,60 s pour ≤ 0,56). Deux voies : (1) accepter ce temps, ce qui change les seuils C1 **et** C3
+  de la décision 1 du §9.8 ; (2) une étape de plus sur le temps, dont les deux leviers sont mesurés au §15.5 : les jambes des
+  triangles (+0,17 à +0,20) et le couloir (+0,13 à +0,15). Il faudrait en retirer environ 0,15 au banc, et 0,04 s au P50 à 4
+  clients en conteneur.

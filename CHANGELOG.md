@@ -11,7 +11,9 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
   lointain, retour par un autre chemin), le moteur sait élargir l'écart entre l'aller et le retour par un **couloir** et
   jouer des **triangles** (deux sommets, trois jambes), tirés par requête sur la répartition réelle des sommets des
   boucles (celle de l'équipe quand elle a au moins 50 boucles du type, sinon la répartition générale). Sans effet en
-  mode strict et pour un aller simple.
+  mode strict et pour un aller simple. En organique, les recherches suivent la règle des virages du contrôle (virage
+  simple et grappes de 100 m, avec une marge de 5°), le contrôle interne calcule les caps comme le contrôleur
+  indépendant, et aucune jambe ne repasse sur ses propres routes.
 - **Contrat HTTP (ajouts seulement)** : `POST /v1/generator/routes` accepte `figures` (`classic` ou `organic`,
   facultatif ; absent, le réglage `generator.figures`, variable `ORD_GENERATOR__FIGURES`, défaut `classic`) ; la réponse
   porte `figures` (la valeur appliquée) ; `routes[].family` peut valoir `triangle` ; `/v1/capabilities` porte

@@ -559,8 +559,15 @@ l'orchestrateur du travail ; la spécification qui les applique est au §16 :
    **codée** le 19 (commits 1 à 4 du §16.9 et un commit de vitesse du modèle, écarts au §16.13). **Essai de fumée fait**
    (§14 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md)) : contrôles I2 et I2′ tenus, `SHARP_TURN` des triangles
    par triangle complet −47 % (ROAD −58 %, GRAVEL −30 %), `REUSE_OUTSIDE_TAIL` à 0, mais **C1 manque** (P50 × 1,54 · × 1,79)
-   et la règle d'arrêt du §16.10 (moitié au moins) n'est pas tenue : campagnes 2 et 3 et bascule **non lancées**, en attente du
-   propriétaire.
+   et la règle d'arrêt du §16.10 (moitié au moins) n'est pas tenue. **Campagnes faites** le 19 novembre, l'arrêt levé par les
+   réponses du propriétaire (§15 du relevé) : déterminisme (D tient), campagne complète et une campagne de décomposition du
+   temps. Sur le tirage complet, `SHARP_TURN` par triangle complet −86 % (ROAD −95 %, GRAVEL −71 %), refus du contrôleur sur
+   les parcours organiques rendus 34 → 0 ; **A1 à A4, B1, B2, C2 et D tiennent** (A2 et C2 manquaient), **C1 manque** : P50
+   × 1,24 · × 1,40 de `svc` (second tirage × 1,26 · × 1,37), au-delà de × 1,25 au curseur 1 (réponse 4). **Pas de bascule** :
+   le défaut reste `classic`. Le temps restant vient des jambes des triangles (+0,17 à +0,20) et du couloir (+0,13 à +0,15) ; le
+   modèle ne coûte rien de net dans les arbres. Séance en conteneur indicative, défauts organiques (§15.7 du relevé) : P50
+   0,29 s en série (≤ 0,29), **0,60 s à 4 clients** (≤ 0,56, 0,66 avant l'étape), mémoire et dépôts tenus. **Prêt à fusionner**,
+   figures organiques en option ; **reste**, au propriétaire : les seuils C1 et C3, ou une étape de plus sur le temps.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -4200,6 +4207,25 @@ remonte que les ancêtres ; le déterminisme et la fenêtre (le modèle ne lit q
 
 Mêmes références (organique comprise, sans re-bénédiction), mêmes empreintes à l'essai de fumée rejoué (relevé, §14.6) :
 sur ce tirage, les trois corrections ne changent que des étapes internes des recherches.
+
+**Campagnes (19 novembre 2026, binaire de `4fca0b9`, relevé §15).** Les réponses du propriétaire (fin du §9.8) lèvent l'arrêt
+de l'essai ; points tranchés pendant les campagnes, chaque fois du côté prudent :
+
+18. **Une campagne de plus que les trois du §16.10.** La réponse 4 demande, si C1 dépasse × 1,25, que le relevé décompose le
+    temps (couloir, jambes, arbres) ; aucune variante de la campagne 3 ne sépare le couloir du modèle. Une campagne courte
+    (`base,svc,svc+org,svc+org+tri:0,svc+org+tri:0+turns:0+reuse:0`, 32 min) le fait, et sert de second tirage des temps
+    de `svc-org`. Elle ne juge rien d'autre.
+19. **Deux marges rapportées dans la campagne 3** (`margin:10`, `margin:15`), pour la question du §14.5 : la marge reste 5°
+    (réponse 1), elles ne sont pas jugées. Aucune ne change le temps (P50 × 1,24 à × 1,26 · × 1,41).
+20. **La tolérance × 1,25 de la réponse 4 se lit à chaque curseur**, comme C1. Elle tient au curseur 0,25 (× 1,24, second tirage
+    × 1,26, moyenne × 1,25) et manque au curseur 1 (× 1,40 et × 1,37, moyenne × 1,38) : pas de bascule. L'écart au seuil dépasse
+    nettement le bruit de 1 à 2 % mesuré entre deux tirages de `svc` sur toutes les équipes (§12 du relevé).
+21. **Pas de commit 5, pas de séance C3.** La séance en conteneur jouée est **indicative** (relevé, §15.7), comme celle du 4c :
+    image de `4fca0b9` construite localement, jamais poussée, défauts organiques posés par variables d'environnement
+    (`ORD_GENERATOR__FIGURES=organic`, `ORD_GENERATOR__PROFILE__LEARN_FIGURES=organic`) au lieu d'un commit, pour mesurer ce que
+    servirait la bascule sans la faire.
+22. **Le `CHANGELOG` de 1.11.0** (non publiée) dit que les recherches organiques suivent la règle des virages et ne font pas
+    d'aller-retour : c'est un comportement de l'option, pas un changement de défaut.
 
 ### 16.14 Questions au propriétaire
 
