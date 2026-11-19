@@ -19,10 +19,10 @@ use crate::search::{
 use crate::tests::{engine_of, engine_zoomed, ll, request};
 use crate::tests_organic::{organic, organic_fixture_path};
 use crate::tests_reference::{
-    assert_matches_fixture, assert_matches_reference, fixture_path_192, reference_lines_with, scenario_graph,
+    assert_matches_fixture, fixture_path, fixture_path_192, reference_lines_with, scenario_graph,
     scenario_graph_dense, scenario_params, scenario_params_192, scenario_requests, REQUESTS,
 };
-use crate::tests_team_sparse::{assert_matches_fixture as assert_team_fixture, fixture_lines};
+use crate::tests_team_sparse::{fixture_lines, fixture_path as team_fixture_path};
 use crate::{AttrWeights, Figures, Mode, Organic, OrganicTune, Request, RideType, DEFAULT_OFF_TEAM_COST_Q8};
 
 thread_local! {
@@ -89,17 +89,25 @@ fn a_synthetic_file_is_attached_and_reaches_the_windows() {
     });
 }
 
+/// Les références sont relues, jamais écrites : sous `ORD_LOOPS_BLESS`, une re-bénédiction faite moteur **avec** fichier
+/// masquerait un écart de I1 (et ferait la course avec les tests sans fichier qui écrivent les mêmes références).
 #[test]
 fn classic_rends_the_frozen_references_with_a_loaded_file() {
     with_attached(|| {
-        assert_matches_reference(&|e, team, r, ws| generate_with_diagnostics(e, team, r, ws, &mut stop()));
+        assert_matches_fixture(
+            &|e, team, r, ws| generate_with_diagnostics(e, team, r, ws, &mut stop()),
+            scenario_params,
+            &fixture_path(),
+            false,
+        );
         assert_matches_fixture(
             &|e, team, r, ws| generate_with_diagnostics(e, team, r, ws, &mut stop()),
             scenario_params_192,
             &fixture_path_192(),
             false,
         );
-        assert_team_fixture(&fixture_lines(&|e, ov| crate::TeamData::build(e, ov).unwrap()));
+        let got = fixture_lines(&|e, ov| crate::TeamData::build(e, ov).unwrap());
+        assert_eq!(got, fixture_lines_of(&team_fixture_path()), "team_reference.txt, fichier chargé");
     });
 }
 
