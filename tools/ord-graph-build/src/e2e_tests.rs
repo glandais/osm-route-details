@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crate::attractors_cmd::{self, AttractorsArgs};
 use crate::build_cmd::{self, BuildArgs};
 use crate::measure::{self, MeasureArgs};
 use crate::views_cmd::{self, ViewsArgs};
@@ -79,4 +80,70 @@ fn build_views_then_measure_on_the_tiny_pbf() {
     // L'état local est plus petit que le tableau dense du graphe entier (ou égal : graphe minuscule).
     let local = &targets[0]["states"][2]["radii"][0]["all"]["state_mb"]["median"];
     assert!(local.as_f64().unwrap() > 0.0);
+}
+
+fn attr_pbf() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/ord-graph/tests/data/attr.osm.pbf")
+}
+
+#[test]
+fn attractors_end_to_end_on_the_tiny_pbf_and_refuse_another_extract() {
+    let dir = tempfile::tempdir().unwrap();
+    let report = build_cmd::run(&BuildArgs {
+        pbf: attr_pbf(),
+        out_dir: Some(dir.path().to_path_buf()),
+        region: Some("attr".into()),
+        zoom: 11,
+        threads: None,
+        report: None,
+    })
+    .expect("build");
+    views_cmd::run(&ViewsArgs {
+        graph: report.output.clone(),
+        views: vec!["road".into(), "gravel".into()],
+        out_dir: None,
+        report: None,
+    })
+    .expect("views");
+    let args = |pbf: PathBuf, out: Option<PathBuf>| AttractorsArgs {
+        pbf,
+        graph: report.output.clone(),
+        views: vec!["road".into(), "gravel".into()],
+        views_dir: None,
+        out_dir: out,
+        snap_m: 300,
+        reach_m: 300,
+        check: true,
+        report: Some(dir.path().join("attractors.json")),
+    };
+    let r = attractors_cmd::run(&args(attr_pbf(), None)).expect("attractors --check");
+    assert_eq!(r.views.len(), 2);
+    assert!(r.views.iter().all(|v| v.checked
+        && v.file.exists()
+        && v.anchors > 0
+        && v.zone_nodes > 0
+        && v.zone_nodes <= v.view_nodes));
+    // Six objets : café, point de vue et sommet (même nœud), village, col, boulangerie en bâtiment.
+    assert_eq!((r.objects, r.ways_tagged), (6, 1));
+    assert!(dir.path().join("attractors.json").exists());
+    assert_eq!(r.views[0].file.file_name().unwrap().to_str().unwrap(), "attr-inconnue-z11.road.orda");
+    let road = ord_graph::attract::AttrFile::open_mmap(&r.views[0].file).unwrap();
+    let base = ord_graph::format::GraphFile::open_mmap(&report.output).unwrap();
+    let view =
+        ord_graph::format::GraphFile::open_mmap(&dir.path().join("attr-inconnue-z11.road.ordv")).unwrap();
+    road.check_for(base.header(), &view).expect("identité");
+    // Deux écritures : mêmes octets.
+    let again =
+        attractors_cmd::run(&args(attr_pbf(), Some(dir.path().join("second")))).expect("seconde écriture");
+    assert_eq!(again.views[0].xxh3, r.views[0].xxh3);
+    assert_eq!(again.views[1].xxh3, r.views[1].xxh3);
+
+    // Un extrait d'un octet différent : refus avant tout calcul.
+    let mut bytes = std::fs::read(attr_pbf()).unwrap();
+    *bytes.last_mut().unwrap() ^= 1;
+    let other = dir.path().join("other.osm.pbf");
+    std::fs::write(&other, bytes).unwrap();
+    let err = attractors_cmd::run(&args(other, Some(dir.path().join("refused")))).unwrap_err();
+    assert!(err.to_string().contains("l'extrait n'est pas celui du graphe"), "{err}");
+    assert!(!dir.path().join("refused").exists());
 }

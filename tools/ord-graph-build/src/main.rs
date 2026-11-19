@@ -3,6 +3,7 @@
 
 use clap::{Parser, Subcommand};
 
+mod attractors_cmd;
 mod build_cmd;
 #[cfg(test)]
 mod e2e_tests;
@@ -25,6 +26,8 @@ enum Command {
     Build(build_cmd::BuildArgs),
     /// Construit, hors ligne, les vues par type de parcours (`road`, `gravel`, `all`) d'un graphe de base.
     Views(views_cmd::ViewsArgs),
+    /// Écrit les fichiers d'attracteurs (`.orda`) des vues `road` et `gravel` depuis l'extrait du graphe (lot 4d).
+    Attractors(attractors_cmd::AttractorsArgs),
     /// Tailles, comptes et recherches bornées (froid / chaud) sur un graphe de base et ses vues.
     Measure(measure::MeasureArgs),
 }
@@ -37,6 +40,10 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Views(a) => {
             let r = views_cmd::run(&a)?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
+        Command::Attractors(a) => {
+            let r = attractors_cmd::run(&a)?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         Command::Measure(a) => {

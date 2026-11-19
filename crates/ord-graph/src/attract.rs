@@ -354,32 +354,41 @@ pub fn anchors_for<B: AsRef<[u8]>>(view: &GraphFile<B>, objects: &[Object], snap
     anchors_in(&grid, objects, snap_m)
 }
 
-fn anchors_in(grid: &Grid, objects: &[Object], snap_m: u16) -> Vec<(u32, u8)> {
+fn snap_in(grid: &Grid, objects: &[Object], snap_m: u16) -> Vec<Option<u32>> {
     let r = f64::from(snap_m);
-    let mut out: Vec<(u32, u8)> = Vec::new();
-    for o in objects {
-        let mut best: Option<(f64, u32)> = None;
-        grid.within(o.lat, o.lon, r, |e| {
-            let d = haversine_m((o.lat, o.lon), (e.lat, e.lon));
-            let better = match best {
-                None => true,
-                Some((bd, bid)) => match d.partial_cmp(&bd) {
-                    Some(Ordering::Less) => true,
-                    Some(Ordering::Equal) => e.id < bid,
-                    _ => false,
-                },
-            };
-            if better {
-                best = Some((d, e.id));
-            }
-        });
-        if let Some((_, id)) = best {
-            out.push((id, o.cat));
-        }
-    }
+    objects
+        .iter()
+        .map(|o| {
+            let mut best: Option<(f64, u32)> = None;
+            grid.within(o.lat, o.lon, r, |e| {
+                let d = haversine_m((o.lat, o.lon), (e.lat, e.lon));
+                let better = match best {
+                    None => true,
+                    Some((bd, bid)) => match d.partial_cmp(&bd) {
+                        Some(Ordering::Less) => true,
+                        Some(Ordering::Equal) => e.id < bid,
+                        _ => false,
+                    },
+                };
+                if better {
+                    best = Some((d, e.id));
+                }
+            });
+            best.map(|b| b.1)
+        })
+        .collect()
+}
+
+fn anchors_from(objects: &[Object], snapped: &[Option<u32>]) -> Vec<(u32, u8)> {
+    let mut out: Vec<(u32, u8)> =
+        objects.iter().zip(snapped).filter_map(|(o, s)| s.map(|n| (n, o.cat))).collect();
     out.sort_unstable();
     out.dedup();
     out
+}
+
+fn anchors_in(grid: &Grid, objects: &[Object], snap_m: u16) -> Vec<(u32, u8)> {
+    anchors_from(objects, &snap_in(grid, objects, snap_m))
 }
 
 /// Zone : chaque nœud de vue à `reach_m` au plus d'un nœud d'ancrage (lui compris), masque des catégories.
@@ -418,10 +427,25 @@ pub fn build_attr<B: AsRef<[u8]>>(
     snap_m: u16,
     reach_m: u16,
 ) -> AttrData {
+    build_attr_counted(view, objects, snap_m, reach_m).0
+}
+
+/// Comme `build_attr`, et le nombre d'objets accrochés par catégorie (bits `0..8`).
+pub fn build_attr_counted<B: AsRef<[u8]>>(
+    view: &GraphFile<B>,
+    objects: &[Object],
+    snap_m: u16,
+    reach_m: u16,
+) -> (AttrData, [u64; 8]) {
     let grid = node_grid(view);
-    let anchors = anchors_in(&grid, objects, snap_m);
+    let snapped = snap_in(&grid, objects, snap_m);
+    let mut per_cat = [0u64; 8];
+    for (o, s) in objects.iter().zip(&snapped) {
+        per_cat[usize::from(o.cat & 7)] += u64::from(s.is_some());
+    }
+    let anchors = anchors_from(objects, &snapped);
     let zone = zone_in(view, &grid, &anchors, reach_m);
-    AttrData { anchors, zone }
+    (AttrData { anchors, zone }, per_cat)
 }
 
 // --- Format ------------------------------------------------------------------------------------------------------
