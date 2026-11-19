@@ -555,8 +555,12 @@ l'orchestrateur du travail ; la spécification qui les applique est au §16 :
    série, mais en 0,66 s à 4 clients, au-delà des 0,56 s de C3. **Prêt à fusionner**, figures
    organiques en option. **Reste**, au propriétaire : C1 et A4 (§13 du relevé), la bascule ; puis le 4d (décision 6 du §9.7, A1
    tient). Spécification : §15.
-   **Étape « virages »** (décisions du §9.8) : causes établies et **spécifiée** le 18 novembre (§16), à coder, puis trois
-   campagnes et, si les critères tiennent, la bascule.
+   **Étape « virages »** (décisions du §9.8, réponses du 19 novembre) : causes établies et **spécifiée** le 18 novembre (§16),
+   **codée** le 19 (commits 1 à 4 du §16.9 et un commit de vitesse du modèle, écarts au §16.13). **Essai de fumée fait**
+   (§14 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md)) : contrôles I2 et I2′ tenus, `SHARP_TURN` des triangles
+   par triangle complet −47 % (ROAD −58 %, GRAVEL −30 %), `REUSE_OUTSIDE_TAIL` à 0, mais **C1 manque** (P50 × 1,54 · × 1,79)
+   et la règle d'arrêt du §16.10 (moitié au moins) n'est pas tenue : campagnes 2 et 3 et bascule **non lancées**, en attente du
+   propriétaire.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -4110,7 +4114,65 @@ défaut reste `classic` et le relevé nomme les critères manqués. La fusion re
 
 ### 16.13 Écarts du codage
 
-À écrire par le codeur.
+Écrits le 19 novembre 2026 par le codeur (commits 1 à 4 du §16.9). Le point technique que les réponses du propriétaire ne
+couvraient pas (les détails ci-dessous) est tranché prudemment, du côté qui refuse davantage ou qui garde le `Classic`.
+
+1. **Fenêtre de cap de 25 à 50 m, pas de 30 à 50 m.** Le contrôle prend `near = min(30, far / 2)` : avec 50 m de chemin connu,
+   `near` vaut 25 m, et c'est aussi la fenêtre des caps `v.head` de la vue. Le §16.2 (comme le §15) écrit « 30 à 50 m » ;
+   le modèle prend 25 m et 50 m, ce qui est ce qui le fait égaler le contrôle aligné à 10⁻⁶° près sur des chaînes droites
+   (test `the_model_angle_equals_the_aligned_check_on_straight_short_chains`).
+2. **Aucune exemption pour le virage simple.** Le §16.2 dit « la paire `(a, b)` est refusée … sauf si elle est exemptée aux
+   bouts », mais le contrôle (`verify.rs`, `check.rs` avec `hairpin_single_node` faux) ne lève ni le virage simple ni l'épingle
+   d'un nœud seul aux bouts : seules les grappes `a ≠ b` sont exemptées (200 m du départ pour `b`, de l'arrivée pour `a`). Le
+   modèle fait de même : `a = b` n'est jamais exempté. Conséquence : un demi-tour par une ouverture de terre-plein de 20 m
+   (deux virages de 90° dont la fenêtre de cap de 25 à 50 m enjambe le raccord) est un virage simple de 180° aux deux
+   nœuds, refusé même à 100 m du départ (test 3) ; l'exemption n'a d'effet que sur une grappe dont les virages simples sont
+   chacun sous le seuil (raccord de plus de 50 m, test 5 à écart de 70 m).
+3. **Longueur d'un segment de chaîne courte : la corde.** Pour une chaîne de moins de 50 m, le chemin approché est le segment
+   entre ses deux nœuds ; ses points à `d` mètres sont repérés par la longueur de la **corde** et non par `len_dm / 10`. Sur une
+   chaîne droite c'est la longueur du contrôle (le test d'exactitude à 10⁻⁶° en dépend, `len_dm` est arrondi au décimètre) ;
+   sur une chaîne courbe le modèle perd en précision, ce que la marge couvre. Les mètres de la grappe (`run`) et des bouts
+   libres restent ceux de `len_dm`, comme le contrôle. Les chaînes de 50 m ou plus sont droites sur `len_dm / 10`.
+4. **Repère des caps du modèle : au nœud.** Le §16.2 ne le dit pas. Le modèle prend les caps dans un repère centré au nœud
+   (celui du contrôle aligné et du contrôleur), non dans le repère `Disc` du départ : sinon l'écart de projection de 0,04° à
+   1,34° du §16.0 s'y retrouverait. Il ne se sert donc pas de `Disc`.
+5. **À rebours, le modèle est le modèle en avant sur le parcours retourné.** Les paires `(a, b)` sont les mêmes (l'angle de
+   virage et la règle des exemptions sont symétriques par retournement) : `refuses_bwd` lit les états qui suivent `f`, les
+   retourne et appelle le même `TurnModel::eval`. Pas de seconde implémentation.
+6. **Contexte des recherches : `Lead` et `Ctx.org`, pas `ctx_path` et `Ctx.turns`.** `Ctx` gagne un seul champ,
+   `org: Option<&OrgSearch>` (le modèle, `no_reuse`, les compteurs de la requête), et les recherches un paramètre
+   `Lead { path, dm, aux }` : les états posés avant la racine (après, à rebours), les mètres du parcours à la racine, et
+   l'arbre de l'autre bout, qui sert à lire la distance à l'extrémité inconnue (T2 pour une recherche en avant, T1 à rebours ;
+   `tree_backward` gagne `t1: Option<&Tree>`). Dans T1, `aux` est absent : aucune exemption à l'arrivée, comme le §16.2.
+7. **Voie rapide plus large que le texte.** Quand `len(f) ≥ 50 m` et que `b0` n'est pas un carrefour, la relaxation n'est pas
+   évaluée du tout (`B ⊆ {b0}` vide) ; `turn_evals` ne compte que les évaluations qui remontent le chemin.
+8. **Jonction de la jambe 3 sur un chemin d'arbre** : `junction_ok` rejoue le modèle sur chaque état du chemin d'arbre dont le
+   début est à moins de 160 m du nœud de jonction (1 600 dm, au lieu des « ~150 mètres »), avec les jambes 1 et 2 pour
+   contexte ; un refus envoie la jambe à l'A*, comme un réemprunt.
+9. **Longueurs des états d'extrémité.** Le premier état du parcours (partiel, morceau d'accroche) et le dernier gardent leur
+   `len_dm` entier dans le chemin approché ; seuls les mètres de l'exemption sont exacts (`Tree::meters` compte le morceau
+   partiel). L'erreur ne touche que les 50 premiers et derniers mètres, où se joue peu de virages.
+10. **Références.** Commit 1 : aucune référence ne change (le contrôle aligné ne diffère pas sur la grille de référence).
+    Commit 2 : la référence organique ne change pas non plus (aucun virage que le modèle refuse n'est pris sur cette grille). Commit 3 :
+    `no_reuse` change **64 des 140** lignes de `organic_reference.txt` (mêmes issues, parcours différents), re-bénie ; celle
+    d'avant l'étape est gardée à côté, `organic_reference_before_turns.txt`, et rejouée avec `turns: false` et
+    `no_reuse: false` (test `the_organic_reference_is_replayed_with_turns_and_no_reuse_off`, I2′ en test). Le test I2 (`LENS_ONLY`,
+    couloir 0) coupe aussi les deux options.
+11. **Tests 8 et 11** : ce sont les tests existants (`the_organic_generation_is_deterministic`,
+    `any_window_gives_the_organic_reference`, `every_organic_route_passes_the_independent_checker_and_triangles_are_among_them`),
+    qui jouent `OrganicTune::default()` donc les nouveaux défauts ; aucun test dupliqué. Le test 10 est dans
+    `crates/ord-loops-check/tests/aligned_turns.rs` (un nœud à 40 km au nord du départ, 150,02° au nœud, 149,8° au départ).
+12. **Vitesse du modèle** (commit `perf(loops)`, hors §16.9). À l'essai de fumée, la première version du modèle faisait
+    `svc-org` à × 2,35 · × 2,73 de `svc` (P50, B et C) contre × 1,2 · × 1,1 sans le modèle. Le profil la mettait dans `atan2`, `hypot`,
+    `sincos` et `fmod` : le test d'angle se fait désormais sur les vecteurs (produit scalaire négatif de carré au moins
+    `cos² × |u|² × |v|²`), les vecteurs unitaires des 65 536 caps viennent d'une table (f32, 512 Ko), une fenêtre se lit en une
+    remontée, et le virage simple après une chaîne de plus de 100 m se calcule sans remonter le chemin. Mêmes décisions
+    (empreintes inchangées) ; × 1,54 · × 1,79 ensuite. Le test d'exactitude à 10⁻⁶° (chaînes courtes) tient toujours ; pour les
+    chaînes longues la tolérance est celle du cap stocké (0,02°).
+13. **Banc.** `Org` gagne `turns0`, `reuse0` et `margin_deg` ; `record.rs` (désaccord moteur-contrôleur) lit le contrôle aligné
+    pour une boucle organique ; `mod.rs` arrête la campagne si I2 (`svc+org+tri:0+w:0+turns:0+reuse:0` = `svc`) ou I2′
+    (`svc+org+turns:0+reuse:0` = `c48118447315c118` toutes équipes, `27952d4befd451f4` à `--teams B,C --limit 20`) manque.
+    La section « 4c » du résumé affiche `turn_cut`, `turn_evals`, `reuse_cut` par requête et les refus du contrôleur par code.
 
 ### 16.14 Questions au propriétaire
 

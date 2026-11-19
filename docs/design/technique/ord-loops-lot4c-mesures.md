@@ -14,6 +14,9 @@
 > mesures. Sans marque dans un tableau : mesuré. Les temps du banc sont pris à 16 fils simultanés : comparables entre variantes
 > d'un même tirage, pas à un relevé à un fil ni au service.
 
+> **Mise à jour du 19 novembre 2026** : l'étape « virages » du §16 de la note de conception est codée ; son essai de fumée est
+> au **§14** (les §0 à §13 restent le relevé du 18 novembre, pris avant l'étape).
+
 ## 0. En bref
 
 - **Bascule : non.** Le défaut du service reste `classic`. Aucun réglage du §15.15 ne tient tous les critères de la bascule.
@@ -418,3 +421,108 @@ figure, puis 162 à 4 clients en organique pendant un dépôt de A, enfin une 1.
   références figées sans re-bénédiction, `base` et `svc` aux empreintes de la sonde). L'API 1.11 n'a que des ajouts. Le
   déterminisme est tenu. Dans la séance en conteneur, les dépôts passent, la mémoire tient et une 1.10 garde les profils de
   la 1.11 (§11). La fusion revient au propriétaire.
+
+## 14. Étape « virages » : essai de fumée (19 novembre 2026)
+
+Relevé du 19 novembre 2026, branche `feat/ord-loops-lot4c`, binaire `release` du dernier commit de code (`perf(loops)` du modèle
+des virages, après `80f33c3`). Spécification : [`ord-loops-lot4.md`](ord-loops-lot4.md), §16 ; réponses du propriétaire : fin du
+§9.8 ; écarts du codage : §16.13. Sorties **privées et hors dépôt** sous `~/.cache/osm-route-details/graph/lot4/smoke-4c-virages/`
+(`virages-essai*`, `virages-marges*`, `avant-optimisation/`). Lettres d'équipes et agrégats seulement. **Seul l'essai de fumée du
+§16.10 est joué** : les campagnes 2 et 3 ne le sont pas (voir « Arrêt » ci-dessous). Même machine, mêmes conventions de marques
+qu'en tête de note ; 20 boucles par équipe, 44 requêtes ROAD et 34 GRAVEL, B et C réunies : **indicatif**.
+
+### 14.1 Commande et contrôles
+
+`B=./target/release/ord-loops-bench`, `G=~/.cache/osm-route-details/graph` :
+
+```
+$B likeness --teams B,C --limit 20 --holdout-share 0.25 \
+  --variants base,svc,svc+org,svc+org+turns:0+reuse:0,svc+org+tri:0+w:0+turns:0+reuse:0,svc+org+reuse:0 \
+  --label virages-essai --out $G/lot4/smoke-4c-virages
+```
+
+Contrôles d'empreinte [mesuré], tous tenus (le banc s'arrête sinon) : `base` `93149ec262198e9e` (= le contrôle du §16.10) ; **I2′**
+`svc-org-turns0-reuse0` `27952d4befd451f4` = l'organique de `ea6ef63` (`svc-org` de l'essai de la relecture) ; **I2**
+`svc-org-tri0-w000-turns0-reuse0` = `svc` `87e04a7ce10a564f`. `svc-org` (défauts de l'étape) : `50adca52ef713d18`, `svc-org-reuse0` :
+`2b88ab9aaa71e707`. Le contrôleur indépendant ne refuse **aucun** parcours rendu, sous aucune variante (0 sur 1 329 parcours rendus, six variantes) : les
+34 `SHARP_TURN` du §16.0 viennent de la campagne complète (toutes équipes, 0,25 de mise à l'écart) et ne se reproduisent pas sur
+cet échantillon, avec ou sans l'alignement : l'effet de l'alignement se lit à la campagne 3.
+
+### 14.2 Refus des triangles : ce que le modèle retire
+
+Triangles complets (trois jambes, à ±10 % de D ou non), refus du contrôle interne, par requête organique jouée [mesuré] :
+
+| variante · type | complets | à ±10 % | gardés | requêtes avec un triangle gardé | `SHARP_TURN` (part des complets) | autres refus | cherchées · reprises (par requête) |
+|---|---:|---:|---:|---:|---|---|---|
+| `svc-org-turns0-reuse0` ROAD | 136 | 116 | 32 | 0,477 | 75 (0,55) | `REUSE_OUTSIDE_TAIL` 13 | 3,95 · 0,70 |
+| `svc-org` ROAD | 105 | 87 | 57 | 0,727 | **24 (0,23)** | aucun | 3,02 · 0,30 |
+| `svc-org-reuse0` ROAD | 113 | 97 | 49 | 0,636 | 33 (0,29) | `EDGE_USED_MORE_THAN_TWICE` 11, `REUSE_OUTSIDE_TAIL` 11 | 3,27 · 0,39 |
+| `svc-org-turns0-reuse0` GRAVEL | 93 | 83 | 34 | 0,559 | 47 (0,51) | aucun | 3,29 · 0,74 |
+| `svc-org` GRAVEL | 76 | 59 | 31 | 0,529 | **27 (0,36)** | aucun | 2,65 · 0,50 |
+| `svc-org-reuse0` GRAVEL | 73 | 57 | 30 | 0,529 | 26 (0,36) | aucun | 2,59 · 0,47 |
+
+- `SHARP_TURN` par triangle complet : ROAD 0,55 → 0,23 (**−58 %**), GRAVEL 0,51 → 0,36 (**−30 %**), les deux types réunis 0,53 → 0,28
+  (**−47 %**) [calculé]. `REUSE_OUTSIDE_TAIL` des triangles disparaît (13 → 0 en ROAD), et les
+  reprises baissent de moitié environ. La part de requêtes avec un triangle gardé monte en ROAD (0,48 → 0,73) et reste en GRAVEL.
+- Sans `no_reuse` (`svc-org-reuse0`), les `REUSE_OUTSIDE_TAIL` et `EDGE_USED_MORE_THAN_TWICE` reviennent en ROAD : l'interdiction
+  de l'aller-retour fait ce que le §16.0 (point 4) annonçait.
+- Compteurs par requête (moyenne, lentille et triangles, apprentissage compris) : ROAD `turn_cut` 105 000, `turn_evals` 810 000,
+  `reuse_cut` 33 000 ; GRAVEL 160 000, 1 194 000, 50 000. `turn_evals` ne compte que les évaluations qui remontent le chemin ;
+  la voie rapide (virage simple après une chaîne de plus de 100 m, ou deux chaînes de 50 m ou plus) est hors compteur.
+
+### 14.3 Temps rapportés à `svc` (indicatif : bruit de 5 à 15 %)
+
+| variante | P50 × `svc`, curseur 0,25 · 1 | P90 × `svc`, curseur 0,25 · 1 | `OK` | PANIC · WINDOW_ESCAPE · VIOLATION |
+|---|---|---|---:|---|
+| `svc-org-tri0-w000-turns0-reuse0` (= `svc`) | 1,07 · 1,12 | 1,00 · 1,06 | 90 % | 0 · 0 · 0 |
+| `svc-org-turns0-reuse0` (l'organique d'avant) | 1,30 · 1,34 | 1,09 · 1,22 | 90 % | 0 · 0 · 0 |
+| **`svc-org`** (défauts de l'étape) | **1,54 · 1,79** | 0,76 · 1,49 | 92,5 % | 0 · 0 · 0 |
+| `svc-org-reuse0` (virages seuls) | 1,56 · 1,88 | 0,91 · 1,36 | 90-92,5 % | 0 · 0 · 0 |
+
+- **C1 manque** : P50 × 1,54 et × 1,79 pour ≤ × 1,15, et pour la tolérance du propriétaire (réponse 4, ≤ × 1,25) : **pas de bascule**.
+  Le modèle coûte **+18 à +34 %** sur l'organique d'avant (`svc-org` contre `svc-org-turns0-reuse0`) ; l'organique d'avant est déjà
+  à × 1,30 · × 1,34 de `svc` dans ce tirage (× 1,29 · × 1,38 à la campagne 4c).
+- **Un premier jeu du modèle donnait × 2,35 · × 2,73** (`avant-optimisation/`). Le profil (`perf`) y mettait `atan2`, `hypot`,
+  `sincos` et `fmod` en tête : le commit `perf(loops)` fait le test d'angle sur des vecteurs (produit scalaire), lit les
+  vecteurs unitaires dans une table, remonte une seule fois par fenêtre et traite le virage simple après une longue chaîne sans
+  remonter le chemin. **Mêmes décisions** (empreintes de `svc-org` et de ses variantes inchangées sur B et C), le profil de C
+  s'apprend en 20,5 s au lieu de 34,4 s. Dans le profil restant (C seule, `base` et `svc+org`, 20 boucles), le modèle pèse environ **un cinquième** du
+  temps du processus (`TurnModel::eval` 12 %, `refuses_fwd`/`refuses_bwd` 6 %, `cos` de `Local::new` 3 %), à côté des deux
+  arbres (`tree_forward` 8 %, `tree_backward` 7 %, qui contiennent les appels au modèle sur leur voie rapide) et de `turn_cost`
+  (6 %). La décomposition par figure (couloir, jambes 2 et 3, arbres), que la réponse 4 demande en cas d'échec de C1, se fera
+  sur la campagne 3, qui ne tourne pas ici.
+
+### 14.4 Arrêt, et pourquoi le modèle laisse des refus
+
+**Arrêt** (§16.10, point 1) : les refus `SHARP_TURN` par triangle complet ne **baissent pas de moitié** contre
+`svc-org-turns0-reuse0` (−47 % réunis, −30 % en GRAVEL). Les campagnes 2 (déterminisme) et 3 (complète) ne sont pas lancées ; la
+bascule du défaut (commit 5) non plus. Les commandes sont au §16.10 de la note du lot 4 (binaire reconstruit après le commit 4,
+sorties sous `$G/lot4/4c-virages/`).
+
+**Lecture des refus qui restent** (diagnostic **non commité**, à l'esprit de l'instrumentation du §16.0 : il évalue le modèle sur
+les parcours des triangles refusés ; B et C, `svc+org`, apprentissage compris, 536 triangles refusés pour `SHARP_TURN`) [mesuré] :
+
+- **453 (85 %) ne sont pas refusés par le modèle évalué sur leur route finale** : leur plus grand angle de grappe vaut **135° à
+  145° pour 443 d'entre eux** (5 sous 125°, 1 de 125° à 135°, 4 à 145° ou plus, que seule une exemption du modèle laisse passer).
+  Ce sont des virages que le contrôle lit à 150° ou plus et que le modèle lit 5° à 15° plus bas. L'effet est de sélection : la recherche
+  évite les paires lues à 145° ou plus, et trouve celles que la géométrie approchée (chaînes courtes en corde, chaînes longues
+  droites le long de leur cap de bout, giratoires et carrefours à plusieurs nœuds plus courbes que leur corde) sous-estime.
+- **83 (15 %) sont refusés par le modèle sur la route finale** : la recherche les a laissés passer parce que le chemin de l'état
+  était différent à l'époque (étiquettes de l'arbre qui dépendent du chemin, jonction de jambes, exemption de l'arrivée lue sur T2).
+- Une marge plus large **retire** davantage (essai `virages-marges`, mêmes 44 · 34 requêtes) : `SHARP_TURN` par triangle complet,
+  ROAD · GRAVEL : marge 5° (défaut) 24 sur 105 · 27 sur 76 ; **10°** 10 sur 86 · 27 sur 71 ; **15°** 11 sur 91 · 13 sur 57
+  (`turn_margin_deg`, option `margin:<deg>` du banc), pour des requêtes avec un triangle gardé de 0,73 · 0,53, 0,71 · 0,50, 0,71 · 0,50 et un
+  P50 × `svc` de 1,77 · 1,75 (5°), 1,76 · 1,64 (10°), 1,52 · 1,31 (15°) : un modèle qui refuse plus tôt perd moins de temps en reprises, mais
+  le tirage est trop petit pour conclure. **La marge de 5° est celle du propriétaire (§9.8, réponse 1) ; elle n'est pas changée.**
+
+### 14.5 Ce que le relevé décide
+
+- **Rien ne change de défaut** : `generator.figures` et `learn_figures` restent `classic`. Le moteur `Classic` rend 1.10 au bit
+  près (I1 : références figées sans re-bénédiction, `base` `93149ec262198e9e` à l'essai).
+- **Ce qu'un tirage plus grand doit dire** (campagne 3, deux heures de poste) : la baisse de `SHARP_TURN` sur toutes les équipes, le rendement en triangles gardés (A2 GRAVEL), l'effet de l'alignement sur le contrôleur (34 → 0 attendu), le temps
+  rapporté à `svc` (C1 ≤ × 1,25 par la réponse 4) et le déterminisme (D). Au vu de l'essai, **C1 ne tiendra probablement pas** : l'organique
+  d'avant coûte déjà × 1,3 et le modèle y ajoute un cinquième ; le levier suivant est le couloir (§15.15, +10 à +12 % au 4c) ou
+  la voie rapide du modèle (par exemple un refus d'avance quand les deux chaînes sont courtes), avant tout relâchement de seuil.
+- **Propositions au propriétaire** : (1) lancer la campagne 3 malgré l'arrêt de l'essai pour lire les critères sur le tirage
+  complet, ou la remettre à un réglage de marge (10° ou 15°) ; (2) un modèle plus fidèle sur les chaînes courtes courbes
+  (arc entre les deux caps de bout `v.head`) coûterait un peu de temps pour réduire le 85 % ci-dessus.
