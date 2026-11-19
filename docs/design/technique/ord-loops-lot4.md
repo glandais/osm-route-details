@@ -582,6 +582,15 @@ l'orchestrateur du travail :
    modèle ne coûte rien de net dans les arbres. Séance en conteneur indicative, défauts organiques (§15.7 du relevé) : P50
    0,29 s en série (≤ 0,29), **0,60 s à 4 clients** (≤ 0,56, 0,66 avant l'étape), mémoire et dépôts tenus. **Prêt à fusionner**,
    figures organiques en option ; **reste**, au propriétaire : les seuils C1 et C3, ou une étape de plus sur le temps.
+   **Bascule** (décisions du §9.9, seuils de temps relevés) : faite le 19 novembre sur `feat/ord-loops-lot4c-bascule`, commit à part
+   `d5dac61` (`generator.figures = organic`, `generator.profile.learn_figures = organic`, API 1.12, paquet 1.12.0). Campagne
+   finale et second tirage des temps (§16 du relevé) : empreintes du §15 au bit près, **tous les critères tiennent** (C1 : P50
+   × 1,23 à × 1,25 · × 1,37 à × 1,38 sur deux tirages, ≤ × 1,40). Séance en conteneur de 3 Gio aux défauts du service, sans
+   variable de contournement : **C3 tient** (P50 0,30 s en série, au seuil ; 0,60 s à 4 clients, ≤ 0,62), pic `anon` 1,47 Gio,
+   18 dépôts en 200, profils organiques en 442 s au plus (budget 720 s), une 1.11 garde les profils de la 1.12 sur le même volume
+   en les lisant `incompatible`. **Bascule gardée. 4c terminé : prêt à fusionner.** Points tranchés : §16.15.
+   **Reste** : la fusion, puis la mise en service (redépôt d'une nuit, §16.15, point 7). **Suite : le 4d**, par la décision 6 du
+   §9.7, puisque A1 tient.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
@@ -4252,3 +4261,41 @@ Chaque question a une option recommandée, appliquée par défaut ; une autre r�
 3. **A4** : la décision 2 lue pour `shared_share` seul (recommandé) ; ou pour les cinq mesures.
 4. **Si C1 manque encore après l'étape** : pas de bascule, le relevé décompose le temps (couloir seul : +10 à +12 % au 4c) ;
    le prochain levier serait le couloir (recommandé), avant tout relâchement de seuil.
+
+### 16.15 Bascule (19 novembre 2026, branche `feat/ord-loops-lot4c-bascule`)
+
+Décisions du §9.9 appliquées. Points techniques que les décisions ne couvraient pas, tranchés du côté prudent :
+
+1. **Version : API 1.12, paquet 1.12.0.** Le contrat ne change pas de forme, mais une valeur par défaut publiée change
+   (`/v1/capabilities` : `generator.figures.default` passe de `classic` à `organic`), et les parcours rendus sans `figures`
+   changent avec elle. La 1.11, fusionnée dans `develop` sans être étiquetée, reste « organique en option », ce qui permet de
+   la reconnaître, et c'est elle qu'on rejoue en compatibilité sur le même volume. `contract/openapi.json` ne change que par
+   `info.version`.
+2. **Seuls les défauts du service changent.** `ord_loops::Figures` (la requête du moteur) et
+   `ord_graph_match::profile::learn::LearnParams::default()` gardent `Classic` : le banc, la sonde et les références figées du
+   moteur ne bougent pas (I1 au bit près, `window_reference*.txt`, `team_reference.txt`, `team_check_reference.txt` et
+   `organic_reference.txt` passent sans re-bénédiction).
+3. **Références re-bénies : aucune.** Le service n'a pas de référence figée. Trois tests disent les nouveaux défauts : la
+   configuration (`config.rs`), les capacités (`generator.rs`), et une requête sans `figures`
+   (`a_request_names_its_figures_or_takes_the_service_setting_and_the_answer_says_which`, dont la seconde moitié joue désormais
+   le réglage `classic`). Le test `the_service_learns_what_the_reference_player_learns_on_the_same_loops` rejoue maintenant le
+   joueur de référence avec `LearnFigures::Organic`, celui du service ; il passait déjà avant ce changement, parce que sur ses
+   quatre anneaux synthétiques de 7,2 km les deux apprentissages donnent la même table.
+4. **Le P90 de C1 reste ≤ × 1,25** : le §9.9 ne relève que le P50.
+5. **C1 lu à chaque tirage, et pas seulement en moyenne.** Les deux tirages de la campagne finale tiennent × 1,40 chacun (1,232 ·
+   1,377 et 1,249 · 1,369), comme les deux du §15 (1,236 · 1,395 et 1,26 · 1,37) : aucune moyenne n'est nécessaire pour conclure.
+6. **Verdicts du banc aux anciens seuils.** Le banc imprime toujours C1 à × 1,15 et juge A3 en GRAVEL (rapporté seulement au
+   §16.11) ; il n'est pas modifié pour la bascule, et les verdicts sont lus à la main aux seuils du §9.9 (relevé, §16.2).
+7. **Mise en service** (rien n'est déployé ni poussé ici). Ordre : le service seul ; le backend de Pédalons ne change pas (il
+   n'envoie pas `figures`, ne lit pas `family` et redépose sur tout `stale`), donc aucun ordre backend / service à tenir. La
+   1.12 suit le chemin d'`OPS-61` (pile partagée, conteneur de 3G, jamais sous 1.9.2 tant que deux environnements partagent le
+   moteur). Au premier démarrage, tous les profils (écrits en classique par 1.10 et 1.11, ou absents sous 1.9.2) rendent les
+   surcouches `stale` pour la raison `profile` : le backend redépose tout la nuit suivante ; d'ici là la table commune et le
+   mélange général des figures servent. Le redépôt organique est plus long (le plus long dépôt de la séance : 579 s, sous le budget
+   de 900 s ; profil 442 s, sous 720 s) et les deux environnements font la queue à la même place de profil. Un retour arrière vers
+   1.11 garde les fichiers mais les lit `incompatible` : il demande lui aussi un redépôt.
+8. **C3 au seuil en série.** La séance donne 0,30 s au centième, la précision de toutes les séances et du seuil : le critère tient
+   tel qu'il est écrit. Un tirage de plus au millième, à chaud, donne 0,274 s ; un tirage à froid juste après un redémarrage,
+   0,348 s (entrées d'équipe chargées à la première requête), rapporté et non jugé, la méthode du §14.13 mesurant après les dépôts.
+   Une instance qui redémarre sert donc ses premières générations plus lentement, comme en classique.
+9. **Une seule séance de C3**, comme le prévoyait le §16.10 ; le second tirage des temps n'est fait qu'au banc.

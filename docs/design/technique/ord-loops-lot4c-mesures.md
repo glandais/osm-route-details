@@ -17,6 +17,9 @@
 > **Mise à jour du 19 novembre 2026** : l'étape « virages » du §16 de la note de conception est codée ; son essai de fumée est
 > au **§14**, ses campagnes (déterminisme, complète, décomposition du temps) et une séance en conteneur indicative au **§15**
 > (les §0 à §13 restent le relevé du 18 novembre, pris avant l'étape). **Bascule : non** ; seul C1 manque (§15.6).
+>
+> **Mise à jour du 19 novembre 2026, après les décisions du §9.9 de la note** (seuils de temps relevés) : la bascule est faite et
+> **gardée** (§16) ; tous les critères tiennent aux nouveaux seuils, C3 compris, au seuil en série.
 
 ## 0. En bref
 
@@ -697,3 +700,116 @@ au §11.
   de la décision 1 du §9.8 ; (2) une étape de plus sur le temps, dont les deux leviers sont mesurés au §15.5 : les jambes des
   triangles (+0,17 à +0,20) et le couloir (+0,13 à +0,15). Il faudrait en retirer environ 0,15 au banc, et 0,04 s au P50 à 4
   clients en conteneur.
+
+## 16. Bascule (19 novembre 2026)
+
+Relevé du 19 novembre 2026, branche `feat/ord-loops-lot4c-bascule` (depuis `develop` à `16652cc`, le 4c et l'étape virages
+fusionnés en option). Décisions du propriétaire : §9.9 de la note (C1 ≤ × 1,40, C3 ≤ 0,62 s à 4 clients et ≤ 0,30 s en série) ;
+points tranchés : §16.15 de la note. Commit de bascule `d5dac61` (`generator.figures = organic`,
+`generator.profile.learn_figures = organic`, API 1.12, paquet 1.12.0). Banc : binaire `release` de `d5dac61`. Séance : image
+`osm-route-details:lot4-4c-bascule` construite sur `d5dac61`, jamais poussée. Sorties **privées et hors dépôt** sous
+`~/.cache/osm-route-details/graph/lot4/4c-bascule/` (banc) et `…/4c-bascule/conteneur/` (séance). Lettres d'équipes et
+agrégats seulement.
+
+### 16.1 Campagnes et contrôles
+
+`B=./target/release/ord-loops-bench`, `G=~/.cache/osm-route-details/graph`, `--out $G/lot4/4c-bascule`, une à la fois, contrôles
+d'abord :
+
+| # | Commande (`$B likeness …`) | Durée | Pic RSS |
+|---|---|---:|---:|
+| essai | `--teams B,C --limit 20 --holdout-share 0.25 --variants base,svc,svc+org,svc+org+turns:0+reuse:0,svc+org+tri:0+w:0+turns:0+reuse:0 --label bascule-essai` | 4 min 51 | 15,5 Gio |
+| D | `--teams B,C --holdout-share 0.25 --variants base,svc+org --threads 1 --label bascule-det1`, puis `--threads 16 --label bascule-det16` | 12 min 57 · 2 min 17 | 10,5 · 15,2 Gio |
+| complète | `--holdout-share 0.25 --variants base,common,svc,common+org,svc+org,svc+org+turns:0+reuse:0 --label lot4-4c-bascule` | 35 min 58 | 18,9 Gio |
+| temps (second tirage) | `--holdout-share 0.25 --variants base,svc,svc+org --label lot4-4c-bascule-t2` | 18 min 45 | 18,4 Gio |
+
+| Contrôle [mesuré] | Attendu | Obtenu | |
+|---|---|---|---|
+| Essai : `base` · `svc` · `svc-org` | `93149ec262198e9e` · `87e04a7ce10a564f` · `50adca52ef713d18` (§14.6) | les mêmes | tient |
+| Essai : I2 (`svc-org-tri0-w000-turns0-reuse0` = `svc`) · I2′ | `87e04a7ce10a564f` · `27952d4befd451f4` | les mêmes | tient |
+| D : B et C, `base` · `svc-org` à 1 et 16 fils | `052224c85ef4145d` · `bac9cbaec14dc42f` (§15.1) | les mêmes aux deux | tient |
+| I1 : `base`, `common`, `svc` (complète et second tirage) | `4686c904975302e7`, `07b62287e64fa258`, `384f003c0bd19b7f` | les mêmes | tient |
+| I2′ (complète) | `c48118447315c118` | `c48118447315c118` | tient |
+| `svc-org` · `common-org` (complète, second tirage) | `6324bdfdabf62f38` · `1024983e6cf5c1d2` (§15.1) | les mêmes | tient |
+
+**Le commit de bascule ne change rien au banc** : le banc construit ses requêtes et ses paramètres d'apprentissage lui-même
+(`svc+org` apprend et sert en organique, `svc` en classique), sans lire la configuration du service. Toutes les empreintes sont
+celles du §15 : formes, goût, triangles et refus du contrôleur sont **identiques au bit près** à ceux du §15.2 et du §15.3, et seuls
+les temps sont un nouveau tirage. C'est ce que la campagne devait établir : le défaut que sert désormais le service est bien le
+`svc-org` jugé au §15.
+
+### 16.2 Critères aux seuils du §9.9
+
+Candidat `svc-org` contre `svc` du même tirage, toutes équipes, lecture « toutes », premier parcours gardé, ROAD puis GRAVEL,
+curseurs 0,25 · 1 [mesuré ; rapports calculés par le banc]. Le banc imprime encore les verdicts aux anciens seuils (C1 × 1,15,
+A3 GRAVEL jugé) : les verdicts ci-dessous sont lus à la main aux seuils du §9.9 et du §16.11.
+
+| critère | seuil | obtenu | |
+|---|---|---|---|
+| A1 : W1 / IQR de r / D, × `svc` | ≤ 0,75 (ROAD), ≤ 0,85 (GRAVEL) | 0,35 · 0,37 ; 0,58 · 0,60 | tient |
+| A2 : part des premiers à 2 sommets | [0,40 ; 0,58] ROAD, [0,32 ; 0,50] GRAVEL | 0,546 · 0,545 ; 0,475 · 0,427 | tient |
+| A2 : W1 / IQR de `vertices_10`, × `svc` | ≤ 0,5 | 0,06 · 0,11 ; 0,12 · 0,06 | tient |
+| A3 : compacité ROAD, W1 / IQR | ≤ 0,80 × `svc` (0,491 · 0,510) | 0,190 · 0,166 | tient (GRAVEL rapporté : 0,337 · 0,248) |
+| A4 : `shared_share` en absolu | médiane ≤ 0,05, P90 ≤ P90 `svc` + 0,05 | médianes 0,002 ; 0,003, P90 dans la marge | tient |
+| A4 : `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km` | W1 / IQR ≤ `svc` + 0,10 | dans la marge | tient |
+| B1 : `S / S_base` | ≤ `svc` + 0,03 et ≤ 0,5 | au plus +0,012 (GRAVEL 0,25 « écart ») | tient |
+| B2 : A ROAD, `svc-org − common-org` | ≤ +0,054 (réserve levée ≤ +0,03) | −0,067 · −0,054 | tient, réserve levée |
+| **C1 : P50 × `svc`** | **≤ 1,40 à chaque curseur** | **1,232 · 1,377** ; second tirage 1,249 · 1,369 ; moyenne 1,24 · 1,37 [calculé] | **tient** |
+| C1 : P90 × `svc` | ≤ 1,25 | 0,952 · 0,971 ; second tirage 0,957 · 0,981 | tient |
+| C2 : `OK`, PANIC, WINDOW_ESCAPE, VIOLATION | `OK` ≥ `svc` − 0,5 ; 0 ; 0 ; ≤ `svc` (0) | 99,3 · 99,2 % (contre 98,2 · 97,9) ; 0 ; 0 ; 0 | tient |
+| D | mêmes empreintes à 1 et 16 fils | tenu (§16.1) | tient |
+
+- Temps du P50 [mesuré] : `svc` 326 · 273 ms (second tirage 320 · 275), `svc-org` 401 · 377 ms (399 · 376). Les quatre tirages
+  de `svc-org` sur toutes les équipes (§15.1 et ici) vont de × 1,23 à × 1,26 au curseur 0,25 et de × 1,37 à × 1,40 au curseur 1 :
+  le seuil de × 1,40 est tenu par chacun, au plus juste par le premier tirage du §15 (× 1,395).
+- **Refus du contrôleur indépendant** sur les parcours organiques rendus : **0 sur 20 280** (14 831 ROAD, 5 449 GRAVEL), comme
+  au §15.2 ; `base` 4, `common` 5, `svc` 0, `svc-org-turns0-reuse0` 34.
+- **Règle L** : non rejouée (l'empreinte de `svc-org` est celle du §15, où `lc` était pire de +0,067) ; l'apprentissage du
+  service passe donc à `organic` avec la bascule.
+
+### 16.3 Séance en conteneur de 3 Gio (C3)
+
+Méthode du §11 et du §15.7 : `--memory=3g --memory-swap=3g`, fichiers France en lecture seule, volume neuf,
+`ORD_CACHE__OFFLINE=true`, échantillons de `memory.current`, `memory.peak`, `anon` toutes les 0,5 s, cache de pages non évincé
+(`sudo` indisponible sans mot de passe). **Défauts du service, sans variable de contournement** : aucune variable `FIGURES` dans
+l'environnement du conteneur (relevé par `docker inspect`), et `/v1/capabilities` rend `api_version` 1.12 et
+`generator.figures.default = organic`. Même volume de requêtes : 18 dépôts sur deux clés en parallèle, puis 54 générations en
+série et 162 à 4 clients, **sans `figures` dans la requête** (le défaut) et, pour la comparaison, avec `figures: classic` ; puis
+162 à 4 clients pendant un dépôt de A ; puis une 1.11 sur le même volume ; puis la 1.12 redémarrée.
+
+| mesure [mesuré] | `classic` (nommé) | défaut (`organic`) | × `classic` [calculé] | seuil C3 | |
+|---|---|---|---:|---|---|
+| 54 générations en série : P50 · P90 · max (s) | 0,24 · 0,58 · 0,76 | **0,30** · 0,48 · 0,58 | 1,25 · 0,83 | ≤ 0,30 s | tient, **au seuil** |
+| 162 générations à 4 clients : P50 · P90 · max (s) | 0,46 · 0,66 · 0,91 | **0,60** · 0,83 · 1,02 | 1,30 · 1,26 | ≤ 0,62 s | tient |
+| 162 à 4 clients pendant un dépôt de A : P50 · P90 · max (s) | — | 0,60 · 0,83 · 1,06 | — | — | — |
+| codes des réponses | 200 : 48 et 144 ; 422 : 6 et 18 | mêmes nombres | — | — | — |
+| premiers parcours `triangle` | 0 | 12 sur 48 (série), 36 sur 144 (4 clients) | — | — | — |
+
+- **Dépôts** : 18 sur 18 en 200, tous au premier essai, le plus long en 579 s (budget du dépôt 900 s). Les profils, appris en
+  **organique** par le défaut, sont `learned` en 3 pas pour 16 équipes et `empty` pour 2. **Temps de profil** : A 442 s et 262 s
+  (les deux clés en parallèle), B 350 s et 199 s, les autres sous 30 s, tous sous le budget de 720 s. Les 18 états sont `ready`,
+  `profile.state = present`, 18 `.ordp.enc` et 18 `.ordo.enc` sur le volume, aucun fichier temporaire. Le dépôt de A pendant 4
+  clients de génération passe en 200 (313 s). Service prêt en 6,0 s.
+- **Mémoire** : pic `anon` **1,47 Gio** pendant les dépôts, 1,13 Gio pendant les générations ; `memory.peak` 1,50 Gio, pour un seuil de
+  2,4 Gio. `oom` 0, `memory.events max` 0, aucun redémarrage.
+- **Le P50 en série est au seuil** : la séance arrondit au centième (méthode des §11 et §15.7), et 0,30 s couvre de 0,295 à 0,305 s.
+  Deux tirages de plus, au millième, après un redémarrage de la 1.12 sur le même volume (`serie3`) : 0,348 s au premier, entrées
+  d'équipe froides (chargées à la première requête, ce que la séance ne mesure pas puisqu'elle suit les dépôts), puis **0,274 s**
+  au second, à chaud. Avant la bascule, la séance indicative du §15.7 donnait 0,29 s (classique 0,24) sur le même protocole.
+- **Compatibilité** : une 1.11 (image de `4fca0b9`, le code de `develop` à `16652cc`) démarrée sur le même volume après les dépôts
+  de la 1.12 rend `api_version` 1.11 et le défaut `classic`. Elle lit les 18 profils comme **`incompatible`** (`stale`, raison
+  `profile`) sans les effacer : 18 `.ordp.enc` avant et après ses purges (de démarrage et périodique, intervalle de 10 s, 45 s
+  d'attente). Elle sert les 54 générations en série avec la table commune (`taste: common`, 48 en 200, 6 en 422, P50 0,24 s).
+  La 1.12 redémarrée ensuite retrouve les 18 états `ready` et `profile.state = present`.
+
+### 16.4 Ce que le relevé décide
+
+- **Bascule : gardée.** Aux seuils du §9.9, tous les critères tiennent : A1 à A4, B1, B2, C1 (P50 × 1,23 à × 1,25 · × 1,37 à × 1,38
+  sur deux tirages, P90 sous × 1,0), C2, D au banc, et C3 en conteneur (0,30 s en série, au seuil ; 0,60 s à 4 clients ; pic `anon`
+  1,47 Gio ; `oom` 0 ; 18 dépôts en 200). Le commit `d5dac61` n'est pas annulé.
+- **Prêt à fusionner** : oui. Le moteur `Classic` rend toujours 1.10 au bit près (I1 au banc, références figées sans
+  re-bénédiction), le déterminisme tient, le contrat ne change que par sa version.
+- **Mise en service** (rien n'est déployé ici) : au premier démarrage de 1.12, tous les profils écrits en classique sont
+  `incompatible`, et les surcouches `stale` jusqu'au redépôt d'une nuit ; d'ici là la table commune sert. Le redépôt
+  organique est plus long qu'en classique : le plus long dépôt passe de 519 s (§11, apprentissage classique) à 579 s.
+- **Suite : le 4d** (décision 6 du §9.7, A1 tient).
