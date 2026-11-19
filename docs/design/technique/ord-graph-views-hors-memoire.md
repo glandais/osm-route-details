@@ -1,0 +1,189 @@
+# Graphe vélo OSM — vues hors mémoire : conception
+
+> Statut : conception technique, **à valider**. Suite de
+> [`ord-graph-build-hors-memoire.md`](ord-graph-build-hors-memoire.md) (graphe de base hors mémoire, réalisé et mesuré
+> jusqu'à la planète : [relevés](ord-graph-build-hors-memoire-mesures.md)) et du lot 0 bis
+> ([`ord-graph-lot0.md`](ord-graph-lot0.md) §11 : vues par type). Motif : servir le monde, il faut les vues `road` et
+> `gravel` de la planète, et `ord-graph-build views` les construit en mémoire.
+> **[mesuré]** : relevé de ce document ou déjà publié ; **[calculé]** : dérivé de mesures ; **[estimé]** : à confirmer.
+
+## 0. Périmètre
+
+- **Dans la note** : `ord-graph-build views --external`, graphe de base `.ordg` → vues `.ordv` `road`, `gravel` et
+  `all`, **sans élagage**. Mêmes octets que la construction en mémoire, à `build_epoch`, somme d'en-tête et `STATS`
+  près (même règle que pour la base).
+- **Hors de la note** : les vues `-prune` (élagage itératif des impasses), que le service ne lit pas. En
+  `--external`, elles sont refusées. Le polygone du monde, déjà fait (`scripts/planet.poly`, écrit à côté du planet par
+  `scripts/osm-planet-update.sh`, test `the_planet_polygon_fits_a_planet_graph_and_stops_at_the_antimeridian`).
+- **Inchangé** : le format `.ordv`, `build_view` (il reste la référence), le service.
+
+## 1. Constat
+
+`views` sur la France (`france-20261117-z11.ordg`, 24,0 M arêtes, 18,8 M nœuds), `road,gravel`, 16 fils :
+**40,6 s, pic 6,0 Gio** **[mesuré]** (6,2 Go publiés dans `OPERATIONS.md` de Pédalons).
+
+| Vue | Arêtes filtrées | Nœuds de vue | Arêtes de vue | Nœuds fondus | Boucles coupées | Anneaux | Fichier |
+|---|---|---|---|---|---|---|---|
+| `road` | 12 760 366 | 6 519 402 | 8 162 395 | 4 648 315 | 49 875 | 469 | 0,88 Go |
+| `gravel` | 17 460 590 | 10 377 093 | 13 451 562 | 4 063 949 | 54 212 | 709 | 1,46 Go |
+
+`build_view` tient tout à la fois : les arêtes de base à plat (20 o par arête), l'incidence complète (CSR), quatre
+tableaux par nœud ou par arête, chaque chaîne dans son propre `Vec`, puis la vue entière (nœuds, arêtes, **toute la
+géométrie** en `refs` + `coords`) pour `write_graph`. Le contrôle `check_view_structure` recharge les arêtes de base et
+une table de hachage de toutes les paires `(a, b)`.
+
+Planète (553,2 M arêtes, 430,0 M nœuds, ≈ 23 × la France) : **≈ 140 Go** **[calculé : 6,0 Gio × 23]** ; les fichiers
+de vue feraient ≈ 20 Go (`road`) et ≈ 34 Go (`gravel`) **[calculé]**.
+
+## 2. Principe
+
+Comme pour la base : des flux triés par le tri externe (`extsort`, mêmes enregistrements à taille fixe, même budget),
+l'écriture par `StreamWriter`. Trois différences :
+
+1. **Le graphe de base est déjà un fichier projeté** : attributs, longueurs, extrémités et géométrie d'une arête se
+   relisent par `mmap` (pages de fichier, que le noyau reprend), sans rien recopier. Les accès suivent les chaînes,
+   donc l'espace : les ids de nœuds et d'arêtes sont dans l'ordre des cellules (Morton), les pages lues sont voisines.
+2. **L'état par élément tient en bits** : arête retenue, arête visitée, nœud fondu, nœud ancre. Pour la planète,
+   4 × ≤ 69 Mo **[calculé]**.
+3. **La marche des chaînes reste séquentielle** et suit exactement l'ordre de `contract` (§4) : c'est ce qui donne les
+   mêmes chaînes, et en particulier le même point de coupure des boucles.
+
+## 3. Ce qui ne se déduit pas d'un flux
+
+`contract` lit l'**incidence non orientée** de chaque nœud : les arêtes retenues qui le touchent, dans l'ordre des ids
+d'arête. Le fichier de base ne la porte pas. Ses listes `out` ne contiennent que les sens ouverts : une arête à sens
+unique n'y apparaît qu'à sa source. Il faut donc la reconstruire (V1–V2).
+
+Pour un nœud fondu (exactement deux arêtes retenues, mêmes sens de part et d'autre), la marche a besoin de ses deux
+arêtes et de leurs bouts opposés. C'est la seule table qui croît avec le graphe : 16 o par nœud fondu, ≈ 1,7 Go pour
+`road` sur la planète **[calculé : 4,65 M × 23 × 16 o]**. Elle est écrite sur un fichier temporaire et **lue par
+`mmap`** (indexée par le rang du nœud parmi les nœuds fondus) : des pages de fichier, pas de mémoire anonyme.
+
+## 4. Étapes
+
+### V1 — Filtre et incidence (flux)
+
+Parcours des cellules du graphe de base dans l'ordre (les arêtes y sont dans l'ordre des ids).
+- Bit `alive[e]` = `ViewKind::keep(attrs)`.
+- Pour chaque arête retenue, deux enregistrements `Inc { node, edge, other, attrs, side }` (24 o) vers un tri par
+  `(node, edge)`.
+
+### V2 — Nœuds fondus et ancres (fusion du tri)
+
+Les enregistrements d'un même nœud arrivent ensemble, dans l'ordre des arêtes : c'est `inc.of(v)`.
+- **Nœud fondu** : exactement deux arêtes distinctes et `mergeable_at` vrai. Calcul fait sur les attributs portés par
+  `Inc` (la fonction est réécrite sur ces champs, sans `BaseEdges`). Bit `merged[v]`, et la paire
+  `(e1, far1, e2, far2)` dans la table des nœuds fondus (§3), au rang de `v`.
+- **Ancre** : degré non nul et pas fondu. Bit `anchor[v]`.
+- Le flux trié est rejoué en V3 (seconde fusion, ou série écrite à part).
+
+### V3 — Chaînes (marche séquentielle)
+
+Même procédure que `contract` :
+- pour chaque ancre `v` par id croissant, pour chaque arête incidente `e` (flux de V2) non visitée, marcher jusqu'à
+  une ancre ou au retour en `v` ;
+- la marche lit `merged` (bit) et la table des nœuds fondus. Les bouts sont connus par `Inc` et par la table : aucune
+  relecture de la base.
+
+Puis les anneaux :
+- arêtes `alive` et non visitées, par id croissant ;
+- départ en `ends(e).0` (relu dans la base) ;
+- rotation sur le plus petit nœud, coupure au milieu, comme aujourd'hui.
+
+Les boucles sont coupées au milieu, et le nœud du milieu devient une ancre (bit `anchor`).
+
+Sortie :
+- les maillons de chaque chaîne dans un fichier temporaire (`u32`, `e | DIR_BIT` si parcouru à rebours) ;
+- un enregistrement `Chain { from, to, off, n }` (base) vers V4.
+
+Mémoire : les bits, la table (fichier), un tampon.
+
+### V4 — Arêtes de vue (tri)
+
+Ids de vue : `view_id(b) = rang(anchor, b)`, par un répertoire de rangs sur le bitset (≈ 3 Mo pour la planète).
+
+Pour chaque chaîne :
+- orientation `a < b`, maillons relus et retournés si besoin ;
+- longueur, sens, pire accès, routes, attributs du plus long maillon, poids ;
+- les attributs et les longueurs de base sont relus par `mmap` de la base.
+
+Enregistrement `VEdge { a, b, first_link, off, n, rev, len_dm, weight, attrs }` (≈ 41 o), trié par
+`(a, b, first_link)`, la clé de `vedges.sort_by_key`. Les doublons sont impossibles : une arête de base n'est que dans
+une chaîne.
+
+### V5 — Écriture
+
+Les arêtes triées sortent dans l'ordre de `a`, donc des cellules : les arêtes possédées par une cellule sont
+contiguës.
+- **Nœuds de vue** : les ancres dans l'ordre des ids de base. Table des cellules : `node_cell` de la base.
+  Positions et ids OSM relus dans la base.
+- **Arêtes orientées** : `(a, b, e)` et `(b, a, e | DIR_BIT)` selon les sens, vers un tri `(src, dst, edge)`. C'est
+  l'ordre de `write_graph`, comme `dir` dans la base hors mémoire. La fusion est lue cellule par cellule en même temps
+  que les arêtes.
+- **Géométrie** : pour chaque arête, dans l'ordre :
+  - la polyligne est recomposée depuis la base (géométrie de chaque maillon, retournée si besoin, plus la position du
+    nœud d'arrivée de chaque maillon) ;
+  - elle est encodée par `encode_geometry`, comme `write_graph` le fait de `interior` ;
+  - les caps sont pris par `polyline_heading_pair` sur la même polyligne.
+
+  Les arêtes étant déjà dans l'ordre final, la géométrie sort dans l'ordre du fichier. **Pas de redistribution par
+  paquets** (à la différence d'E7 dans la base).
+- **Sections de vue** : `VIEW_WEIGHT`, `VIEW_CHAIN_OFF`, `VIEW_CHAIN`, `VIEW_BASE_NODE`, `VIEW_HEADING` écrites en
+  flux dans des fichiers temporaires, puis recopiées dans l'ordre de `extras`, après `ID_EDGES`. `VIEW_META` est un
+  petit JSON.
+- **Ajout à `StreamWriter`** : `put_extra(kind, reader, len)`, l'actuel `put_small`.
+
+### V6 — Contrôle
+
+`check_view_structure` réécrit en flux :
+- bits `alive` et `seen` ;
+- attributs et longueurs relus par `mmap` ;
+- paires parallèles comptées sur les arêtes **triées** : une suite d'arêtes de même `(a, b)` compte une fois. Plus de
+  table de hachage, même nombre.
+
+Le contrôle exhaustif reste systématique, comme aujourd'hui.
+
+## 5. Ressources attendues (planète, `gravel`, budget 1 Gio)
+
+| | Valeur | |
+|---|---|---|
+| Mémoire anonyme | budget + ≈ 0,3 Go (bits ≈ 0,25 Go, tampons, table des cellules) | **[estimé]** |
+| Pages de fichier | table des nœuds fondus ≈ 1,5 Go, base relue le long des chaînes | **[calculé]** |
+| Disque temporaire | incidence ≈ 19 Go (×2 pendant la fusion), arêtes de vue ≈ 13 Go, orientées ≈ 7 Go, géométrie ≈ 30 Go : pic ≈ 50 à 70 Go | **[calculé]** |
+| Mur | une passe sur la base, deux tris de l'ordre de 10⁹ enregistrements, l'écriture d'environ 34 Go : de l'ordre de 30 à 60 min par vue | **[estimé]** |
+
+## 6. Interface
+
+`ord-graph-build views --graph <base>.ordg --views road,gravel --external [--mem-budget-mb 1024] [--tmp-dir D]`.
+
+Mêmes options que `build --external`, même dossier temporaire verrouillé (`TmpDir`). Le rapport ajoute
+`tmp_peak_bytes`, `runs` et `peak_rss_before_verify_kb` par vue. `-prune` avec `--external` : erreur claire.
+
+## 7. Tests
+
+- **Mêmes octets** : `--external` contre `build_view` + `write_graph`.
+  - Sur les graphes aléatoires et denses de `tests/external.rs`, à budget minuscule : plusieurs séries par tri, et des
+    fusions à plusieurs niveaux.
+  - Sur des cas construits : boucle de longueur paire et impaire, anneau sans ancre, double sens suivi d'un sens
+    unique, arêtes parallèles, nœud isolé.
+- **Bout en bout** : Andorre et les Pays de la Loire. Vues `--external` identiques aux vues en mémoire, et
+  `check_view_structure` réussi.
+- **Échecs** : `-prune` refusé ; dossier temporaire nettoyé après une erreur.
+
+## 8. Protocole de mesure
+
+1. **Région et France**, `road,gravel`, en mémoire puis `--external` à 16 Mo et 1 Gio : mêmes octets, mur et pic.
+2. **Europe** (`europe-20261116-z11.ordg`, déjà construit), `--external` à 1 Gio.
+3. **Planète** : à la suite de la mise à jour du planet (`osm-planet-update.sh`), base puis vues, `--external` à
+   1 Gio. Vérifier d'abord que les quatre fichiers passent le chargement du service (`polygon_fits` réel, temps de
+   démarrage), sur le poste, avant de copier ≈ 100 Go sur le serveur.
+
+## 9. Points de tension
+
+- **La table des nœuds fondus** croît avec le graphe. Sur `mmap`, elle sort de la mémoire anonyme, mais ses pages
+  restent comptées dans le RSS du processus. Si elle devient gênante, une marche entièrement externe (classement de
+  listes par tris répétés) la supprime. Elle coûterait plusieurs tris de plus.
+- **Les relectures de la base par `mmap`** supposent la localité des chaînes. Une chaîne très longue, ou un anneau
+  (rares : 469 sur la France), font des accès épars. À mesurer en V3–V5 sur l'Europe.
+- **Ordre de la marche** : l'identité des octets repose sur le même ordre de découverte que `contract`. Les tests à
+  boucles impaires le vérifient : leur point de coupure dépend du sens de la marche.

@@ -14,6 +14,8 @@
 #   serveur) : `ord-graph-build` date le graphe avec `osmosis_replication_timestamp`.
 # - Le planet n'est remplacé qu'une fois le lot écrit en entier (`--fsync`, puis `mv` dans le même dossier) : une
 #   interruption laisse l'ancien intact. Un verrou (`flock`) empêche deux mises à jour du même fichier.
+# - Écrit à côté le polygone de couverture `<planet sans .osm.pbf>.poly` (copie de `scripts/planet.poly`, le
+#   rectangle du monde), que le générateur du service lit avec le graphe, comme le `.poly` Geofabrik d'un extrait.
 #
 # Options :
 #   --days N        jours de diffs par lot (défaut 7)
@@ -86,6 +88,15 @@ if [ ! -e "$PLANET" ]; then
   echo "$official  $PLANET.part" | md5sum --check --status || { rm -f "$PLANET.part"; die "MD5 faux, fichier supprimé"; }
   mv "$PLANET.part" "$PLANET"
   log "planet téléchargé : $PLANET"
+fi
+
+# --- Polygone de couverture ---------------------------------------------------------------------------------------
+POLY_SRC=$(dirname "$(realpath "$0")")/planet.poly
+POLY=${PLANET%.osm.pbf}.poly
+[ -f "$POLY_SRC" ] || die "$POLY_SRC introuvable"
+if ! cmp -s "$POLY_SRC" "$POLY"; then
+  cp "$POLY_SRC" "$POLY.tmp" && mv "$POLY.tmp" "$POLY"
+  log "polygone écrit : $POLY"
 fi
 
 # --- Point de départ et dernière séquence publiée -----------------------------------------------------------------

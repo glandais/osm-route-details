@@ -801,4 +801,22 @@ mod tests {
         // La région, sa mer à 9 km : toujours acceptée.
         assert!(polygon_fits([-2.67, 46.22, 0.92, 48.57], [-2.6, 46.3, 0.85, 48.5], 1.0));
     }
+
+    /// Le polygone du planet (`scripts/planet.poly`, écrit par `osm-planet-update.sh`) : le rectangle du monde.
+    #[test]
+    fn the_planet_polygon_fits_a_planet_graph_and_stops_at_the_antimeridian() {
+        let poly = Poly::parse(include_str!("../../../../scripts/planet.poly")).unwrap();
+        let pb = poly.bbox().unwrap();
+        assert_eq!(pb, [-180.0, -90.0, 180.0, 90.0]);
+        // Nœuds jusqu'aux bords (pôle Sud, antiméridien), ou en retrait : accepté.
+        assert!(polygon_fits(pb, [-180.0, -90.0, 180.0, 90.0], 1.0));
+        assert!(polygon_fits(pb, [-179.9, -85.0, 179.9, 84.0], 1.0));
+        // Mais pas sur un graphe régional.
+        assert!(!polygon_fits(pb, [-5.2, 41.3, 9.6, 51.1], 1.0));
+        assert!(poly.contains(2.35, 48.85) && poly.contains(178.4, -18.1));
+        // Un départ dont le disque passe l'antiméridien (Fidji, 5 km) est hors couverture : le moteur ne raccorde
+        // pas les deux bords de la carte.
+        assert!(poly.contains_disc(-18.1, 178.4, 5_000.0));
+        assert!(!poly.contains_disc(-16.8, 179.98, 5_000.0));
+    }
 }
