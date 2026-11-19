@@ -29,6 +29,7 @@ mod taste_common;
 mod team;
 #[cfg(any(test, feature = "reference"))]
 mod team_reference;
+mod turns;
 mod verify;
 mod window;
 
@@ -42,6 +43,8 @@ mod tests_organic;
 mod tests_reference;
 #[cfg(test)]
 mod tests_team_sparse;
+#[cfg(test)]
+mod tests_turns;
 #[cfg(test)]
 mod tests_window;
 
@@ -189,6 +192,9 @@ pub struct OrganicTune {
     /// Le contrôle interne prend ses caps comme le contrôleur indépendant (repère centré au nœud) ; `false` : celui de
     /// l'organique d'avant l'étape « virages » (§16.3 de la note du lot 4).
     pub turns: bool,
+    /// Marge (degrés) du modèle des virages de la recherche : il refuse à partir de `150 − marge` ; 0 : le seuil du contrôle
+    /// (§16.2 de la note).
+    pub turn_margin_deg: u8,
 }
 
 impl Default for OrganicTune {
@@ -210,6 +216,7 @@ impl Default for OrganicTune {
             spike_m: 500,
             sharp_retry: true,
             turns: true,
+            turn_margin_deg: 5,
         }
     }
 }
@@ -278,6 +285,12 @@ pub struct FigureDiagnostics {
     pub leg3_settled: u64,
     /// Biais final de la sécante.
     pub beta_final: f64,
+    /// Relaxations refusées par le modèle des virages, relaxations qu'il a évaluées hors voie rapide (le coût) ; toute la
+    /// requête, lentille et triangles.
+    pub turn_cut: u64,
+    pub turn_evals: u64,
+    /// Relaxations refusées parce qu'elles reprenaient en sens inverse une chaîne du chemin (aller-retour dans une jambe).
+    pub reuse_cut: u64,
 }
 
 #[derive(Clone, Debug)]

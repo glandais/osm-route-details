@@ -19,6 +19,7 @@ use crate::search::{
     Weighter, Workspace, BAN, INF, NONE, TAIL,
 };
 use crate::team::{TeamCtx, TeamData, WindowTeam};
+use crate::turns::{Lead, OrgSearch, TurnModel};
 use crate::verify::{check_route_aligned_in, check_route_in, trim_piece, Check, Violation};
 use crate::window::Window;
 use crate::{
@@ -250,7 +251,21 @@ pub fn generate_with_figures_in<B: AsRef<[u8]>>(
 ) -> (Result<Generation, Failure>, Diagnostics, FigureDiagnostics) {
     let mut diag = Diagnostics::default();
     let mut fig = FigureDiagnostics::default();
-    let res = generate_inner(e, win, team, r, ws, stop, &mut diag, &mut fig);
+    // Le modèle des virages et l'interdiction de l'aller-retour de l'organique (§16) ; sans effet hors boucle ou en strict,
+    // où `generate_inner` rend la main à `Classic`.
+    let org_search = match r.figures {
+        Figures::Organic(o) => Some(OrgSearch::new(
+            o.tune.turns.then(|| TurnModel::new(e.params.max_turn_deg, o.tune.turn_margin_deg)),
+            false,
+        )),
+        Figures::Classic => None,
+    };
+    let res = generate_inner(e, win, team, r, ws, stop, &mut diag, &mut fig, org_search.as_ref());
+    if let Some(o) = &org_search {
+        fig.turn_cut = o.turn_cut.get();
+        fig.turn_evals = o.turn_evals.get();
+        fig.reuse_cut = o.reuse_cut.get();
+    }
     match res {
         Ok(mut g) => {
             g.diagnostics = diag.clone();
@@ -270,6 +285,7 @@ fn generate_inner<B: AsRef<[u8]>>(
     stop: &mut dyn FnMut() -> bool,
     diag: &mut Diagnostics,
     fig: &mut FigureDiagnostics,
+    org_search: Option<&OrgSearch>,
 ) -> Result<Generation, Failure> {
     if r.mode != Mode::Discovery && team.is_none() {
         return Err(Failure::NoTeamData);
@@ -312,6 +328,7 @@ fn generate_inner<B: AsRef<[u8]>>(
         Figures::Organic(o) if is_loop && r.mode != Mode::Strict => Some(o),
         _ => None,
     };
+    let org_search = org.and(org_search);
     let mut tri = org.map(|o| TriState::new(figures::draw(r.seed ^ fingerprint(r) ^ FIGURE_SALT, &o), &o));
     if let (Some(o), Some(st)) = (org.as_ref(), tri.as_ref()) {
         fig.applied = true;
@@ -328,7 +345,7 @@ fn generate_inner<B: AsRef<[u8]>>(
     let d_dm = d * 10.0;
 
     for pass in 0..PASSES {
-        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc };
+        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc, org: org_search };
         let vws = &mut ws.views[vi];
         // Le `ban` d'un usage précédent est gardé tant qu'il ne dépasse pas le double : sa génération croît
         // strictement, une case ancienne n'est jamais lue comme posée (lot 6, §9).
@@ -337,7 +354,7 @@ fn generate_inner<B: AsRef<[u8]>>(
             vws.ban_gen = 0;
         }
         tree_forward(&cx, &mut vws.t1, stop).map_err(|_| halted())?;
-        tree_backward(&cx, &mut vws.t2, stop).map_err(|_| halted())?;
+        tree_backward(&cx, &mut vws.t2, Some(&vws.t1), stop).map_err(|_| halted())?;
         let ViewWs { t1, t2, ta, ban, ban_gen, cor } = vws;
         let (t1, t2) = (&*t1, &*t2);
         if pass == 0 {
@@ -417,7 +434,8 @@ fn generate_inner<B: AsRef<[u8]>>(
                 };
                 diag.astar_runs += 1;
                 let before = budget;
-                let found = astar(&cx, ta, t2, last, last_pred, &b, &mut budget, &mut exhausted, stop)
+                let lead = Lead { path: &out_fields, dm: t1.meters(last), aux: Some(t2) };
+                let found = astar(&cx, ta, t2, last, last_pred, &b, &lead, &mut budget, &mut exhausted, stop)
                     .map_err(|_| halted())?;
                 diag.astar_settled += before - budget;
                 // (états du parcours, mètres (dm) du parcours, mètres (dm) du retour)
@@ -456,9 +474,20 @@ fn generate_inner<B: AsRef<[u8]>>(
                     diag.astar_runs += 1;
                     let before = rev_budget;
                     let mut rev_exhausted = false;
-                    let back =
-                        astar_back(&cx, ta, t1, tnode, ret[0], &b, &mut rev_budget, &mut rev_exhausted, stop)
-                            .map_err(|_| halted())?;
+                    let lead = Lead { path: &ret, dm: t2.meters(ret[0]), aux: Some(t1) };
+                    let back = astar_back(
+                        &cx,
+                        ta,
+                        t1,
+                        tnode,
+                        ret[0],
+                        &b,
+                        &lead,
+                        &mut rev_budget,
+                        &mut rev_exhausted,
+                        stop,
+                    )
+                    .map_err(|_| halted())?;
                     diag.astar_settled += before - rev_budget;
                     got = back.map(|f| {
                         let ret_m = f64::from(t2.meters(ret[0]));
@@ -534,7 +563,8 @@ fn generate_inner<B: AsRef<[u8]>>(
         }
         if let (Some(o), Some(st)) = (org.as_ref(), tri.as_mut()) {
             if !st.done && !exhausted {
-                let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc };
+                let cx =
+                    Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc, org: org_search };
                 let fx = Fixed { e, win, team, r, cx: &cx, s_snap: &s_snap, e_snap: &e_snap, o, d, tail_dm };
                 let mut sc = Scratch { ta, ban, ban_gen, cor };
                 figures::triangle_phase(

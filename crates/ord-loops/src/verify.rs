@@ -75,11 +75,11 @@ pub struct Check {
     pub sharp_at: Vec<usize>,
 }
 
-const CLUSTER_M: f64 = 100.0;
+pub(crate) const CLUSTER_M: f64 = 100.0;
 /// La règle des grappes est levée quand la grappe tient dans les 200 premiers ou les 200 derniers mètres du
 /// parcours : en quittant son départ, faire le tour d'un pâté de maisons n'est pas un retour (Java,
 /// `RouteGuarantees.CLUSTER_FREE_ENDS_M`, relevé en production le 15 novembre 2026).
-const CLUSTER_FREE_ENDS_M: f64 = 200.0;
+pub(crate) const CLUSTER_FREE_ENDS_M: f64 = 200.0;
 const HEAD_NEAR_M: f64 = 30.0;
 const HEAD_FAR_M: f64 = 50.0;
 const CONNECTOR_MIN_M: f64 = 15.0;
@@ -678,4 +678,16 @@ fn corridor_share(core: &[Piece], loc: &Local) -> f64 {
         }
     }
     CORRIDOR_STEP_M * doubled as f64 / (2.0 * core_len)
+}
+
+/// Angle (degrés) du virage entre le nœud d'arrivée du morceau `ia` (cap avant) et celui du morceau `ib` (cap après),
+/// calculé comme le contrôle aligné : le même que celui d'une grappe `(a, b)` ou, pour `ia == ib`, d'un virage simple.
+/// Pour les tests du modèle des virages de la recherche (`turns.rs`).
+#[cfg(test)]
+pub(crate) fn aligned_pair_angle<B: AsRef<[u8]>>(e: &Engine<B>, route: &Route, ia: usize, ib: usize) -> f64 {
+    let pieces = build_pieces(e, route);
+    let last_of = |p: &Piece| *p.pts.last().expect("morceau non vide");
+    let hin = route_heading(&pieces, ia, false, &Local::new(last_of(&pieces[ia])));
+    let hout = route_heading(&pieces, ib + 1, true, &Local::new(pieces[ib + 1].pts[0]));
+    turn_angle_deg(hin, hout)
 }

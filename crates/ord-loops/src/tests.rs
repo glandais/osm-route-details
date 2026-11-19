@@ -833,7 +833,7 @@ fn the_tree_equals_a_reference_dijkstra_with_turn_costs() {
     let disc = Disc::new(s7, s7, 1.0e6, true);
     let forb = Default::default();
     let esc = std::cell::Cell::new(false);
-    let cx = Ctx { v, w: &w, disc: &disc, s: &a, e: &a, forb: &forb, esc: &esc };
+    let cx = Ctx { v, w: &w, disc: &disc, s: &a, e: &a, forb: &forb, esc: &esc, org: None };
     let mut t = Tree::default();
     tree_forward(&cx, &mut t, &mut || false).unwrap();
     // Référence : même graphe de lignes, mêmes coûts, Dijkstra par tas.

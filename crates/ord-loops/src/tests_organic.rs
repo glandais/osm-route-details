@@ -14,6 +14,7 @@ use crate::search::{
 use crate::team::{TeamCtx, TeamData, WindowTeam};
 use crate::tests::{engine_of, engine_zoomed, ll, overlay_of, pt, tags};
 use crate::tests_reference::{scenario_graph, scenario_params, scenario_rows};
+use crate::turns::Lead;
 use crate::{Mode, Request, RideType, DEFAULT_OFF_TEAM_COST_Q8};
 
 fn loop_request(start: crate::LatLon, d: f64, mode: Mode) -> Request {
@@ -58,11 +59,11 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
         let disc = Disc::new(s_e7, s_e7, d, true);
         let forb = Forbidden::default();
         let esc = Cell::new(false);
-        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: None };
         let mut ws = Workspace::new();
         let ViewWs { t1, t2, ta, .. } = &mut ws.views[0];
         tree_forward(&cx, t1, &mut || false).unwrap();
-        tree_backward(&cx, t2, &mut || false).unwrap();
+        tree_backward(&cx, t2, None, &mut || false).unwrap();
         let (t1, t2) = (&*t1, &*t2);
         let both: Vec<u32> = t1.reached.iter().copied().filter(|&n| t2.node_best(n).is_some()).collect();
         assert!(both.len() > 50, "trop peu de nœuds atteints");
@@ -96,6 +97,7 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
                     last_pred,
                     tg,
                     &ban,
+                    &Lead::NONE,
                     tri,
                     u64::MAX / 2,
                     &mut budget,
@@ -160,8 +162,16 @@ fn the_minimum_factor_bounds_every_chain_cost() {
                                 let disc = Disc::new(s_e7, s_e7, r.distance_m, true);
                                 let forb = Forbidden::default();
                                 let esc = Cell::new(false);
-                                let cx =
-                                    Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+                                let cx = Ctx {
+                                    v,
+                                    w: &w,
+                                    disc: &disc,
+                                    s: &sa,
+                                    e: &sa,
+                                    forb: &forb,
+                                    esc: &esc,
+                                    org: None,
+                                };
                                 let mut ws = Workspace::new();
                                 let t1 = &mut ws.views[vi].t1;
                                 tree_forward(&cx, t1, &mut || false).unwrap();
@@ -247,11 +257,11 @@ fn a_corridor_sends_the_return_off_the_parallel_road_and_leaves_the_tail_and_the
     let disc = Disc::new(s_e7, s_e7, d, true);
     let forb = Forbidden::default();
     let esc = Cell::new(false);
-    let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+    let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: None };
     let mut ws = Workspace::new();
     let ViewWs { t1, t2, ta, ban, ban_gen, cor } = &mut ws.views[0];
     tree_forward(&cx, t1, &mut || false).unwrap();
-    tree_backward(&cx, t2, &mut || false).unwrap();
+    tree_backward(&cx, t2, None, &mut || false).unwrap();
     let (t1, t2) = (&*t1, &*t2);
     // Le demi-tour : le nœud le plus au nord de l'aller (x = 0, repère du départ).
     let north = |n: u32| disc.xy_of(v.pos[n as usize]);
@@ -275,7 +285,9 @@ fn a_corridor_sends_the_return_off_the_parallel_road_and_leaves_the_tail_and_the
     let used_east = |fields: &[u32]| fields.iter().map(|&f| north(v.tgt(f)).0).fold(0.0f64, f64::max);
     let run = |b: &Ban<'_>, ta: &mut crate::search::Tree| {
         let (mut budget, mut exhausted) = (u64::MAX / 2, false);
-        astar(&cx, ta, t2, last, last_pred, b, &mut budget, &mut exhausted, &mut || false).unwrap().unwrap()
+        astar(&cx, ta, t2, last, last_pred, b, &Lead::NONE, &mut budget, &mut exhausted, &mut || false)
+            .unwrap()
+            .unwrap()
     };
     // Sans couloir : la parallèle à 200 m.
     let plain = Ban::plain(ban, *ban_gen);
@@ -505,11 +517,11 @@ fn a_comb_apex_is_a_spike_and_is_repaired_at_the_last_junction_500_m_back() {
         let sa = make_anchor(&e, v, &w, s_snap);
         let disc = Disc::new(r.start.to_e7(), r.start.to_e7(), d, true);
         let (forb, esc) = (Forbidden::default(), Cell::new(false));
-        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+        let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: None };
         let mut ws = Workspace::new();
         let ViewWs { t1, t2, .. } = &mut ws.views[0];
         tree_forward(&cx, t1, &mut stop()).unwrap();
-        tree_backward(&cx, t2, &mut stop()).unwrap();
+        tree_backward(&cx, t2, None, &mut stop()).unwrap();
         let (t1, t2) = (&*t1, &*t2);
         let apex = *t1
             .reached

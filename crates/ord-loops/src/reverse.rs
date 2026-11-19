@@ -6,6 +6,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 use crate::search::{turn_cost, Ban, Ctx, Found, Stopped, Tree, BAN, INF, NONE, POLL, TAIL};
+use crate::turns::Lead;
 
 /// Rend les états de l'aller, du départ au dernier état avant le demi-tour `turn_node`. `ret0` : premier état du
 /// retour (il fixe le virage au demi-tour).
@@ -17,6 +18,7 @@ pub(crate) fn astar_back(
     turn_node: u32,
     ret0: u32,
     ban: &Ban<'_>,
+    lead: &Lead<'_>,
     budget: &mut u64,
     exhausted: &mut bool,
     stop: &mut dyn FnMut() -> bool,
@@ -47,6 +49,11 @@ pub(crate) fn astar_back(
             }
             let hin_over = terminal.then(|| cx.s.out_head[(fg & 1) as usize]);
             let Some(tc) = turn_cost(v, cx.forb, fg, NONE, f_next, hin_over, None) else { continue };
+            if let Some(o) = cx.org {
+                if o.refuses_bwd(cx, ta, lead, fg, f_next, m, g, store != NONE) {
+                    continue;
+                }
+            }
             let (w, len, h) = if terminal {
                 let dir = (fg & 1) as usize;
                 let w = cx.s.out_cost[dir];

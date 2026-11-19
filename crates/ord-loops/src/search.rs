@@ -11,6 +11,7 @@ use crate::cost::{self, RideType, TASTE_CLASSES};
 use crate::engine::{Engine, Snap, ViewData};
 use crate::geo::{heading_deg, polyline_m, Local};
 use crate::team::{ChainTeam, TeamCtx, TypeTeam, BRIDGED, TEAM};
+use crate::turns::{Lead, OrgSearch};
 use crate::verify::slice;
 use crate::Mode;
 use ord_graph::view::{heading_to_u16, polyline_heading};
@@ -278,7 +279,7 @@ const TURN_FREE16: u32 = 8_192; // 45°
 const TURN_COST_MAX: u32 = 2_000; // 200 m équivalents (en décimètres pondérés), à 150°
 
 #[inline]
-fn in_head(v: &ViewData, f: u32) -> u16 {
+pub(crate) fn in_head(v: &ViewData, f: u32) -> u16 {
     let h = v.head[(f >> 1) as usize];
     if f & 1 == 0 {
         h[1]
@@ -288,7 +289,7 @@ fn in_head(v: &ViewData, f: u32) -> u16 {
 }
 
 #[inline]
-fn out_head(v: &ViewData, f: u32) -> u16 {
+pub(crate) fn out_head(v: &ViewData, f: u32) -> u16 {
     let h = v.head[(f >> 1) as usize];
     if f & 1 == 0 {
         h[0]
@@ -298,7 +299,7 @@ fn out_head(v: &ViewData, f: u32) -> u16 {
 }
 
 #[inline]
-fn angle16(a: u16, b: u16) -> u32 {
+pub(crate) fn angle16(a: u16, b: u16) -> u32 {
     (i32::from(b.wrapping_sub(a) as i16)).unsigned_abs()
 }
 
@@ -530,6 +531,8 @@ pub(crate) struct Ctx<'a> {
     pub forb: &'a Forbidden,
     /// Levé quand la recherche touche un nœud incomplet de la fenêtre : le résultat est jeté (lot 6, §5.2).
     pub esc: &'a std::cell::Cell<bool>,
+    /// Modèle des virages et interdiction de l'aller-retour (lot 4, 4c, §16) : `None` en `Classic`.
+    pub org: Option<&'a OrgSearch>,
 }
 
 pub(crate) const POLL: u32 = 2048;
@@ -579,6 +582,11 @@ pub(crate) fn tree_forward(
             if !retro_ok(v, pred, f, fo) {
                 continue;
             }
+            if let Some(o) = cx.org {
+                if o.refuses_fwd(cx, t, &Lead::NONE, f, fo, m, d, true) {
+                    continue;
+                }
+            }
             let nd = d.saturating_add(w).saturating_add(tc);
             if nd < t.get(fo) {
                 t.set(fo, nd, f, m + v.len_dm[c as usize]);
@@ -593,6 +601,7 @@ pub(crate) fn tree_forward(
 pub(crate) fn tree_backward(
     cx: &Ctx<'_>,
     t: &mut Tree,
+    t1: Option<&Tree>,
     stop: &mut dyn FnMut() -> bool,
 ) -> Result<(), Stopped> {
     let v = cx.v;
@@ -631,6 +640,12 @@ pub(crate) fn tree_backward(
             }
             let hout_over = (t.pred(f) == NONE).then(|| cx.e.in_head[(f & 1) as usize]);
             let Some(tc) = turn_cost(v, cx.forb, fg, NONE, f, None, hout_over) else { continue };
+            if let Some(o) = cx.org {
+                let lead = Lead { path: &[], dm: 0, aux: t1 };
+                if o.refuses_bwd(cx, t, &lead, fg, f, m, d, true) {
+                    continue;
+                }
+            }
             let nd = d.saturating_add(w).saturating_add(tc);
             if nd < t.get(fg) {
                 t.set(fg, nd, f, m + v.len_dm[c as usize]);
@@ -709,6 +724,7 @@ pub(crate) fn astar(
     last: u32,
     last_pred: u32,
     ban: &Ban<'_>,
+    lead: &Lead<'_>,
     budget: &mut u64,
     exhausted: &mut bool,
     stop: &mut dyn FnMut() -> bool,
@@ -746,6 +762,11 @@ pub(crate) fn astar(
             };
             if !retro_ok(v, pred_prev, f_prev, fo) {
                 continue;
+            }
+            if let Some(o) = cx.org {
+                if o.refuses_fwd(cx, ta, lead, f_prev, fo, m, g, store != NONE) {
+                    continue;
+                }
             }
             let (w, len, h) = if terminal {
                 let dir = (fo & 1) as usize;
@@ -1046,6 +1067,7 @@ pub(crate) fn astar_p2p(
     last_pred: u32,
     tgt: &P2pTarget,
     ban: &Ban<'_>,
+    lead: &Lead<'_>,
     tri: bool,
     cap_states: u64,
     budget: &mut u64,
@@ -1077,6 +1099,11 @@ pub(crate) fn astar_p2p(
             let Some(tc) = turn_cost(v, cx.forb, f_prev, pred_prev, fo, hin_over, None) else { continue };
             if !retro_ok(v, pred_prev, f_prev, fo) {
                 continue;
+            }
+            if let Some(o) = cx.org {
+                if o.refuses_fwd(cx, ta, lead, f_prev, fo, m, g, store != NONE) {
+                    continue;
+                }
             }
             let mut w = cx.w.chain(c);
             if w == INF {

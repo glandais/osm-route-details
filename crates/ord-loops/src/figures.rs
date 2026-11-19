@@ -17,6 +17,7 @@ use crate::search::{
     NONE, P2P_SLACK, TAIL,
 };
 use crate::team::TeamCtx;
+use crate::turns::Lead;
 use crate::verify::{check_route_aligned_in, check_route_in, Violation};
 use crate::window::Window;
 use crate::{Failure, Family, FigureDiagnostics, Organic, Position, Request, Route};
@@ -325,7 +326,8 @@ fn run_leg2<B: AsRef<[u8]>>(
         slack: P2P_SLACK,
     };
     let cap = t1.settled.len() as u64;
-    let out = astar_p2p(cx, sc.ta, t1, t2, last, last_pred, &tgt, &ban, true, cap, budget, stop)
+    let lead = Lead { path: leg1, dm: t1.meters(last), aux: Some(t2) };
+    let out = astar_p2p(cx, sc.ta, t1, t2, last, last_pred, &tgt, &ban, &lead, true, cap, budget, stop)
         .map_err(|_| halted(cx))?;
     fig.p2p_settled += out.settled;
     Ok(match out.end {
@@ -340,6 +342,24 @@ fn run_leg2<B: AsRef<[u8]>>(
         P2pEnd::NotFound => Leg::None,
         P2pEnd::BudgetOut => Leg::OutOfBudget,
     })
+}
+
+/// Mètres (dm) des jambes 1 et 2 posées : ceux de T1 au bout de la jambe 1, puis les chaînes entières de la jambe 2.
+fn leg_dm(cx: &Ctx<'_>, t1: &Tree, leg1: &[u32], leg2: &[u32]) -> u32 {
+    let v = cx.v;
+    t1.meters(*leg1.last().expect("jambe non vide"))
+        + leg2.iter().map(|&f| v.len_dm[(f >> 1) as usize]).sum::<u32>()
+}
+
+/// Le chemin d'arbre `ret` posé après les jambes 1 et 2 tient la règle des virages du contrôle aux jonctions (§16.2).
+/// Sans modèle (`Classic`, `turns` coupé), toujours vrai.
+fn junction_ok(cx: &Ctx<'_>, t1: &Tree, t2: &Tree, leg1: &[u32], leg2: &[u32], ret: &[u32]) -> bool {
+    let Some(o) = cx.org else { return true };
+    if o.model.is_none() {
+        return true;
+    }
+    let ctx: Vec<u32> = [leg1, leg2].concat();
+    o.junction_ok(cx, &ctx, leg_dm(cx, t1, leg1, leg2), ret, Some(t2))
 }
 
 fn halted(cx: &Ctx<'_>) -> Failure {
@@ -380,6 +400,7 @@ fn run_leg3<B: AsRef<[u8]>>(
         if free
             && turn_cost(v, cx.forb, last2, pred2, ret[0], None, None).is_some()
             && retro_ok(v, pred2, last2, ret[0])
+            && junction_ok(cx, t1, t2, leg1, leg2, &ret)
         {
             fig.leg3_t2 += 1;
             return Ok(Leg::Found(ret));
@@ -400,8 +421,10 @@ fn run_leg3<B: AsRef<[u8]>>(
         Ban { stamp: sc.ban, gen, cor: use_cor.then_some(&*sc.cor), kappa_q8: u32::from(fx.o.tune.kappa_q8) };
     let before = *budget;
     let mut exhausted = false;
-    let found =
-        astar(cx, sc.ta, t2, last2, pred2, &ban, budget, &mut exhausted, stop).map_err(|_| halted(cx))?;
+    let path: Vec<u32> = if cx.org.is_some() { [leg1, leg2].concat() } else { Vec::new() };
+    let lead = Lead { path: &path, dm: leg_dm(cx, t1, leg1, leg2), aux: Some(t2) };
+    let found = astar(cx, sc.ta, t2, last2, pred2, &ban, &lead, budget, &mut exhausted, stop)
+        .map_err(|_| halted(cx))?;
     fig.leg3_settled += before - *budget;
     if exhausted {
         return Ok(Leg::OutOfBudget);

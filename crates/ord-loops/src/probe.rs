@@ -146,7 +146,7 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
     let s_e7 = r.start.to_e7();
     let disc = Disc::new(s_e7, s_e7, d, true);
     let forb = Forbidden::default();
-    let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc };
+    let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: None };
     let mut out = Probe::default();
     let vws = &mut ws.views[vi];
     if vws.ban.len() < v.n_chains || vws.ban.len() > (2 * v.n_chains).max(64) {
@@ -156,7 +156,7 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
     let t0 = Instant::now();
     let halted = |_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
     tree_forward(&cx, &mut vws.t1, &mut || false).map_err(halted)?;
-    tree_backward(&cx, &mut vws.t2, &mut || false).map_err(halted)?;
+    tree_backward(&cx, &mut vws.t2, None, &mut || false).map_err(halted)?;
     out.trees_us = t0.elapsed().as_secs_f64() * 1e6;
     let ViewWs { t1, t2, ta, ban, ban_gen, .. } = vws;
     let (t1, t2) = (&*t1, &*t2);
@@ -312,16 +312,28 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
             slack: 0,
         };
         let halted = |_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
-        let run = |ta: &mut crate::search::Tree,
-                   tri: bool|
-         -> Result<(LegProbe, Option<Vec<u32>>), Failure> {
-            let t0 = Instant::now();
-            let mut left = u64::MAX / 2;
-            let r =
-                astar_p2p(&cx, ta, t1, t2, last, last_pred, &tgt, &b, tri, budget, &mut left, &mut || false)
-                    .map_err(halted)?;
-            Ok(leg_of(&r, t0.elapsed().as_secs_f64() * 1e6))
-        };
+        let run =
+            |ta: &mut crate::search::Tree, tri: bool| -> Result<(LegProbe, Option<Vec<u32>>), Failure> {
+                let t0 = Instant::now();
+                let mut left = u64::MAX / 2;
+                let r = astar_p2p(
+                    &cx,
+                    ta,
+                    t1,
+                    t2,
+                    last,
+                    last_pred,
+                    &tgt,
+                    &b,
+                    &crate::turns::Lead::NONE,
+                    tri,
+                    budget,
+                    &mut left,
+                    &mut || false,
+                )
+                .map_err(halted)?;
+                Ok(leg_of(&r, t0.elapsed().as_secs_f64() * 1e6))
+            };
         // Heuristique au départ de la jambe 2 (nœud P1), pour situer.
         let h_at = |tri: bool| -> f64 { f64::from(tgt.h(&cx, t1, t2, n1, tri)) };
         let (tri_leg, tri_path) = run(ta, true)?;
@@ -382,9 +394,19 @@ pub fn probe_triangle_in<B: AsRef<[u8]>>(
                 let mut budget3 = budget;
                 let mut exhausted3 = false;
                 let t0 = Instant::now();
-                let found =
-                    astar(&cx, ta, t2, last2, pred2, &b3, &mut budget3, &mut exhausted3, &mut || false)
-                        .map_err(|_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped })?;
+                let found = astar(
+                    &cx,
+                    ta,
+                    t2,
+                    last2,
+                    pred2,
+                    &b3,
+                    &crate::turns::Lead::NONE,
+                    &mut budget3,
+                    &mut exhausted3,
+                    &mut || false,
+                )
+                .map_err(|_| if esc.get() { Failure::WindowEscape } else { Failure::Stopped })?;
                 pp.leg3_astar = Some(LegProbe {
                     us: t0.elapsed().as_secs_f64() * 1e6,
                     settled: budget - budget3,
