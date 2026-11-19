@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 
 use ord_graph::util::SplitMix64;
+use ord_loops::RideType;
 use serde::Serialize;
 
 use super::compare::{Compare, Conditions, Done, Reading};
@@ -857,6 +858,31 @@ pub struct AttrSection {
     pub chosen: Option<String>,
 }
 
+/// La douceur d'un réglage (§17.15) : la somme de ses poids ROAD et GRAVEL, puis sa tolérance de lentille ; plus petit, plus
+/// doux. `rank:0` (aucune clé de rang) passe devant à poids et tolérance égaux.
+fn softness(d: &Done) -> (u32, u16, bool) {
+    let Some(a) = d.variant.org.and_then(|o| o.attr) else { return (u32::MAX, u16::MAX, true) };
+    let sum = [RideType::Road, RideType::Gravel]
+        .into_iter()
+        .map(|r| a.weights(r).w.iter().map(|&x| u32::from(x)).sum::<u32>())
+        .sum();
+    let ltol = a.ltol_milli.unwrap_or(ord_loops::OrganicTune::default().attr_lens_tol_milli);
+    (sum, ltol, !a.rank0)
+}
+
+/// Le choix du réglage (§17.15) : parmi les verdicts qui tiennent `ok`, ceux dont la part fermée moyenne est à 0,05 au plus
+/// de la plus grande ; parmi eux, le plus doux (poids plus petits, puis `ltol` plus petit), puis l'ordre de la liste.
+fn choose(verdicts: &[AttrVerdict], done: &[Done], ok: impl Fn(&AttrVerdict) -> bool) -> Option<String> {
+    let held: Vec<(&AttrVerdict, f64)> =
+        verdicts.iter().filter(|v| ok(v)).map(|v| (v, v.mean_closed.unwrap_or(0.0))).collect();
+    let best = held.iter().map(|(_, m)| *m).fold(f64::NEG_INFINITY, f64::max);
+    held.iter()
+        .filter(|(_, m)| *m >= best - 0.05)
+        .enumerate()
+        .min_by_key(|(i, (v, _))| (find(done, &v.candidate).map(softness), *i))
+        .map(|(_, (v, _))| v.candidate.clone())
+}
+
 pub fn attr_section(cmp: &Compare, done: &[Done]) -> Option<AttrSection> {
     let any = done.iter().any(|d| d.variant.org.is_some_and(|o| o.attr.is_some()));
     if !any && !has(done, REFERENCE) {
@@ -880,14 +906,7 @@ pub fn attr_section(cmp: &Compare, done: &[Done]) -> Option<AttrSection> {
             .iter()
             .all(|id| v.checks.iter().find(|c| c.id == *id).and_then(|c| c.holds) == Some(true))
     };
-    let mut chosen: Option<(&AttrVerdict, f64)> = None;
-    for v in verdicts.iter().filter(|v| ok(v)) {
-        let m = v.mean_closed.unwrap_or(0.0);
-        if chosen.is_none_or(|(_, best)| m > best + 0.05) {
-            chosen = Some((v, m));
-        }
-    }
-    let chosen = chosen.map(|(v, _)| v.candidate.clone());
+    let chosen = choose(&verdicts, done, ok);
     Some(AttrSection {
         candidates,
         controls: controls(&cmp.conditions, done, base),
@@ -1275,5 +1294,37 @@ mod tests {
         assert!(!stop.is_empty(), "base, svc-org et la sonde ne sont pas ceux du relevé");
         // Sans portée complète, aucun contrôle.
         assert!(cmp.attr.as_ref().unwrap().controls.stop.is_empty());
+    }
+
+    /// Le choix du réglage (§17.15) : la plus grande part fermée, et à 0,05 près le plus doux (poids, puis `ltol`), quel que
+    /// soit l'ordre de la liste.
+    #[test]
+    fn the_chosen_setting_is_the_softest_within_0_05_of_the_best() {
+        let all = vec![
+            base_done(&real_mask),
+            done("svc+org+attr", "a", Vec::new()),
+            done("svc+org+attr+ltol:20", "b", Vec::new()),
+            done("svc+org+attr+rcom:2", "c", Vec::new()),
+        ];
+        let v = |name: &str, m: f64| AttrVerdict {
+            candidate: name.into(),
+            checks: Vec::new(),
+            switch_criteria_hold: None,
+            mean_closed: Some(m),
+        };
+        let pick = |ms: [f64; 3]| {
+            let vs =
+                [v("svc-org-attr", ms[0]), v("svc-org-attr-ltol20", ms[1]), v("svc-org-attr-rcom2", ms[2])];
+            choose(&vs, &all, |_| true)
+        };
+        // `rcom:2` ferme nettement plus : il l'emporte, si fort soit-il.
+        assert_eq!(pick([0.60, 0.57, 0.70]).as_deref(), Some("svc-org-attr-rcom2"));
+        // Tous à 0,05 du meilleur : le plus doux, `ltol:20` (mêmes poids que `attr`, tolérance plus petite), joué après `attr`.
+        assert_eq!(pick([0.60, 0.57, 0.62]).as_deref(), Some("svc-org-attr-ltol20"));
+        // `ltol:20` trop loin : `attr` (poids plus petits que `rcom:2`).
+        assert_eq!(pick([0.60, 0.50, 0.62]).as_deref(), Some("svc-org-attr"));
+        // Aucun verdict ne tient : aucun choix.
+        let vs = [v("svc-org-attr", 0.9)];
+        assert_eq!(choose(&vs, &all, |_| false), None);
     }
 }
