@@ -592,6 +592,11 @@ l'orchestrateur du travail :
    **Reste** : la fusion, puis la mise en service (redépôt d'une nuit, §16.15, point 7). **Suite : le 4d**, par la décision 6 du
    §9.7, puisque A1 tient.
 5. 4d : destinations d'équipe comme attracteurs, puis fichier OSM.
+   **Sonde faite** le 19 novembre sur la branche `feat/ord-loops-lot4d`, destinations OSM seules (§9.1, point 4) ; relevé :
+   [`ord-loops-lot4d-sonde.md`](ord-loops-lot4d-sonde.md). Le fichier coûte 1,1 à 1,4 Mo par vue et 14 µs par fenêtre de
+   100 km. En ROAD, le point lointain réel est à moins de 300 m d'un attracteur dans 26 % des boucles, 11 % au hasard, 19 · 17 %
+   en 1.12 ; ce qui manque à 1.12, ce sont les commerces et les points de vue, pas les bourgs. En GRAVEL, le point de vue seul.
+   Cols et sommets non mesurables sur le banc. Cinq questions au §9 du relevé.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
 
