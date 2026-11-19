@@ -132,11 +132,22 @@ fn attractors_end_to_end_on_the_tiny_pbf_and_refuse_another_extract() {
     let view =
         ord_graph::format::GraphFile::open_mmap(&dir.path().join("attr-inconnue-z11.road.ordv")).unwrap();
     road.check_for(base.header(), &view).expect("identité");
-    // Deux écritures : mêmes octets.
+    // Deux écritures : mêmes ancrages et même zone (la date d'écriture est de la provenance, hors de ce que le moteur lit).
     let again =
         attractors_cmd::run(&args(attr_pbf(), Some(dir.path().join("second")))).expect("seconde écriture");
-    assert_eq!(again.views[0].xxh3, r.views[0].xxh3);
-    assert_eq!(again.views[1].xxh3, r.views[1].xxh3);
+    for (a, b) in r.views.iter().zip(&again.views) {
+        let (fa, fb) = (
+            ord_graph::attract::AttrFile::open_mmap(&a.file).unwrap(),
+            ord_graph::attract::AttrFile::open_mmap(&b.file).unwrap(),
+        );
+        assert_eq!(fa.anchors().collect::<Vec<_>>(), fb.anchors().collect::<Vec<_>>());
+        assert_eq!(fa.zone_nodes(), fb.zone_nodes());
+        assert_eq!(fa.zone_masks(), fb.zone_masks());
+        assert_eq!(
+            (fa.n_anchors(), fa.n_zone(), fa.len_bytes()),
+            (fb.n_anchors(), fb.n_zone(), fb.len_bytes())
+        );
+    }
 
     // Un extrait d'un octet différent : refus avant tout calcul.
     let mut bytes = std::fs::read(attr_pbf()).unwrap();

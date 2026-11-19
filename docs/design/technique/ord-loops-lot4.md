@@ -620,6 +620,12 @@ recommandée là où elles diffèrent.
    **Spécifié** le 19 novembre (§17) : fichier `.orda` par vue (ancrages et zone de 300 m, ≈ 10 et 12 Mo), sous-commande
    `ord-graph-build attractors`, attracteurs en organique seulement (candidats du triangle, rang des paires, demi-tour de la
    lentille), api 1.13, critères chiffrés au §17.12 ; cinq questions au §17.19, leur option recommandée appliquée par défaut.
+   **Décisions du 19 novembre** (§9.10) : poids généraux, cols et sommets actifs au poids du point de vue, temps relatif à
+   1.12, bascule par le codeur. **Codé** le même jour (commits 1 à 6 du §17.14, écarts au §17.20) : fichier `.orda` et sous-commande
+   `attractors`, attracteurs dans le moteur organique, apprentissage sans attracteurs (règle L′), banc, service api 1.13 (paquet
+   1.13.0, défaut `off`). Fichiers de la France construits (44 s, 1,2 Go, 9,8 et 11,9 Mo) ; invariants I1, I3, I4, I5 tenus ; essai
+   de fumée B et C (relevé : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md)). **Reste** : les campagnes 1 à 5 du §17.15,
+   puis, si les critères tiennent, la bascule (commit 7) et la séance en conteneur.
 6. Service api 1.10, relevés en conteneur, bascule du défaut sur `organic`, version et mise en service.
 7. Plan de tribly : section « Lot 4 » du §12 avec ce qui est mesuré ; `API-207` mis à jour.
 
@@ -4864,3 +4870,58 @@ un seuil ou un défaut, pas l'architecture.
    suivi de la séance C3 et annulé (`git revert`) si elle manque ; l'apprentissage reste sans attracteurs (aucun profil invalidé,
    aucun redépôt) sauf règle L′. Le fichier lui-même reste à poser par l'exploitation (§17.16) : sans lui, 1.13 sert comme 1.12.
    La fusion reste au propriétaire.
+
+### 17.20 Écarts du codage
+
+Codé le 19 novembre 2026 (branche `feat/ord-loops-lot4d`), selon les décisions du §9.10. Relevé de l'essai de fumée et des
+fichiers de la France : [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md).
+
+1. **Cols et sommets actifs** (décision 2 du §9.10, contre le « poids 0 » du §17.3) : `AttrWeights::general` donne ROAD
+   `[1, 1, 1, 0, 0, 1, 1, 0]` et GRAVEL `[0, 0, 1, 0, 0, 1, 1, 0]` (café, boulangerie, point de vue, bourg, village, col,
+   sommet, réservé) ; MTB rien. Au banc, `rvue:<n>` et `gvue:<n>` fixent ensemble les poids du point de vue, du col et du
+   sommet du type (le poids d'un col ne se règle pas seul) ; `rcom` fixe café et boulangerie, `rbourg` bourg et village,
+   `gcom` café et boulangerie en GRAVEL. La colonne « retenus » du banc est donc, en ROAD, commerce + point de vue + col +
+   sommet, en GRAVEL point de vue + col + sommet. Leur effet n'est pas jugé (aucun critère) mais E3 les borne en ROAD (≤ réel
+   + 0,03), et A, B, C1 et C2 les couvrent.
+2. **Fichiers sous `lot6/`**, à côté du graphe et des vues (consigne de l'orchestrateur), et non sous `lot4/4d/orda/` (§17.15) ;
+   le banc les cherche d'abord sous `lot6/`, puis sous `lot4/4d/orda/` (`--attractors-road`, `--attractors-gravel`
+   l'emportent). Le rapport de la construction reste sous `lot4/4d/orda/report.json`.
+3. **Comptes de la France** (§17.0, point 6, estimés sur la sonde) : 134 979 objets (la sonde en comptait 172 600, plans d'eau
+   et eau potable compris, relations comprises, filtre `france.poly`), **1 859 928 nœuds de zone en route** (estimé
+   1 860 162), **2 244 792 en gravel** (2 244 994) ; 9 815 808 et 11 852 456 octets (estimés ≈ 9,8 et ≈ 11,8 Mo). Aucun nœud
+   étiqueté n'a manqué : 58 832 nœuds demandés par les 4 931 ways étiquetées, 58 832 trouvés.
+4. **Date d'écriture** : `built_epoch` est dans le fichier (provenance, hors identité) : deux constructions de la même entrée
+   diffèrent par cet en-tête et l'empreinte de fin, pas par les ancrages ni la zone. Le déterminisme se lit donc sur
+   `[128, fin − 8[` ; `--check` réencode avec la date du fichier lu et compare octet pour octet.
+5. **`OsmSource::tagged_nodes(f)`** reçoit `f(id, lat, lon, étiquettes)` avec les étiquettes en tranche (vide pour presque tous
+   les nœuds) ; l'extraction filtre les identifiants demandés par les ways avec un filtre de Bloom d'un bit par hachage (16 bits
+   par identifiant) devant la dichotomie. `MemSource::node_tag` et `PbfSource` suivent. Un petit extrait de test
+   (`crates/ord-graph/tests/data/attr.osm`, `attr.osm.pbf`, synthétique) a été ajouté.
+6. **La lentille ne filtre pas les degrés** (comme le texte du §17.7) : un demi-tour attracteur peut tomber sur une impasse ;
+   `tries_per_sector` (6) et le jeu des essais l'écartent. À surveiller au temps : le choix de 1.12 ne change que si un nœud
+   pesant est à ≤ 5 % de D de `e`.
+7. **Fonctions pures pour les tests** : `lens_pick` (generate.rs) et `pair_order` (figures.rs) sont extraites du corps de
+   `generate_inner` et de `triangle_phase` ; avec des poids nuls elles sont littéralement le code de 1.12 (I5 le montre).
+8. **Pas de filtre `deg ≥ 3` pour les attracteurs candidats** : ce sont les mêmes filtres que le plus agréable (degré ≥ 3, T1 et
+   T2, bande, cap), le §17.7 le disait ; le second tableau est parcouru dans la même boucle.
+9. **Engine** : `Engine::check_attractors` (sans ranger) s'ajoute à `set_attractors` : le service contrôle les deux fichiers avant
+   d'en poser un (« disponibles que si les deux vues ont leur fichier »).
+10. **Banc** : `AnchorGrid::hits_within` pour la part à 1 km ; `Measures.attr` (`far`, `far_1k`, `v10`) ; le pourcentage `hors A`
+    est « toutes les équipes sauf A » ; la section est la 11 du rapport ; `compare::write` rend la liste des contrôles manqués et
+    `run` s'arrête s'il y en a (contrôles de portée complète seulement : I1 `base`, `common`, `svc`, I5 `svc-org` et `svc-org-attr0`
+    en portée complète **ou** en essai B et C ; la métrique contre la sonde en portée complète seulement). La règle I1 de `svc` est
+    désormais un arrêt (elle n'était qu'affichée). Critère **A5** ajouté (garde contre `svc-org`, §17.12 « de plus ») ; B2
+    nomme son partenaire en remplaçant `svc` par `common` dans le nom du candidat (`common-org-attr…`) ; C2 compte aussi les refus du
+    contrôleur indépendant ; C1 est relatif à `svc-org` (le rapport à `svc` est affiché) ; le choix du réglage de la campagne 3 est
+    écrit dans la section (`chosen`).
+11. **Service** : `generator.attractors` vaut `off` ; les poids de la dernière requête sont rangés dans un crochet de test
+    (`TestHooks::last_attr_weights`, écrit à chaque requête, un verrou, hors du chemin chaud en pratique : les générations sont deux
+    au plus à la fois). `AttractorsInfo` n'existe que quand le générateur est prêt.
+12. **Apprentissage** : `LearnParams::attractors` et `LearnFigures::figures_with` ; `figures_of` (sans attracteurs) est gardé.
+13. **Test 9** : les références `window_reference.txt`, `window_reference_192.txt` et `team_reference.txt` sont rejouées moteur
+    avec fichier (`tests_attract.rs`) ; `team_check_reference.txt` (crate `ord-loops-check`) ne l'est pas : le contrôleur ne lit
+    aucun attracteur, et le test 17 rejoue le moteur avec fichier contre lui.
+14. **Pas fait** (le 19 novembre, consigne de l'orchestrateur) : les campagnes 1 à 5 du §17.15 (hors un essai de fumée B et C,
+    20 boucles), le relevé complet, et donc **ni le commit 7 (bascule) ni la séance C3** : `attractors` reste `off`. L'essai de
+    fumée montre déjà un dépassement du réel sur le commerce en ROAD (E3 ne tient pas sur 21 requêtes), que le §17.17 prévoyait
+    (leviers : `ltol`, puis les poids) ; la campagne 3 est faite pour ça.
