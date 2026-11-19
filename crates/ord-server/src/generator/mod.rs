@@ -93,6 +93,32 @@ pub struct GeneratorCapabilities {
     /// Figures a request may ask for (`figures`) and the one used when it names none (api 1.11).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub figures: Option<FiguresInfo>,
+    /// OSM attractors of the far points of organic rides (api 1.13).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attractors: Option<AttractorsInfo>,
+}
+
+/// Why the attractor files are not available.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AttractorsReason {
+    /// A view has no `.orda` file next to it (or at the configured path).
+    Missing,
+    /// A file cannot be read or is damaged.
+    Unreadable,
+    /// A file belongs to another graph or another view.
+    Mismatch,
+}
+
+/// The OSM attractors (`.orda` files, one per view): the generator serves without them, as api 1.12 did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AttractorsInfo {
+    /// Both views have their file and the engine read them.
+    pub available: bool,
+    /// `available` and `generator.attractors = on`: organic rides use the attractors.
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<AttractorsReason>,
 }
 
 /// The figures the generator offers.
@@ -215,6 +241,8 @@ pub struct Ready {
     stopping: AtomicBool,
     graph_id: String,
     capabilities: GeneratorCapabilities,
+    /// Les attracteurs OSM (4d) : lus au démarrage, jamais rechargés.
+    attractors: AttractorsInfo,
 }
 
 impl std::fmt::Debug for Ready {
@@ -333,6 +361,54 @@ fn poly_geojson(poly: &Poly) -> serde_json::Value {
     serde_json::json!({"type": "MultiPolygon", "coordinates": polygons})
 }
 
+/// Lit les fichiers d'attracteurs des deux vues (lot 4, 4d) : absent, illisible ou d'un autre graphe, le générateur démarre
+/// quand même et sert comme 1.12 ; les fichiers ne sont posés dans le moteur que si les deux sont bons.
+fn load_attractors(engine: &mut GenEngine, cfg: &GeneratorConfig) -> AttractorsInfo {
+    let mut files = Vec::new();
+    let mut reason: Option<AttractorsReason> = None;
+    for (vi, path) in cfg.attractor_paths().into_iter().enumerate() {
+        let view = ["road", "gravel"][vi];
+        let Some(path) = path.filter(|p| p.exists()) else {
+            tracing::info!(view, "generator attractors file missing: serving without attractors");
+            reason.get_or_insert(AttractorsReason::Missing);
+            continue;
+        };
+        match ord_graph::attract::AttrFile::open_mmap(&path) {
+            Err(e) => {
+                tracing::warn!(error = %e, view, file = %path.display(), "generator attractors file unreadable");
+                reason.get_or_insert(AttractorsReason::Unreadable);
+            }
+            Ok(f) => match engine.check_attractors(vi, &f) {
+                Ok(()) => files.push((vi, f)),
+                Err(e) => {
+                    tracing::warn!(error = %e, view, file = %path.display(), "generator attractors file does not match its view");
+                    reason.get_or_insert(AttractorsReason::Mismatch);
+                }
+            },
+        }
+    }
+    if reason.is_none() {
+        for (vi, f) in files {
+            if let Err(e) = engine.set_attractors(vi, f) {
+                tracing::warn!(error = %e, "generator attractors file refused");
+                reason = Some(AttractorsReason::Mismatch);
+            }
+        }
+    }
+    let available = reason.is_none();
+    if available {
+        tracing::info!(
+            enabled = cfg.attractors == crate::config::GeneratorAttractors::On,
+            "generator attractors loaded"
+        );
+    }
+    AttractorsInfo {
+        available,
+        enabled: available && cfg.attractors == crate::config::GeneratorAttractors::On,
+        reason,
+    }
+}
+
 impl Generator {
     /// Générateur éteint sans raison d'erreur (aucun graphe configuré).
     pub fn disabled() -> Self {
@@ -380,7 +456,7 @@ impl Generator {
             );
             return disabled(DisabledReason::NotConfigured);
         }
-        let engine = match Engine::new(base, road, gravel, params) {
+        let mut engine = match Engine::new(base, road, gravel, params) {
             Ok(e) => e,
             Err(ord_loops::EngineError::ViewMismatch | ord_loops::EngineError::OverlayMismatch) => {
                 tracing::warn!("generator view does not belong to the configured graph");
@@ -391,6 +467,12 @@ impl Generator {
                 return disabled(DisabledReason::GraphUnreadable);
             }
         };
+        let attractors = load_attractors(&mut engine, cfg);
+        metrics::gauge!("ord_generator_attractors_available").set(if attractors.available {
+            1.0
+        } else {
+            0.0
+        });
         if std::env::var_os("MALLOC_MMAP_THRESHOLD_").is_none() {
             // Le budget de mémoire du générateur ne tient que si glibc rend les grands blocs au système (lot 6).
             tracing::warn!(
@@ -530,6 +612,7 @@ impl Generator {
             overlay_ttl_days: Some(cfg.overlay_ttl_days),
             matcher_hash: Some(format!("{matcher_hash:016x}")),
             ascent: false,
+            attractors: Some(attractors),
             figures: Some(FiguresInfo {
                 default: match cfg.figures {
                     crate::config::GeneratorFigures::Classic => "classic",
@@ -569,6 +652,7 @@ impl Generator {
                 stopping: AtomicBool::new(false),
                 graph_id: gid,
                 capabilities,
+                attractors,
             })),
         }
     }
@@ -595,6 +679,7 @@ impl Generator {
                 matcher_hash: None,
                 ascent: false,
                 figures: None,
+                attractors: None,
             },
         }
     }

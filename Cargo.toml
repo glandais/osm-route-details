@@ -5,7 +5,7 @@ members = ["crates/*", "tools/*"]
 exclude = ["tools/ord-loops-viewer"]
 
 [workspace.package]
-version = "1.12.0"
+version = "1.13.0"
 edition = "2021"
 rust-version = "1.90"
 publish = false

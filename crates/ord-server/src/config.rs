@@ -376,6 +376,34 @@ pub struct GeneratorConfig {
     /// Figures de la génération quand la requête n'en nomme pas (lot 4, 4c) : `organic` (défaut depuis 1.12) ou `classic`
     /// (la lentille seule, le moteur de 1.10 au bit près).
     pub figures: GeneratorFigures,
+    /// Attracteurs OSM des points lointains organiques (lot 4, 4d) : `off` (défaut au commit du service) ou `on`. Le service
+    /// lit les fichiers `.orda` des deux vues quand ils sont là ; `on` ne joue les attracteurs que s'ils sont tous deux
+    /// disponibles. Sans fichier, 1.13 sert comme 1.12 au bit près.
+    pub attractors: GeneratorAttractors,
+    /// Fichier d'attracteurs de la vue `road` (défaut : `view_road` avec l'extension `.orda`, à côté de la vue).
+    pub attractors_road: Option<PathBuf>,
+    /// Fichier d'attracteurs de la vue `gravel` (défaut : `view_gravel` avec l'extension `.orda`).
+    pub attractors_gravel: Option<PathBuf>,
+}
+
+/// Les attracteurs OSM jouent-ils quand leurs fichiers sont là ?
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeneratorAttractors {
+    #[default]
+    Off,
+    On,
+}
+
+impl GeneratorConfig {
+    /// Les fichiers d'attracteurs `[road, gravel]` : ceux de la configuration, sinon ceux déduits des vues
+    /// (`x.road.ordv` donne `x.road.orda`, dans le même dossier).
+    pub fn attractor_paths(&self) -> [Option<PathBuf>; 2] {
+        let from = |explicit: &Option<PathBuf>, view: &Option<PathBuf>| {
+            explicit.clone().or_else(|| view.as_ref().map(|v| v.with_extension("orda")))
+        };
+        [from(&self.attractors_road, &self.view_road), from(&self.attractors_gravel, &self.view_gravel)]
+    }
 }
 
 /// Les figures que le moteur essaie : la lentille seule (1.10), ou les figures organiques du 4c (lentille au couloir et
@@ -415,6 +443,9 @@ impl Default for GeneratorConfig {
             deposit: GeneratorDepositConfig::default(),
             profile: GeneratorProfileConfig::default(),
             figures: GeneratorFigures::Organic,
+            attractors: GeneratorAttractors::Off,
+            attractors_road: None,
+            attractors_gravel: None,
         }
     }
 }
@@ -887,6 +918,39 @@ mod tests {
             jail.set_env("ORD_GENERATOR__FIGURES", "organic");
             jail.set_env("ORD_GENERATOR__PROFILE__LEARN_FIGURES", "triangle");
             assert!(Config::load(None).is_err(), "figure d'apprentissage inconnue refusée");
+            Ok(())
+        });
+    }
+
+    /// Test 21 du 4d : réglages des attracteurs, chemins déduits des vues, variables d'environnement.
+    #[test]
+    fn the_attractor_settings_default_to_off_and_deduce_their_files_from_the_views() {
+        let mut g = GeneratorConfig::default();
+        assert_eq!(g.attractors, GeneratorAttractors::Off);
+        assert_eq!(g.attractor_paths(), [None, None]);
+        g.view_road = Some(PathBuf::from("/d/france-z11.road.ordv"));
+        g.view_gravel = Some(PathBuf::from("/d/france-z11.gravel.ordv"));
+        assert_eq!(
+            g.attractor_paths(),
+            [
+                Some(PathBuf::from("/d/france-z11.road.orda")),
+                Some(PathBuf::from("/d/france-z11.gravel.orda"))
+            ]
+        );
+        g.attractors_gravel = Some(PathBuf::from("/x/autre.orda"));
+        assert_eq!(g.attractor_paths()[1], Some(PathBuf::from("/x/autre.orda")));
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__ATTRACTORS", "on");
+            jail.set_env("ORD_GENERATOR__ATTRACTORS_ROAD", "/a/r.orda");
+            jail.set_env("ORD_GENERATOR__ATTRACTORS_GRAVEL", "/a/g.orda");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.attractors, GeneratorAttractors::On);
+            assert_eq!(
+                c.generator.attractor_paths(),
+                [Some(PathBuf::from("/a/r.orda")), Some(PathBuf::from("/a/g.orda"))]
+            );
+            jail.set_env("ORD_GENERATOR__ATTRACTORS", "oui");
+            assert!(Config::load(None).is_err(), "valeur inconnue refusée");
             Ok(())
         });
     }

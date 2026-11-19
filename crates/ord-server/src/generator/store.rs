@@ -85,6 +85,8 @@ pub struct TestHooks {
     pub profile_hold: AtomicBool,
     /// La phase de profil panique une fois les données de la nouvelle surcouche comptées dans le budget.
     pub profile_panic: AtomicBool,
+    /// Les poids d'attracteurs de la dernière requête envoyée au moteur (lot 4, 4d) : le test lit ce que le service a posé.
+    pub last_attr_weights: std::sync::Mutex<Option<ord_loops::AttrWeights>>,
 }
 
 /// Métadonnées d'une surcouche, dans la partie chiffrée du fichier.

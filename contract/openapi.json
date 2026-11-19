@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.12"
+    "version": "1.13"
   },
   "paths": {
     "/health/live": {
@@ -738,6 +738,43 @@
             "format": "double"
           }
         }
+      },
+      "AttractorsInfo": {
+        "type": "object",
+        "description": "The OSM attractors (`.orda` files, one per view): the generator serves without them, as api 1.12 did.",
+        "required": [
+          "available",
+          "enabled"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Both views have their file and the engine read them."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "`available` and `generator.attractors = on`: organic rides use the attractors."
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AttractorsReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AttractorsReason": {
+        "type": "string",
+        "description": "Why the attractor files are not available.",
+        "enum": [
+          "missing",
+          "unreadable",
+          "mismatch"
+        ]
       },
       "Attribution": {
         "type": "object",
@@ -2175,6 +2212,17 @@
           "ascent": {
             "type": "boolean",
             "description": "Do the routes carry ascent and descent (`ascent_m`, `descent_m`)? No: the engine has no elevation."
+          },
+          "attractors": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AttractorsInfo",
+                "description": "OSM attractors of the far points of organic rides (api 1.13)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "coverage": {
             "oneOf": [

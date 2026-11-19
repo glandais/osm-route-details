@@ -397,6 +397,12 @@ impl<B: AsRef<[u8]>> Engine<B> {
         Ok(())
     }
 
+    /// Le fichier va avec ce graphe de base et la vue `vi` (`AttrFile::check_for`), sans le ranger : le service contrôle les deux
+    /// fichiers avant d'en poser un.
+    pub fn check_attractors(&self, vi: usize, f: &AttrFile<B>) -> Result<(), AttrError> {
+        f.check_for(self.base.header(), &self.views_files[vi])
+    }
+
     /// La vue `vi` a un fichier d'attracteurs.
     pub fn has_attractors(&self, vi: usize) -> bool {
         self.attr[vi].is_some()

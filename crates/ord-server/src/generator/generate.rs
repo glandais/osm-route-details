@@ -359,6 +359,14 @@ impl Ready {
         if Instant::now() >= deadline {
             return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded"));
         }
+        // Les attracteurs (4d) : les poids généraux du type quand le réglage est `on` et que les deux fichiers sont là, sinon aucun
+        // (le moteur rend alors 1.12 au bit près).
+        let attr = if self.attractors.enabled {
+            ord_loops::AttrWeights::general(input.ride)
+        } else {
+            ord_loops::AttrWeights::NONE
+        };
+        *self.hooks.last_attr_weights.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(attr);
         let req = Request {
             start: input.start,
             end: input.end,
@@ -378,7 +386,7 @@ impl Ready {
                         input.ride,
                     ),
                     tune: ord_loops::OrganicTune::default(),
-                    attr: ord_loops::AttrWeights::NONE,
+                    attr,
                 }),
             },
         };

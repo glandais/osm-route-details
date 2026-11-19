@@ -3,6 +3,34 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.13.0 (API 1.13)
+
+### Ajouté
+
+- **Fichier d'attracteurs OSM** (lot 4, 4d) : un fichier `<graphe>.road.orda` et `<graphe>.gravel.orda` par vue, qui range
+  les cafés, boulangeries, points de vue, bourgs, cols et sommets de l'extrait (nœuds et ways, relations ignorées), accrochés
+  aux nœuds de la vue à 300 m, et la zone de 300 m autour de chaque accroche (un masque de catégories par nœud). Il est lié au
+  graphe de base **et** à la vue (comptes, empreinte de l'extrait, dates de construction) ; un fichier d'un autre graphe est
+  refusé. Données OSM publiques, hors dépôt. Environ 10 Mo (route) et 12 Mo (gravel) pour la France.
+- **Sous-commande `ord-graph-build attractors`** : écrit les deux fichiers depuis l'extrait du graphe (le même, octet pour
+  octet : taille et empreinte sont vérifiées), `--check` relit et recalcule. Environ 45 s et 1,2 Go pour la France.
+- **Moteur** : en organique seulement, les attracteurs sont des sommets candidats du triangle, un point de rang des paires de
+  sommets et le demi-tour préféré de la lentille (dans une tolérance de 5 % de D). Poids généraux (commerce, point de vue, col
+  et sommet en route ; point de vue, col et sommet en gravel ; rien au VTT) ; jamais en classique, en strict ni en aller simple.
+- **Contrat HTTP (ajouts seulement)** : `/v1/capabilities` porte `generator.attractors` (`available`, `enabled`, `reason` :
+  `missing`, `unreadable` ou `mismatch`). Réglages `generator.attractors` (`off` ou `on`, variable
+  `ORD_GENERATOR__ATTRACTORS`), `generator.attractors_road` et `generator.attractors_gravel` (par défaut déduits des vues :
+  `x.road.ordv` donne `x.road.orda`). Jauge `ord_generator_attractors_available`.
+
+### Compatibilité
+
+- **Fichier facultatif** : sans lui, ou avec un fichier absent, illisible ou d'un autre graphe, le service démarre et sert
+  comme 1.12, au bit près. Les attracteurs ne sont disponibles que si les deux vues ont leur fichier.
+- **Aucun redépôt** : `graph_id`, `params_hash` et les profils sont inchangés ; l'apprentissage ne lit pas les attracteurs.
+- **Déploiement roulant** : une 1.12 ignore le fichier.
+- **Défaut `off`** dans cette version : poser les fichiers ne change aucun parcours tant que `generator.attractors` n'est pas
+  `on`.
+
 ## 1.12.0 (API 1.12)
 
 ### Changé
