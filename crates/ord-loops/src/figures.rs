@@ -123,12 +123,13 @@ impl Scratch<'_> {
         *self.ban_gen
     }
 
-    /// Pose les interdits d'une jambe de départ : hors queue `BAN`, dans la queue `TAIL` (aller repris au coût × 2).
-    fn stamp_leg1(&mut self, t1: &Tree, leg1: &[u32], tail_dm: u32) {
+    /// Pose les interdits d'une jambe de départ : hors queue `BAN`, dans la queue `TAIL` (aller repris au coût × 2) ; avec
+    /// `all_ban`, `BAN` partout (la jambe 2 ne reprend rien de la jambe 1, §16.4 de la note).
+    pub(crate) fn stamp_leg1(&mut self, t1: &Tree, leg1: &[u32], tail_dm: u32, all_ban: bool) {
         let gen = *self.ban_gen;
         for &f in leg1 {
             let c = (f >> 1) as usize;
-            let bits = if t1.meters(f) <= tail_dm { TAIL } else { BAN };
+            let bits = if !all_ban && t1.meters(f) <= tail_dm { TAIL } else { BAN };
             let cur = if self.ban[c] >> 3 == gen { self.ban[c] & 7 } else { 0 };
             let bits = if cur & BAN != 0 { BAN } else { bits };
             self.ban[c] = (gen << 3) | bits;
@@ -304,7 +305,7 @@ fn run_leg2<B: AsRef<[u8]>>(
     let last = *leg1.last().expect("jambe non vide");
     let last_pred = if leg1.len() >= 2 { leg1[leg1.len() - 2] } else { NONE };
     sc.next_gen();
-    sc.stamp_leg1(t1, leg1, fx.tail_dm);
+    sc.stamp_leg1(t1, leg1, fx.tail_dm, fx.o.tune.no_reuse);
     let w_m = f64::from(fx.o.tune.corridor_w_milli) / 1000.0 * fx.d;
     let use_cor = fx.o.tune.corridor_w_milli > 0;
     if use_cor {
@@ -391,7 +392,7 @@ fn run_leg3<B: AsRef<[u8]>>(
     let p_node = v.tgt(last2);
     let leg2_chains: FxHashSet<u32> = leg2.iter().map(|&f| f >> 1).collect();
     sc.next_gen();
-    sc.stamp_leg1(t1, leg1, fx.tail_dm);
+    sc.stamp_leg1(t1, leg1, fx.tail_dm, false);
     if let Some(b2) = t2.node_best(p_node) {
         let mut ret = t2.path_to(b2);
         ret.reverse();

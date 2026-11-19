@@ -390,3 +390,141 @@ fn a_cluster_within_200_m_of_the_start_or_the_end_is_not_refused() {
     assert!(reached(true, -h, 300.0).1, "grappe à 170 m de l'arrivée : exemptée");
     assert!(!reached(true, -h, 100.0).1, "grappe à 370 m de l'arrivée : refusée");
 }
+
+// --- Tests 6 et 7 : aucun aller-retour dans une jambe -----------------------------------------------------------------
+
+/// Une route d'accès `P1 – J – L` qui finit par une boucle en `L`, et une rue `J – T` qui repart vers l'ouest : le virage de
+/// `J` vers `T` depuis l'est fait 158°, interdit. Le chemin le moins cher de `P1` à `T` fait donc le tour de la boucle et
+/// revient sur `J – L` en sens inverse.
+fn lollipop() -> MemSource {
+    let mut s = MemSource::default();
+    for (id, n, e) in [
+        (1, 0.0, 0.0),
+        (2, 0.0, 300.0),
+        (3, 0.0, 600.0),
+        (4, 80.0, 650.0),
+        (5, 80.0, 550.0),
+        (6, -40.0, 200.0),
+    ] {
+        pt(&mut s, id, n, e);
+    }
+    let res = tags("residential", &[]);
+    s.way(11, &[1, 2], &res).way(12, &[2, 3], &res).way(13, &[3, 4, 5, 3], &res).way(14, &[2, 6], &res);
+    s
+}
+
+fn lollipop_search(no_reuse: bool) -> Option<Vec<u32>> {
+    let e = engine_of(&mut lollipop());
+    let win = e.full_window(0);
+    let v = &win.v;
+    let r = request(ll(0.0, 100.0), 8000.0, Mode::Discovery);
+    let w = Weighter::new(v, None, RideType::Road, Mode::Discovery, 0.5, DEFAULT_OFF_TEAM_COST_Q8);
+    let s_snap = e.snap(&win, r.start, &|_| true, 0).unwrap().unwrap();
+    let sa = make_anchor(&e, v, &w, s_snap);
+    let s_e7 = r.start.to_e7();
+    let disc = Disc::new(s_e7, s_e7, 8000.0, true);
+    let (forb, esc) = (Forbidden::default(), Cell::new(false));
+    let os = OrgSearch::new(None, no_reuse);
+    let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &sa, forb: &forb, esc: &esc, org: Some(&os) };
+    let last = state(v, node_at(v, 0.0, 0.0), node_at(v, 0.0, 300.0));
+    let target = node_at(v, -40.0, 200.0);
+    let tgt = P2pTarget {
+        node: target,
+        xy: disc.xy_of(v.pos[target as usize]),
+        t1: 0,
+        t2: 0,
+        f_min: 0.0,
+        slack: 0,
+    };
+    let ban = vec![0u32; v.n_chains];
+    let (t1, t2, mut ta) = (Tree::default(), Tree::default(), Tree::default());
+    let lead = Lead { path: &[last], dm: sa.out_len[(last & 1) as usize], aux: None };
+    let mut budget = u64::MAX / 2;
+    let out = astar_p2p(
+        &cx,
+        &mut ta,
+        &t1,
+        &t2,
+        last,
+        NONE,
+        &tgt,
+        &Ban::plain(&ban, 1),
+        &lead,
+        false,
+        u64::MAX / 2,
+        &mut budget,
+        &mut stop(),
+    )
+    .unwrap();
+    if no_reuse {
+        // Le garde du compteur : un refus au moins a eu lieu.
+        assert!(os.reuse_cut.get() > 0, "aucun aller-retour refusé");
+    }
+    out.fields
+}
+
+fn repeated_chain(fields: &[u32]) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    fields.iter().any(|&f| !seen.insert(f >> 1))
+}
+
+/// Test 6.
+#[test]
+fn a_leg_never_turns_back_on_a_chain_it_has_just_taken() {
+    let without = lollipop_search(false).expect("sans l'interdiction, le chemin fait le tour de la boucle");
+    assert!(repeated_chain(&without), "garde : le chemin le moins cher revient sur ses pas : {without:?}");
+    assert!(lollipop_search(true).is_none_or(|f| !repeated_chain(&f)));
+}
+
+/// Test 7 : la jambe 2 ne reprend aucune chaîne de la jambe 1, queue comprise ; la jambe 3 et la lentille gardent la queue.
+#[test]
+fn leg_two_bans_the_whole_of_leg_one_and_the_tail_stays_for_the_other_searches() {
+    let e = engine_of(&mut lollipop());
+    let win = e.full_window(0);
+    let v = &win.v;
+    let leg1 = [
+        state(v, node_at(v, 0.0, 0.0), node_at(v, 0.0, 300.0)),
+        state(v, node_at(v, 0.0, 300.0), node_at(v, 0.0, 600.0)),
+    ];
+    let mut t1 = Tree::default();
+    t1.begin(2 * v.n_chains, v.n_nodes);
+    t1.set(leg1[0], 10, NONE, 3000);
+    t1.set(leg1[1], 20, leg1[0], 6000);
+    let tail_dm = 4000;
+    let mut results = Vec::new();
+    for all_ban in [false, true] {
+        let (mut ta, mut ban, mut gen, mut cor) =
+            (Tree::default(), vec![0u32; v.n_chains], 0u32, Default::default());
+        let mut sc = crate::figures::Scratch { ta: &mut ta, ban: &mut ban, ban_gen: &mut gen, cor: &mut cor };
+        sc.stamp_leg1(&t1, &leg1, tail_dm, all_ban);
+        let bits = |f: u32| ban[(f >> 1) as usize] & 7;
+        results.push((bits(leg1[0]), bits(leg1[1])));
+    }
+    assert_eq!(results[0], (crate::search::TAIL, crate::search::BAN), "la queue garde son interdit léger");
+    assert_eq!(results[1], (crate::search::BAN, crate::search::BAN), "la jambe 2 interdit toute la jambe 1");
+}
+
+/// I2′ : sans le modèle des virages ni l'interdiction de l'aller-retour, l'organique est celui d'avant l'étape (la
+/// référence de `ea6ef63`, gardée à part : `organic_reference.txt` est re-bénie par l'étape).
+#[test]
+fn the_organic_reference_is_replayed_with_turns_and_no_reuse_off() {
+    let off = Figures::Organic(Organic {
+        mix: test_mix(),
+        tune: OrganicTune { turns: false, no_reuse: false, ..OrganicTune::default() },
+    });
+    crate::tests_reference::assert_matches_fixture(
+        &|e, team, r, ws| {
+            crate::generate::generate_with_diagnostics(
+                e,
+                team,
+                &Request { figures: off, ..r.clone() },
+                ws,
+                &mut stop(),
+            )
+        },
+        crate::tests_reference::scenario_params,
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/organic_reference_before_turns.txt"),
+        false,
+    );
+}

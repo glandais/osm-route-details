@@ -195,6 +195,9 @@ pub struct OrganicTune {
     /// Marge (degrés) du modèle des virages de la recherche : il refuse à partir de `150 − marge` ; 0 : le seuil du contrôle
     /// (§16.2 de la note).
     pub turn_margin_deg: u8,
+    /// Aucune jambe ne repasse sur une de ses chaînes dans l'autre sens, et la jambe 2 ne reprend rien de la jambe 1, queue
+    /// comprise (§16.4 de la note) ; `false` : l'organique d'avant l'étape « virages ».
+    pub no_reuse: bool,
 }
 
 impl Default for OrganicTune {
@@ -217,6 +220,7 @@ impl Default for OrganicTune {
             sharp_retry: true,
             turns: true,
             turn_margin_deg: 5,
+            no_reuse: true,
         }
     }
 }

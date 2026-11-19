@@ -348,7 +348,7 @@ fn stop() -> impl FnMut() -> bool {
 fn an_organic_request_without_triangles_or_corridor_is_the_classic_one() {
     let lens_only = Figures::Organic(Organic {
         mix: FigureMix::LENS_ONLY,
-        tune: OrganicTune { corridor_w_milli: 0, turns: false, ..OrganicTune::default() },
+        tune: OrganicTune { corridor_w_milli: 0, turns: false, no_reuse: false, ..OrganicTune::default() },
     });
     assert_matches_reference(&|e, team, r, ws| {
         generate_with_diagnostics(e, team, &with_figures(r, lens_only), ws, &mut stop())

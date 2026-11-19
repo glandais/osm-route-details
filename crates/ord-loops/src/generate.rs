@@ -256,7 +256,7 @@ pub fn generate_with_figures_in<B: AsRef<[u8]>>(
     let org_search = match r.figures {
         Figures::Organic(o) => Some(OrgSearch::new(
             o.tune.turns.then(|| TurnModel::new(e.params.max_turn_deg, o.tune.turn_margin_deg)),
-            false,
+            o.tune.no_reuse,
         )),
         Figures::Classic => None,
     };
