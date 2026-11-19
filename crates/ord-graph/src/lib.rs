@@ -5,6 +5,7 @@
 //! Note de conception : `docs/design/technique/ord-graph-lot0.md`. Aucune dépendance `ord-*` ; sans les
 //! features `pbf` et `mmap`, le crate ne dépend ni d'`osmpbf` ni de `memmap2`.
 
+pub mod attract;
 pub mod attrs;
 pub mod build;
 pub mod format;

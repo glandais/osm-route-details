@@ -57,7 +57,13 @@ pub trait OsmSource {
     /// Passe 2 : les nœuds `(id, décimicro-latitude, décimicro-longitude)`, dans n'importe quel ordre
     /// et éventuellement en parallèle (d'où `Sync`).
     fn nodes(&mut self, f: &(dyn Fn(i64, i32, i32) + Sync)) -> Result<(), BuildError>;
+    /// Comme `nodes`, avec les étiquettes du nœud (vides pour la plupart) : `f(id, lat, lon, étiquettes)`.
+    /// Sert à l'extraction des attracteurs (lot 4d) ; la construction du graphe n'en a pas besoin.
+    fn tagged_nodes(&mut self, f: &TaggedNodeFn<'_>) -> Result<(), BuildError>;
 }
+
+/// Reçoit un nœud et ses étiquettes (`OsmSource::tagged_nodes`).
+pub type TaggedNodeFn<'a> = dyn Fn(i64, i32, i32, &[(&str, &str)]) + Sync + 'a;
 
 /// Source en mémoire, pour les tests et les petits cas à la main.
 #[derive(Clone, Debug, Default)]
@@ -65,7 +71,12 @@ pub struct MemSource {
     pub nodes: Vec<(i64, i32, i32)>,
     pub ways: Vec<MemWay>,
     pub relations: Vec<MemRelation>,
+    /// Étiquettes de certains nœuds (lot 4d) : `(id, étiquettes)`.
+    pub node_tags: Vec<MemNodeTags>,
 }
+
+/// Les étiquettes d'un nœud de `MemSource`.
+pub type MemNodeTags = (i64, Vec<(String, String)>);
 
 /// Une way de `MemSource` : id, nœuds, tags.
 pub type MemWay = (i64, Vec<i64>, Vec<(String, String)>);
@@ -84,6 +95,11 @@ impl MemSource {
     }
     pub fn way(&mut self, id: i64, refs: &[i64], tags: &[(&str, &str)]) -> &mut Self {
         self.ways.push((id, refs.to_vec(), owned_tags(tags)));
+        self
+    }
+    /// Étiquettes d'un nœud déjà ajouté par `node`.
+    pub fn node_tag(&mut self, id: i64, tags: &[(&str, &str)]) -> &mut Self {
+        self.node_tags.push((id, owned_tags(tags)));
         self
     }
     pub fn relation(&mut self, id: i64, tags: &[(&str, &str)], way_members: &[i64]) -> &mut Self {
@@ -116,6 +132,19 @@ impl OsmSource for MemSource {
     fn nodes(&mut self, f: &(dyn Fn(i64, i32, i32) + Sync)) -> Result<(), BuildError> {
         for &(id, lat, lon) in &self.nodes {
             f(id, lat, lon);
+        }
+        Ok(())
+    }
+
+    fn tagged_nodes(&mut self, f: &TaggedNodeFn<'_>) -> Result<(), BuildError> {
+        for &(id, lat, lon) in &self.nodes {
+            let tags: Vec<(&str, &str)> = self
+                .node_tags
+                .iter()
+                .filter(|(nid, _)| *nid == id)
+                .flat_map(|(_, t)| t.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                .collect();
+            f(id, lat, lon, &tags);
         }
         Ok(())
     }
@@ -330,7 +359,7 @@ const FLAG_MULTI: u8 = 1;
 const FLAG_END: u8 = 2;
 const FLAG_LOOP: u8 = 4;
 
-fn haversine_m(a: (i32, i32), b: (i32, i32)) -> f64 {
+pub(crate) fn haversine_m(a: (i32, i32), b: (i32, i32)) -> f64 {
     const R: f64 = 6_371_008.8;
     let (p1, p2) = (f64::from(a.0) * 1e-7, f64::from(b.0) * 1e-7);
     let (dphi, dl) = ((p2 - p1).to_radians(), (f64::from(b.1) - f64::from(a.1)).to_radians() * 1e-7);

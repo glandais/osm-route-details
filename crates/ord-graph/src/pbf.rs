@@ -10,7 +10,7 @@ use osmpbf::{Blob, BlobReader, BlobType, PrimitiveBlock, RelMemberType};
 use rayon::prelude::*;
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::build::{BuildError, ElementSink, OsmRelation, OsmSource, OsmWay, SourceMeta};
+use crate::build::{BuildError, ElementSink, OsmRelation, OsmSource, OsmWay, SourceMeta, TaggedNodeFn};
 
 #[derive(Debug)]
 pub struct PbfSource {
@@ -149,6 +149,32 @@ impl OsmSource for PbfSource {
                 Ok(())
             })?;
             // Trié par type : une fois les ways atteintes, il ne reste plus de nœud.
+            Ok(!past_nodes.load(Ordering::Relaxed))
+        })
+    }
+    fn tagged_nodes(&mut self, f: &TaggedNodeFn<'_>) -> Result<(), BuildError> {
+        let past_nodes = AtomicBool::new(false);
+        self.batches(|batch| {
+            batch.par_iter().try_for_each(|blob| -> Result<(), BuildError> {
+                let block = blob.to_primitiveblock().map_err(err)?;
+                let mut tags: Vec<(&str, &str)> = Vec::new();
+                for group in block.groups() {
+                    for n in group.dense_nodes() {
+                        tags.clear();
+                        tags.extend(n.tags());
+                        f(n.id(), n.decimicro_lat(), n.decimicro_lon(), &tags);
+                    }
+                    for n in group.nodes() {
+                        tags.clear();
+                        tags.extend(n.tags());
+                        f(n.id(), n.decimicro_lat(), n.decimicro_lon(), &tags);
+                    }
+                    if group.ways().next().is_some() || group.relations().next().is_some() {
+                        past_nodes.store(true, Ordering::Relaxed);
+                    }
+                }
+                Ok(())
+            })?;
             Ok(!past_nodes.load(Ordering::Relaxed))
         })
     }
