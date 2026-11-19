@@ -7,6 +7,7 @@
 
 pub mod attract;
 pub mod attrs;
+pub mod bits;
 pub mod build;
 #[cfg(feature = "external")]
 pub mod external;
@@ -24,6 +25,8 @@ pub mod search;
 pub mod stats;
 pub mod util;
 pub mod view;
+#[cfg(feature = "external")]
+pub mod view_external;
 
 pub use attrs::{Access, Attrs, HighwayClass};
 pub use build::{build_graph, BuildError, BuildOptions, GraphData, MemSource, OsmSource};

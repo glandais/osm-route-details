@@ -1362,6 +1362,12 @@ impl StreamWriter {
         Ok(())
     }
 
+    /// Section optionnelle `kind` de `len` octets lus dans `r` (les sections de vue), après `ID_EDGES` et dans
+    /// l'ordre de `GraphData::extras`, comme `write_graph`.
+    pub fn put_extra(&mut self, kind: u32, r: &mut impl std::io::Read, len: u64) -> Result<(), FormatError> {
+        self.put_small(kind, r, len)
+    }
+
     /// Section `ID_NODES` : `n` ids OSM (`U64`), dans l'ordre des ids globaux.
     pub fn put_node_ids(&mut self, r: &mut impl std::io::Read, n: u64) -> Result<(), FormatError> {
         self.put_small(KIND_ID_NODES, r, n * size_of::<U64>() as u64)

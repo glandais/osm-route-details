@@ -18,12 +18,12 @@
 
 use std::collections::BinaryHeap;
 
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use zerocopy::little_endian::U32;
 use zerocopy::FromBytes;
 
 use crate::attrs::{Access, Attrs, HighwayClass};
+use crate::bits::Bits;
 use crate::build::{CellSpec, EdgeData, ExtraSection, GraphData, NodeData, SourceMeta};
 use crate::format::{
     FormatError, GraphFile, DIR_BIT, KIND_VIEW_BASE_NODE, KIND_VIEW_CHAIN, KIND_VIEW_CHAIN_OFF,
@@ -199,9 +199,18 @@ impl BaseEdges {
         }
         s
     }
+}
+
+/// Ce que la contraction lit d'une arête de base : les tableaux de [`BaseEdges`] (construction en mémoire), ou le
+/// fichier du graphe de base lui-même (construction hors mémoire, `view_external`). Les règles de la contraction
+/// (fusion d'un nœud, poids et attributs d'une chaîne) ne s'écrivent qu'une fois, sur ce trait.
+pub(crate) trait EdgeSrc {
+    fn ends(&self, e: u32) -> (u32, u32);
+    fn attrs(&self, e: u32) -> Attrs;
+    fn len_dm(&self, e: u32) -> u32;
 
     fn other(&self, e: u32, v: u32) -> u32 {
-        let (a, b) = self.ends[e as usize];
+        let (a, b) = self.ends(e);
         if a == v {
             b
         } else {
@@ -211,7 +220,7 @@ impl BaseEdges {
 
     /// Le sens `a → b` (`rev` faux) ou `b → a` (`rev` vrai) est ouvert.
     fn open(&self, e: u32, rev: bool) -> bool {
-        let a = self.attrs[e as usize];
+        let a = self.attrs(e);
         if rev {
             a.bwd_ok()
         } else {
@@ -221,7 +230,31 @@ impl BaseEdges {
 
     /// Sens de parcours de `e` quand on le quitte depuis `from` (faux : de `a` vers `b`).
     fn rev_from(&self, e: u32, from: u32) -> bool {
-        self.ends[e as usize].0 != from
+        self.ends(e).0 != from
+    }
+}
+
+impl EdgeSrc for BaseEdges {
+    fn ends(&self, e: u32) -> (u32, u32) {
+        self.ends[e as usize]
+    }
+    fn attrs(&self, e: u32) -> Attrs {
+        self.attrs[e as usize]
+    }
+    fn len_dm(&self, e: u32) -> u32 {
+        self.len_dm[e as usize]
+    }
+}
+
+impl<B: AsRef<[u8]>> EdgeSrc for GraphFile<B> {
+    fn ends(&self, e: u32) -> (u32, u32) {
+        self.edge_ends(e)
+    }
+    fn attrs(&self, e: u32) -> Attrs {
+        self.edge(e).attrs
+    }
+    fn len_dm(&self, e: u32) -> u32 {
+        self.edge(e).len_dm
     }
 }
 
@@ -310,7 +343,7 @@ fn oriented_attrs(a: Attrs, rev: bool) -> Attrs {
 }
 
 /// Un maillon de chaîne : arête de base, parcourue de `b` vers `a` si `rev`.
-type Link = (u32, bool);
+pub(crate) type Link = (u32, bool);
 
 struct Chain {
     links: Vec<Link>,
@@ -318,8 +351,8 @@ struct Chain {
     to: u32,
 }
 
-fn link_from(be: &BaseEdges, l: Link) -> u32 {
-    let (a, b) = be.ends[l.0 as usize];
+pub(crate) fn link_from(be: &impl EdgeSrc, l: Link) -> u32 {
+    let (a, b) = be.ends(l.0);
     if l.1 {
         b
     } else {
@@ -327,8 +360,8 @@ fn link_from(be: &BaseEdges, l: Link) -> u32 {
     }
 }
 
-fn link_to(be: &BaseEdges, l: Link) -> u32 {
-    let (a, b) = be.ends[l.0 as usize];
+pub(crate) fn link_to(be: &impl EdgeSrc, l: Link) -> u32 {
+    let (a, b) = be.ends(l.0);
     if l.1 {
         a
     } else {
@@ -337,7 +370,7 @@ fn link_to(be: &BaseEdges, l: Link) -> u32 {
 }
 
 /// Le nœud `x` (de degré 2, arêtes `e1` et `e2`) peut-il être fondu ?
-fn mergeable_at(be: &BaseEdges, kind: ViewKind, x: u32, e1: u32, e2: u32) -> bool {
+pub(crate) fn mergeable_at(be: &impl EdgeSrc, kind: ViewKind, x: u32, e1: u32, e2: u32) -> bool {
     // Sens le long de la chaîne e1 → x → e2 : e1 est parcourue vers `x`, e2 depuis `x`.
     let into_e1 = be.open(e1, be.rev_from(e1, be.other(e1, x)));
     let out_e1 = be.open(e1, be.rev_from(e1, x));
@@ -349,8 +382,8 @@ fn mergeable_at(be: &BaseEdges, kind: ViewKind, x: u32, e1: u32, e2: u32) -> boo
         return false;
     }
     if kind == ViewKind::All {
-        let a1 = oriented_attrs(be.attrs[e1 as usize], be.rev_from(e1, be.other(e1, x)));
-        let a2 = oriented_attrs(be.attrs[e2 as usize], be.rev_from(e2, x));
+        let a1 = oriented_attrs(be.attrs(e1), be.rev_from(e1, be.other(e1, x)));
+        let a2 = oriented_attrs(be.attrs(e2), be.rev_from(e2, x));
         return a1 == a2;
     }
     true
@@ -460,15 +493,43 @@ fn u32_bytes(v: &[u32]) -> Vec<u8> {
 }
 
 /// Somme des coûts des arêtes d'une chaîne (`NO_WEIGHT` si l'une n'en a pas).
-fn chain_weight(be: &BaseEdges, links: &[Link]) -> u32 {
+fn chain_weight(be: &impl EdgeSrc, links: &[Link]) -> u32 {
     let mut sum: u64 = 0;
     for &(e, _) in links {
-        match edge_cost(be.attrs[e as usize], be.len_dm[e as usize]) {
+        match edge_cost(be.attrs(e), be.len_dm(e)) {
             Some(w) => sum += u64::from(w),
             None => return NO_WEIGHT,
         }
     }
     sum.min(u64::from(NO_WEIGHT - 1)) as u32
+}
+
+/// Longueur, attributs et poids d'une arête de vue, depuis ses maillons orientés : longueur et poids sommés, sens
+/// ouverts tout du long, pire accès, routes réunies, le reste pris au plus long maillon (le premier à égalité).
+pub(crate) fn chain_summary(be: &impl EdgeSrc, links: &[Link]) -> Result<(u32, Attrs, u32), FormatError> {
+    let mut len: u64 = 0;
+    let mut fwd = true;
+    let mut bwd = true;
+    let mut worst = 0u8;
+    let mut routes = 0u8;
+    let mut longest = (0u32, 0usize);
+    for (i, &(e, rev)) in links.iter().enumerate() {
+        let (ea, el) = (be.attrs(e), be.len_dm(e));
+        len += u64::from(el);
+        fwd &= be.open(e, rev);
+        bwd &= be.open(e, !rev);
+        worst = worst.max(ea.access() as u8);
+        routes |= ea.routes();
+        if el > longest.0 || i == 0 {
+            longest = (el, i);
+        }
+    }
+    let len_dm = u32::try_from(len)
+        .map_err(|_| FormatError::Build(format!("chaîne de {len} dm : plus longue que 2^32")))?;
+    let (le, lrev) = links[longest.1];
+    let mut f = oriented_attrs(be.attrs(le), lrev).unpack();
+    (f.fwd_ok, f.bwd_ok, f.access, f.routes) = (fwd, bwd, worst, routes);
+    Ok((len_dm, Attrs::pack(&f), chain_weight(be, links)))
 }
 
 struct ViewEdge {
@@ -572,36 +633,14 @@ pub fn build_view<B: AsRef<[u8]>>(g: &GraphFile<B>, spec: &ViewSpec) -> Result<G
             }
             std::mem::swap(&mut from, &mut to);
         }
-        let mut len: u64 = 0;
-        let mut fwd = true;
-        let mut bwd = true;
-        let mut worst = 0u8;
-        let mut routes = 0u8;
-        let mut longest = (0u32, 0usize);
-        for (i, &(e, rev)) in links.iter().enumerate() {
-            let (ea, el) = (be.attrs[e as usize], be.len_dm[e as usize]);
-            len += u64::from(el);
-            fwd &= be.open(e, rev);
-            bwd &= be.open(e, !rev);
-            worst = worst.max(ea.access() as u8);
-            routes |= ea.routes();
-            if el > longest.0 || i == 0 {
-                longest = (el, i);
-            }
-        }
-        let len_dm = u32::try_from(len)
-            .map_err(|_| FormatError::Build(format!("chaîne de {len} dm : plus longue que 2^32")))?;
-        let (le, lrev) = links[longest.1];
-        let mut f = oriented_attrs(be.attrs[le as usize], lrev).unpack();
-        (f.fwd_ok, f.bwd_ok, f.access, f.routes) = (fwd, bwd, worst, routes);
-        let weight = chain_weight(&be, &links);
+        let (len_dm, attrs, weight) = chain_summary(&be, &links)?;
         vedges.push(ViewEdge {
             a: view_id[from as usize],
             b: view_id[to as usize],
             links,
             len_dm,
             weight,
-            attrs: Attrs::pack(&f),
+            attrs,
         });
     }
     vedges.sort_by_key(|e| (e.a, e.b, e.links[0].0, e.links[0].1));
@@ -832,7 +871,10 @@ pub struct ViewStructure {
 
 /// Contrôle exhaustif d'une vue contre son graphe de base : chaque chaîne est contiguë, joint bien ses deux
 /// nœuds, somme ses longueurs, ses poids et ses sens ; chaque arête de base vivante est dans **une** chaîne et
-/// aucune autre ; aucune boucle.
+/// aucune autre ; aucune boucle ; arêtes triées par `(a, b)`.
+///
+/// Lit la base dans son fichier (`EdgeSrc`) et ne tient qu'un bit par arête de base (vivante, vue) : il contrôle
+/// aussi les vues de la planète. Seules les vues élaguées (`-prune`) rechargent les arêtes de base, pour l'élagage.
 pub fn check_view_structure<B1: AsRef<[u8]>, B2: AsRef<[u8]>>(
     base: &GraphFile<B1>,
     view: &GraphFile<B2>,
@@ -845,13 +887,28 @@ pub fn check_view_structure<B1: AsRef<[u8]>, B2: AsRef<[u8]>>(
         return Err("la vue ne correspond pas à ce graphe de base (comptes ou empreinte)".into());
     }
     let spec = ViewSpec { kind: meta.kind, prune_dead_ends: meta.prune_dead_ends };
-    let be = BaseEdges::load(base);
-    let (alive, _) = alive_edges(&be, &spec);
+    let n_base = h.edges as usize;
+    let mut alive = Bits::new(n_base);
+    if spec.prune_dead_ends {
+        let be = BaseEdges::load(base);
+        for (e, &a) in alive_edges(&be, &spec).0.iter().enumerate() {
+            if a {
+                alive.set(e);
+            }
+        }
+    } else {
+        for e in 0..n_base {
+            if spec.kind.keep(base.attrs(e as u32)) {
+                alive.set(e);
+            }
+        }
+    }
     let weights = view.view_weights().ok_or("poids absents")?;
     let nodes = view.view_base_nodes().ok_or("nœuds de base absents")?;
-    let mut seen = vec![false; be.ends.len()];
+    let mut seen = Bits::new(n_base);
     let mut out = ViewStructure::default();
-    let mut pairs: FxHashMap<(u32, u32), u32> = FxHashMap::default();
+    // Paires parallèles : les arêtes sont triées par `(a, b)`, une paire répétée est une suite.
+    let (mut prev, mut run) = (None::<(u32, u32)>, 0u32);
     for ve in 0..view.header().edges as u32 {
         let chain = view.view_chain(ve).ok_or("chaîne absente")?;
         if chain.is_empty() {
@@ -861,29 +918,38 @@ pub fn check_view_structure<B1: AsRef<[u8]>, B2: AsRef<[u8]>>(
         if a == b {
             return Err(format!("arête {ve} : boucle"));
         }
-        *pairs.entry((a, b)).or_default() += 1;
+        match prev {
+            Some(p) if p == (a, b) => run += 1,
+            Some(p) if p > (a, b) => return Err(format!("arête {ve} : arêtes non triées par (a, b)")),
+            _ => {
+                out.parallel_pairs += u64::from(run > 1);
+                run = 1;
+            }
+        }
+        prev = Some((a, b));
         let (mut len, mut weight, mut fwd, mut bwd) = (0u64, 0u64, true, true);
         let mut no_weight = false;
         let mut at = nodes[a as usize].get();
         for l in chain {
             let (e, rev) = (l.get() & !DIR_BIT, l.get() & DIR_BIT != 0);
-            if !alive[e as usize] {
+            if e as usize >= n_base || !alive.get(e as usize) {
                 return Err(format!("arête {ve} : l'arête de base {e} n'est pas retenue par le filtre"));
             }
-            if std::mem::replace(&mut seen[e as usize], true) {
+            if seen.replace(e as usize) {
                 return Err(format!("arête de base {e} dans deux chaînes"));
             }
-            if link_from(&be, (e, rev)) != at {
+            if link_from(base, (e, rev)) != at {
                 return Err(format!("arête {ve} : chaîne non contiguë à l'arête de base {e}"));
             }
-            at = link_to(&be, (e, rev));
-            len += u64::from(be.len_dm[e as usize]);
-            match edge_cost(be.attrs[e as usize], be.len_dm[e as usize]) {
+            at = link_to(base, (e, rev));
+            let (ea, el) = (base.attrs(e), base.len_dm(e));
+            len += u64::from(el);
+            match edge_cost(ea, el) {
                 Some(w) => weight += u64::from(w),
                 None => no_weight = true,
             }
-            fwd &= be.open(e, rev);
-            bwd &= be.open(e, !rev);
+            fwd &= base.open(e, rev);
+            bwd &= base.open(e, !rev);
         }
         if at != nodes[b as usize].get() {
             return Err(format!("arête {ve} : la chaîne n'arrive pas au nœud b"));
@@ -907,14 +973,12 @@ pub fn check_view_structure<B1: AsRef<[u8]>, B2: AsRef<[u8]>>(
         out.unusable_edges += u64::from(no_weight || (!fwd && !bwd));
         out.max_chain_len = out.max_chain_len.max(chain.len() as u64);
     }
-    for (e, &al) in alive.iter().enumerate() {
-        if al && !seen[e] {
-            return Err(format!("arête de base vivante {e} absente de toute chaîne"));
-        }
+    out.parallel_pairs += u64::from(run > 1);
+    if let Some(e) = alive.ones().find(|&e| !seen.get(e)) {
+        return Err(format!("arête de base vivante {e} absente de toute chaîne"));
     }
     out.view_edges = view.header().edges;
-    out.base_edges_covered = seen.iter().filter(|&&s| s).count() as u64;
-    out.parallel_pairs = pairs.values().filter(|&&c| c > 1).count() as u64;
+    out.base_edges_covered = seen.count_ones();
     Ok(out)
 }
 

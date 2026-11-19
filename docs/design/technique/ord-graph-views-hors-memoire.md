@@ -1,6 +1,6 @@
 # Graphe vélo OSM — vues hors mémoire : conception
 
-> Statut : conception technique, **à valider**. Suite de
+> Statut : conception technique, **implémentée** le 19 novembre 2026 (§10 : écarts et vérifications). Suite de
 > [`ord-graph-build-hors-memoire.md`](ord-graph-build-hors-memoire.md) (graphe de base hors mémoire, réalisé et mesuré
 > jusqu'à la planète : [relevés](ord-graph-build-hors-memoire-mesures.md)) et du lot 0 bis
 > ([`ord-graph-lot0.md`](ord-graph-lot0.md) §11 : vues par type). Motif : servir le monde, il faut les vues `road` et
@@ -187,3 +187,90 @@ Mêmes options que `build --external`, même dossier temporaire verrouillé (`Tm
   (rares : 469 sur la France), font des accès épars. À mesurer en V3–V5 sur l'Europe.
 - **Ordre de la marche** : l'identité des octets repose sur le même ordre de découverte que `contract`. Les tests à
   boucles impaires le vérifient : leur point de coupure dépend du sens de la marche.
+
+## 10. Réalisation (19 novembre 2026)
+
+Module `crates/ord-graph/src/view_external.rs` (`build_view_external`), bitset `bits.rs`, option `--external` de
+`ord-graph-build views` (avec `--mem-budget-mb` et `--tmp-dir`), `StreamWriter::put_extra`.
+
+### 10.1 Écarts à la conception
+
+- **Règles partagées** : `mergeable_at`, `chain_summary` (longueur, sens, accès, routes, attributs du plus long
+  maillon, poids), `link_from` et `link_to` sont écrits sur le trait `EdgeSrc`. Ce trait est implémenté par
+  `BaseEdges` (en mémoire) et par `GraphFile` (le fichier de base). `build_view` les appelle, au lieu de son code en
+  ligne : les deux constructions ne peuvent plus diverger sur ces règles.
+- **`Inc` sans le bout opposé ni les attributs** (9 o au lieu de 24) : le bout et les attributs se relisent dans la
+  base (`edge_ends` est un accès direct à `ID_EDGES`).
+- **La table des nœuds fondus ne garde que les deux arêtes** (8 o par nœud fondu au lieu de 16), pour la même raison.
+  Elle est lue par un petit cache de blocs (16 Mio, lecture positionnée), pas par `mmap` : aucun `unsafe` de plus.
+  Les maillons, relus au hasard en V5, passent par le même cache.
+- **Ids de base dans `VEdge`** : seul `base_a` est gardé (le point de départ de la polyligne). Le reste se déduit des
+  maillons.
+- **`check_view_structure` réécrit pour toutes les vues**, pas seulement en `--external`. La base est lue dans son
+  fichier, avec deux bits par arête de base. Les paires parallèles sont comptées sur les arêtes triées, et une vue
+  dont les arêtes ne sont pas triées par `(a, b)` est maintenant une erreur. Seules les vues `-prune` rechargent
+  encore `BaseEdges`.
+- **Rapport** : `peak_rss_anon_kb` (pic de `RssAnon` relevé toutes les 2^20 itérations et à chaque étape) et les
+  durées des étapes. `VmHWM` compte les pages du graphe de base projeté (1,9 Go pour la France), lu en entier par
+  `verify()` : il ne dit pas la mémoire de la construction.
+
+### 10.2 Vérifications
+
+- **Tests `tests/views_external.rs`** :
+  - **40 réseaux riches en chaînes**, trois vues, budgets de 1 o, 4 Kio et 64 Mio : octets identiques, contrôle de
+    structure réussi. Ces réseaux contiennent :
+    - une grille d'ancres et des ways à nœuds intermédiaires (parfois coupées en deux, parfois doublées) ;
+    - des raquettes de longueur paire et impaire, des anneaux isolés ;
+    - des sens uniques dans les deux sens, des accès privés, des surfaces non revêtues.
+  - **Garde-fou** : le test vérifie qu'il y a bien eu des boucles coupées, des anneaux et des nœuds fondus.
+  - **Fusion à plusieurs niveaux** : une grille de 30 × 30, plus de 64 séries.
+  - **Graphe vide** ; vue `-prune` refusée, dossier propre.
+  - **Mutation** : couper les boucles un maillon plus loin (`div_ceil`) est détecté.
+- **Bout en bout** (`e2e_tests.rs`) : sur le mini-PBF, `road`, `gravel` et `all` en `--external` à 1 Mo ont les
+  octets des vues en mémoire, en-tête mis à part ; `-prune` refusé.
+- **France** (`france-20261117-z11.ordg`), `road,gravel` : octets identiques à la construction en mémoire, en-tête
+  mis à part **[mesuré]**.
+
+| | En mémoire | `--external` 16 Mo | `--external` 1 Gio (cgroup 1,5 Gio) |
+|---|---|---|---|
+| Mur (deux vues) | 40,6 s | 56 à 139 s | 138 s |
+| Pic | 6,0 Gio (`VmHWM`) | **0,06 Gio** anonyme | **0,98 Gio** anonyme |
+| Disque temporaire (`gravel`) | — | 2,18 Gio | 1,23 Gio |
+
+Le mur varie d'un lancement à l'autre (56 s puis 139 s à 16 Mo, sans autre charge visible) ; l'étape V5 (géométrie
+recomposée depuis la base) en prend la plus grande part. Sous cgroup de 1,5 Gio, le cache de pages est compté et la
+base (1,9 Go) n'y tient pas : elle est relue du disque.
+
+**Europe** (`europe-20261116-z11.ordg`, 191,2 M arêtes, 15,2 Go), `road,gravel`, `--external` 1 Gio, sans cgroup
+**[mesuré]** :
+
+| Vue | Arêtes de vue | Fichier | Mur | Pic anonyme | Disque temporaire | Séries au plus |
+|---|---|---|---|---|---|---|
+| `road` | 62 175 542 | 6,26 Gio | 814 s | 1,34 Gio | 9,64 Gio | 4 |
+| `gravel` | 106 641 655 | 10,88 Gio | 619 s | 1,47 Gio | 17,01 Gio | 6 |
+
+Étapes (s), `road` / `gravel` :
+
+| V1 | V2 | V3 | V4 | V5 arêtes, géométrie | V5 écriture | relecture |
+|---|---|---|---|---|---|---|
+| 27 / 28 | 119 / 23 | 16 / 10 | 53 / 57 | **527 / 370** | 60 / 109 | 11 / 23 |
+
+La commande entière dure 33,7 min. Elle compte en plus `verify()` de la base et le contrôle exhaustif de chaque vue.
+
+**Lecture** :
+- **Le pic anonyme dépasse le budget de 0,34 à 0,47 Gio.** Hors tampons de tri, il comprend :
+  - les quatre bitsets (≈ 0,1 Gio) ;
+  - les deux caches de blocs (32 Mio) ;
+  - en V5, le tri des arêtes orientées (moitié du budget), en même temps que les tampons d'écriture des sept flux.
+
+  Le critère « budget + 0,3 Go » de la base est donc légèrement dépassé ; à resserrer si besoin (part du tri
+  `dir`).
+- **V5 domine** (65 % et 60 % du mur). Pour chaque maillon, il relit la géométrie dans la base (recherche de cellule,
+  décodage). Pour chaque point d'arrivée, il refait une recherche de cellule. Les arêtes sortent dans l'ordre des
+  cellules, mais leurs maillons visitent la base au fil des chaînes. À 8,5 µs par arête de vue, c'est le premier
+  levier si la planète est trop lente.
+- **Le disque temporaire** est de l'ordre de 1,5 × le fichier de vue. Le pic `VmHWM` (12,0 Gio) compte les pages
+  de la base et des vues relues.
+
+Planète **[calculé, × 2,9 sur l'Europe]** : ≈ 40 min par vue, ≈ 30 Go (`road`) et ≈ 50 Go (`gravel`) de disque
+temporaire, pic anonyme ≈ 1,5 Gio.

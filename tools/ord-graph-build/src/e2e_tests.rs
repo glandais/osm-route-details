@@ -7,6 +7,9 @@ use crate::build_cmd::{self, BuildArgs};
 use crate::measure::{self, MeasureArgs};
 use crate::views_cmd::{self, ViewsArgs};
 
+/// Fin de l'en-tête d'un `.ordg` : `build_epoch` et la somme d'en-tête y sont, la table des sections suit.
+const HEADER_END: usize = 256;
+
 fn mini_pbf() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/ord-graph/tests/data/mini.osm.pbf")
 }
@@ -37,9 +40,41 @@ fn build_views_then_measure_on_the_tiny_pbf() {
         views: names.iter().map(|s| (*s).to_string()).collect(),
         out_dir: None,
         report: Some(dir.path().join("views.json")),
+        external: false,
+        mem_budget_mb: 1024,
+        tmp_dir: None,
     })
     .expect("views");
     assert_eq!(built.views.len(), 4);
+    // Hors mémoire : mêmes octets pour les vues sans élagage ; `-prune` refusé.
+    let ext_dir = dir.path().join("ext");
+    let ext = views_cmd::run(&ViewsArgs {
+        graph: report.output.clone(),
+        views: names[..3].iter().map(|s| (*s).to_string()).collect(),
+        out_dir: Some(ext_dir.clone()),
+        report: None,
+        external: true,
+        mem_budget_mb: 1,
+        tmp_dir: None,
+    })
+    .expect("views --external");
+    for (m, e) in built.views.iter().zip(&ext.views) {
+        let (mb, eb) = (std::fs::read(&m.file).unwrap(), std::fs::read(&e.file).unwrap());
+        // Deux lancements, deux dates de construction : seuls les octets de l'en-tête diffèrent.
+        assert_eq!(mb.len(), eb.len(), "vue {}", m.name);
+        assert_eq!(&mb[HEADER_END..], &eb[HEADER_END..], "vue {} : corps différent", m.name);
+        assert!(e.tmp_peak_bytes.is_some() && e.runs.is_some());
+    }
+    let pruned = views_cmd::run(&ViewsArgs {
+        graph: report.output.clone(),
+        views: vec!["road-prune".into()],
+        out_dir: Some(ext_dir),
+        report: None,
+        external: true,
+        mem_budget_mb: 1,
+        tmp_dir: None,
+    });
+    assert!(pruned.unwrap_err().to_string().contains("-prune"));
     assert!(built.views.iter().all(|v| v.file.exists() && v.file_bytes > 0));
     // `all` ne filtre rien : tout le graphe de base est couvert.
     assert_eq!(built.views[2].base_edges_covered, 4);
@@ -109,6 +144,9 @@ fn attractors_end_to_end_on_the_tiny_pbf_and_refuse_another_extract() {
         views: vec!["road".into(), "gravel".into()],
         out_dir: None,
         report: None,
+        external: false,
+        mem_budget_mb: 1024,
+        tmp_dir: None,
     })
     .expect("views");
     let args = |pbf: PathBuf, out: Option<PathBuf>| AttractorsArgs {
