@@ -518,6 +518,20 @@ l'orchestrateur du travail ; la spécification qui les applique est au §16 :
 5. **Points de prudence du §16.12 confirmés** : alignement sur les caps et l'épingle, épingle non modélisée, exemption d'arrivée
    lue sur T2, instrumentation de diagnostic non commitée (elle écrit des positions privées).
 
+### 9.9 Décisions (2026-11-19, après l'étape virages)
+
+Décisions du propriétaire sur le §15.6 de [`ord-loops-lot4c-mesures.md`](ord-loops-lot4c-mesures.md), transmises par
+l'orchestrateur du travail :
+
+1. **Temps accepté, bascule** : les seuils de temps sont relevés à **C1 : P50 ≤ × 1,40 de `svc` au banc, à chaque curseur**, et
+   **C3 : P50 ≤ 0,62 s à 4 clients et ≤ 0,30 s en série** (conteneur de 3 Gio). Ils remplacent ceux du §9.7 (décision 1), du §9.8
+   (décision 1) et la tolérance × 1,25 de la réponse 4 du §16.14. Les autres critères restent ceux du §16.11 : A1 à A4 (A4 avec
+   `shared_share` en absolu), B1, B2, le P90 de C1 (≤ × 1,25), C2, D, et pour C3 le pic `anon` ≤ 2,4 Gio, `oom` 0 et les dépôts
+   en 200. La bascule se fait comme au §9.7 (décision 4) : commit à part, séance en conteneur, `git revert` si C3 manque.
+2. **Correction de la relecture gardée** : la jambe 2 n'a pas d'exemption à l'arrivée (`12820de`, §16.13, point 15).
+3. **4c fusionné dans `develop` en option** (fait par l'orchestrateur, `16652cc`) : la bascule se fait sur une branche à part,
+   `feat/ord-loops-lot4c-bascule`, partie de `develop`.
+
 ---
 
 ## 10. Étapes, dans l'ordre
