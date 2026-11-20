@@ -159,8 +159,8 @@ impl Ready {
     }
 
     /// Le moteur dans une fenêtre du cache : une fois, puis, si la recherche touche le bord de la fenêtre (le
-    /// garde-fou du §5.2, jamais attendu), une fois de plus dans une fenêtre élargie de la plus longue chaîne et de
-    /// 10 km ; un second échappement rend une erreur interne sans coordonnée.
+    /// garde-fou du §5.2, jamais attendu), une fois de plus dans une fenêtre élargie de la plus longue chaîne qui
+    /// touche les tuiles d'accroche et de 10 km ; un second échappement rend une erreur interne sans coordonnée.
     fn generate_windowed(
         &self,
         req: &Request,
@@ -168,7 +168,6 @@ impl Ready {
         deadline: Instant,
         stop: &mut dyn FnMut() -> bool,
     ) -> Result<Generation, Problem> {
-        let vi = req.ride_type.view_index();
         let mut extra_m = 0.0;
         for attempt in 0..2 {
             let plan = self.engine.plan_with(req, self.cfg.window_radius_step_m, extra_m);
@@ -189,7 +188,7 @@ impl Ready {
                 Err(Failure::WindowEscape) => {
                     metrics::counter!("ord_generator_window_escapes_total").increment(1);
                     tracing::warn!(attempt, "generator window escape");
-                    extra_m = self.engine.longest_chain_m(vi) + 10_000.0;
+                    extra_m = plan.snap_lmax_m + 10_000.0;
                 }
                 Ok(g) => return Ok(g),
                 Err(f) => return Err(reason_of(f).map_or_else(|p| p, failed)),

@@ -448,3 +448,55 @@ fn a_chain_longer_than_the_margin_that_leaves_the_disc_is_loaded_whole_and_the_a
     }
     assert_eq!(compared, 12);
 }
+
+/// La grille, et depuis son coin sud-est une route de 300 km vers l'est (une seule chaîne : son nœud du milieu est
+/// contracté) : un bac, à l'échelle de la planète.
+fn grid_with_a_ferry() -> ord_graph::build::MemSource {
+    use crate::tests::{pt, tags};
+    let mut s = grid_with_a_long_chain();
+    let corner = 14 - 1 + 1; // id(0, n - 1) de la grille de 14
+    pt(&mut s, 20_001, 0.0, 13.0 * 140.0 + 150_000.0);
+    pt(&mut s, 20_002, 0.0, 13.0 * 140.0 + 300_000.0);
+    s.way(6000, &[corner as i64, 20_001, 20_002], &tags("tertiary", &[]));
+    s
+}
+
+#[test]
+fn the_snap_zone_takes_the_far_end_of_a_long_chain_and_nothing_in_between() {
+    use ord_graph::grid::{tile_key, tile_of_e7};
+    let e = engine_zoomed(&mut grid_with_a_ferry(), 11, scenario_params());
+    assert!(e.longest_chain_m(0) > 290_000.0, "le bac est une seule chaîne");
+    let tile = |north: f64, east: f64| {
+        let p = crate::tests::ll(north, east).to_e7();
+        let (x, y) = tile_of_e7(p.0, p.1, 11);
+        tile_key(x, y)
+    };
+    let full = e.full_window(0);
+    let req = |north: f64, east: f64| Request {
+        start: crate::tests::ll(north, east),
+        end: None,
+        bearing: None,
+        distance_m: 2_000.0,
+        ride_type: crate::RideType::Road,
+        mode: crate::Mode::Discovery,
+        familiarity: 0.5,
+        off_team_cost_q8: 768,
+        seed: 3,
+        figures: crate::Figures::Classic,
+    };
+    // Sur la grille, à l'embarcadère : l'autre rive est dans la zone d'accroche, le milieu de la traversée non.
+    let r = req(140.0, 1_500.0);
+    let plan = e.plan(&r, 0.0);
+    assert!(plan.need.contains(&tile(0.0, 13.0 * 140.0 + 300_000.0)), "tuile de l'autre rive");
+    assert!(!plan.need.contains(&tile(0.0, 13.0 * 140.0 + 150_000.0)), "tuile du milieu de la traversée");
+    assert!(plan.need.len() < 20, "{} tuiles", plan.need.len());
+    assert!(plan.snap_lmax_m > 290_000.0);
+    let win = e.build_window(0, &plan.need, &mut || false).unwrap();
+    let want = generate_with_diagnostics_in(&e, &full, None, &r, &mut Workspace::new(), &mut || false);
+    let got = generate_with_diagnostics_in(&e, &win, None, &r, &mut Workspace::new(), &mut || false);
+    assert!(!matches!(got.0, Err(Failure::WindowEscape)));
+    assert_eq!(format!("{got:?}"), format!("{want:?}"));
+    // Loin de la grille et du bac : la zone ne doit rien au bac.
+    let far = e.plan(&req(60_000.0, 100_000.0), 0.0);
+    assert!(far.snap_lmax_m == 0.0 && far.need.len() < 10, "{} tuiles", far.need.len());
+}

@@ -94,6 +94,8 @@ pub struct WindowPlan {
     pub view: usize,
     pub need: Vec<u32>,
     pub class: Vec<u32>,
+    /// Plus longue chaîne (m) qui touche les tuiles d'accroche : l'élargissement de la fenêtre après un échappement.
+    pub snap_lmax_m: f64,
 }
 
 /// Cases d'accroche (0,01°) que `snap` balaie pour un point : `(ilat0, ilat1, ilon0, ilon1)`.
@@ -181,23 +183,28 @@ impl<B: AsRef<[u8]>> Engine<B> {
         let radius = r.distance_m / 2.0 + margin;
         let mut need: Vec<u32> = Vec::new();
         tiles_of_disc(zoom, s7, center, radius, &mut need);
-        // Zone 2 : les cases d'accroche, élargies de la plus longue chaîne (§5.1).
-        let lmax_m = f64::from(self.idx[vi].lmax_dm) / 10.0 + margin;
+        // Zone 2 (note `ord-loops-planete.md` §3) : les tuiles des cases d'accroche (`B`), et les tuiles des deux bouts
+        // de chaque chaîne qui touche une tuile de `B` : toute chaîne candidate à l'accroche a ses deux bouts complets.
         let ky = M_PER_DEG * 1e-7;
+        let mut snap_tiles: Vec<u32> = Vec::new();
         for p in std::iter::once(s7).chain(r.end.map(LatLon::to_e7)) {
             let (ilat0, ilat1, ilon0, ilon1) = snap_cells(self.params.snap_m, p);
             let (la0, la1) = (ilat0 * CELL_E7, (ilat1 + 1) * CELL_E7 - 1);
             let (lo0, lo1) = (ilon0 * CELL_E7, (ilon1 + 1) * CELL_E7 - 1);
             let worst_lat = f64::from(la0.abs().max(la1.abs())) * 1e-7;
-            let dlat = (lmax_m / ky) as i32 + 2;
-            let dlon = (lmax_m / (ky * worst_lat.to_radians().cos().max(0.05))) as i32 + 2;
+            let dlat = (margin / ky) as i32 + 2;
+            let dlon = (margin / (ky * worst_lat.to_radians().cos().max(0.05))) as i32 + 2;
             tiles_of_rect(
                 zoom,
                 (la0.saturating_sub(dlat), la1.saturating_add(dlat)),
                 (lo0.saturating_sub(dlon), lo1.saturating_add(dlon)),
-                &mut need,
+                &mut snap_tiles,
             );
         }
+        snap_tiles.sort_unstable();
+        snap_tiles.dedup();
+        let snap_lmax_dm = self.chain_end_tiles(vi, &snap_tiles, &mut need);
+        need.extend_from_slice(&snap_tiles);
         need.sort_unstable();
         need.dedup();
         let class = if radius_step_m > 0.0 {
@@ -215,7 +222,38 @@ impl<B: AsRef<[u8]>> Engine<B> {
         } else {
             need.clone()
         };
-        WindowPlan { view: vi, need, class }
+        WindowPlan { view: vi, need, class, snap_lmax_m: f64::from(snap_lmax_dm) / 10.0 }
+    }
+
+    /// Pousse dans `out` les tuiles des deux bouts de chaque chaîne de la vue `vi` qui touche une tuile de `tiles`
+    /// (possédée par sa cellule ou étrangère), et rend la plus longue de ces chaînes, en dm.
+    fn chain_end_tiles(&self, vi: usize, tiles: &[u32], out: &mut Vec<u32>) -> u32 {
+        let view = &self.views_files[vi];
+        let tile_of_node = |n: u32| {
+            let (x, y) = view.cell_xy(view.node_cell(n));
+            tile_key(x, y)
+        };
+        let mut lmax = 0u32;
+        let mut push = |c: u32, len_dm: u32, out: &mut Vec<u32>| {
+            let (a, b) = view.edge_ends(c);
+            out.push(tile_of_node(a));
+            out.push(tile_of_node(b));
+            lmax = lmax.max(len_dm);
+        };
+        for &key in tiles {
+            let (x, y) = tile_of_key(key);
+            if let Some(ci) = view.find_cell(x, y) {
+                let cv = view.cell(ci);
+                let info = *cv.info();
+                for i in 0..info.n_edges {
+                    push(info.first_edge + i, cv.owned(i as usize).len_dm, out);
+                }
+            }
+            for &(_, c) in self.idx[vi].foreign_of(key) {
+                push(c, view.edge(c).len_dm, out);
+            }
+        }
+        lmax
     }
 
     /// Estimation (octets) de ce que tiendra la fenêtre de `tiles` de la vue `vi`, avec les agrégats d'une équipe :
