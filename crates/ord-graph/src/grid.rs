@@ -25,6 +25,30 @@ pub fn tile_origin_deg(x: u32, y: u32, zoom: u8) -> (f64, f64) {
     (lat, lon)
 }
 
+/// Plus petite dimension (m) des tuiles des rangées `y − 1` à `y + 1` : leur hauteur, ou leur largeur à leur latitude
+/// la plus haute. Une polyligne partie d'une tuile de la rangée `y` ne sort de ses huit voisines qu'en traversant
+/// l'une de ces tuiles : plus courte que cela, elle y reste (note `ord-loops-planete.md` §4). Seuil des arêtes plus
+/// larges qu'une cellule, propre à la latitude : le plus petit de tout le graphe s'effondre près des pôles.
+pub fn neighbourhood_min_tile_m(y: u32, zoom: u8) -> f64 {
+    const M_PER_DEG: f64 = 6_371_008.8 * std::f64::consts::PI / 180.0;
+    let last = (1u32 << zoom) - 1;
+    let mut min = f64::INFINITY;
+    for row in y.saturating_sub(1)..=(y + 1).min(last) {
+        let (lat_hi, lon_lo) = tile_origin_deg(0, row, zoom);
+        let (lat_lo, lon_hi) = tile_origin_deg(1, row + 1, zoom);
+        let height = (lat_hi - lat_lo) * M_PER_DEG;
+        let width = (lon_hi - lon_lo) * M_PER_DEG * lat_hi.abs().max(lat_lo.abs()).to_radians().cos();
+        min = min.min(height.min(width));
+    }
+    min
+}
+
+/// Longueur (dm) au-delà de laquelle une arête possédée par une cellule de la rangée `y` peut sortir de ses voisines :
+/// la moitié de [`neighbourhood_min_tile_m`] (marge prise).
+pub fn wide_threshold_dm(y: u32, zoom: u8) -> u32 {
+    (neighbourhood_min_tile_m(y, zoom) * 0.5 * 10.0).min(f64::from(u32::MAX)) as u32
+}
+
 /// Clé d'une tuile pour les index triés : `y << 16 | x` (x et y tiennent sur 16 bits jusqu'à z16).
 pub fn tile_key(x: u32, y: u32) -> u32 {
     (y << 16) | x

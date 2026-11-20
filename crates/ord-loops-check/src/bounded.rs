@@ -15,7 +15,7 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use ord_graph::format::GraphFile;
-use ord_graph::grid::{tile_key, tile_of_e7, tile_of_key, tile_origin_deg};
+use ord_graph::grid::{tile_key, tile_of_e7, tile_of_key};
 use ord_graph::overlay::Overlay;
 use ord_loops::RideType;
 
@@ -25,20 +25,6 @@ use crate::rules::{admitted, team_edge, Admission, TypeIndex};
 const M_PER_DEG: f64 = 6_371_008.8 * std::f64::consts::PI / 180.0;
 /// Demi-côté (m) de la boîte autour de chaque point d'une arête de la surcouche.
 const ZONE_BOX_M: f64 = 1_000.0;
-
-/// Plus petite dimension (m) d'une tuile du graphe.
-fn min_tile_m<B: AsRef<[u8]>>(g: &GraphFile<B>) -> f64 {
-    let zoom = g.header().zoom;
-    let mut min = f64::INFINITY;
-    for ci in 0..g.n_cells() {
-        let (x, y) = g.cell_xy(ci);
-        let (lat_hi, lon_lo) = tile_origin_deg(x, y, zoom);
-        let (lat_lo, lon_hi) = tile_origin_deg(x + 1, y + 1, zoom);
-        let width = (lon_hi - lon_lo) * M_PER_DEG * lat_hi.abs().max(lat_lo.abs()).to_radians().cos();
-        min = min.min(((lat_hi - lat_lo) * M_PER_DEG).min(width));
-    }
-    min
-}
 
 /// Ce qui est vrai de tout le graphe : les arêtes plus larges qu'une cellule.
 #[derive(Debug, Default)]
@@ -50,10 +36,11 @@ pub struct GraphIndex {
 impl GraphIndex {
     /// Un balayage des enregistrements d'arêtes ; seules les arêtes de plus de la moitié d'une tuile sont examinées.
     pub fn build<B: AsRef<[u8]>>(g: &GraphFile<B>) -> Self {
-        let thr_dm = (min_tile_m(g) * 0.5 * 10.0).min(f64::from(u32::MAX)) as u32;
+        let zoom = g.header().zoom;
         let mut wide = Vec::new();
         for ci in 0..g.n_cells() {
             let info = *g.cell_info(ci);
+            let thr_dm = ord_graph::grid::wide_threshold_dm(info.y, zoom);
             let cv = g.cell(ci);
             for k in 0..info.n_edges {
                 if cv.owned(k as usize).len_dm <= thr_dm {

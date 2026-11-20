@@ -8,7 +8,7 @@
 //! région (l'outil : 402 Mio mesurés pour la région, 0,4 s à 16 fils), et [`CellIndex`], construit **par cellule, à la
 //! demande**, borné en mémoire (le service : lot 3a §4). Les deux rendent exactement les mêmes `Hit`.
 
-use ord_graph::grid::{tile_of_e7, tile_origin_deg};
+use ord_graph::grid::{tile_of_e7, tile_origin_deg, wide_threshold_dm};
 use ord_graph::mmap::MappedGraph;
 use rayon::prelude::*;
 use rstar::primitives::{GeomWithData, Line};
@@ -254,21 +254,6 @@ fn segment_tiles(p: (i32, i32), q: (i32, i32), zoom: u8) -> ((u32, u32), (u32, u
 }
 
 impl<'g> CellIndex<'g> {
-    /// Plus petite dimension (m) d'une tuile du graphe : sa hauteur, ou sa largeur à sa latitude la plus haute.
-    fn min_tile_m(gf: &MappedGraph) -> f64 {
-        let zoom = gf.header().zoom;
-        let mut min = f64::INFINITY;
-        for ci in 0..gf.n_cells() {
-            let (x, y) = gf.cell_xy(ci);
-            let (lat_hi, lon_lo) = tile_origin_deg(x, y, zoom);
-            let (lat_lo, lon_hi) = tile_origin_deg(x + 1, y + 1, zoom);
-            let height = (lat_hi - lat_lo) * M_PER_DEG;
-            let width = (lon_hi - lon_lo) * M_PER_DEG * lat_hi.abs().max(lat_lo.abs()).to_radians().cos();
-            min = min.min(height.min(width));
-        }
-        min
-    }
-
     /// Les arêtes **plus larges qu'une cellule** : celles dont un segment touche une tuile hors de la cellule
     /// propriétaire et de ses 8 voisines. Une arête plus courte que la moitié de la plus petite tuile ne peut pas en
     /// être : on ne relit la géométrie que des arêtes plus longues (un balayage des enregistrements, ~0,3 s sur la
@@ -279,11 +264,11 @@ impl<'g> CellIndex<'g> {
 
     fn wide_edges(gf: &MappedGraph) -> Vec<WideEdge> {
         let zoom = gf.header().zoom;
-        let thr_dm = (Self::min_tile_m(gf) * 0.5 * 10.0).min(f64::from(u32::MAX)) as u32;
         let mut out = Vec::new();
         for ci in 0..gf.n_cells() {
             let info = gf.cell_info(ci);
             let (cx, cy) = gf.cell_xy(ci);
+            let thr_dm = wide_threshold_dm(cy, zoom);
             let cv = gf.cell(ci);
             for k in 0..info.n_edges {
                 if cv.owned(k as usize).len_dm <= thr_dm {

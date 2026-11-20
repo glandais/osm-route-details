@@ -130,3 +130,82 @@ fn an_edge_wider_than_a_cell_goes_to_the_exception_list_and_the_index_stays_exac
     }
     assert!(compared > 2_000 && non_empty > 300, "{compared} comparaisons, {non_empty} non vides");
 }
+
+/// Des arêtes de 0,3 à 30 km dans tous les sens, près du pôle (84° N : tuiles de ≈ 2 km de large) et à l'équateur
+/// (≈ 19,6 km) : la liste des arêtes plus larges qu'une cellule, au seuil propre à chaque latitude, est celle d'un
+/// examen de **toutes** les arêtes (note `ord-loops-planete.md` §4).
+#[test]
+fn wide_edges_with_a_threshold_per_latitude_are_those_of_a_full_scan() {
+    use ord_graph::grid::tile_of_e7;
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = MemSource::default();
+    let mut rng = ord_graph::util::SplitMix64(11);
+    let mut next = 1i64;
+    for (lat0, lon0) in [(84.0, 20.0), (0.5, 20.0)] {
+        for w in 0..300 {
+            let len_m = 300.0 + rng.below(30_000) as f64;
+            let dir_rad = rng.below(360) as f64 * std::f64::consts::PI / 180.0;
+            let (n_m, e_m) = (len_m * dir_rad.cos(), len_m * dir_rad.sin());
+            let m_lon = M_LAT * f64::to_radians(lat0).cos();
+            let p0 = (lat0 + rng.below(20_000) as f64 / M_LAT, lon0 + rng.below(20_000) as f64 / m_lon);
+            let mut refs = Vec::new();
+            for k in 0..=2u32 {
+                let f = f64::from(k) / 2.0;
+                s.node(next, p0.0 + f * n_m / M_LAT, p0.1 + f * e_m / m_lon);
+                refs.push(next);
+                next += 1;
+            }
+            // Un sur deux, un nœud intermédiaire de plus (un coude) : la géométrie compte, pas seulement les bouts.
+            if w % 2 == 0 {
+                refs.remove(1);
+            }
+            s.way(10_000 + next, &refs, &[("highway", "residential")]);
+        }
+    }
+    let mut data = build_graph(&mut s, &BuildOptions { zoom: 11 }, "test", &mut |_| {}).unwrap();
+    let path = dir.path().join("g.ordg");
+    write_graph(&path, &mut data, "test", 1_700_000_000).unwrap();
+    let g = MappedGraph::open_mmap(&path).unwrap();
+    // Examen exhaustif : un segment dont la boîte touche une tuile hors des voisines de la cellule de l'arête.
+    let mut want = Vec::new();
+    for ci in 0..g.n_cells() {
+        let info = *g.cell_info(ci);
+        for k in 0..info.n_edges {
+            let e = info.first_edge + k;
+            let (a, b) = g.edge_ends(e);
+            let mut pts = vec![g.node_pos(a)];
+            pts.extend(g.geometry(e));
+            pts.push(g.node_pos(b));
+            let out = pts.windows(2).any(|w| {
+                let (x0, y0) = tile_of_e7(w[0].0.max(w[1].0), w[0].1.min(w[1].1), 11);
+                let (x1, y1) = tile_of_e7(w[0].0.min(w[1].0), w[0].1.max(w[1].1), 11);
+                x0 + 1 < info.x || y0 + 1 < info.y || x1 > info.x + 1 || y1 > info.y + 1
+            });
+            if out {
+                want.push(e);
+            }
+        }
+    }
+    let got = CellIndex::exceptions(&g);
+    assert_eq!(got, want);
+    // Et celle du contrôleur : les arêtes dont un bout n'est ni dans leur cellule ni dans une voisine.
+    let far: Vec<u32> = (0..g.n_cells())
+        .flat_map(|ci| {
+            let info = *g.cell_info(ci);
+            (info.first_edge..info.first_edge + info.n_edges).map(move |e| (info, e))
+        })
+        .filter(|&(info, e)| {
+            let (a, b) = g.edge_ends(e);
+            [a, b].iter().any(|&n| {
+                let (x, y) = g.cell_xy(g.node_cell(n));
+                x.abs_diff(info.x) > 1 || y.abs_diff(info.y) > 1
+            })
+        })
+        .map(|(_, e)| e)
+        .collect();
+    assert!(!far.is_empty());
+    assert_eq!(ord_loops_check::GraphIndex::build(&g).wide_edges(), &far[..]);
+    // Les deux latitudes en ont : le test départage bien quelque chose.
+    let lat_of = |e: u32| f64::from(g.node_pos(g.edge_ends(e).0).0) * 1e-7;
+    assert!(got.iter().any(|&e| lat_of(e) > 80.0) && got.iter().any(|&e| lat_of(e) < 10.0), "{got:?}");
+}
