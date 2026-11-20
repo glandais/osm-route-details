@@ -1,6 +1,6 @@
 # Générateur de parcours — la planète dans le service : conception
 
-> Statut : conception technique, **validée** le 20 novembre 2026. Suite de
+> Statut : conception technique, validée et **implémentée** le 20 novembre 2026 (§11 : écarts et relevés). Suite de
 > [`ord-graph-views-hors-memoire.md`](ord-graph-views-hors-memoire.md) §10.4 (la planète chargée par le service sur le
 > poste) et du lot 6 ([`ord-loops-lot6.md`](ord-loops-lot6.md) : moteur fenêtré, index globaux du démarrage, arêtes
 > larges). Motif : les fichiers de la planète sont justes, mais le service ne les sert pas dans le conteneur de 3 Go.
@@ -205,3 +205,75 @@ facultatif (le démarrage reste de quelques secondes sans lui).
 6. `feat(loops, server)` : `Engine::with_index`, lecture du fichier par le service, configuration, désactivation sur
    fichier étranger ; tests.
 7. Mesures (§8), puis relevé dans cette note.
+
+## 11. Réalisation (20 novembre 2026)
+
+### 11.1 Écarts à la conception
+
+- **Pas de nouvelle raison de désactivation** : un `.ordi` illisible ou d'un autre graphe éteint le générateur avec
+  `graph_unreadable` (et un `warn` qui dit lequel), au lieu d'un `IndexMismatch` du contrat : le contrat HTTP ne change
+  pas. Le moteur, lui, a bien `EngineError::IndexMismatch`.
+- **Validation complète à l'ouverture** : `IndexFile::open` relit l'empreinte de chaque section et contrôle le tri et
+  les bornes de toutes les tables (comme `.orda`), au lieu de le réserver à `--check` : 0,58 Go relus, compris dans
+  les 7,6 s du démarrage.
+- **Un débordement trouvé en chemin** (`fix(loops)` séparé) : le centre de tuile de la classe de fenêtre (§5.5 du
+  lot 6) se calculait en `i32`. Au-delà de 107,4° de longitude, la somme de deux longitudes E7 débordait : classe de
+  millions de tuiles, 503 de Tokyo à Anchorage (et un `panic` en debug). Calcul en `i64`, même résultat ailleurs ; test
+  aux longitudes du Pacifique.
+- **France sans arête large** : 0 [mesuré, examen exhaustif de toutes les arêtes] ; le chemin de 83,6 km du lot 6
+  n'existe plus dans l'extrait du 17 novembre (plus longue arête de base : 15,7 km).
+
+### 11.2 Vérifications
+
+`cargo fmt`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace` : 989 tests, 0 échec. Tests
+ajoutés : zone d'accroche d'un bac de 300 km (la tuile de l'autre rive, pas celle du milieu, même parcours que le
+moteur à plat) ; arêtes larges au seuil par latitude = examen de toutes les arêtes, à 84° N et à l'équateur (mutation
+du facteur ½ détectée) ; aller-retour, refus et corruption du `.ordi` ; `Engine::with_index` = `Engine::new` (tables,
+longueurs de composante pour chaque chaîne, parcours de 12 requêtes, au seuil des réglages et au triple) ; refus d'un
+fichier d'un autre graphe ou d'un seuil trop bas ; service : mêmes parcours avec et sans fichier, fichier d'un autre
+graphe ou tronqué → éteint ; `ord-graph-build index --check` de bout en bout sur le mini-PBF.
+
+### 11.3 Relevés [mesuré]
+
+**`ord-graph-build index`** (binaire de `b391f15`, sans cgroup) :
+
+| | France | Planète |
+|---|---|---|
+| Mur | 6,5 s | 20 min 03 s |
+| Pic anonyme | 0,33 Gio | **4,76 Gio** (estimé 3,5) |
+| Fichier | 15,1 Mo | 582 Mo |
+| Composantes `road` / `gravel` | 1,5 / 2,4 s | 63 / 780 s |
+| Chaînes étrangères `road` / `gravel` | 121 466 / 223 406 | 3 399 631 / 6 195 931 |
+| Composantes courtes `road` / `gravel` | 150 561 / 224 629 | 21 890 652 / 14 273 526 |
+| Arêtes larges (segment / bout) | 0 / 0 | 16 448 / 16 356, en 85 s (14,4 + 8,2 min avant) |
+
+Les composantes de `gravel` attendent le disque (780 s pour 272 M nœuds, contre 63 s pour les 195 M de `road`) : la
+vue (39 Go) et la base ne tiennent pas ensemble dans le cache de pages.
+
+**Le service sur la planète**, avec le `.ordi`, sous `MemoryMax=3G`, `MemorySwapMax=0`, environnement de l'image,
+cache de pages des cinq fichiers évincé au départ, série du §10.4 de la note des vues (14 lieux, route 60 km, gravel
+40 km, route 100 km, deux passes, 84 générations en série) :
+
+| | Avant (12 Go, sans fichier) | Après (3 Go, avec `.ordi`) |
+|---|---|---|
+| Prêt (`load_ms`) | 2 203 521 ms | **7 606 ms** |
+| `index_mb` | 646 | 0 |
+| Pic anonyme | 5,0 Gio (démarrage) | **920 Mo** (pendant la série) |
+| `oom` / `oom_kill` | — (tué à 3 Go) | 0 / 0 |
+| 200 | 6 sur 56 | **55 sur 84** ; médiane 0,87 s, p90 3,40 s, max 7,85 s |
+| 503 `overloaded` | 39 | **0** |
+| 504 | 1 | 1 (Tokyo, route 100 km, pages froides, 8,0 s ; 7,46 s au second passage) |
+| 422 | 10 | 28 : 18 `no_candidate`, 10 `start_too_far` |
+
+Les 422 sont les échecs ordinaires des tirages : plein Atlantique et Taveuni (`start_too_far`), Ushuaia, Reykjavik en
+route 60 km, Anchorage en route 100 km, et Suva (`no_candidate`). Suva, sondé au moteur : des candidats, tous à L/D de
+0,1 à 0,6 (aucune boucle de 15 à 60 km sans repasser par la même route) ; Nadi et le Kamtchatka de même, alors que
+Tonga (−175°), Samoa, Auckland, Wellington, Dunedin et Honolulu rendent leurs boucles : la longitude n'y est pour
+rien. Fenêtres en mémoire à la fin : 654 Mo (budget 800 Mo).
+
+### 11.4 Ce qui reste
+
+- **Tokyo à pages froides** : 7,8 s pour une boucle de 60 km, 504 à 100 km. La densité (1,4 M chaînes pour 22 tuiles)
+  et le disque, pas la conception ; à suivre sur le serveur.
+- **Pic de la commande `index`** : 4,76 Gio. Tient sur le poste ; le Tarjan économe du §9 reste possible.
+- **Non mesuré ici** : la série des dix villes et la concurrence du lot 6 sur la planète, les dépôts sur la planète.
