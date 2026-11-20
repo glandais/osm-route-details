@@ -11,14 +11,17 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
   calculait à chaque démarrage (chaînes étrangères et composantes courtes des deux vues, arêtes plus larges qu'une
   cellule, échantillon des nœuds pour le contrôle du polygone), calculés hors ligne par la sous-commande
   **`ord-graph-build index`** et projetés au démarrage. Lié à la base et aux deux vues. Réglage `generator.index`
-  (variable `ORD_GENERATOR__INDEX`, par défaut le graphe avec l'extension `.ordi`). Pour servir la planète : démarrage
-  de 37 min à quelques secondes, pic anonyme de 5 Gio à presque rien **[estimé : relevés à venir]**.
+  (variable `ORD_GENERATOR__INDEX`, par défaut le graphe avec l'extension `.ordi`). Sur la planète (582 Mo, 20 min de
+  calcul) : prêt en 7,6 s au lieu de 37 min, dans 3 Go (il était tué), 920 Mo d'anonyme au plus pendant une série de
+  générations, plus aucun 503 (`ord-loops-planete.md` §11).
 
 ### Corrigé
 
 - **Fenêtre d'une requête** : la zone d'accroche prend les tuiles des deux bouts des chaînes qui touchent les cases
   d'accroche, au lieu d'être élargie de la plus longue chaîne de toute la vue (566 km en route, 1 406 km en gravel sur la
   planète : 503 `overloaded` partout). Mêmes parcours.
+- **Classe de fenêtre au-delà de 107,4° de longitude** : le centre de tuile débordait un `i32` (classe de millions de
+  tuiles, 503 de Tokyo à Anchorage) ; calcul en `i64`.
 - **Arêtes plus larges qu'une cellule** : seuil de décodage propre à la latitude de chaque cellule (le plus petit du
   graphe s'effondrait près des pôles), liste lue une fois au démarrage et partagée par les dépôts (elle était relue à
   chaque dépôt), plafond de 1 000 à 100 000 avant le repli sur l'index entier.
