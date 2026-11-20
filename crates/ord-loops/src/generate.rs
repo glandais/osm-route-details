@@ -387,8 +387,19 @@ fn generate_inner<B: AsRef<[u8]>>(
     let mut forb = Forbidden::default();
     let tail_dm = (e.params.tail_reuse_share * d * 10.0) as u32;
     let d_dm = d * 10.0;
+    // Paliers d'écart au cap des secteurs essayés. Une boucle ne prend que les secteurs à 50° au plus. Un aller simple
+    // avec cap élargit à 95°, puis à tous, mais seulement quand toutes les passes d'un palier n'ont rien rendu : le cap
+    // n'y était qu'un terme de la note, et la route de l'équipe l'emportait (parcours à 90–170° du cap demandé pour une
+    // arrivée proche du départ, plus grande équipe, 20 novembre 2026).
+    let tiers: &[f64] = match r.bearing {
+        Some(_) if is_loop => &[50.0],
+        Some(_) => &[50.0, 95.0, 180.0],
+        None => &[180.0],
+    };
+    let mut tier = 0usize;
+    let mut tier_pass = 0usize;
 
-    for pass in 0..PASSES {
+    for pass in 0.. {
         let cx = Ctx { v, w: &w, disc: &disc, s: &sa, e: &ea, forb: &forb, esc: &esc, org: org_search };
         let vws = &mut ws.views[vi];
         // Le `ban` d'un usage précédent est gardé tant qu'il ne dépasse pas le double : sa génération croît
@@ -415,10 +426,12 @@ fn generate_inner<B: AsRef<[u8]>>(
             let ang = disc.bearing_of(v.pos[node as usize]);
             sectors[((ang / 30.0) as usize) % SECTORS].push((node, t1.meters(b1), t2.meters(b2)));
         }
+        // Secteurs à `tiers[tier]` degrés au plus du cap demandé (voir `tiers`).
+        let max_dev = tiers[tier];
         let mut order: Vec<usize> = (0..SECTORS)
             .filter(|&k| match r.bearing {
-                Some(b) if is_loop => turn_angle_deg(b.degrees(), k as f64 * 30.0 + 15.0) <= 50.0,
-                _ => true,
+                Some(b) => turn_angle_deg(b.degrees(), k as f64 * 30.0 + 15.0) <= max_dev,
+                None => true,
             })
             .collect();
         for i in (1..order.len()).rev() {
@@ -629,9 +642,18 @@ fn generate_inner<B: AsRef<[u8]>>(
         }
         let wanted = scored.len() >= 3;
         let tri_done = tri.as_ref().is_none_or(|st| st.done);
-        if exhausted || (wanted && tri_done) || new_forb.is_empty() {
+        if exhausted || (wanted && tri_done) || new_forb.is_empty() || tier_pass + 1 >= PASSES {
+            if scored.is_empty() && !exhausted && tier + 1 < tiers.len() {
+                // Les virages interdits d'un palier tiennent souvent les rues du départ : le palier suivant repart
+                // sans eux, comme une première passe.
+                tier += 1;
+                tier_pass = 0;
+                forb = Forbidden::default();
+                continue;
+            }
             break;
         }
+        tier_pass += 1;
         forb.extend(new_forb);
     }
     diag.rejected = rejected.into_iter().collect();

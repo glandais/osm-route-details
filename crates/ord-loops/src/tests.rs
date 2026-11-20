@@ -608,6 +608,26 @@ fn a_bearing_keeps_the_barycentre_on_its_side() {
 }
 
 #[test]
+fn a_one_way_ride_with_an_arrival_near_the_start_follows_the_bearing() {
+    // Le cap d'un aller simple n'était qu'un terme de la note : parcours à 90–170° du cap pour une arrivée à 1 km du
+    // départ (plus grande équipe, 20 novembre 2026). Il choisit maintenant les secteurs, comme pour une boucle.
+    let e = engine_of(&mut grid(21, 300.0));
+    for b in
+        [crate::Bearing8::N, crate::Bearing8::E, crate::Bearing8::S, crate::Bearing8::W, crate::Bearing8::SE]
+    {
+        let mut r = request(ll(3000.0, 3000.0), 6000.0, Mode::Discovery);
+        r.end = Some(ll(2700.0, 2700.0));
+        r.bearing = Some(b);
+        let routes = run(&e, None, &r).expect("un aller simple avec cap");
+        assert_valid(&e, None, &r, &routes);
+        for x in &routes {
+            let dev = x.bearing_deviation_deg.unwrap();
+            assert!(dev <= 65.0, "{b:?} : parcours à {dev:.0}° du cap");
+        }
+    }
+}
+
+#[test]
 fn strict_rides_the_team_ring_and_nothing_else_and_team_first_bridges_a_gap() {
     let mut s = ring(None, false);
     let e = engine_of(&mut s);
