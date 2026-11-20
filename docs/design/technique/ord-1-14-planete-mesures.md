@@ -164,3 +164,77 @@ Durée vue par le client (attente de la file comprise), en secondes.
 - **Le cap des allers simples** : durées et issues relevées (12 × 200, 4,1 s au plus), pas l'écart au cap.
 - **Istanbul, péninsule historique** : `network_too_small` pour les cinq types ; non expliqué ici (accroche dans une
   composante courte), sans lien avec le budget.
+
+## 7. Validation de l'image 1.14.0
+
+> Relevés du 20 novembre 2026, sur `release/1.14.0` (commit `8eeafac`). Même poste, mêmes requêtes et même ordre que les
+> §3 et §4 ; seul le cadre change : l'image, comme en production.
+
+### 7.1 Cadre
+
+- **Image** : `docker build -t osm-route-details:1.14.0-local .` (le `Dockerfile` du dépôt, Rust 1.99.1, distroless),
+  41 Mo ; `osm-route-details --version` rend `ord-server 1.14.0`. Image locale, rien de poussé.
+- **Conteneur** : `docker run --memory 3g --memory-swap 3g`, l'environnement du service partagé de Pédalons
+  (`ORD_GENERATOR__GRAPH`, `__VIEW_ROAD`, `__VIEW_GRAVEL`, `__COVERAGE_POLY` sous `/var/lib/osm-route-details/graph/`,
+  `ORD_CACHE__MEMORY_ELEVATION_MB=256`, `ORD_CACHE__MEMORY_STREETS_MB=256`, `MALLOC_ARENA_MAX=2`,
+  `MALLOC_MMAP_THRESHOLD_=1048576`), le dossier des cinq fichiers de la planète monté **en lecture seule** (l'`.ordi` est
+  trouvé à côté du graphe, sans `ORD_GENERATOR__INDEX`), un volume neuf pour le cache. **Aucune surcharge du budget** :
+  celui de l'image, 30 s. L'altitude reste celle de la production (en ligne), mais une génération ne la demande pas.
+- **Pages froides** et passes chaudes comme au §2 (`posix_fadvise(DONTNEED)` sur les fichiers de l'hôte, que le
+  conteneur partage). Mémoire lue dans le groupe du conteneur (`memory.stat`, `memory.peak`, `memory.events`), état par
+  `docker inspect` (santé, `OOMKilled`, redémarrages).
+
+### 7.2 Démarrage et service
+
+- `generator ready` en **4,7 s** (`load_ms` 4 676, `index: file`, `index_ms` 0, 431,5 M nœuds, 555,2 M arêtes) ; le
+  service répond en 5,3 à 5,8 s après `docker run`. Journal : fichiers d'attracteurs absents, service sans attracteurs.
+- `/v1/capabilities` : `generator.enabled = true`, couverture du monde entier, `figures.default = organic`,
+  `attractors = { available: false, enabled: false, reason: missing }`, **`limits.budget_ms = 30000`**,
+  `max_concurrent` 2, `max_queued` 8.
+- Healthcheck de l'image : `healthy` du début à la fin des trois conteneurs, 0 redémarrage, `OOMKilled` faux.
+
+### 7.3 Relevés
+
+Durées en secondes (journal du service en série ; vues par le client en concurrence). Entre parenthèses, l'étape de
+mesure (§3 et §4 : binaire `develop`, budget levé à 120 s, ou 30 s pour la dernière ligne).
+
+| Série | Passe | n | Médiane | p90 | Max | Issues |
+|---|---|---|---|---|---|---|
+| Zones denses, 60–150 km | froide | 90 | 1,92 (2,01) | 5,48 (5,49) | 11,26 (11,73) | 83 × 200, 7 × 422 |
+| | chaude | 90 | 1,51 (1,48) | 4,61 (4,75) | 10,05 (10,59) | idem |
+| Zones denses, 200 km | froide | 44 | 5,05 (5,14) | 14,36 (14,70) | 24,85 (25,73) | 42 × 200, 2 × 422 |
+| | chaude | 44 | 4,08 (4,18) | 14,14 (14,19) | 24,34 (24,77) | idem |
+| Allers simples avec cap | froide | 12 | 1,26 (1,21) | 3,92 (4,07) | 4,12 (4,08) | 12 × 200 |
+| 14 lieux | froide | 70 | 0,43 (0,40) | 1,69 (1,65) | 11,15 (11,04) | 41 × 200, 29 × 422 |
+| France, 40–150 km | froide | 30 | 1,01 (1,01) | 1,92 (1,94) | 2,17 (2,19) | 30 × 200 |
+| | chaude | 30 | 0,68 (0,68) | 1,40 (1,43) | 1,75 (1,75) | idem |
+| France, 200 km | froide | 16 | 2,91 (2,95) | 4,82 (4,84) | 6,30 (6,42) | 16 × 200 |
+| Concurrence ×4, 60–150 km | — | 72 | 4,80 (4,71) | 7,84 (7,76) | 14,94 (14,55) | 65 × 200, 7 × 422 |
+| Concurrence ×4, 60–200 km | — | 84 | 5,87 (5,72) | 15,78 (16,49) | 29,46 (30,30) | 77 × 200, 7 × 422 |
+
+- **Aucun 504, aucun 503**, aucun abandon `budget`, aucune ligne `WARN` ni `ERROR` sur les 680 générations ; les 422
+  sont les refus du §3.2 (Istanbul `network_too_small`, `no_candidate` et `start_too_far` des lieux maigres ou en mer).
+- **Mêmes parcours** : les 524 réponses en série sont identiques à celles de l'étape de mesure (même statut, mêmes
+  longueurs au mètre, mêmes raisons), et les deux séries concurrentes rendent les mêmes réponses par lieu et type. La
+  France, en particulier, rend les mêmes parcours en même temps (sommes des durées 34,3 s contre 34,4 s à froid).
+- **Mémoire** : anonyme **1 021 Mo** au plus en série (dont la série de 200 km, la plus lourde), 976 et 939 Mo en
+  concurrence ; 0 `oom`, 0 `oom_kill`. `memory.peak` atteint la limite (3 221 Mo) dans les trois conteneurs : ce sont les
+  pages de fichier des projections, que le noyau reprend ; l'anonyme garde 2 Go de marge.
+
+### 7.4 Verdict
+
+**L'image 1.14.0 est bonne pour la planète.** Elle démarre en 5 s sur les cinq fichiers en lecture seule, publie le
+budget de 30 s, sert les zones denses sans 504 là où la décision le promettait (toutes les générations en série, 200 km
+compris, et les quatre clients simultanés), rend exactement les parcours de `develop`, aussi vite, et tient dans 3 Go
+avec 2 Go de marge d'anonyme.
+
+Deux réserves, qui ne bloquent pas la publication :
+
+- **Le pire cas concurrent frôle le budget** : Osaka gravel 200 km rendu en 29,5 s (30,3 s à l'étape de mesure), quand
+  quatre générations japonaises de 200 km arrivent ensemble. Sur un serveur plus lent que ce poste, ce cas finit en 504.
+  À suivre après déploiement (`ord_generator_requests_total{outcome="timeout"}`) ; s'il apparaît, relever
+  `ORD_GENERATOR__BUDGET_MS` sans reconstruire l'image (et le délai de Pédalons d'autant), ou réduire le coût des
+  figures organiques en ville très dense (§5, point 2).
+- **Non mesuré ici** : l'altitude demandée en même temps (deux caches de 256 Mo en plus au pire, sous la limite de 3 Go
+  avec l'anonyme relevé), les surcouches d'équipe et leurs dépôts sur la planète (données privées), et le serveur de
+  production (§6).
