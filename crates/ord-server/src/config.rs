@@ -384,6 +384,10 @@ pub struct GeneratorConfig {
     pub attractors_road: Option<PathBuf>,
     /// Fichier d'attracteurs de la vue `gravel` (défaut : `view_gravel` avec l'extension `.orda`).
     pub attractors_gravel: Option<PathBuf>,
+    /// Fichier d'index de service `.ordi` (défaut : `graph` avec l'extension `.ordi`, à côté du graphe) : les index
+    /// globaux du moteur, calculés hors ligne (`ord-graph-build index`). Absent, le service les calcule au démarrage ;
+    /// présent mais d'un autre graphe, le générateur est éteint (note `ord-loops-planete.md` §5.3).
+    pub index: Option<PathBuf>,
 }
 
 /// Les attracteurs OSM jouent-ils quand leurs fichiers sont là ?
@@ -396,6 +400,11 @@ pub enum GeneratorAttractors {
 }
 
 impl GeneratorConfig {
+    /// Le fichier d'index de service : celui de la configuration, sinon le graphe avec l'extension `.ordi`.
+    pub fn index_path(&self) -> Option<PathBuf> {
+        self.index.clone().or_else(|| self.graph.as_ref().map(|g| g.with_extension("ordi")))
+    }
+
     /// Les fichiers d'attracteurs `[road, gravel]` : ceux de la configuration, sinon ceux déduits des vues
     /// (`x.road.ordv` donne `x.road.orda`, dans le même dossier).
     pub fn attractor_paths(&self) -> [Option<PathBuf>; 2] {
@@ -423,6 +432,7 @@ impl Default for GeneratorConfig {
             view_road: None,
             view_gravel: None,
             coverage_poly: None,
+            index: None,
             overlay_dir: PathBuf::from("/var/cache/osm-route-details/generator"),
             max_concurrent: 2,
             max_queued: 8,
@@ -951,6 +961,22 @@ mod tests {
             );
             jail.set_env("ORD_GENERATOR__ATTRACTORS", "oui");
             assert!(Config::load(None).is_err(), "valeur inconnue refusée");
+            Ok(())
+        });
+    }
+
+    /// Le fichier d'index de service : à côté du graphe par défaut, ou celui de la configuration.
+    #[test]
+    fn the_service_index_defaults_to_the_graph_with_the_ordi_extension() {
+        let mut g = GeneratorConfig::default();
+        assert_eq!(g.index_path(), None);
+        g.graph = Some(PathBuf::from("/d/planet-z11.ordg"));
+        assert_eq!(g.index_path(), Some(PathBuf::from("/d/planet-z11.ordi")));
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__GRAPH", "/d/planet-z11.ordg");
+            jail.set_env("ORD_GENERATOR__INDEX", "/i/autre.ordi");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.index_path(), Some(PathBuf::from("/i/autre.ordi")));
             Ok(())
         });
     }

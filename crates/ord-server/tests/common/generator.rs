@@ -305,3 +305,30 @@ pub fn tree(dir: &Path) -> Vec<String> {
     out.sort();
     out
 }
+
+/// Écrit le fichier d'index de service (`<graphe>.ordi`) de ces fichiers, par les fonctions du démarrage du moteur, au
+/// seuil de composantes des réglages par défaut.
+pub fn write_service_index(files: &Files, out: &Path) {
+    use ord_graph::service_index::{node_sample, write_index, IndexData, ViewTables};
+    let open = |p: &Path| ord_graph::mmap::MappedGraph::open_mmap(p).unwrap();
+    let (base, road, gravel) = (open(&files.graph), open(&files.road), open(&files.gravel));
+    let cap_dm = ord_loops::cap_dm_of(&ord_loops::Params::default());
+    let tables = [&road, &gravel].map(|v| {
+        let (short, lmax_dm) = ord_loops::short_components(v, cap_dm);
+        ViewTables {
+            foreign: ord_loops::foreign_index(v, 2),
+            short: short.into_iter().map(|(c, l)| (c, l as u32)).collect(),
+            lmax_dm,
+        }
+    });
+    let (node_bbox, node_sample) = node_sample(&base);
+    let data = IndexData {
+        views: tables,
+        cap_dm: cap_dm as u32,
+        wide_seg: ord_graph_match::CellIndex::exceptions(&base),
+        wide_end: ord_loops_check::GraphIndex::build(&base).wide_edges().to_vec(),
+        node_bbox,
+        node_sample,
+    };
+    write_index(out, &base, [&road, &gravel], &data, b"{}", 0).expect("index de service");
+}

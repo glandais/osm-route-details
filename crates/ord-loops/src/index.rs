@@ -10,22 +10,81 @@
 use ord_graph::format::GraphFile;
 use ord_graph::grid::{tile_key, tile_of_e7, tile_rect_e7};
 
+use std::sync::Arc;
+
+use ord_graph::service_index::{IndexFile, Pair};
+
 use crate::engine::{strong_components, Params};
 use crate::geo::M_PER_DEG;
 
+/// Les tables d'un fichier d'index de service (`.ordi`), vues sans leur type d'octets : le moteur les lit en place.
+pub(crate) trait IndexTables: Send + Sync + std::fmt::Debug {
+    fn foreign(&self, vi: usize) -> &[Pair];
+    fn short(&self, vi: usize) -> &[Pair];
+}
+
+impl<F: AsRef<[u8]> + Send + Sync + std::fmt::Debug> IndexTables for IndexFile<F> {
+    fn foreign(&self, vi: usize) -> &[Pair] {
+        IndexFile::foreign(self, vi)
+    }
+    fn short(&self, vi: usize) -> &[Pair] {
+        IndexFile::short(self, vi)
+    }
+}
+
+/// Où sont les tables : calculées à l'ouverture, ou lues dans le fichier d'index de service.
 #[derive(Debug)]
-#[allow(dead_code)] // lu par la fenêtre, à l'étape suivante du lot 6
+enum Tables {
+    Computed {
+        /// `(clé de tuile, id global de chaîne)`, triés : chaînes qui touchent la tuile sans la posséder.
+        foreign: Vec<(u32, u32)>,
+        /// `(id global de chaîne, longueur dm de sa composante)` pour les chaînes dont la composante fait moins de
+        /// `cap_dm` (0 si les deux bouts sont dans deux composantes), triés.
+        short_comp: Vec<(u32, u64)>,
+    },
+    File {
+        file: Arc<dyn IndexTables>,
+        vi: usize,
+    },
+}
+
+/// Les chaînes étrangères d'une tuile, d'où qu'elles viennent.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ForeignSlice<'a> {
+    Computed(&'a [(u32, u32)]),
+    File(&'a [Pair]),
+}
+
+impl<'a> ForeignSlice<'a> {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Computed(s) => s.len(),
+            Self::File(s) => s.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// `(clé de tuile, id global de chaîne)`, dans l'ordre.
+    pub fn iter(&self) -> impl Iterator<Item = (u32, u32)> + 'a {
+        let (c, f) = match *self {
+            Self::Computed(s) => (s, &[][..]),
+            Self::File(s) => (&[][..], s),
+        };
+        c.iter().copied().chain(f.iter().map(|p| (p[0].get(), p[1].get())))
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct ViewIndex {
     pub zoom: u8,
-    /// `(clé de tuile, id global de chaîne)`, triés : chaînes qui touchent la tuile sans la posséder.
-    pub foreign: Vec<(u32, u32)>,
-    /// `(id global de chaîne, longueur dm de sa composante)` pour les chaînes dont la composante fait moins de
-    /// `cap_dm` (0 si les deux bouts sont dans deux composantes), triés.
-    pub short_comp: Vec<(u32, u64)>,
+    tables: Tables,
     pub cap_dm: u64,
     /// Plus longue chaîne, en dm.
     pub lmax_dm: u32,
-    /// Durées de construction, en ms : balayage des étrangères, composantes.
+    /// Durées de construction, en ms : balayage des étrangères, composantes (0 : lues dans le fichier).
     pub foreign_ms: u64,
     pub scc_ms: u64,
 }
@@ -178,7 +237,6 @@ pub fn cap_dm_of(params: &Params) -> u64 {
     (params.min_component_share * params.max_distance_m * 10.0).ceil() as u64
 }
 
-#[allow(dead_code)] // lu par la fenêtre, à l'étape suivante du lot 6
 impl ViewIndex {
     pub fn build<B: AsRef<[u8]> + Sync>(view: &GraphFile<B>, params: &Params, threads: usize) -> Self {
         let t0 = std::time::Instant::now();
@@ -188,27 +246,76 @@ impl ViewIndex {
         let cap_dm = cap_dm_of(params);
         let (short_comp, lmax_dm) = short_components(view, cap_dm);
         let scc_ms = t1.elapsed().as_millis() as u64;
-        Self { zoom: view.header().zoom, foreign, short_comp, cap_dm, lmax_dm, foreign_ms, scc_ms }
-    }
-
-    /// Chaînes étrangères de la tuile `key`.
-    pub fn foreign_of(&self, key: u32) -> &[(u32, u32)] {
-        let lo = self.foreign.partition_point(|x| x.0 < key);
-        let hi = self.foreign.partition_point(|x| x.0 <= key);
-        &self.foreign[lo..hi]
-    }
-
-    /// Longueur (dm) de la composante fortement connexe de la chaîne `c` ; `cap_dm` (« au moins ») si elle est plus
-    /// longue : la comparaison à un seuil d'au plus `cap_dm` reste exacte.
-    pub fn comp_len_dm(&self, c: u32) -> u64 {
-        match self.short_comp.binary_search_by_key(&c, |x| x.0) {
-            Ok(i) => self.short_comp[i].1,
-            Err(_) => self.cap_dm,
+        Self {
+            zoom: view.header().zoom,
+            tables: Tables::Computed { foreign, short_comp },
+            cap_dm,
+            lmax_dm,
+            foreign_ms,
+            scc_ms,
         }
     }
 
-    /// Octets tenus par l'index.
+    /// Les tables de la vue `vi` lues dans un fichier d'index de service, au seuil des réglages (`cap_dm`, au plus
+    /// celui du fichier : vérifié par l'appelant).
+    pub fn from_file(zoom: u8, file: Arc<dyn IndexTables>, vi: usize, cap_dm: u64, lmax_dm: u32) -> Self {
+        Self { zoom, tables: Tables::File { file, vi }, cap_dm, lmax_dm, foreign_ms: 0, scc_ms: 0 }
+    }
+
+    /// Vrai si les tables viennent du fichier d'index de service.
+    pub fn is_from_index_file(&self) -> bool {
+        matches!(self.tables, Tables::File { .. })
+    }
+
+    /// Toutes les chaînes étrangères, `(clé de tuile, id de chaîne)` croissants.
+    pub fn foreign_all(&self) -> ForeignSlice<'_> {
+        match &self.tables {
+            Tables::Computed { foreign, .. } => ForeignSlice::Computed(foreign),
+            Tables::File { file, vi } => ForeignSlice::File(file.foreign(*vi)),
+        }
+    }
+
+    /// Chaînes étrangères de la tuile `key`.
+    pub fn foreign_of(&self, key: u32) -> ForeignSlice<'_> {
+        match &self.tables {
+            Tables::Computed { foreign, .. } => {
+                let lo = foreign.partition_point(|x| x.0 < key);
+                let hi = foreign.partition_point(|x| x.0 <= key);
+                ForeignSlice::Computed(&foreign[lo..hi])
+            }
+            Tables::File { file, vi } => {
+                let f = file.foreign(*vi);
+                let lo = f.partition_point(|x| x[0].get() < key);
+                let hi = f.partition_point(|x| x[0].get() <= key);
+                ForeignSlice::File(&f[lo..hi])
+            }
+        }
+    }
+
+    /// Longueur (dm) de la composante fortement connexe de la chaîne `c` ; `cap_dm` (« au moins ») si elle est plus
+    /// longue : la comparaison à un seuil d'au plus `cap_dm` reste exacte. Le fichier peut avoir un seuil plus haut :
+    /// une longueur au-delà de `cap_dm` y vaut `cap_dm`, comme dans les tables calculées.
+    pub fn comp_len_dm(&self, c: u32) -> u64 {
+        match &self.tables {
+            Tables::Computed { short_comp, .. } => match short_comp.binary_search_by_key(&c, |x| x.0) {
+                Ok(i) => short_comp[i].1,
+                Err(_) => self.cap_dm,
+            },
+            Tables::File { file, vi } => {
+                let s = file.short(*vi);
+                match s.binary_search_by_key(&c, |x| x[0].get()) {
+                    Ok(i) => u64::from(s[i][1].get()).min(self.cap_dm),
+                    Err(_) => self.cap_dm,
+                }
+            }
+        }
+    }
+
+    /// Octets de mémoire anonyme tenus par l'index (0 pour les tables du fichier : des pages de fichier).
     pub fn bytes(&self) -> usize {
-        self.foreign.capacity() * 8 + self.short_comp.capacity() * 16
+        match &self.tables {
+            Tables::Computed { foreign, short_comp } => foreign.capacity() * 8 + short_comp.capacity() * 16,
+            Tables::File { .. } => 0,
+        }
     }
 }

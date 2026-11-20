@@ -684,6 +684,54 @@ async fn a_view_of_another_graph_or_a_polygon_far_from_the_graph_disables_the_ge
     assert_eq!(caps["generator"]["reason"], "polygon_mismatch");
 }
 
+/// Le fichier d'index de service (note `ord-loops-planete.md` §5.3) : à côté du graphe, il sert les mêmes parcours que
+/// les index calculés au démarrage ; celui d'un autre graphe éteint le générateur.
+#[tokio::test]
+async fn the_service_index_file_serves_the_same_routes_and_one_of_another_graph_disables_the_generator() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = write_files(dir.path(), "a", 21);
+    let body = json!({"start": {"lat": node(10, 10)[0], "lon": node(10, 10)[1]}, "distance_m": 3600.0,
+        "ride_type": "road", "cursor": 1.0, "seed": 1});
+    let routes = |config: &Config| {
+        let app = router(AppState::new(config).unwrap());
+        let body = body.clone();
+        async move {
+            let caps = send(app.clone(), get("/v1/capabilities")).await.json();
+            assert_eq!(caps["generator"]["enabled"], true, "{caps}");
+            let r = send(app, generate(None, None, &body)).await;
+            assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+            r.json()["routes"].clone()
+        }
+    };
+    let config = config_with(test_config(), dir.path(), &a);
+    let computed = routes(&config).await;
+    assert!(!computed.as_array().unwrap().is_empty());
+    write_service_index(&a, &a.graph.with_extension("ordi"));
+    let from_file = routes(&config).await;
+    assert_eq!(from_file, computed);
+    // Un chemin explicite marche aussi.
+    let moved = dir.path().join("ailleurs.ordi");
+    std::fs::rename(a.graph.with_extension("ordi"), &moved).unwrap();
+    let mut explicit = config.clone();
+    explicit.generator.index = Some(moved.clone());
+    assert_eq!(routes(&explicit).await, computed);
+
+    // Le fichier d'un autre graphe, à la place de celui-ci : éteint, sans recalculer.
+    let b = write_files(dir.path(), "b", 20);
+    write_service_index(&b, &a.graph.with_extension("ordi"));
+    let caps = send(router(AppState::new(&config).unwrap()), get("/v1/capabilities")).await.json();
+    assert_eq!(
+        (caps["generator"]["enabled"].as_bool(), caps["generator"]["reason"].as_str()),
+        (Some(false), Some("graph_unreadable"))
+    );
+    // Un fichier tronqué : de même.
+    std::fs::remove_file(a.graph.with_extension("ordi")).unwrap();
+    let bytes = std::fs::read(&moved).unwrap();
+    std::fs::write(a.graph.with_extension("ordi"), &bytes[..bytes.len() / 2]).unwrap();
+    let caps = send(router(AppState::new(&config).unwrap()), get("/v1/capabilities")).await.json();
+    assert_eq!(caps["generator"]["reason"], "graph_unreadable");
+}
+
 #[tokio::test]
 async fn a_stored_overlay_of_the_graph_is_not_the_one_of_the_contract_version_alone() {
     // Les routes sont dans le contrat avec leurs en-têtes, et le chemin ne porte aucun identifiant.

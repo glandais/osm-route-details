@@ -6,10 +6,12 @@
 //! (quelques Mo) et lit le graphe de base dans le fichier projeté, aux mêmes octets.
 
 use std::fmt;
+use std::sync::Arc;
 
 use ord_graph::attract::{AttrError, AttrFile};
 use ord_graph::attrs::Attrs;
 use ord_graph::format::{GraphFile, DIR_BIT};
+use ord_graph::service_index::IndexFile;
 use ord_graph::view::ViewKind;
 
 use crate::cost::{self, RideType, Taste};
@@ -88,6 +90,9 @@ pub enum EngineError {
     /// La construction creuse des données d'équipe a quitté les cases chaudes, même élargies à la boîte de la zone
     /// (lot 6, finition 2, §20.2) : jamais un résultat faux, une erreur.
     TeamZoneEscape,
+    /// Le fichier d'index de service n'est pas celui de ce graphe et de ces vues, ou son seuil de composantes est
+    /// sous celui des réglages.
+    IndexMismatch(String),
 }
 
 impl fmt::Display for EngineError {
@@ -97,6 +102,7 @@ impl fmt::Display for EngineError {
             Self::ViewMismatch => write!(f, "la vue ne correspond pas à ce graphe de base"),
             Self::OverlayMismatch => write!(f, "la surcouche vient d'un autre graphe"),
             Self::TeamZoneEscape => write!(f, "la construction de l'équipe a quitté son voisinage"),
+            Self::IndexMismatch(s) => write!(f, "fichier d'index de service inutilisable : {s}"),
         }
     }
 }
@@ -356,6 +362,41 @@ impl<B: AsRef<[u8]> + Sync> Engine<B> {
         };
         Ok(Self { base, views_files: [road, gravel], kinds, idx, params, attr: [None, None] })
     }
+
+    /// Comme [`Engine::new`], avec les index globaux lus dans le fichier d'index de service (`.ordi`, note
+    /// `ord-loops-planete.md` §5) au lieu d'être calculés : contrôle que le fichier est celui de cette base et de ces
+    /// vues, et que son seuil de composantes couvre celui des réglages.
+    pub fn with_index<F>(
+        base: GraphFile<B>,
+        road: GraphFile<B>,
+        gravel: GraphFile<B>,
+        params: Params,
+        index: Arc<IndexFile<F>>,
+    ) -> Result<Self, EngineError>
+    where
+        F: AsRef<[u8]> + Send + Sync + fmt::Debug + 'static,
+    {
+        if base.is_view() {
+            return Err(EngineError::BadView("le graphe de base est une vue".into()));
+        }
+        let kinds = [ViewKind::Road, ViewKind::Gravel];
+        for (view, kind) in [(&road, kinds[0]), (&gravel, kinds[1])] {
+            check_view(&base, view, kind)?;
+        }
+        index.check_for(&base, [&road, &gravel]).map_err(|e| EngineError::IndexMismatch(e.to_string()))?;
+        let cap_dm = crate::index::cap_dm_of(&params);
+        if u64::from(index.cap_dm()) < cap_dm {
+            return Err(EngineError::IndexMismatch(format!(
+                "seuil des composantes {} dm, les réglages demandent {cap_dm} dm",
+                index.cap_dm()
+            )));
+        }
+        let zoom = base.header().zoom;
+        let tables: Arc<dyn crate::index::IndexTables> = index.clone();
+        let idx =
+            [0, 1].map(|vi| ViewIndex::from_file(zoom, Arc::clone(&tables), vi, cap_dm, index.lmax_dm(vi)));
+        Ok(Self { base, views_files: [road, gravel], kinds, idx, params, attr: [None, None] })
+    }
 }
 
 fn check_view<B: AsRef<[u8]>>(
@@ -426,6 +467,11 @@ impl<B: AsRef<[u8]>> Engine<B> {
     /// Durées de construction des index (ms) : `[(chaînes étrangères, composantes)]` par vue.
     pub fn index_timings_ms(&self) -> [(u64, u64); 2] {
         [(self.idx[0].foreign_ms, self.idx[0].scc_ms), (self.idx[1].foreign_ms, self.idx[1].scc_ms)]
+    }
+
+    /// Vrai si les index globaux viennent du fichier d'index de service ([`Engine::with_index`]).
+    pub fn index_from_file(&self) -> bool {
+        self.idx[0].is_from_index_file()
     }
 
     /// Octets tenus par les index globaux des deux vues.

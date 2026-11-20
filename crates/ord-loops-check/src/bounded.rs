@@ -60,6 +60,12 @@ impl GraphIndex {
         Self { wide }
     }
 
+    /// L'index d'une liste d'arêtes larges déjà connue (croissante), lue par exemple dans le fichier d'index de service.
+    pub fn from_wide(wide: Vec<u32>) -> Self {
+        debug_assert!(wide.windows(2).all(|w| w[0] < w[1]));
+        Self { wide }
+    }
+
     pub fn wide_edges(&self) -> &[u32] {
         &self.wide
     }

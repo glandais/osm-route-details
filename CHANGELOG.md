@@ -3,6 +3,32 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## Non publié
+
+### Ajouté
+
+- **Fichier d'index de service** (`<graphe>.ordi`, note `ord-loops-planete.md`) : les index globaux que le générateur
+  calculait à chaque démarrage (chaînes étrangères et composantes courtes des deux vues, arêtes plus larges qu'une
+  cellule, échantillon des nœuds pour le contrôle du polygone), calculés hors ligne par la sous-commande
+  **`ord-graph-build index`** et projetés au démarrage. Lié à la base et aux deux vues. Réglage `generator.index`
+  (variable `ORD_GENERATOR__INDEX`, par défaut le graphe avec l'extension `.ordi`). Pour servir la planète : démarrage
+  de 37 min à quelques secondes, pic anonyme de 5 Gio à presque rien **[estimé : relevés à venir]**.
+
+### Corrigé
+
+- **Fenêtre d'une requête** : la zone d'accroche prend les tuiles des deux bouts des chaînes qui touchent les cases
+  d'accroche, au lieu d'être élargie de la plus longue chaîne de toute la vue (566 km en route, 1 406 km en gravel sur la
+  planète : 503 `overloaded` partout). Mêmes parcours.
+- **Arêtes plus larges qu'une cellule** : seuil de décodage propre à la latitude de chaque cellule (le plus petit du
+  graphe s'effondrait près des pôles), liste lue une fois au démarrage et partagée par les dépôts (elle était relue à
+  chaque dépôt), plafond de 1 000 à 100 000 avant le repli sur l'index entier.
+
+### Compatibilité
+
+- **Fichier facultatif** : sans lui, le service calcule les index au démarrage, comme avant. Présent mais illisible ou
+  d'un autre graphe, le générateur est éteint (`reason` : `graph_unreadable`) : le recalculer tuerait le conteneur sur la
+  planète. Contrat HTTP inchangé ; aucun redépôt.
+
 ## 1.13.1 (API 1.13)
 
 ### Corrigé

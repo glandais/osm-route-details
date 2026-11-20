@@ -572,7 +572,7 @@ impl<'a, B: AsRef<[u8]>> SparseView<'a, B> {
                     chain(c);
                 }
             }
-            for f in idx.foreign_of(key) {
+            for f in idx.foreign_of(key).iter() {
                 chain(f.1);
             }
         }

@@ -48,8 +48,6 @@ const POLY_OVERHANG_M: f64 = 15_000.0;
 const POLY_OVERHANG_FRACTION: f64 = 0.20;
 const NODES_OUTSIDE_M: f64 = 5_000.0;
 const POLY_MIN_NODES_INSIDE: f64 = 0.95;
-/// Un nœud sur `NODE_SAMPLE_EVERY` est testé contre le polygone.
-const NODE_SAMPLE_EVERY: usize = 16;
 
 /// Why the generator is off.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
@@ -285,28 +283,22 @@ fn disabled(reason: DisabledReason) -> Generator {
     Generator { state: GeneratorState::Disabled(reason) }
 }
 
-/// Boîte des nœuds du graphe `[lon_min, lat_min, lon_max, lat_max]`, et part des nœuds (échantillonnés) que le
-/// polygone contient.
-fn node_extent(g: &MappedGraph, poly: &Poly) -> Option<([f64; 4], f64)> {
-    let mut b: Option<[f64; 4]> = None;
-    let (mut seen, mut sampled, mut inside) = (0usize, 0usize, 0usize);
-    for ci in 0..g.n_cells() {
-        let cv = g.cell(ci);
-        for local in 0..cv.info().n_nodes as usize {
-            let (lat, lon) = cv.node(local);
-            let (lat, lon) = (f64::from(lat) * 1e-7, f64::from(lon) * 1e-7);
-            b = Some(match b {
-                None => [lon, lat, lon, lat],
-                Some(b) => [b[0].min(lon), b[1].min(lat), b[2].max(lon), b[3].max(lat)],
-            });
-            if seen % NODE_SAMPLE_EVERY == 0 {
-                sampled += 1;
-                inside += usize::from(poly.contains(lon, lat));
-            }
-            seen += 1;
-        }
+/// Boîte des nœuds du graphe `[lon_min, lat_min, lon_max, lat_max]` (depuis leur boîte E7 `(lat_min, lat_max, lon_min,
+/// lon_max)`), et part des nœuds échantillonnés (un sur [`ord_graph::service_index::NODE_SAMPLE_EVERY`]) que le
+/// polygone contient. L'échantillon et la boîte viennent du fichier d'index de service, ou d'un balayage des nœuds.
+fn node_extent_of(
+    bbox_e7: Option<[i32; 4]>,
+    sample: impl Iterator<Item = (i32, i32)>,
+    poly: &Poly,
+) -> Option<([f64; 4], f64)> {
+    let b = bbox_e7?;
+    let d = |v: i32| f64::from(v) * 1e-7;
+    let (mut sampled, mut inside) = (0usize, 0usize);
+    for (lat, lon) in sample {
+        sampled += 1;
+        inside += usize::from(poly.contains(d(lon), d(lat)));
     }
-    Some((b?, inside as f64 / sampled.max(1) as f64))
+    Some(([d(b[2]), d(b[0]), d(b[3]), d(b[1])], inside as f64 / sampled.max(1) as f64))
 }
 
 /// Le polygone est-il celui de ce graphe ?
@@ -456,11 +448,36 @@ impl Generator {
             );
             return disabled(DisabledReason::NotConfigured);
         }
-        let mut engine = match Engine::new(base, road, gravel, params) {
+        // Le fichier d'index de service (note `ord-loops-planete.md` §5.3) : absent, les index se calculent ici ;
+        // présent mais illisible ou d'un autre graphe, le générateur s'éteint (recalculer tuerait le conteneur sur la
+        // planète).
+        let index = match cfg.index_path() {
+            Some(p) if p.exists() => match ord_graph::service_index::IndexFile::open_mmap(&p) {
+                Ok(f) => Some(Arc::new(f)),
+                Err(e) => {
+                    tracing::warn!(error = %e, file = %p.display(), "generator service index unreadable");
+                    return disabled(DisabledReason::GraphUnreadable);
+                }
+            },
+            Some(p) => {
+                tracing::info!(file = %p.display(), "generator service index missing: computing the indexes at startup");
+                None
+            }
+            None => None,
+        };
+        let engine = match &index {
+            Some(f) => Engine::with_index(base, road, gravel, params, Arc::clone(f)),
+            None => Engine::new(base, road, gravel, params),
+        };
+        let mut engine = match engine {
             Ok(e) => e,
             Err(ord_loops::EngineError::ViewMismatch | ord_loops::EngineError::OverlayMismatch) => {
                 tracing::warn!("generator view does not belong to the configured graph");
                 return disabled(DisabledReason::ViewMismatch);
+            }
+            Err(e @ ord_loops::EngineError::IndexMismatch(_)) => {
+                tracing::warn!(error = %e, "generator service index does not match the graph");
+                return disabled(DisabledReason::GraphUnreadable);
             }
             Err(e) => {
                 tracing::warn!(error = %e, "generator view unusable");
@@ -488,7 +505,18 @@ impl Generator {
             }
             None => return disabled(DisabledReason::PolygonMismatch),
         };
-        let (Some(pb), Some((nb, inside))) = (poly.bbox(), node_extent(engine.base(), &poly)) else {
+        let extent = match &index {
+            Some(f) => node_extent_of(
+                f.node_bbox(),
+                f.node_sample().iter().map(|p| (p[0].get() as i32, p[1].get() as i32)),
+                &poly,
+            ),
+            None => {
+                let (bbox, sample) = ord_graph::service_index::node_sample(engine.base());
+                node_extent_of(bbox, sample.into_iter(), &poly)
+            }
+        };
+        let (Some(pb), Some((nb, inside))) = (poly.bbox(), extent) else {
             return disabled(DisabledReason::PolygonMismatch);
         };
         if !polygon_fits(pb, nb, inside) {
@@ -503,7 +531,13 @@ impl Generator {
         tracing::info!(nodes_inside = inside, "generator coverage polygon checked");
         // Arêtes plus larges qu'une cellule : listées (une sur la France, 16 448 sur la planète), lues une fois et
         // ajoutées par chaque index par cellule. Au-delà d'un plafond, repli sur l'index entier.
-        let wide = ord_graph_match::CellIndex::wide_list(engine.base());
+        let wide = match &index {
+            Some(f) => {
+                let ids: Vec<u32> = f.wide_seg().iter().map(|e| e.get()).collect();
+                ord_graph_match::CellIndex::wide_list_of(engine.base(), &ids)
+            }
+            None => ord_graph_match::CellIndex::wide_list(engine.base()),
+        };
         let wide_edges = wide.len();
         let cell_index_ok = wide_edges <= MAX_WIDE_EDGES;
         let cell_wide = cell_index_ok.then_some(wide);
@@ -513,7 +547,10 @@ impl Generator {
                 "too many edges wider than a cell: deposits build the whole spatial index"
             );
         }
-        let graph_index = ord_loops_check::GraphIndex::build(engine.base());
+        let graph_index = match &index {
+            Some(f) => ord_loops_check::GraphIndex::from_wide(f.wide_end().iter().map(|e| e.get()).collect()),
+            None => ord_loops_check::GraphIndex::build(engine.base()),
+        };
         let gid = graph_id(&identity);
         let matcher_hash = ord_graph_match::agg::params_hash();
         // Le budget de mémoire compte les équipes résidentes que le stockage lui déclare ; elles ont leurs propres plafonds
@@ -628,6 +665,7 @@ impl Generator {
             nodes = identity.nodes,
             edges = identity.edges,
             cell_index = cell_index_ok,
+            index = if engine.index_from_file() { "file" } else { "computed" },
             wide_edges,
             index_ms = engine.index_timings_ms().iter().map(|t| t.0).max().unwrap_or(0),
             scc_ms = engine.index_timings_ms().iter().map(|t| t.1).max().unwrap_or(0),

@@ -42,7 +42,7 @@ fn check_foreign<B: AsRef<[u8]>>(e: &Engine<B>, vi: usize) -> Result<usize, Stri
             }
         });
     }
-    let got = &e.idx[vi].foreign;
+    let got: Vec<(u32, u32)> = e.idx[vi].foreign_all().iter().collect();
     if got.len() != want.len() || got.iter().zip(&want).any(|(g, w)| g != w) {
         return Err(format!(
             "index des chaînes étrangères de la vue {vi} : {} entrées, {} attendues",

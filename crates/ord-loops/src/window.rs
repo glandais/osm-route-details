@@ -249,7 +249,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
                     push(info.first_edge + i, cv.owned(i as usize).len_dm, out);
                 }
             }
-            for &(_, c) in self.idx[vi].foreign_of(key) {
+            for (_, c) in self.idx[vi].foreign_of(key).iter() {
                 push(c, view.edge(c).len_dm, out);
             }
         }
@@ -290,7 +290,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
             })
             .collect();
         // Les tuiles traversées par une chaîne sans y avoir de nœud comptent aussi : l'accroche y cherche des candidats.
-        tiles.extend(self.idx[vi].foreign.iter().map(|f| f.0));
+        tiles.extend(self.idx[vi].foreign_all().iter().map(|f| f.0));
         tiles.sort_unstable();
         tiles.dedup();
         self.build_window(vi, &tiles, &mut || false).expect("jamais coupée")
