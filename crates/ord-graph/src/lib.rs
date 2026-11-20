@@ -22,6 +22,7 @@ pub mod overlay;
 #[cfg(feature = "pbf")]
 pub mod pbf;
 pub mod search;
+pub mod service_index;
 pub mod stats;
 pub mod util;
 pub mod view;
