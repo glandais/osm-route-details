@@ -274,3 +274,79 @@ La commande entière dure 33,7 min. Elle compte en plus `verify()` de la base et
 
 Planète **[calculé, × 2,9 sur l'Europe]** : ≈ 40 min par vue, ≈ 30 Go (`road`) et ≈ 50 Go (`gravel`) de disque
 temporaire, pic anonyme ≈ 1,5 Gio.
+
+### 10.3 Planète (20 novembre 2026)
+
+`planet-261116.osm.pbf` mis à jour par `scripts/osm-planet-update.sh` jusqu'à la séquence quotidienne 5181
+(données du 19 novembre 2026, 00:00 UTC), puis `hm-runs/world-build.sh` : `build --external --mem-budget-mb 1024`,
+puis `views --views road,gravel --external --mem-budget-mb 1024`, binaire de `6e26240`, sans cgroup **[mesuré]**.
+
+**Base** `planet-261116-20261119-z11.ordg` : 431 524 740 sommets, 555 203 623 arêtes (263,8 M ways retenues sur
+1 234 M), 45,9 Go ; mur 1:42:36, pic anonyme avant `verify()` 1,27 Gio, disque temporaire 150,7 Go au plus (comme
+le relevé du §5.1 de la note de construction : 1:42:10, 1,49 Gio).
+
+| Vue | Nœuds | Arêtes de vue | Fichier | Mur | Pic anonyme | Disque temporaire | Séries au plus |
+|---|---|---|---|---|---|---|---|
+| `road` | 195 144 379 | 247 912 662 | 26,7 Go | 2 497 s (41,6 min) | 1,73 Gio | 41,5 Go | 13 |
+| `gravel` | 272 415 226 | 353 279 888 | 39,3 Go | 4 779 s (79,6 min) | 1,76 Gio | 60,9 Go | 18 |
+
+Contrôle exhaustif des deux vues réussi : toutes les arêtes filtrées couvertes (328 586 418 et 429 328 530),
+0 arête inutilisable ; 1 038 112 et 1 243 633 boucles coupées, 14 453 et 18 392 anneaux.
+
+Étapes, mur / processeur (s), `road` puis `gravel` :
+
+| V1 | V2 | V3 | V4 | V5 arêtes, géométrie | V5 écriture | relecture |
+|---|---|---|---|---|---|---|
+| 134 / 86 | 161 / 71 | 53 / 26 | 277 / 202 | **1 577 / 354** | 237 / 60 | 58 / 19 |
+| 678 / 135 | 652 / 108 | 351 / 46 | 771 / 309 | **1 853 / 478** | 373 / 85 | 101 / 26 |
+
+**Lecture** :
+- **Le disque limite, pas le calcul** : 4 à 5 fois plus de mur que de processeur. La base (46 Go) ne tient pas dans
+  le cache de pages (15 Gio de mémoire sur le poste) ; les relectures au fil des chaînes ratent le cache. Les
+  étapes V1 à V4 de `gravel` sont 3 à 7 fois plus longues que celles de `road` pour 1,3 fois plus d'arêtes
+  (hypothèse non vérifiée : le cache de pages est occupé par la vue `road` qui vient d'être écrite).
+- **Le pic anonyme dépasse le budget de 0,73 à 0,76 Gio** (0,34 à 0,47 en Europe). Les quatre bitsets en prennent
+  ≈ 0,25 Go **[calculé : 2 × 555 M + 2 × 432 M bits]** ; le reste n'est pas ventilé. Sous 2 Gio : acceptable pour
+  une construction sur le poste.
+- **Estimation du §10.2** (≈ 40 min par vue, 30 et 50 Go de temporaire) : juste pour `road`, deux fois trop
+  optimiste pour le mur de `gravel` ; le temporaire est 1,6 fois le fichier de vue.
+- **Chaîne complète** (mise à jour du planet exclue) : 4 h 19 min, 112 Go de fichiers.
+
+### 10.4 Chargement de la planète par le service (poste, 20 novembre 2026)
+
+Binaire `osm-route-details` de `6e26240`, environnement de l'image (`MALLOC_ARENA_MAX=2 MALLOC_MMAP_THRESHOLD_=1048576`),
+sans altitude (`ORD_CACHE__OFFLINE=true`, IGN désactivé), réglages par défaut (budget de 800 Mo), les quatre fichiers
+de la planète et `planet-261116.poly`, cache de pages des fichiers évincé au départ, sous
+`systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0` **[mesuré]**.
+
+- **À 3 Go (la limite du conteneur de production) : tué par le noyau** (`oom-kill`) au bout de 2 min 53 s, avant
+  d'être prêt. En cause, les composantes fortement connexes de `ViewIndex::build` : quatre tableaux par nœud de vue
+  (≈ 13 o par nœud, 195 M et 272 M nœuds), les deux vues en parallèle.
+- **À 12 Go : prêt après 36,7 min** (`load_ms` 2 203 521 ; 8,5 s pour la France), pic anonyme 5,0 Gio, ≈ 0,75 Gio
+  au repos ensuite ; 0 `oom`. Polygone accepté (`nodes_inside` 1,0), identités des vues vérifiées.
+
+| Étape du chargement | Durée |
+|---|---|
+| Index des vues (`foreign_ms` 159 071, `scc_ms` 559 603 au plus des deux vues) | 14,1 min |
+| Arêtes plus larges qu'une cellule (`CellIndex::exceptions`) : **16 448**, plafond 1 000 dépassé, repli sur l'index entier pour les dépôts | 14,4 min |
+| `GraphIndex::build` du contrôleur | 8,2 min |
+
+Le processus attend le disque presque tout ce temps (7 min de processeur à 31 min) : ces balayages sont en un fil,
+par fautes de pages sur 112 Go qui ne tiennent pas dans le cache.
+
+**Générations** (découverte, curseur 1, boucles de 60 km en route et 40 km en gravel, 14 lieux sur tous les
+continents dont Suva et Taveuni de part et d'autre de l'antiméridien, deux passes en série, 56 requêtes) :
+6 × 200 (route : Denver, Le Cap, Nairobi), 10 × 422 attendues (Reykjavik `no_candidate`, Ushuaia, plein Atlantique
+`start_too_far`), **39 × 503 `overloaded`** et 1 × 504, toutes au bout du budget de 8 s.
+
+Cause des 503 : la zone 2 d'une fenêtre (`Engine::plan_with`) élargit les cases d'accroche de la **plus longue
+chaîne de la vue** (`lmax_dm`). Sur la planète, elle fait **566 km** (`road`) et **1 406 km** (`gravel`) ; 1 et 5
+chaînes de plus de 500 km, 303 et 420 de plus de 100 km. Chaque fenêtre couvre alors des centaines de kilomètres
+autour du départ, son estimation dépasse le budget et la réservation attend jusqu'à l'échéance.
+
+**La planète n'est pas servable en l'état**, ni dans 3 Go ni en temps de démarrage. Les fichiers ne sont pas en
+cause, ce sont trois hypothèses du service calibrées sur la France :
+1. l'élargissement des fenêtres par la plus longue chaîne globale ;
+2. les composantes fortement connexes calculées en mémoire, sur toute la vue, au démarrage ;
+3. les balayages complets de la base au démarrage (index des vues, arêtes larges, index du contrôleur), et le
+   plafond de 1 000 arêtes larges.
