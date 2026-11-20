@@ -552,6 +552,14 @@ recommandée là où elles diffèrent.
    séance en conteneur (les deux fichiers `.orda` posés) ; `git revert` si elle manque. L'apprentissage reste sans attracteurs sauf
    règle L′ (aucun profil invalidé). La fusion et la pose des fichiers en production restent au propriétaire.
 
+### 9.11 Décisions (2026-11-20, après le relevé du 4d)
+
+1. **Fusion et publication de 1.13.0** avec `attractors = off` : les fichiers `.orda` sont posés en production, les capacités
+   disent `available = true, enabled = false`, les parcours sont ceux de 1.12.
+2. **Garder `off`** : aucun réglage ne tient tous les critères du §9.10 (relevé
+   [`ord-loops-lot4d-mesures.md`](ord-loops-lot4d-mesures.md)), et les critères ne sont pas relâchés. Le 4d s'arrête là,
+   sans étape de plus ; l'option reste dans le moteur pour une reprise.
+
 ---
 
 ## 10. Étapes, dans l'ordre
