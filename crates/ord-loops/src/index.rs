@@ -105,71 +105,88 @@ fn foreign_of_cells<B: AsRef<[u8]>>(view: &GraphFile<B>, cells: std::ops::Range<
     out
 }
 
+/// Index des chaînes étrangères d'une vue (note lot 6 §4.1) : `(clé de tuile, id de chaîne)` pour chaque tuile que
+/// touche une chaîne sans lui appartenir, triés et sans doublon. `threads` fils, par paquets de cellules.
+pub fn foreign_index<B: AsRef<[u8]> + Sync>(view: &GraphFile<B>, threads: usize) -> Vec<(u32, u32)> {
+    let n_cells = view.n_cells();
+    let threads = threads.clamp(1, n_cells.max(1));
+    let mut foreign: Vec<(u32, u32)> = if threads == 1 {
+        foreign_of_cells(view, 0..n_cells)
+    } else {
+        let step = n_cells.div_ceil(threads);
+        std::thread::scope(|s| {
+            let parts: Vec<_> = (0..threads)
+                .map(|t| {
+                    let r = (t * step).min(n_cells)..((t + 1) * step).min(n_cells);
+                    s.spawn(move || foreign_of_cells(view, r))
+                })
+                .collect();
+            parts.into_iter().flat_map(|h| h.join().expect("fil d'index")).collect()
+        })
+    };
+    foreign.sort_unstable();
+    foreign.dedup();
+    foreign.shrink_to_fit();
+    foreign
+}
+
+/// Composantes fortement connexes d'une vue (note lot 6 §6) : `(id de chaîne, longueur dm de sa composante)` pour les
+/// chaînes dont la composante fait moins de `cap_dm` (0 si ses deux bouts sont dans deux composantes), triés ; et la
+/// plus longue chaîne, en dm. Tarjan sur toute la vue : 13 o par nœud.
+pub fn short_components<B: AsRef<[u8]>>(view: &GraphFile<B>, cap_dm: u64) -> (Vec<(u32, u64)>, u32) {
+    let n_cells = view.n_cells();
+    let n_nodes = view.header().nodes as usize;
+    let comp = strong_components(n_nodes, &|x, buf| {
+        let cv = view.cell(view.node_cell(x));
+        let local = (x - cv.info().first_node) as usize;
+        buf.extend(cv.out(local).iter().map(|d| d.target()));
+    });
+    let mut comp_len = vec![0u64; comp.iter().max().map_or(0, |&m| m as usize + 1)];
+    let mut lmax_dm = 0u32;
+    for ci in 0..n_cells {
+        let cv = view.cell(ci);
+        let info = *cv.info();
+        for i in 0..info.n_edges {
+            let (a, b) = view.edge_ends(info.first_edge + i);
+            let len = cv.owned(i as usize).len_dm;
+            lmax_dm = lmax_dm.max(len);
+            if comp[a as usize] == comp[b as usize] {
+                comp_len[comp[a as usize] as usize] += u64::from(len);
+            }
+        }
+    }
+    let mut short_comp: Vec<(u32, u64)> = Vec::new();
+    for ci in 0..n_cells {
+        let info = *view.cell(ci).info();
+        for i in 0..info.n_edges {
+            let c = info.first_edge + i;
+            let (a, b) = view.edge_ends(c);
+            let l =
+                if comp[a as usize] == comp[b as usize] { comp_len[comp[a as usize] as usize] } else { 0 };
+            if l < cap_dm {
+                short_comp.push((c, l));
+            }
+        }
+    }
+    short_comp.sort_unstable();
+    short_comp.shrink_to_fit();
+    (short_comp, lmax_dm)
+}
+
+/// Seuil des composantes courtes (dm) des réglages : `⌈min_component_share × max_distance_m × 10⌉`.
+pub fn cap_dm_of(params: &Params) -> u64 {
+    (params.min_component_share * params.max_distance_m * 10.0).ceil() as u64
+}
+
 #[allow(dead_code)] // lu par la fenêtre, à l'étape suivante du lot 6
 impl ViewIndex {
     pub fn build<B: AsRef<[u8]> + Sync>(view: &GraphFile<B>, params: &Params, threads: usize) -> Self {
         let t0 = std::time::Instant::now();
-        let n_cells = view.n_cells();
-        let threads = threads.clamp(1, n_cells.max(1));
-        let mut foreign: Vec<(u32, u32)> = if threads == 1 {
-            foreign_of_cells(view, 0..n_cells)
-        } else {
-            let step = n_cells.div_ceil(threads);
-            std::thread::scope(|s| {
-                let parts: Vec<_> = (0..threads)
-                    .map(|t| {
-                        let r = (t * step).min(n_cells)..((t + 1) * step).min(n_cells);
-                        s.spawn(move || foreign_of_cells(view, r))
-                    })
-                    .collect();
-                parts.into_iter().flat_map(|h| h.join().expect("fil d'index")).collect()
-            })
-        };
-        foreign.sort_unstable();
-        foreign.dedup();
-        foreign.shrink_to_fit();
+        let foreign = foreign_index(view, threads);
         let foreign_ms = t0.elapsed().as_millis() as u64;
-
         let t1 = std::time::Instant::now();
-        let n_nodes = view.header().nodes as usize;
-        let comp = strong_components(n_nodes, &|x, buf| {
-            let cv = view.cell(view.node_cell(x));
-            let local = (x - cv.info().first_node) as usize;
-            buf.extend(cv.out(local).iter().map(|d| d.target()));
-        });
-        let cap_dm = (params.min_component_share * params.max_distance_m * 10.0).ceil() as u64;
-        let mut comp_len = vec![0u64; comp.iter().max().map_or(0, |&m| m as usize + 1)];
-        let mut lmax_dm = 0u32;
-        for ci in 0..n_cells {
-            let cv = view.cell(ci);
-            let info = *cv.info();
-            for i in 0..info.n_edges {
-                let (a, b) = view.edge_ends(info.first_edge + i);
-                let len = cv.owned(i as usize).len_dm;
-                lmax_dm = lmax_dm.max(len);
-                if comp[a as usize] == comp[b as usize] {
-                    comp_len[comp[a as usize] as usize] += u64::from(len);
-                }
-            }
-        }
-        let mut short_comp: Vec<(u32, u64)> = Vec::new();
-        for ci in 0..n_cells {
-            let info = *view.cell(ci).info();
-            for i in 0..info.n_edges {
-                let c = info.first_edge + i;
-                let (a, b) = view.edge_ends(c);
-                let l = if comp[a as usize] == comp[b as usize] {
-                    comp_len[comp[a as usize] as usize]
-                } else {
-                    0
-                };
-                if l < cap_dm {
-                    short_comp.push((c, l));
-                }
-            }
-        }
-        short_comp.sort_unstable();
-        short_comp.shrink_to_fit();
+        let cap_dm = cap_dm_of(params);
+        let (short_comp, lmax_dm) = short_components(view, cap_dm);
         let scc_ms = t1.elapsed().as_millis() as u64;
         Self { zoom: view.header().zoom, foreign, short_comp, cap_dm, lmax_dm, foreign_ms, scc_ms }
     }

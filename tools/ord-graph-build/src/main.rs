@@ -7,6 +7,7 @@ mod attractors_cmd;
 mod build_cmd;
 #[cfg(test)]
 mod e2e_tests;
+mod index_cmd;
 mod measure;
 mod util;
 mod views_cmd;
@@ -28,6 +29,9 @@ enum Command {
     Views(views_cmd::ViewsArgs),
     /// Écrit les fichiers d'attracteurs (`.orda`) des vues `road` et `gravel` depuis l'extrait du graphe (lot 4d).
     Attractors(attractors_cmd::AttractorsArgs),
+    /// Écrit le fichier d'index de service (`.ordi`) d'un graphe et de ses vues `road` et `gravel` : ce que le
+    /// générateur calculait à chaque démarrage.
+    Index(index_cmd::IndexArgs),
     /// Tailles, comptes et recherches bornées (froid / chaud) sur un graphe de base et ses vues.
     Measure(measure::MeasureArgs),
 }
@@ -40,6 +44,10 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Views(a) => {
             let r = views_cmd::run(&a)?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
+        Command::Index(a) => {
+            let r = index_cmd::run(&a)?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         Command::Attractors(a) => {

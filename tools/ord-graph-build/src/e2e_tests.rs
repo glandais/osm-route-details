@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::attractors_cmd::{self, AttractorsArgs};
 use crate::build_cmd::{self, BuildArgs};
+use crate::index_cmd::{self, IndexArgs};
 use crate::measure::{self, MeasureArgs};
 use crate::views_cmd::{self, ViewsArgs};
 
@@ -232,4 +233,79 @@ fn external_build_writes_the_same_graph() {
     assert_eq!(gm.section_digests(), ge.section_digests());
     // Rien d'autre que le graphe et le rapport : le dossier temporaire est parti.
     assert_eq!(std::fs::read_dir(d2.path()).unwrap().count(), 2);
+}
+
+#[test]
+fn index_after_views_on_the_tiny_pbf_and_refuse_a_view_of_another_build() {
+    let dir = tempfile::tempdir().unwrap();
+    let build = |out: &std::path::Path| {
+        build_cmd::run(&BuildArgs {
+            pbf: mini_pbf(),
+            out_dir: Some(out.to_path_buf()),
+            region: None,
+            zoom: 11,
+            threads: None,
+            report: None,
+            external: false,
+            mem_budget_mb: 1024,
+            tmp_dir: None,
+        })
+        .expect("build")
+    };
+    let views = |graph: &std::path::Path| {
+        views_cmd::run(&ViewsArgs {
+            graph: graph.to_path_buf(),
+            views: vec!["road".into(), "gravel".into()],
+            out_dir: None,
+            report: None,
+            external: false,
+            mem_budget_mb: 1024,
+            tmp_dir: None,
+        })
+        .expect("views")
+    };
+    let report = build(dir.path());
+    views(&report.output);
+    let args = IndexArgs {
+        graph: report.output.clone(),
+        views_dir: None,
+        out: None,
+        cap_km: 400,
+        threads: Some(2),
+        check: true,
+        report: Some(dir.path().join("index.json")),
+    };
+    let r = index_cmd::run(&args).expect("index --check");
+    assert!(r.checked && r.out.exists() && dir.path().join("index.json").exists());
+    assert_eq!(r.out, report.output.with_extension("ordi"));
+    assert_eq!(r.cap_dm, 4_000_000);
+    assert_eq!(r.views.len(), 2);
+    assert!(r.views.iter().all(|v| v.chains > 0 && v.lmax_dm > 0));
+    // Le mini-PBF tient dans une cellule : toutes ses chaînes sont dans de petites composantes.
+    assert!(r.views.iter().all(|v| v.short == v.chains), "{:?}", r.views);
+    assert_eq!(r.node_sample, report.vertices.div_ceil(16));
+    let f = ord_graph::service_index::IndexFile::open_mmap(&r.out).unwrap();
+    let open = |p: &std::path::Path| ord_graph::format::GraphFile::open_mmap(p).unwrap();
+    let (base, road, gravel) = (
+        open(&report.output),
+        open(&crate::views_cmd::view_path(&report.output, "road", None)),
+        open(&crate::views_cmd::view_path(&report.output, "gravel", None)),
+    );
+    f.check_for(&base, [&road, &gravel]).expect("identité");
+
+    // Une vue d'une autre construction du même extrait (autre date) : refusée avant d'écrire.
+    let other = dir.path().join("autre");
+    std::fs::create_dir_all(&other).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let r2 = build(&other);
+    views(&r2.output);
+    std::fs::remove_file(crate::views_cmd::view_path(&report.output, "gravel", None)).unwrap();
+    std::fs::copy(
+        crate::views_cmd::view_path(&r2.output, "gravel", None),
+        crate::views_cmd::view_path(&report.output, "gravel", None),
+    )
+    .unwrap();
+    let err = index_cmd::run(&IndexArgs { out: Some(dir.path().join("x.ordi")), ..args }).unwrap_err();
+    assert!(err.to_string().contains("n'est pas une vue de ce graphe"), "{err}");
+    assert!(!dir.path().join("x.ordi").exists());
 }

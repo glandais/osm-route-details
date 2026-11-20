@@ -9,6 +9,9 @@ license.workspace = true
 
 [dependencies]
 ord-graph = { workspace = true, features = ["pbf", "mmap", "external"] }
+ord-graph-match.workspace = true
+ord-loops.workspace = true
+ord-loops-check.workspace = true
 
 anyhow.workspace = true
 clap.workspace = true
@@ -17,6 +20,7 @@ rustc-hash.workspace = true
 rustix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+zerocopy.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

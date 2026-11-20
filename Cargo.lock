@@ -1400,12 +1400,16 @@ dependencies = [
  "anyhow",
  "clap",
  "ord-graph",
+ "ord-graph-match",
+ "ord-loops",
+ "ord-loops-check",
  "rayon",
  "rustc-hash",
  "rustix 1.1.6",
  "serde",
  "serde_json",
  "tempfile",
+ "zerocopy",
 ]
 
 [[package]]

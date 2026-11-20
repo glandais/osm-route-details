@@ -241,6 +241,30 @@ fn check_increasing<T: PartialOrd + Copy + std::fmt::Debug>(name: &str, xs: &[T]
     Ok(())
 }
 
+/// La boîte `(lat_min, lat_max, lon_min, lon_max)` E7 de tous les nœuds de la base (`None` sans nœud) et un nœud sur
+/// [`NODE_SAMPLE_EVERY`] dans l'ordre des ids (le premier, le dix-septième…) : ce que le contrôle du polygone de
+/// couverture du service lit.
+pub fn node_sample<B: AsRef<[u8]>>(base: &GraphFile<B>) -> (Option<[i32; 4]>, Vec<(i32, i32)>) {
+    let mut bbox: Option<[i32; 4]> = None;
+    let mut sample = Vec::with_capacity(base.header().nodes.div_ceil(u64::from(NODE_SAMPLE_EVERY)) as usize);
+    let mut seen = 0u64;
+    for ci in 0..base.n_cells() {
+        let cv = base.cell(ci);
+        for local in 0..cv.info().n_nodes as usize {
+            let (lat, lon) = cv.node(local);
+            bbox = Some(match bbox {
+                None => [lat, lat, lon, lon],
+                Some(b) => [b[0].min(lat), b[1].max(lat), b[2].min(lon), b[3].max(lon)],
+            });
+            if seen.is_multiple_of(u64::from(NODE_SAMPLE_EVERY)) {
+                sample.push((lat, lon));
+            }
+            seen += 1;
+        }
+    }
+    (bbox, sample)
+}
+
 /// Écrit le fichier à côté de sa destination (`<path>.tmp`, `fsync`, 0444), puis le renomme ; rend sa taille.
 /// `views` : `[road, gravel]`, des vues non élaguées de `base`.
 pub fn write_index<B: AsRef<[u8]>>(

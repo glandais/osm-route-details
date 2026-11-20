@@ -64,6 +64,7 @@ pub use generate::{
     route_geometry,
 };
 pub use geo::LatLon;
+pub use index::{cap_dm_of, foreign_index, short_components};
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
