@@ -3,6 +3,15 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.13.1 (API 1.13)
+
+### Corrigé
+
+- **Cap d'un aller simple** : il choisit maintenant les secteurs du point de demi-tour, comme pour une boucle (50° au plus du
+  cap), élargis à 95° puis à tous seulement si aucune passe n'a rendu de parcours. Il n'était qu'un terme de la note : pour une
+  arrivée proche du départ, la route de l'équipe l'emportait et les parcours partaient à 90–170° du cap demandé. Boucles et
+  aller simple sans cap inchangés au bit près.
+
 ## 1.13.0 (API 1.13)
 
 ### Ajouté
