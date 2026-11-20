@@ -340,7 +340,8 @@ pub struct GeneratorConfig {
     /// Générations en calcul en même temps (CPU) et en attente au plus ; au-delà, 503 `overloaded`.
     pub max_concurrent: usize,
     pub max_queued: usize,
-    /// Budget d'une génération, attente comprise.
+    /// Budget d'une génération, attente comprise (30 s depuis 1.14.0 : zones denses de la planète, voir
+    /// `ord-1-14-planete-mesures.md`). Publié dans `/v1/capabilities`, `generator.limits.budget_ms`.
     pub budget_ms: u64,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
@@ -436,7 +437,7 @@ impl Default for GeneratorConfig {
             overlay_dir: PathBuf::from("/var/cache/osm-route-details/generator"),
             max_concurrent: 2,
             max_queued: 8,
-            budget_ms: 8_000,
+            budget_ms: 30_000,
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
             team_cache_entries: 64,
@@ -836,6 +837,24 @@ mod tests {
             jail.set_env("ORD_GENERATOR__MAX_CONCURRENT", "0");
             let err = Config::load(None).expect_err("sans place de calcul");
             assert!(err.to_string().contains("generator"), "{err}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_generation_budget_defaults_to_30_s_and_comes_from_the_environment() {
+        assert_eq!(GeneratorConfig::default().budget_ms, 30_000);
+        figment::Jail::expect_with(|jail| {
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(
+                (c.generator.budget_ms, c.generator.max_concurrent, c.generator.max_queued),
+                (30_000, 2, 8)
+            );
+            jail.set_env("ORD_GENERATOR__BUDGET_MS", "8000");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.budget_ms, 8_000);
+            jail.set_env("ORD_GENERATOR__BUDGET_MS", "0");
+            assert!(Config::load(None).is_err(), "budget nul");
             Ok(())
         });
     }

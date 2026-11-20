@@ -611,6 +611,8 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     assert_eq!(g["cursor"]["strict_at"], 0.0);
     assert_eq!(g["cursor"]["discovery_at"], 1.0);
     assert_eq!(g["limits"]["distance_m_min"], 1000.0);
+    // Budget d'une génération publié : 30 s par défaut depuis 1.14.0 (8 s avant).
+    assert_eq!(g["limits"]["budget_ms"], 30_000);
     assert_eq!(g["limits"]["deposit"]["max_tracks"], 20_000);
     // Le quota qui décide d'un 507 est celui de l'espace : il est publié, comme l'attente de la place de dépôt.
     assert_eq!(g["limits"]["storage"]["max_namespace_mb"], 64);
