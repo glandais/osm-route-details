@@ -15,7 +15,7 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
   calcul) : prêt en 7,6 s au lieu de 37 min, dans 3 Go (il était tué), 920 Mo d'anonyme au plus pendant une série de
   générations, plus aucun 503 (`ord-loops-planete.md` §11).
 
-### Modifié
+### Changé
 
 - **Budget d'une génération : 8 s -> 30 s** (`generator.budget_ms`, `ORD_GENERATOR__BUDGET_MS`, publié dans `/v1/capabilities`
   sous `generator.limits.budget_ms`). Mesures sur la planète, en série, pages froides, 3 Go, sans altitude
@@ -44,6 +44,10 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
 - **Fichier facultatif** : sans lui, le service calcule les index au démarrage, comme avant. Présent mais illisible ou
   d'un autre graphe, le générateur est éteint (`reason` : `graph_unreadable`) : le recalculer tuerait le conteneur sur la
   planète. Contrat HTTP inchangé ; aucun redépôt.
+- **Budget de 30 s** : seule la valeur par défaut publiée sous `generator.limits.budget_ms` change, pas le contrat. Un
+  client qui coupe avant (Pédalons : 10 s jusqu'ici) abandonne des générations que le service aurait rendues ; le délai
+  du client et celui de tout proxy intermédiaire passent au budget plus l'altitude et une marge (Pédalons : 35 s).
+  `ORD_GENERATOR__BUDGET_MS=8000` rend le comportement de 1.13. Les parcours rendus ne changent pas.
 
 ## 1.13.1 (API 1.13)
 
