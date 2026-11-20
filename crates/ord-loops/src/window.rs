@@ -211,7 +211,9 @@ impl<B: AsRef<[u8]>> Engine<B> {
             // Classe : le disque centré sur le centre de la tuile du centre, de rayon arrondi au pas au-dessus.
             let (cx, cy) = tile_of_e7(center.0, center.1, zoom);
             let (la0, la1, lo0, lo1) = tile_rect_e7(cx, cy, zoom);
-            let tc = ((la0 + la1) / 2, (lo0 + lo1) / 2);
+            // En i64 : au-delà de 107,4° de longitude, la somme de deux longitudes E7 déborde un i32.
+            let mid = |a: i32, b: i32| ((i64::from(a) + i64::from(b)) / 2) as i32;
+            let tc = (mid(la0, la1), mid(lo0, lo1));
             let off = haversine_m(tc, center);
             let steps = ((radius + off) / radius_step_m).ceil().max(1.0);
             let mut class = Vec::new();

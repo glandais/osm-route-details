@@ -500,3 +500,28 @@ fn the_snap_zone_takes_the_far_end_of_a_long_chain_and_nothing_in_between() {
     let far = e.plan(&req(60_000.0, 100_000.0), 0.0);
     assert!(far.snap_lmax_m == 0.0 && far.need.len() < 10, "{} tuiles", far.need.len());
 }
+
+/// La classe d'une fenêtre (§5.5 du lot 6) près de l'antiméridien et du méridien 150° W : le centre de tuile se calculait
+/// en i32 et débordait au-delà de 107,4° de longitude, d'où une classe de millions de tuiles (503 sur la planète, de
+/// Tokyo à Anchorage).
+#[test]
+fn the_window_class_stays_local_at_any_longitude() {
+    let e = engine_zoomed(&mut grid_with_a_long_chain(), 11, scenario_params());
+    for (lat, lon) in [(35.68, 139.77), (-33.87, 151.21), (61.22, -149.9), (-16.8, -179.97), (47.2, -1.55)] {
+        let r = Request {
+            start: crate::LatLon::new(lat, lon),
+            end: None,
+            bearing: None,
+            distance_m: 60_000.0,
+            ride_type: crate::RideType::Road,
+            mode: crate::Mode::Discovery,
+            familiarity: 0.5,
+            off_team_cost_q8: 768,
+            seed: 3,
+            figures: crate::Figures::Classic,
+        };
+        let plan = e.plan(&r, 10_000.0);
+        assert!(crate::window::tiles_cover(&plan.class, &plan.need));
+        assert!(plan.class.len() < 200, "({lat}, {lon}) : {} tuiles dans la classe", plan.class.len());
+    }
+}
