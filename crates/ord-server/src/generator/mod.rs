@@ -222,9 +222,9 @@ pub struct Ready {
     pub(crate) engine: GenEngine,
     poly: Poly,
     store: Arc<store::Store>,
-    /// L'index par cellule couvre ce graphe : peu d'arêtes plus larges qu'une cellule (liste d'exceptions) ; sinon
-    /// index entier.
-    cell_index_ok: bool,
+    /// Les arêtes plus larges qu'une cellule, lues une fois au démarrage et partagées par les index par cellule des
+    /// dépôts ; `None` : trop nombreuses, les dépôts bâtissent l'index entier.
+    pub(crate) cell_wide: Option<ord_graph_match::index::WideEdges>,
     /// Arêtes plus larges qu'une cellule, pour le contrôleur indépendant (une fois, au démarrage).
     pub(crate) graph_index: ord_loops_check::GraphIndex,
     /// Fenêtres du moteur sous un budget de mémoire (lot 6).
@@ -252,7 +252,7 @@ impl std::fmt::Debug for Ready {
 }
 
 /// Au-delà de ce nombre d'arêtes plus larges qu'une cellule, l'index des dépôts retombe sur l'index entier.
-const MAX_WIDE_EDGES: usize = 1_000;
+const MAX_WIDE_EDGES: usize = 100_000;
 
 /// Identité d'un graphe pour le stockage : xxh3 des champs de `GraphIdentity::same_ids` (un graphe reconstruit à
 /// l'identique garde ses surcouches ; un autre les rend `stale`).
@@ -501,10 +501,12 @@ impl Generator {
             return disabled(DisabledReason::PolygonMismatch);
         }
         tracing::info!(nodes_inside = inside, "generator coverage polygon checked");
-        // Arêtes plus larges qu'une cellule : listées (une sur la France), l'index par cellule les ajoute. Au-delà d'un
-        // plafond, repli sur l'index entier.
-        let wide_edges = ord_graph_match::CellIndex::exceptions(engine.base()).len();
+        // Arêtes plus larges qu'une cellule : listées (une sur la France, 16 448 sur la planète), lues une fois et
+        // ajoutées par chaque index par cellule. Au-delà d'un plafond, repli sur l'index entier.
+        let wide = ord_graph_match::CellIndex::wide_list(engine.base());
+        let wide_edges = wide.len();
         let cell_index_ok = wide_edges <= MAX_WIDE_EDGES;
+        let cell_wide = cell_index_ok.then_some(wide);
         if !cell_index_ok {
             tracing::warn!(
                 wide_edges,
@@ -640,7 +642,7 @@ impl Generator {
                 engine,
                 poly,
                 store,
-                cell_index_ok,
+                cell_wide,
                 graph_index,
                 windows,
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),

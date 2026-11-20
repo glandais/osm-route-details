@@ -140,8 +140,8 @@ impl Worker {
         let gf = r.engine.base();
         let cell;
         let full;
-        let idx: &dyn Near = if r.cell_index_ok {
-            cell = CellIndex::new(gf, r.cfg.deposit.index_cache_mb * 1024 * 1024);
+        let idx: &dyn Near = if let Some(wide) = &r.cell_wide {
+            cell = CellIndex::with_wide(gf, r.cfg.deposit.index_cache_mb * 1024 * 1024, Arc::clone(wide));
             &cell
         } else {
             full = SegIndex::build(gf);

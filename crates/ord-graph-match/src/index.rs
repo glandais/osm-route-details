@@ -221,9 +221,13 @@ impl Lru {
     }
 }
 
+/// Les arêtes plus larges qu'une cellule d'un graphe, avec leurs points : lues une fois (au démarrage du service) et
+/// partagées par tous les index par cellule ([`CellIndex::with_wide`]).
+pub type WideEdges = std::sync::Arc<Vec<WideEdge>>;
+
 /// Une arête plus large qu'une cellule : ses points, relus une fois, et la cellule qui la possède.
 #[derive(Debug)]
-struct WideEdge {
+pub struct WideEdge {
     edge: u32,
     owner: (u32, u32),
     pts: Vec<(i32, i32)>,
@@ -241,7 +245,7 @@ pub struct CellIndex<'g> {
     gf: &'g MappedGraph,
     zoom: u8,
     cap_bytes: usize,
-    wide: Vec<WideEdge>,
+    wide: WideEdges,
     lru: std::sync::Mutex<Lru>,
     built: std::sync::atomic::AtomicU64,
 }
@@ -295,11 +299,34 @@ impl<'g> CellIndex<'g> {
 
     /// Index vide. Relit la liste des arêtes plus larges qu'une cellule (§8.2 du lot 6).
     pub fn new(gf: &'g MappedGraph, cap_bytes: usize) -> Self {
+        Self::with_wide(gf, cap_bytes, Self::wide_list(gf))
+    }
+
+    /// La liste des arêtes plus larges qu'une cellule, avec leurs points, à partager entre index.
+    pub fn wide_list(gf: &MappedGraph) -> WideEdges {
+        std::sync::Arc::new(Self::wide_edges(gf))
+    }
+
+    /// La liste des arêtes `edges` (croissantes, déjà connues pour être plus larges qu'une cellule, par exemple lues
+    /// dans le fichier d'index de service), avec leurs points relus dans la base.
+    pub fn wide_list_of(gf: &MappedGraph, edges: &[u32]) -> WideEdges {
+        let wide = edges
+            .iter()
+            .map(|&edge| {
+                let owner = gf.cell_xy(gf.edge(edge).cell);
+                WideEdge { edge, owner, pts: edge_points_e7(gf, edge) }
+            })
+            .collect();
+        std::sync::Arc::new(wide)
+    }
+
+    /// Index vide, avec une liste d'arêtes larges déjà lue ([`CellIndex::wide_list`]).
+    pub fn with_wide(gf: &'g MappedGraph, cap_bytes: usize, wide: WideEdges) -> Self {
         Self {
             gf,
             zoom: gf.header().zoom,
             cap_bytes,
-            wide: Self::wide_edges(gf),
+            wide,
             lru: std::sync::Mutex::new(Lru::default()),
             built: std::sync::atomic::AtomicU64::new(0),
         }
@@ -342,7 +369,7 @@ impl<'g> CellIndex<'g> {
             }
         }
         // Les arêtes plus larges qu'une cellule, sauf celles déjà lues : possédées par la cellule ou une voisine.
-        for w in &self.wide {
+        for w in self.wide.iter() {
             if w.owner.0.abs_diff(x) <= 1 && w.owner.1.abs_diff(y) <= 1 {
                 continue;
             }
