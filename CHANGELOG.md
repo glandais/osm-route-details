@@ -3,7 +3,7 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
-## Non publié
+## 1.14.0 (API 1.13)
 
 ### Ajouté
 
@@ -14,6 +14,19 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
   (variable `ORD_GENERATOR__INDEX`, par défaut le graphe avec l'extension `.ordi`). Sur la planète (582 Mo, 20 min de
   calcul) : prêt en 7,6 s au lieu de 37 min, dans 3 Go (il était tué), 920 Mo d'anonyme au plus pendant une série de
   générations, plus aucun 503 (`ord-loops-planete.md` §11).
+
+### Modifié
+
+- **Budget d'une génération : 8 s -> 30 s** (`generator.budget_ms`, `ORD_GENERATOR__BUDGET_MS`, publié dans `/v1/capabilities`
+  sous `generator.limits.budget_ms`). Mesures sur la planète, en série, pages froides, 3 Go, sans altitude
+  (`ord-1-14-planete-mesures.md`) : dans 18 zones denses (Tokyo, Osaka, Séoul...), 60 à 150 km, médiane 2,0 s, p90 5,5 s,
+  maximum 11,7 s (Tokyo, route 150 km) ; à 200 km, médiane 5,1 s, maximum 25,7 s. Réussites à 8 s : 79 sur 83 (60 à 150 km) et
+  27 sur 42 (200 km) ; à 30 s : 83 et 42. À quatre clients simultanés sur 60 à 200 km, 16 générations sur 84 (19 %)
+  finissaient en 504 à 8 s, aucune à 30 s (maximum 30,3 s). Le moteur n'abandonne jamais sur le budget (0 `budget` sur
+  616 générations à budget levé) : `astar_budget`, `max_concurrent` (2) et `max_queued` (8) ne changent pas, les parcours
+  et les références figées non plus ; la France reste identique (maximum 6,4 s à 200 km). Mémoire inchangée (anonyme 972 Mo
+  au plus, aucun `oom`). Les clients dont le délai était calé sur 8 s doivent l'allonger : budget + altitude + marge
+  (Pédalons : 35 s).
 
 ### Corrigé
 
