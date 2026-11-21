@@ -308,7 +308,9 @@ fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 
 #[tokio::test]
 async fn a_budget_spent_before_the_first_step_keeps_the_previous_profile_and_still_writes_the_overlay() {
-    let w = World::with(|c| c.generator.profile.budget_s = 1);
+    // 4 s: enough for the three steps of the first deposit on a slow runner (2 of 3 in 1 s on the
+    // runner of the image build), and the hold below outlasts it.
+    let w = World::with(|c| c.generator.profile.budget_s = 4);
     let k = key(1);
     let first = w.deposit(&k, "team-a", loops_deposit(&RINGS)).await;
     assert_eq!(first.json()["profile"]["outcome"], "learned", "{}", first.text);
@@ -320,7 +322,7 @@ async fn a_budget_spent_before_the_first_step_keeps_the_previous_profile_and_sti
     let release = {
         let hooks = std::sync::Arc::clone(&hooks);
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(1500)).await;
+            tokio::time::sleep(Duration::from_millis(4500)).await;
             hooks.profile_hold.store(false, Ordering::Relaxed);
         })
     };
