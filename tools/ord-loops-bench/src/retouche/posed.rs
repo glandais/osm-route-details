@@ -13,9 +13,12 @@ use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ord_graph::mmap::MappedGraph;
+use ord_graph_match::geo::decode_polyline6;
 use ord_graph_match::walk::{Join, Leg, Walk};
 use rayon::prelude::*;
 
+use super::{continuity, project};
+use crate::likeness::export;
 use crate::likeness::walk::Trace;
 
 /// Bit de sens d'un lien de chaîne de vue.
@@ -187,6 +190,137 @@ pub fn candidates(
         }
     }
     out
+}
+
+/// Une couture candidate posée sur la trace d'origine.
+#[derive(Clone, Copy, Debug)]
+pub struct PSeam {
+    pub seam: Seam,
+    /// Abscisse sur la polyligne du document (§2.4), m.
+    pub s_m: f64,
+}
+
+/// Une trace posée : tout ce que les prototypes lisent (note §3). **Privé** : porte l'identifiant de hachage de la trace,
+/// jamais écrit.
+pub struct Posed {
+    pub team: usize,
+    pub letter: String,
+    pub rank: u32,
+    pub id_hash: u64,
+    pub ty: u8,
+    pub ride: ord_loops::RideType,
+    pub shape: continuity::Shape,
+    pub walk: Walk,
+    pub line: project::DocLine,
+    /// Longueur de la polyligne du document, m.
+    pub l_m: f64,
+    pub seams: Vec<PSeam>,
+    /// Longueur graphe cumulée à la fin de chaque jambe, m.
+    pub cum_end: Vec<f64>,
+    pub edge_set: rustc_hash::FxHashSet<u32>,
+}
+
+impl Posed {
+    /// Indices des coutures valides pour `resize` (marge des deux côtés).
+    pub fn both(&self, margin_m: f64) -> Vec<usize> {
+        (0..self.seams.len()).filter(|&k| self.seams[k].seam.valid(margin_m)).collect()
+    }
+
+    /// Indices des coutures valides pour `move_end` (marge avant seulement).
+    pub fn before(&self, margin_m: f64) -> Vec<usize> {
+        (0..self.seams.len()).filter(|&k| self.seams[k].seam.valid_before(margin_m)).collect()
+    }
+
+    /// Début de la jambe `j`, abscisse de graphe cumulée.
+    pub fn leg_start(&self, j: usize) -> f64 {
+        if j == 0 {
+            0.0
+        } else {
+            self.cum_end[j - 1]
+        }
+    }
+}
+
+/// Longueur graphe d'une jambe, m : `(hi − lo) × len_dm / 10`.
+pub fn leg_len_m(gf: &MappedGraph, l: &Leg) -> f64 {
+    (l.hi - l.lo).abs() * f64::from(gf.edge(l.edge).len_dm) / 10.0
+}
+
+/// Pose une trace de l'export : marche, polyligne du document, coutures (règles 1 à 3, marges des plages) et leurs
+/// abscisses de trace. `None` pour une trace illisible, vide ou de type au-delà de MTB.
+pub fn pose(ctx: &continuity::Ctx<'_>, idx: usize, rank: u32, letter: &str) -> Option<Posed> {
+    let t = &ctx.ing.tracks[idx];
+    if !t.readable || t.ty > 2 {
+        return None;
+    }
+    let m = export::track_match(ctx.jobs, t);
+    if m.pieces.is_empty() {
+        return None;
+    }
+    let walk = Walk::from_pieces(ctx.gf, &m.pieces);
+    if walk.legs.is_empty() {
+        return None;
+    }
+    let trace = walk.trace(ctx.gf);
+    let gap = {
+        let (a, b) = (trace.pts[0], trace.pts[trace.pts.len() - 1]);
+        (a[0] - b[0]).hypot(a[1] - b[1])
+    };
+    let shape = if gap < ctx.retain.loop_gap * trace.l_poly {
+        continuity::Shape::Loop
+    } else {
+        continuity::Shape::OneWay
+    };
+    let line = project::DocLine::from_parts(
+        t.edges.iter().map(|e| decode_polyline6(&ctx.ing.keys[e.key as usize].0).unwrap_or_default()),
+    );
+    let l_m = line.len_m();
+    let view = ctx.views[usize::from(t.ty == 1 || t.ty == 2)];
+    let cands = candidates(ctx.gf, &walk, &trace, view, ctx.opts.touch_continues);
+    let mut prev_join = 0usize;
+    let points: Vec<project::SeamPoint> = cands
+        .iter()
+        .map(|c| {
+            let p = ctx.gf.node_pos(c.node);
+            let chords: f64 = walk.joins[prev_join..c.join]
+                .iter()
+                .filter_map(|j| if let Join::Hole(d) = j { Some(*d) } else { None })
+                .sum();
+            prev_join = c.join;
+            project::SeamPoint {
+                latlon: (f64::from(p.0) * 1e-7, f64::from(p.1) * 1e-7),
+                a_m: c.a_m,
+                slack_m: 3.0 * chords,
+            }
+        })
+        .collect();
+    let proj = project::project(&line, &points, ctx.proj_tol_m);
+    let seams = cands.iter().zip(&proj.s).map(|(c, &s)| PSeam { seam: *c, s_m: s }).collect();
+    let mut acc = 0.0;
+    let cum_end = walk
+        .legs
+        .iter()
+        .map(|l| {
+            acc += leg_len_m(ctx.gf, l);
+            acc
+        })
+        .collect();
+    let edge_set = walk.legs.iter().map(|l| l.edge).collect();
+    Some(Posed {
+        team: t.team,
+        letter: letter.to_string(),
+        rank,
+        id_hash: t.id_hash,
+        ty: t.ty,
+        ride: ord_graph_match::profile::collect::ride_of(t.ty),
+        shape,
+        walk,
+        line,
+        l_m,
+        seams,
+        cum_end,
+        edge_set,
+    })
 }
 
 #[cfg(test)]

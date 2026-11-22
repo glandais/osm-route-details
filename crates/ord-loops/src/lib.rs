@@ -22,6 +22,8 @@ mod geo;
 mod index;
 #[cfg(feature = "probe")]
 pub mod probe;
+#[cfg(feature = "probe")]
+pub mod probe_graft;
 mod reverse;
 mod search;
 mod selfcheck;
@@ -38,6 +40,8 @@ mod window;
 mod tests;
 #[cfg(test)]
 mod tests_attract;
+#[cfg(all(test, feature = "probe"))]
+mod tests_graft;
 #[cfg(test)]
 mod tests_index;
 #[cfg(test)]

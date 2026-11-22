@@ -131,11 +131,21 @@ impl Tree {
 #[derive(Default, Debug)]
 pub struct Workspace {
     pub(crate) views: [ViewWs; 2],
+    /// Retouche, lot 0 : chaînes interdites pour le prochain appel de `generate_inner`, qui le prend (`take`).
+    #[cfg(feature = "probe")]
+    pub(crate) keep_out: Option<crate::probe_graft::KeepOut>,
 }
 
 impl Workspace {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Retouche, lot 0 (sonde) : interdit ces chaînes à **toute** la prochaine génération, arbres, A* et accroche compris.
+    /// L'appel de `generate_inner` prend le masque : il faut le poser avant chaque appel.
+    #[cfg(feature = "probe")]
+    pub fn set_keep_out(&mut self, ko: Option<crate::probe_graft::KeepOut>) {
+        self.keep_out = ko;
     }
 
     /// Octets tenus par les trois arbres, le `ban` et la trame du couloir de chaque vue (capacités réelles).
@@ -183,6 +193,9 @@ pub(crate) struct Weighter<'a> {
     /// λ en 256es.
     lambda_q8: u64,
     mt: [u32; 256],
+    /// Retouche, lot 0 (sonde) : bitset des chaînes interdites à toute la requête.
+    #[cfg(feature = "probe")]
+    keep_out: Option<&'a [u64]>,
 }
 
 impl<'a> Weighter<'a> {
@@ -210,7 +223,16 @@ impl<'a> Weighter<'a> {
             tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
+            #[cfg(feature = "probe")]
+            keep_out: None,
         }
+    }
+
+    /// Pose le masque des chaînes interdites (sonde). Une chaîne masquée pèse `INF` : absente du graphe de la requête.
+    #[cfg(feature = "probe")]
+    pub fn with_keep_out(mut self, ko: Option<&'a [u64]>) -> Self {
+        self.keep_out = ko;
+        self
     }
 
     #[inline]
@@ -227,6 +249,12 @@ impl<'a> Weighter<'a> {
     /// Poids d'une arête de vue, `INF` si elle est interdite (strict, hors réseau d'équipe).
     #[inline]
     pub fn chain(&self, c: u32) -> u32 {
+        #[cfg(feature = "probe")]
+        if let Some(k) = self.keep_out {
+            if k[(c >> 6) as usize] >> (c & 63) & 1 != 0 {
+                return INF;
+            }
+        }
         let w = self.w_osm[c as usize];
         let Some(ct) = self.ct else { return w };
         let t = ct[c as usize];

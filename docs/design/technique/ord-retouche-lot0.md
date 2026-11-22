@@ -783,3 +783,21 @@ commit message rappelle que la génération ordinaire est inchangée et cite l'e
   (D4, après la première version).
 - **Le goût appris** : les jeux tournent sur le poids neutre. Le service passera le profil de l'équipe, comme pour une
   génération, sans effet attendu sur la continuité ni sur les coutures.
+
+---
+
+## 12. Écarts du codage de la livraison B
+
+- **`KeepOut::build(win, mask_edges, free_edges)`** : une chaîne est masquée si elle porte une arête à masquer **et aucune**
+  arête libre (la zone des coutures). Sans cela, une longue chaîne qui contient la jambe de la couture serait masquée entière
+  et la recherche ne pourrait plus partir du nœud. Le paramètre `e` du §4.2 est supprimé (inutile).
+- **`move_end_in` rejoue après un virage serré** (jusqu'à 4 passes, comme `generate_inner`) : le contrôle interne du raccord
+  de la meilleure sortie interdit les transitions refusées et relance l'arbre. Sans cela, 23 % des raccords avaient un
+  `SHARP_TURN` (essai : K2 à 68 %, 84 % avec les reprises). `MoveEndOut` gagne `passes`.
+- **`EndOnRoute { edge }`** rend l'arête accrochée, pas `after_s_m` : le banc situe lui-même la couture qui suit. Le rejeu avec
+  le masque du seul préfixe (`prefix_retry`) est fait par le banc, en rappelant `move_end_in`, pas par le moteur.
+- **C2 est borné à `±c2_window_m` (5 km) de graphe autour des coutures** (`--c2-window-m`), original compris, pour que le coût
+  des contrôles reste borné sur des traces de 400 km ; `unchecked_m` compte ce que les trous laissent sans lecture dans ce voisinage.
+- Seule la variante `best` de `move_end` est contrôlée ; les deux autres sont mesurées (abandon, raccord, `L′/L`).
+- Le sous-commandes sont `retouche-play` (+ `--op`), les fichiers `out_play.rs`, `play.rs` ; `Posed` ne garde ni `trace` ni `runs`.
+- La commande I5 du §8 est incomplète : `--variants base,svc,svc+org,svc+org+attr:0` (empreinte `50adca52ef713d18` retrouvée).

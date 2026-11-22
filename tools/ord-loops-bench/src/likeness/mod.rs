@@ -1309,7 +1309,7 @@ fn taste_tables(source: &str, overlay: &str, t: &Taste) -> Vec<TasteTable> {
 }
 
 /// Données d'équipe et tables du contrôleur d'une surcouche, construites en parallèle comme le fait le service.
-fn build_team(
+pub(crate) fn build_team(
     engine: &Eng,
     gi: &GraphIndex,
     overlay: &Overlay,

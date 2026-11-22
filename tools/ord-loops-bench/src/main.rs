@@ -57,6 +57,8 @@ enum Command {
     Likeness(likeness::LikenessArgs),
     /// Retouche d'un parcours, lot 0 A : continuité de l'appariement et emplacement des coutures (mesure).
     RetoucheContinuity(retouche::RetoucheContinuityArgs),
+    /// Retouche d'un parcours, lot 0 B : prototypes `move_end` et `resize`, contrôlés et chronométrés (mesure).
+    RetouchePlay(retouche::RetouchePlayArgs),
     /// Exporte la table de goût commune du moteur depuis les rapports de la chaîne commune rejouée (lot 4, 3b).
     TasteCommon(taste_common::TasteCommonArgs),
     /// Exporte la répartition générale des figures du moteur depuis le rapport `base` (lot 4, 4c).
@@ -286,6 +288,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Command::Likeness(a)) => likeness::run(&a),
         Some(Command::RetoucheContinuity(a)) => retouche::run_continuity(&a),
+        Some(Command::RetouchePlay(a)) => retouche::run_play(&a),
         Some(Command::TasteCommon(a)) => taste_common::run(&a),
         Some(Command::ShapeCommon(a)) => shape_common::run(&a),
         None => run_bench(cli.bench),

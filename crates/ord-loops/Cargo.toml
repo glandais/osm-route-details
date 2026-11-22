@@ -12,7 +12,8 @@ license.workspace = true
 # toujours.
 reference = []
 # La sonde du coût d'une recherche point à point (lot 4, 4c, `ord-loops-lot4c-sonde.md`) : code de mesure, pour le
-# banc seulement.
+# banc seulement. Elle porte aussi le crochet de la retouche d'un parcours (lot 0, `ord-retouche-lot0.md`) : un masque de
+# chaînes interdites à toute une génération et `probe_graft`, jamais appelés par la génération ordinaire.
 probe = []
 
 [dependencies]

@@ -329,6 +329,10 @@ fn generate_inner<B: AsRef<[u8]>>(
     fig: &mut FigureDiagnostics,
     org_search: Option<&OrgSearch>,
 ) -> Result<Generation, Failure> {
+    // Retouche, lot 0 (sonde) : le masque posé par le banc, pris dès l'entrée (un appel suivant ne l'hérite jamais, même
+    // après un échec précoce).
+    #[cfg(feature = "probe")]
+    let keep_out = ws.keep_out.take();
     if r.mode != Mode::Discovery && team.is_none() {
         return Err(Failure::NoTeamData);
     }
@@ -341,6 +345,13 @@ fn generate_inner<B: AsRef<[u8]>>(
     assert_eq!(win.vi, vi, "la fenêtre n'est pas celle de la vue du type demandé");
     let v = &win.v;
     let w = Weighter::new(v, team, ride, r.mode, r.familiarity, r.off_team_cost_q8);
+    #[cfg(feature = "probe")]
+    let w = {
+        if let Some(k) = &keep_out {
+            k.assert_window(win);
+        }
+        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits))
+    };
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
     let ok = |c: u32| -> bool {

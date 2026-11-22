@@ -9,9 +9,15 @@
 //! sont lettrées, une trace y est désignée par `(lettre, rang)` et seuls des agrégats sont recopiables.
 
 pub mod continuity;
+pub mod control;
+pub mod draw;
+pub mod move_end;
 pub mod out;
+pub mod out_play;
+pub mod play;
 pub mod posed;
 pub mod project;
+pub mod resize;
 
 use std::path::PathBuf;
 
@@ -28,9 +34,9 @@ use self::posed::{SeamOpts, ViewInfo, ViewLookup};
 use crate::likeness::export::{self, RetainParams};
 use crate::likeness::{read_letters, Phases};
 
-/// Arguments de `retouche-continuity`. Les défauts sont ceux de `likeness` (lot 6, export privé).
-#[derive(Debug, Args)]
-pub struct RetoucheContinuityArgs {
+/// Les chemins communs aux sous-commandes. Les défauts sont ceux de `likeness` (lot 6, export privé).
+#[derive(Debug, Args, Clone)]
+pub struct PathOpts {
     /// Graphe de base (défaut : `G/lot6/france-20261115-z11.ordg`).
     #[arg(long)]
     pub graph: Option<PathBuf>,
@@ -52,6 +58,16 @@ pub struct RetoucheContinuityArgs {
     /// Sortie (défaut : `G/retouche/`).
     #[arg(long)]
     pub out: Option<PathBuf>,
+    /// Surcouches d'équipe, `<id>-….ordo` (défaut : `G/lot6/overlays/`) ; lues par `retouche-play` seulement.
+    #[arg(long)]
+    pub overlays: Option<PathBuf>,
+}
+
+/// Arguments de `retouche-continuity`.
+#[derive(Debug, Args)]
+pub struct RetoucheContinuityArgs {
+    #[command(flatten)]
+    pub paths: PathOpts,
     /// Préfixe des fichiers de sortie : `<label>-continuity.{jsonl,json,md}`.
     #[arg(long, default_value = "continuity")]
     pub label: String,
@@ -75,18 +91,19 @@ pub struct RetoucheContinuityArgs {
     pub threads: Option<usize>,
 }
 
-struct Paths {
-    graph: PathBuf,
-    road: PathBuf,
-    gravel: PathBuf,
-    poly: PathBuf,
-    export: PathBuf,
-    letters: PathBuf,
-    out: PathBuf,
+pub(crate) struct Paths {
+    pub graph: PathBuf,
+    pub road: PathBuf,
+    pub gravel: PathBuf,
+    pub poly: PathBuf,
+    pub export: PathBuf,
+    pub letters: PathBuf,
+    pub out: PathBuf,
+    pub overlays: PathBuf,
 }
 
-impl RetoucheContinuityArgs {
-    fn paths(&self) -> Result<Paths> {
+impl PathOpts {
+    pub(crate) fn resolve(&self) -> Result<Paths> {
         let home =
             std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| anyhow!("HOME n'est pas défini"))?;
         let g = home.join(".cache/osm-route-details/graph");
@@ -103,6 +120,7 @@ impl RetoucheContinuityArgs {
             ),
             letters: pick(&self.letters, g.join("lot2/team-letters.json")),
             out: pick(&self.out, g.join("retouche")),
+            overlays: pick(&self.overlays, lot6.join("overlays")),
         })
     }
 }
@@ -112,7 +130,7 @@ fn open(p: &std::path::Path) -> Result<MappedGraph> {
 }
 
 pub fn run_continuity(a: &RetoucheContinuityArgs) -> Result<()> {
-    let paths = a.paths()?;
+    let paths = a.paths.resolve()?;
     let letters = read_letters(&paths.letters)?;
     let wanted: Vec<u64> = letters
         .iter()
@@ -212,4 +230,51 @@ pub fn run_continuity(a: &RetoucheContinuityArgs) -> Result<()> {
     ph.end("sorties");
     eprintln!("sorties : {}", paths.out.display());
     Ok(())
+}
+
+pub use self::play::{run_play, RetouchePlayArgs};
+
+/// Une valeur du curseur de familiarité, par la correspondance du service (`cursor::apply`).
+#[derive(Clone, Copy, Debug)]
+pub struct Cursor {
+    pub value: f64,
+    applied: ord_server::generator::cursor::Applied,
+}
+
+impl Cursor {
+    pub fn new(value: f64) -> Result<Self> {
+        use ord_server::generator::cursor;
+        let h = cursor::hundredths(value).ok_or_else(|| anyhow!("curseur hors de [0, 1] : {value}"))?;
+        Ok(Self { value, applied: cursor::apply(h) })
+    }
+
+    /// La requête de la trace pour ce curseur ; le départ, l'arrivée et la distance sont posés par l'appelant.
+    pub fn request(&self, p: &posed::Posed, seed: u64) -> ord_loops::Request {
+        ord_loops::Request {
+            start: ord_loops::LatLon::new(0.0, 0.0),
+            end: None,
+            bearing: None,
+            distance_m: 0.0,
+            ride_type: p.ride,
+            mode: self.applied.mode,
+            familiarity: self.applied.familiarity,
+            off_team_cost_q8: self.applied.off_team_cost_q8,
+            seed: p.id_hash ^ seed,
+            figures: ord_loops::Figures::Classic,
+        }
+    }
+}
+
+/// Ce que les essais lisent pour une équipe.
+pub struct Env<'a> {
+    pub engine: &'a crate::likeness::play::Eng,
+    pub wins: &'a crate::likeness::play::SharedWindows<'a>,
+    pub team_key: u64,
+    pub team: &'a ord_loops::TeamData,
+    pub ctl: control::Ctl<'a>,
+    pub seed: u64,
+    pub margin_m: f64,
+    pub max_windows: usize,
+    pub max_controls: usize,
+    pub no_keep_out: bool,
 }
