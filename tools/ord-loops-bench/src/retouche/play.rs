@@ -94,8 +94,9 @@ pub struct RetouchePlayArgs {
     pub seam_margin_m: f64,
     #[arg(long, default_value_t = 15.0)]
     pub proj_tol_m: f64,
-    /// Demi-largeur de la fenêtre de C2 autour d'une couture, m de graphe.
-    #[arg(long, default_value_t = 5000.0)]
+    /// Demi-largeur de la fenêtre de C2 autour d'une couture, m de graphe. Par défaut les plages continues entières
+    /// (référence) ; `5000` est la variante locale, qui laisse passer des refus lointains (note §13).
+    #[arg(long, default_value_t = 1.0e9)]
     pub c2_window_m: f64,
     /// Candidats contrôlés au plus par demande de `resize`.
     #[arg(long, default_value_t = 12)]

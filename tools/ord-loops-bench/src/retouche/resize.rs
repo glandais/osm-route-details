@@ -83,6 +83,9 @@ pub struct RsLine {
     /// Temps de génération cumulé jusqu'à la première fenêtre qui rend un candidat à 3 % ou moins.
     pub first_ok_ms: Option<f64>,
     pub ctl_ms: f64,
+    /// Contrôles réellement joués (C1 à C3), et le plafond `max_controls` a été atteint avec des candidats restants.
+    pub controls_run: usize,
+    pub capped: bool,
     pub fp: String,
 }
 
@@ -183,7 +186,9 @@ pub fn play_request(
         let (mut res, mut gen_ms) = run(&win, &wt, ws);
         if matches!(&res, Ok((Err(Failure::WindowEscape), ..))) {
             (win, wt) = env.wins.acquire_wide(env.team, &req, None);
+            let first_ms = gen_ms;
             (res, gen_ms) = run(&win, &wt, ws);
+            gen_ms += first_ms;
         }
         let _ = t0;
         wl.gen_ms = gen_ms;
@@ -257,13 +262,19 @@ pub fn play_request(
     let t0 = Instant::now();
     let mut proposals: Vec<(usize, Best, Route)> = Vec::new();
     let mut used_wins: FxHashSet<usize> = FxHashSet::default();
-    for c in cands.iter().take(env.max_controls) {
+    // Le plafond compte les contrôles réellement joués : un candidat sauté (fenêtre déjà proposée) n'use pas le budget.
+    for c in &cands {
         if proposals.len() >= 3 {
             break;
         }
         if used_wins.contains(&c.win) {
             continue;
         }
+        if line.controls_run >= env.max_controls {
+            line.capped = true;
+            break;
+        }
+        line.controls_run += 1;
         let w = &wins[c.win];
         let (si, sj) = (&p.seams[w.i], &p.seams[w.j]);
         let new = Walk::from_route(gf, &c.route);

@@ -42,6 +42,11 @@ fn k2_eligible(l: &MeLine) -> bool {
     l.outcome != "end_too_far" && l.outcome != "no_seam" && l.kind != "close_loop"
 }
 
+/// Un essai dont `move_end_in` a tourné au-delà de l'accroche (ni `no_seam` ni `end_too_far`) : la population de K4.
+fn me_played(l: &MeLine) -> bool {
+    l.outcome != "no_seam" && l.outcome != "end_too_far"
+}
+
 pub fn me_agg(lines: &[&MeLine]) -> Value {
     let ok: Vec<&&MeLine> = lines.iter().filter(|l| l.outcome == "ok").collect();
     let el: Vec<&&MeLine> = lines.iter().filter(|l| k2_eligible(l)).collect();
@@ -56,7 +61,8 @@ pub fn me_agg(lines: &[&MeLine]) -> Value {
         }
         m
     };
-    let k4: Vec<f64> = lines.iter().filter(|l| l.outcome != "no_seam").map(|l| l.gen_ms + l.ctl_ms).collect();
+    // K4 : tous les appels de l'essai, échecs et reprises compris ; les lignes non jouées n'y entrent pas.
+    let k4: Vec<f64> = lines.iter().filter(|l| me_played(l)).map(|l| l.call_ms + l.ctl_ms).collect();
     json!({
         "n": lines.len(),
         "outcomes": counts(lines.iter().map(|l| l.outcome.as_str())),
@@ -105,8 +111,13 @@ pub fn rs_agg(lines: &[&RsLine]) -> Value {
             *refused.entry(c.clone()).or_default() += *n as usize;
         }
     }
-    let too_short = lines.iter().filter(|l| l.delta < 0.0 && l.outcome == "engine_fail").count();
-    let shorten = lines.iter().filter(|l| l.delta < 0.0).count();
+    let shortening: Vec<&&RsLine> = lines.iter().filter(|l| l.delta < 0.0).collect();
+    let shorten = shortening.len();
+    let too_short = shortening.iter().filter(|l| l.fail.as_deref() == Some("DISTANCE_TOO_SHORT")).count();
+    let short_wins: Vec<&super::resize::WinLine> = shortening.iter().flat_map(|l| l.windows.iter()).collect();
+    let short_wins_too_short = short_wins.iter().filter(|w| w.outcome == "DISTANCE_TOO_SHORT").count();
+    let hit_some =
+        shortening.iter().filter(|l| l.windows.iter().any(|w| w.outcome == "DISTANCE_TOO_SHORT")).count();
     let wsum: f64 = lines.iter().map(|l| l.weight).sum();
     let wok: f64 = ok.iter().map(|l| l.weight).sum();
     json!({
@@ -119,6 +130,9 @@ pub fn rs_agg(lines: &[&RsLine]) -> Value {
         "reuse_refused": lines.iter().map(|l| l.reuse_refused).sum::<usize>(),
         "engine_fail_dominant": counts(lines.iter().filter_map(|l| l.fail.as_deref())),
         "distance_too_short_share_of_shortening": share(too_short, shorten),
+        "distance_too_short_some_window_of_shortening": share(hit_some, shorten),
+        "distance_too_short_share_of_shortening_windows": share(short_wins_too_short, short_wins.len()),
+        "controls_capped": share(lines.iter().filter(|l| l.capped).count(), lines.iter().filter(|l| l.controls_run > 0).count()),
         "windows": wins.len(),
         "window_yield": share(wins.iter().filter(|w| w.routes > 0).count(), wins.len()),
         "window_outcomes": counts(wins.iter().map(|w| w.outcome.as_str())),
@@ -130,7 +144,7 @@ pub fn rs_agg(lines: &[&RsLine]) -> Value {
         "angle_in_deg": q(&f(&|_, b| b.angle_in_deg)),
         "angle_out_deg": q(&f(&|_, b| b.angle_out_deg)),
         "unchecked_m": q(&f(&|_, b| Some(b.unchecked_m))),
-        "total_ms": q(&lines.iter().map(|l| l.total_ms).collect::<Vec<_>>()),
+        "total_ms": q(&lines.iter().filter(|l| l.outcome != "no_window").map(|l| l.total_ms).collect::<Vec<_>>()),
         "first_ok_ms": q(&lines.iter().filter_map(|l| l.first_ok_ms).collect::<Vec<_>>()),
         "ctl_ms": q(&lines.iter().map(|l| l.ctl_ms).collect::<Vec<_>>()),
     })
@@ -200,9 +214,11 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     let k2: Vec<&MeLine> = me.iter().filter(|l| k2_eligible(l)).collect();
     let k2_ok = k2.iter().filter(|l| l.accepted).count();
     let k2s = Share::new(k2_ok, k2.len());
-    let k3s = Share::new(k3_ok, k3.len());
-    let k4_rs: Vec<f64> = rs.iter().map(|l| l.total_ms).collect();
-    let k4_me: Vec<f64> = me.iter().filter(|l| l.outcome != "no_seam").map(|l| l.gen_ms + l.ctl_ms).collect();
+    // Le verdict de K3 porte sur la part pondérée par strate (effectif de Kish) ; la part brute est la seconde ligne.
+    let k3s = Share::weighted(k3.iter().map(|l| (l.weight, l.outcome == "ok")));
+    let k3_unw = Share::new(k3_ok, k3.len());
+    let k4_rs: Vec<f64> = rs.iter().filter(|l| l.outcome != "no_window").map(|l| l.total_ms).collect();
+    let k4_me: Vec<f64> = me.iter().filter(|l| me_played(l)).map(|l| l.call_ms + l.ctl_ms).collect();
     let (q4r, q4m) = (Q::of(&k4_rs), Q::of(&k4_me));
     let k4_verdict = |q: &Option<Q>| match q {
         Some(q) if q.p90 < 2000.0 => "tenu",
@@ -211,7 +227,7 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     };
     let criteria = json!({
         "k2": {"share": k2s, "verdict": k2s.verdict(0.95), "seuil": 0.95},
-        "k3": {"share": k3s, "before_controls": Share::new(k3_raw, k3.len()), "weighted_p": if k3_w > 0.0 { Value::from(k3_wok / k3_w) } else { Value::Null },
+        "k3": {"share": k3s, "unweighted": k3_unw, "before_controls": Share::new(k3_raw, k3.len()), "weighted_p": if k3_w > 0.0 { Value::from(k3_wok / k3_w) } else { Value::Null },
                "verdict": k3s.verdict(0.90), "seuil": 0.90},
         "k4_resize_p90_ms": q4r.map(|x| x.p90), "k4_resize_verdict": k4_verdict(&q4r),
         "k4_move_end_p90_ms": q4m.map(|x| x.p90), "k4_move_end_verdict": k4_verdict(&q4m),
@@ -249,9 +265,9 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     );
     let _ = writeln!(
         md,
-        "| K3 | distance à ±3 %, 90 %, \\|δ\\| ≤ 25 % | {} ; pondéré {} | {} |",
+        "| K3 | distance à ±3 %, 90 %, \\|δ\\| ≤ 25 % | pondéré (n effectif de Kish) {} ; non pondéré {} | {} |",
         sh_md(&criteria["k3"]["share"]),
-        criteria["k3"]["weighted_p"].as_f64().map_or("n/a".into(), |p| format!("{:.1} %", p * 100.0)),
+        sh_md(&criteria["k3"]["unweighted"]),
         k3s.verdict(0.90)
     );
     let _ = writeln!(
@@ -298,7 +314,12 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     md.push_str("\n## `resize`\n\n");
     let t = &rs_json["total"];
     let _ = writeln!(md, "- demandes : {} ; issues : {}", t["n"], t["outcomes"]);
-    let _ = writeln!(md, "- K3 (|δ| ≤ 25 %) : {}", sh_md(&criteria["k3"]["share"]));
+    let _ = writeln!(
+        md,
+        "- K3 (|δ| ≤ 25 %), pondéré : {} ; non pondéré : {}",
+        sh_md(&criteria["k3"]["share"]),
+        sh_md(&criteria["k3"]["unweighted"])
+    );
     let _ = writeln!(
         md,
         "- K3 avant les contrôles (un candidat à 3 % au moins existe) : {}",
@@ -314,8 +335,15 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     let _ = writeln!(md, "- échec dominant du moteur : {}", t["engine_fail_dominant"]);
     let _ = writeln!(
         md,
-        "- `DistanceTooShort` parmi les raccourcissements : {}",
-        sh_md(&t["distance_too_short_share_of_shortening"])
+        "- `DISTANCE_TOO_SHORT` comme échec dominant parmi les raccourcissements : {} ; au moins une fenêtre : {} ; parmi les fenêtres de raccourcissement : {}",
+        sh_md(&t["distance_too_short_share_of_shortening"]),
+        sh_md(&t["distance_too_short_some_window_of_shortening"]),
+        sh_md(&t["distance_too_short_share_of_shortening_windows"])
+    );
+    let _ = writeln!(
+        md,
+        "- plafond de contrôles atteint (parmi les demandes contrôlées) : {}",
+        sh_md(&t["controls_capped"])
     );
     let _ = writeln!(md, "- codes de refus (C1, C2, C3) : {}", t["refused_codes"]);
     let _ = writeln!(

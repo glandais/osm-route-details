@@ -796,8 +796,38 @@ commit message rappelle que la génération ordinaire est inchangée et cite l'e
   `SHARP_TURN` (essai : K2 à 68 %, 84 % avec les reprises). `MoveEndOut` gagne `passes`.
 - **`EndOnRoute { edge }`** rend l'arête accrochée, pas `after_s_m` : le banc situe lui-même la couture qui suit. Le rejeu avec
   le masque du seul préfixe (`prefix_retry`) est fait par le banc, en rappelant `move_end_in`, pas par le moteur.
-- **C2 est borné à `±c2_window_m` (5 km) de graphe autour des coutures** (`--c2-window-m`), original compris, pour que le coût
-  des contrôles reste borné sur des traces de 400 km ; `unchecked_m` compte ce que les trous laissent sans lecture dans ce voisinage.
+- **C2 lit les plages continues entières** autour des coutures (`--c2-window-m`, 1e9 m par défaut), original compris ;
+  `unchecked_m` compte ce que les trous laissent sans lecture. La variante locale `--c2-window-m 5000` (±5 km) a été la
+  première version : voir §13 pour l'écart mesuré.
 - Seule la variante `best` de `move_end` est contrôlée ; les deux autres sont mesurées (abandon, raccord, `L′/L`).
 - Le sous-commandes sont `retouche-play` (+ `--op`), les fichiers `out_play.rs`, `play.rs` ; `Posed` ne garde ni `trace` ni `runs`.
 - La commande I5 du §8 est incomplète : `--variants base,svc,svc+org,svc+org+attr:0` (empreinte `50adca52ef713d18` retrouvée).
+
+---
+
+## 13. Relecture de la livraison B : corrections et mesure de la fenêtre de C2
+
+Corrections du banc (aucun test du moteur modifié, génération ordinaire inchangée) :
+
+- **`EndOnRoute`** : le passage de `E′` est le **dernier** de l'arête sur la marche (cas prudent pour K2) ; une arête absente
+  de la marche (chaîne masquée qui déborde) donne l'issue `end_on_masked_chain`, jamais acceptée, qui reste au dénominateur de K2.
+- **K3** : le verdict porte sur la part pondérée par strate, intervalle de Wilson sur l'effectif de Kish ; la part brute est donnée à côté.
+- **K4** : tous les appels sont chronométrés, échecs et reprises compris (`call_ms`, et la somme des deux passes de fenêtre
+  pour `resize`). Les lignes non jouées (`no_window` ; `end_too_far` et `no_seam`) sont hors de la population.
+- **`DISTANCE_TOO_SHORT`** : compté sur l'échec dominant des raccourcissements, sur « au moins une fenêtre » et sur les fenêtres.
+- **Plafond de contrôles** : `max_controls` compte les contrôles réellement joués ; la part de demandes plafonnées est rapportée.
+
+Fenêtre de C2, même essai (`--teams B,C --limit 20`, 16 fils), plages entières contre ±5 km :
+
+| | ±5 km | plages entières |
+|---|---|---|
+| K2 | 84,3 % [82,2 ; 86,2] | 85,8 % [83,8 ; 87,7] |
+| K3 (pondéré) | 79,4 % [75,3 ; 83,0] | 78,0 % [73,8 ; 81,7] |
+| P90 `resize`, ms | 3 029 | 2 907 |
+| P90 `move_end`, ms | 93 | 93 |
+| refus C2 `TOO_MANY_CROSSINGS` (`resize`) | 14 | 60 |
+
+Les deux fenêtres diffèrent d'environ 1,5 point sur K2 et K3, sans changer un verdict, et la fenêtre locale laisse passer
+des refus lointains (`TOO_MANY_CROSSINGS` ×4, `EDGE_USED_MORE_THAN_TWICE` n'existe qu'avec les plages entières) ; le coût en
+temps est le même. Les plages entières sont donc la référence, ±5 km une variante. Part des raccourcissements dont
+l'échec dominant est `DISTANCE_TOO_SHORT` : 11,7 % (au moins une fenêtre : 46,8 %) ; plafond de contrôles atteint : 1,4 % des demandes contrôlées.

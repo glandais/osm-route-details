@@ -41,7 +41,7 @@ pub struct MeLine {
     pub shape: &'static str,
     pub cursor: f64,
     pub kind: String,
-    /// `ok`, `truncated`, `end_too_far`, `end_on_route_no_seam`, `no_seam_reached`, `window_escape`, `no_team_data`,
+    /// `ok`, `truncated`, `end_too_far`, `end_on_route_no_seam`, `end_on_masked_chain`, `no_seam_reached`, `window_escape`, `no_team_data`,
     /// `panic`.
     pub outcome: String,
     /// Le recollé de la variante `best` passe C1, C2 et C3 (ou le parcours est tronqué à une couture).
@@ -71,6 +71,8 @@ pub struct MeLine {
     pub gen_ms: f64,
     pub ctl_ms: f64,
     pub win_ms: f64,
+    /// Somme des temps de tous les appels à `move_end_in` de l'essai, échecs et reprises compris, ms.
+    pub call_ms: f64,
     pub fp: String,
 }
 
@@ -143,28 +145,30 @@ pub fn play_trial(
         .collect();
     let all_edges = || p.edge_set.iter().copied();
     let t0 = Instant::now();
+    let mut call_ms = 0.0;
     let (mut win, mut wt) = env.wins.acquire(env.team_key, env.team, &req, None);
     let mut ko = KeepOut::build(&win, all_edges(), []);
-    let mut res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm);
+    let mut res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm, &mut call_ms);
     if matches!(res, Ok(Err(MoveEndFail::WindowEscape))) {
         (win, wt) = env.wins.acquire_wide(env.team, &req, None);
         ko = KeepOut::build(&win, all_edges(), []);
-        res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm);
+        res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm, &mut call_ms);
     }
     // Aucune couture atteinte : on rejoue une fois avec le masque du seul préfixe de la couture la plus tardive.
     if matches!(res, Ok(Err(MoveEndFail::NoSeamReached))) {
         let last = &p.seams[*valid.last().expect("non vide")];
         ko = KeepOut::build(&win, p.walk.legs[..=last.seam.join].iter().map(|l| l.edge), []);
-        res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm);
+        res = call(env, &win, &wt, &req, &seams, &ko, ws, &prm, &mut call_ms);
         line.prefix_retry = true;
     }
     line.win_ms = t0.elapsed().as_secs_f64() * 1000.0;
+    line.call_ms = call_ms;
     line.masked_chains = ko.masked_chains();
     line.masked_m = ko.masked_m(&win);
     let res = match res {
         Err(_) => {
             line.outcome = "panic".into();
-            return line;
+            return finish(line);
         }
         Ok(r) => r,
     };
@@ -175,8 +179,14 @@ pub fn play_trial(
         Err(MoveEndFail::NoTeamData) => line.outcome = "no_team_data".into(),
         Err(MoveEndFail::Stopped) => line.outcome = "stopped".into(),
         Err(MoveEndFail::EndOnRoute { edge }) => {
-            // `E′` est sur le parcours : on le tronque à la première couture valide après le passage de l'arête.
-            let at = p.walk.legs.iter().position(|l| l.edge == edge).unwrap_or(0);
+            // `E′` est sur le parcours : on le tronque à la première couture valide après son passage. Une arête
+            // parcourue plusieurs fois (tige aller-retour, tour) est prise à son **dernier** passage, le cas prudent
+            // pour K2. Une arête absente de la marche est une chaîne masquée plus longue que la marche (départ ou
+            // arrivée au milieu d'une chaîne) : échec à part, jamais accepté, qui reste au dénominateur de K2.
+            let Some(at) = last_pass(p.walk.legs.iter().map(|l| l.edge), edge) else {
+                line.outcome = "end_on_masked_chain".into();
+                return finish(line);
+            };
             match valid.iter().find(|&&k| p.seams[k].seam.join >= at) {
                 Some(&k) => {
                     line.outcome = "truncated".into();
@@ -197,6 +207,10 @@ pub fn play_trial(
             record(env, p, &proto, trial, &valid, &out, cache, &mut line);
         }
     }
+    finish(line)
+}
+
+fn finish(mut line: MeLine) -> MeLine {
     if line.fp.is_empty() {
         line.fp = format!("{:016x}", xxh3_64(line.outcome.as_bytes()));
     }
@@ -213,12 +227,16 @@ fn call(
     ko: &KeepOut,
     ws: &mut Workspace,
     prm: &MoveEndParams,
+    acc_ms: &mut f64,
 ) -> Result<Result<MoveEndOut, MoveEndFail>, ()> {
-    catch_unwind(AssertUnwindSafe(|| {
+    let t = Instant::now();
+    let r = catch_unwind(AssertUnwindSafe(|| {
         let tc = TeamCtx { data: env.team, win: wt };
         move_end_in(env.engine, win, Some(tc), req, seams, ko, ws, prm)
     }))
-    .map_err(|_| ())
+    .map_err(|_| ());
+    *acc_ms += t.elapsed().as_secs_f64() * 1000.0;
+    r
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -276,6 +294,14 @@ fn record(
     line.fp = format!("{:016x}", xxh3_64(&fp));
 }
 
+/// Indice de la jambe du dernier passage de `edge` sur la marche, `None` si la marche n'y passe pas.
+fn last_pass(
+    mut edges: impl DoubleEndedIterator<Item = u32> + ExactSizeIterator,
+    edge: u32,
+) -> Option<usize> {
+    edges.rposition(|e| e == edge)
+}
+
 /// Le groupe d'un essai pour les agrégats, lu sur son étiquette (`r2_b0`, `team_end`, `close_loop`).
 pub fn kind_group_of(label: &str) -> &'static str {
     match label.strip_prefix('r').and_then(|r| r.split('_').next()).and_then(|k| k.parse::<f64>().ok()) {
@@ -284,5 +310,18 @@ pub fn kind_group_of(label: &str) -> &'static str {
         Some(_) => "ring_15",
         None if label == "team_end" => "team_end",
         None => "close_loop",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_pass_takes_the_final_ride_and_reports_a_missing_edge() {
+        let walk = [4u32, 7, 9, 7, 5];
+        assert_eq!(last_pass(walk.iter().copied(), 7), Some(3));
+        assert_eq!(last_pass(walk.iter().copied(), 4), Some(0));
+        assert_eq!(last_pass(walk.iter().copied(), 99), None);
     }
 }

@@ -27,13 +27,37 @@ impl Share {
         if n == 0 {
             return Self { k, n, p: 0.0, lo: 0.0, hi: 1.0 };
         }
-        let (kf, nf) = (k as f64, n as f64);
-        let p = kf / nf;
+        let mut s = Self::wilson(k as f64 / n as f64, n as f64);
+        (s.k, s.n) = (k, n);
+        s
+    }
+
+    /// Part pondérée `Σw·ok / Σw`, intervalle de Wilson sur l'effectif de Kish `n_eff = (Σw)² / Σw²` ; `k` et `n`
+    /// portent `n_eff` arrondi et la part correspondante.
+    pub fn weighted(items: impl Iterator<Item = (f64, bool)>) -> Self {
+        let (mut sw, mut sw2, mut sok) = (0.0, 0.0, 0.0);
+        for (w, ok) in items {
+            sw += w;
+            sw2 += w * w;
+            if ok {
+                sok += w;
+            }
+        }
+        if sw <= 0.0 || sw2 <= 0.0 {
+            return Self { k: 0, n: 0, p: 0.0, lo: 0.0, hi: 1.0 };
+        }
+        let n_eff = sw * sw / sw2;
+        let mut s = Self::wilson(sok / sw, n_eff);
+        (s.k, s.n) = ((s.p * n_eff).round() as usize, n_eff.round() as usize);
+        s
+    }
+
+    fn wilson(p: f64, nf: f64) -> Self {
         let z2 = Z90 * Z90;
         let denom = 1.0 + z2 / nf;
         let centre = (p + z2 / (2.0 * nf)) / denom;
         let half = Z90 * (p * (1.0 - p) / nf + z2 / (4.0 * nf * nf)).sqrt() / denom;
-        Self { k, n, p, lo: (centre - half).max(0.0), hi: (centre + half).min(1.0) }
+        Self { k: 0, n: 0, p, lo: (centre - half).max(0.0), hi: (centre + half).min(1.0) }
     }
 
     /// « tenu » si la borne basse atteint le seuil, « non tenu » si la borne haute est en dessous, sinon « à la limite ».
@@ -356,5 +380,22 @@ mod tests {
         assert_eq!(Share::new(990, 1000).verdict(0.95), "tenu");
         assert_eq!(Share::new(900, 1000).verdict(0.95), "non tenu");
         assert_eq!(Share::new(19, 20).verdict(0.95), "à la limite");
+    }
+
+    #[test]
+    fn weighted_share_uses_kish_effective_size() {
+        // Poids égaux : identique à la part simple.
+        let eq = Share::weighted((0..100).map(|i| (1.0, i < 95)));
+        let simple = Share::new(95, 100);
+        assert!((eq.p - simple.p).abs() < 1e-12 && (eq.lo - simple.lo).abs() < 1e-9, "{eq:?}");
+        // Une petite strate sur-représentée (poids 1, tous réussis) et une grande (poids 9, la moitié réussie) :
+        // la part pondérée est celle de la grande strate, l'intervalle est plus large que celui du non pondéré.
+        let items: Vec<(f64, bool)> =
+            (0..60).map(|_| (1.0, true)).chain((0..60).map(|i| (9.0, i % 2 == 0))).collect();
+        let w = Share::weighted(items.iter().copied());
+        let u = Share::new(items.iter().filter(|x| x.1).count(), items.len());
+        assert!((w.p - (60.0 + 270.0) / 600.0).abs() < 1e-12, "{w:?}");
+        assert!(w.n < u.n && (w.hi - w.lo) > (u.hi - u.lo), "{w:?} {u:?}");
+        assert_eq!(Share::weighted(std::iter::empty()).verdict(0.9), "sans objet");
     }
 }
