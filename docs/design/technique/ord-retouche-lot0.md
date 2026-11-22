@@ -172,6 +172,11 @@ une abscisse de trace `s_k` :
 - s'il n'y en a pas, la couture est une **anomalie d'ordre**. Elle est comptée, puis projetée sur le plus proche point
   global, et `s_k` reste croissante (`max(s_{k−1}, …)`).
 
+**Complément du codage (livraison A).** Un trou ne vaut que sa corde sur la marche, alors que le passage non apparié qu'il
+recouvre est plus long : la borne haute de la fenêtre gagne `3 ×` la somme des cordes des trous entre la couture
+précédente et celle-ci. Sans lui, toute couture qui suit un trou de quelques centaines de mètres tombait en « anomalie
+d'ordre » à l'essai.
+
 Le départ de la recherche avance avec la marche, si bien qu'un aller-retour (le même nœud passé deux fois), une boucle
 en 8 ou une trace qui se recoupe trouvent chacun **le bon passage**, au lieu du premier venu.
 

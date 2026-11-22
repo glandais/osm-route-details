@@ -15,7 +15,7 @@ pub mod compare_org;
 pub mod compare_svc;
 pub mod export;
 #[cfg(test)]
-mod fixture;
+pub(crate) mod fixture;
 pub mod holdout;
 pub mod measure;
 pub mod out;
@@ -355,21 +355,21 @@ pub fn read_letters(path: &std::path::Path) -> Result<std::collections::BTreeMap
 type Built = Result<((Overlay, f64), Option<Overlay>, Option<LearnSet>)>;
 
 /// Une phase : durée et pic de mémoire anonyme.
-struct Phases {
+pub(crate) struct Phases {
     sampler: AnonSampler,
     started: std::time::Instant,
     list: Vec<out::Phase>,
 }
 
 impl Phases {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let sampler = AnonSampler::start();
         let _ = sampler.take_max_mb();
         Self { sampler, started: std::time::Instant::now(), list: Vec::new() }
     }
 
     /// Clôt la phase en cours sous `name`.
-    fn end(&mut self, name: &str) {
+    pub(crate) fn end(&mut self, name: &str) {
         let secs = self.started.elapsed().as_secs_f64();
         let peak = self.sampler.take_max_mb();
         eprintln!("phase {name} : {secs:.1} s, pic anonyme {peak:.0} Mo");

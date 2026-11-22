@@ -13,6 +13,7 @@ mod input;
 mod likeness;
 mod record;
 mod report;
+mod retouche;
 mod shape_common;
 mod taste_common;
 mod teams;
@@ -54,6 +55,8 @@ struct Cli {
 enum Command {
     /// Banc de vraisemblance du lot 4 (4a) : formes réelles contre générées, reconstruction.
     Likeness(likeness::LikenessArgs),
+    /// Retouche d'un parcours, lot 0 A : continuité de l'appariement et emplacement des coutures (mesure).
+    RetoucheContinuity(retouche::RetoucheContinuityArgs),
     /// Exporte la table de goût commune du moteur depuis les rapports de la chaîne commune rejouée (lot 4, 3b).
     TasteCommon(taste_common::TasteCommonArgs),
     /// Exporte la répartition générale des figures du moteur depuis le rapport `base` (lot 4, 4c).
@@ -282,6 +285,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Likeness(a)) => likeness::run(&a),
+        Some(Command::RetoucheContinuity(a)) => retouche::run_continuity(&a),
         Some(Command::TasteCommon(a)) => taste_common::run(&a),
         Some(Command::ShapeCommon(a)) => shape_common::run(&a),
         None => run_bench(cli.bench),
