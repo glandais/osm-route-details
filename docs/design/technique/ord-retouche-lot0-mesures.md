@@ -8,6 +8,9 @@
 > `full-*.log`). Lettres d'équipes et agrégats seulement ici : ni départ, ni coordonnée, ni identifiant d'équipe, de trace ou
 > d'arête. Rien n'a été poussé ni déployé. Aucune ligne du moteur ni de ses tests n'a changé pour ce relevé.
 >
+> Validé le même jour : K1, l'ordre, K2 et ses classes de refus, K3 brut, pondéré et à ±1, 2, 3 %, et K4 recalculés depuis
+> les jsonl privés ; un dénominateur de K4 corrigé (§4.3), une formulation du §2.3 précisée, le dénominateur de K2 explicité (§3.1).
+>
 > Marques : **[mesuré]** vient des sorties du banc ; **[calculé]** d'un calcul fait ici sur ces sorties (relecture des jsonl privés
 > ou arithmétique sur les agrégats) ; **[supposé]** n'est pas vérifié. Sans marque dans un tableau : mesuré. Les temps sont pris à
 > 16 fils simultanés, sauf mention : pessimistes pour le service.
@@ -20,8 +23,8 @@
   pour 2 000). Au sens du §9 de la note (K1 et K2 ouvrent le lot 1, K3 et K4 le lot 2), aucun des deux lots ne s'ouvre ;
   la conclusion (§9) dit ce que les chiffres autorisent malgré tout.
 - **K1 ne se corrige ni par la marge, ni par `Touch`, ni par les trous.** La marge de 200 m ramenée à 50 m et `Touch` tenu pour
-  continu font passer K1 de 54,2 à 70,8 %, pas plus. La distance maximale à la couture a un P50 de 830 m **même sans marge** ; son P95
-  est à 2,6 km [calculé]. Les trous de l'appariement sont minuscules (corde de P50 32 m). Ce qui reste, ce sont de longs espaces entre
+  continu font passer K1 de 54,2 à 70,8 %, pas plus. La distance maximale à la couture a un P50 de 830 m **même à 50 m de marge avec `Touch` continu**
+  (aucune variante sans marge n'a été jouée) ; son P95 est à 2,6 km à 200 m [calculé]. Les trous de l'appariement sont minuscules (corde de P50 32 m). Ce qui reste, ce sont de longs espaces entre
   deux coutures possibles, que le banc n'a pas décomposés par règle (§2.3).
 - **K2 : 89 % des refus ne tiennent qu'à un `SHARP_TURN` du contrôleur indépendant sur le recollé (C2)** [calculé] : 14 435
   des 16 209 refus d'essais joués. Sans eux, K2 serait de **96,3 %** [calculé, contrefactuel, non mesuré]. Le moteur ne connaît pas
@@ -133,7 +136,7 @@ La note demandait de dire si K1 manque à cause des trous ou de la marge de 200 
   70,8 % : il manque 24 points.
 - **Les plages sont courtes** (P50 par trace 1 046 m, P10 22 m, P90 10,6 km) parce que `Touch` coupe : 15 plages et 6 trous en
   médiane. `Touch` continu gagne 6 points à 200 m, 2 à 100 m.
-- **Ce qui reste** (distance maximale d'un P50 de 830 m même sans marge, 396 coutures valides en médiane par trace, soit environ une tous
+- **Ce qui reste** (distance maximale d'un P50 de 830 m même à 50 m de marge avec `Touch` continu, 396 coutures valides en médiane par trace, soit environ une tous
   les 130 m sur la longueur médiane de 52 km [calculé]) est de **longs espaces rares** : une trace a des coutures serrées presque partout
   et pourtant un espace de 1 à 2 km quelque part. Les règles 1 et 2 de la couture (le nœud est un nœud de la vue du type, et les arêtes des deux
   jambes sont dans cette vue) sont les suspectes **[supposé]** : une chaîne de vue sans carrefour, ou un passage hors de la vue du
@@ -185,6 +188,9 @@ simples et semi-boucles) restent à 41 % de K1 : le filtre du banc de ressemblan
 ### 3.1 K2 : arrivée déplacée sans refus du contrôleur, 95 % des essais
 
 **67 922 sur 85 482 = 79,5 % [79,2 ; 79,7]. Non tenu.** Le critère (§9 de la note) compte comme échec un `EndOnRoute` sans couture.
+Dénominateur [calculé à la validation] : les 87 792 essais, moins les 750 fermetures de boucle (que le banc ne compte pas : 0/0)
+et les 1 560 `end_too_far` restants (arrivée hors de portée, refusée avant toute recherche) ; les 1 351 `no_seam_reached` y sont des
+échecs. Remettre les fermetures de boucle (601 acceptées sur 746 jouables) donnerait 79,5 % aussi : le choix ne pèse pas.
 Refus classés [calculé sur le jsonl : 84 131 essais joués et jugés, dont 16 209 refusés ; le dénominateur du banc, 85 482, compte aussi les essais sans couture atteinte] :
 
 | cause du refus | essais | part des refus |
@@ -346,13 +352,19 @@ acquis** (§5.5 de la note).
 | mesure | P50 | P90 | verdict |
 |---|---|---|---|
 | `resize`, somme des générations, 16 fils | 524 ms | **4 060 ms** | **non tenu** |
-| `resize`, avec les contrôles [calculé] | 655 ms | 4 139 ms | |
-| `resize`, pondéré par strate [calculé] | 544 ms | 3 778 ms | |
+| `resize`, avec les contrôles [calculé] | 789 ms | **4 470 ms** | **non tenu** |
+| `resize`, génération seule, pondéré par strate [calculé] | 566 ms | 3 882 ms | |
+| `resize`, avec les contrôles, pondéré par strate [calculé] | 910 ms | 4 242 ms | |
 | `move_end`, génération et contrôles, 16 fils | 72 ms | **127 ms** | **tenu** |
 | première proposition à 3 % (`resize`) | 93 ms | 442 ms | |
 
-(Le P90 « avec les contrôles » est calculé sur les 7 044 demandes, `no_window` à zéro compris ; les contrôles seuls : P50 181 ms, P90 441 ms.)
-Part des demandes sous 2 s : 78,6 % ; pondérée 75,1 % [calculé].
+Toutes les lignes `resize` portent sur les **6 368 demandes qui ont au moins une fenêtre** : c'est le dénominateur du P90 du banc
+(4 060 ms), les 676 `no_window` ne lançant aucune recherche (temps nul). *Correction de la validation* : la première version de ce
+relevé calculait les lignes « avec les contrôles » et « pondéré » sur les 7 044 demandes, `no_window` à zéro compris (655 / 4 139 ms et
+544 / 3 778 ms), ce qui les rendait plus flatteuses que la ligne du banc et non comparables à elle. Les contrôles font partie du
+chemin d'une retouche (contrôle du recollé, lot 1) : **le P90 de service à retenir est 4,5 s** (4,2 s pondéré) ; les contrôles seuls :
+P50 181 ms, P90 441 ms. Part des demandes sous 2 s, sur les 6 368 : 76,4 % en génération seule, 73,4 % avec les contrôles ; pondérée
+74,6 % et 71,5 % [calculé] (78,6 % et 75,1 % dans la première version, `no_window` compris).
 
 Où le temps passe, génération seule, 16 fils [calculé] :
 
@@ -459,7 +471,7 @@ gagnés ne font gagner que 0,8 point à K2 et 1,5 à K3 : **la marge a peu d'eff
 | K1 | couture à ≤ 1 km pour 95 % des parcours | 1 819/3 355 = **54,2 % [52,8 ; 55,6]** (à 2,6 km : 95 %) ; meilleure variante 70,8 % | **non tenu** |
 | K2 | `move_end` sans refus du contrôleur, 95 % | 67 922/85 482 = **79,5 % [79,2 ; 79,7]** ; 89 % des refus sont un `SHARP_TURN` de C2 seul (contrefactuel 96,3 % [calculé]) | **non tenu** |
 | K3 | ±3 % pour \|δ\| ≤ 25 %, 90 % | pondéré 1 139/1 281 = **88,9 % [87,4 ; 90,3]** ; brut 3 760/4 696 = 80,1 % [79,1 ; 81,0] | **à la limite** (pondéré) ; **non tenu** (brut) |
-| K4 | P90 du temps sous 2 s | `resize` **4 060 ms** à 16 fils (environ 2,6 s à 1 fil [calculé, incertain]) ; `move_end` **127 ms** | `resize` **non tenu** ; `move_end` **tenu** |
+| K4 | P90 du temps sous 2 s | `resize` **4 060 ms** à 16 fils en génération seule, **4 470 ms** avec les contrôles [calculé] (environ 2,6 s à 1 fil, génération seule [calculé, incertain]) ; `move_end` **127 ms** | `resize` **non tenu** ; `move_end` **tenu** |
 | ordre | moins de 1 % de traces avec anomalie d'ordre | **5,0 % [4,5 ; 5,7]** | **non tenu** |
 
 **Décision du §9 de la note.** K1 et K2 n'étant pas tenus, le **lot 1 (arrivée) ne s'ouvre pas tel que le critère le demande**. K3 n'étant
