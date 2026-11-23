@@ -12,6 +12,15 @@ Les équipes sont désignées par leur lettre, comme dans les relevés du lot 4 
 
 Les choix que cette note prend sans réponse du propriétaire sont marqués **(défaut pris, à contredire)** et repris au §14.
 
+> **Mise à jour du 23 novembre 2026, après le 5a** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §7) :
+> les règles du §3.5 sont appliquées. **R1** : crans **0,25 · 0,47 · 0,65** en `offroad` (réel GRAVEL P10 0,264, P50 0,470,
+> P90 0,611 ; M2 ne confirme pas les 20 / 38 / 49 %), reportés au §10.1 et au §14. **R2** déclenchée (écart médian 0,083, P90
+> 0,154) : cause dans la source (12,6 % de la longueur de l'export sans classe de revêtement), pas dans `SURFACE_OTHER` ; crans
+> gardés sur `offroad`. **R3** : 29 % de courbes monotones, la recherche du §4.3 est la **grille** {0,35 ; 0,5 ; 0,7 ; 1 ; 1,4}.
+> **R4** déclenchée (B à 0,310). **R5** : bornes du §6.1 inchangées. **R6** : le **5e est abandonné** (§5.2 ; `run1k` et
+> `switch_10km` générés déjà plus enchaînés que le réel). **R7** : pas de 5h. Le relevé montre aussi que « Beaucoup » à 0,65
+> et C1 ne tiendront pas tels qu'écrits : points du §8 du relevé, laissés au propriétaire, rien n'est relâché ici.
+
 Relue contre le code le 23 novembre (seconde lecture) : la règle `surface_rd` écrite sur la table de Valhalla dès le départ
 (§2.2), la marge des heuristiques avec τ (§5.2), l'exemption d'équipe exigeant un parcours du type (§6.2), le réglage du
 contrôleur passé par le service (§6.4), `reached` recalculé après le contrôleur (§8.2, §10.1), des critères A, B et C1 resserrés
@@ -32,7 +41,7 @@ Aujourd'hui le moteur ne reçoit aucune consigne de ce genre : le non-revêtu n'
 | 5b | **Une définition, mesurée partout** : `Attrs::surface_rd()` (règle route-details), mesure dans le vérificateur du moteur, dans `ord-loops-check` et dans la réponse | `ord-graph`, `ord-loops`, `ord-loops-check`, `ord-server` | Accord avec la classe `sc` de l'export sur les boucles réelles |
 | 5c | **Bornes de roulabilité** par type, dans le moteur et dans le contrôleur | `ord-loops`, `ord-loops-check` | 0 `NOT_RIDEABLE` ; longueur réelle écartée |
 | 5d | **La consigne de part** : champ d'API, multiplicateur μ du non-revêtu cherché pas à pas dans le budget, terme de choix, rendu « atteint ou non » | `ord-loops`, `ord-server` | Part obtenue contre part visée (§9) |
-| 5e | **Coût de passage** revêtu ↔ non revêtu, quand une consigne est donnée | `ord-loops` | Part de non-revêtu en tronçons de plus d'1 km |
+| 5e | ~~**Coût de passage** revêtu ↔ non revêtu, quand une consigne est donnée~~ **abandonné par R6 au 5a** | `ord-loops` | Part de non-revêtu en tronçons de plus d'1 km |
 | 5f | **Service** api 1.14, paquet 1.15.0, séance en conteneur | `ord-server`, image | Critères C du §9 |
 | 5g | **Pédalons** : contrat, trois crans dans le panneau web | dépôt tribly | Tests de ressource et du panneau ; e2e |
 
@@ -325,7 +334,9 @@ ne passe qu'une fois, sur les parcours finalement rendus.
 2. **Mesure** : part `offroad` de la première proposition après le choix (§4.5). Dans `[cible − tol, cible + tol]` → arrêt.
 3. **Pas suivants** : sans encadrement, x recule ou avance d'un pas de 1 (μ ÷ 2 ou × 2) dans le bon sens ; dès qu'un
    encadrement existe, sécante sur les deux points qui l'encadrent, arrondie à la grille de 1/8, puis bissection si la sécante
-   retombe sur un point déjà joué (règle R3 : grille fixe si les courbes ne sont pas monotones).
+   retombe sur un point déjà joué (règle R3 : grille fixe si les courbes ne sont pas monotones). **Le 5a a tranché pour la
+   grille** (29 % de courbes monotones) : μ pris dans {0,35 ; 0,5 ; 0,7 ; 1 ; 1,4}, pas 0 au point de grille du prior, le
+   meilleur des candidats mis en commun gardé, sans sécante ni bissection.
 4. **Arrêt** au premier pas dans la tolérance, ou si l'une de ces conditions tombe avant de lancer le pas k + 1 :
    - k + 1 > `offroad.max_steps` (**4** par défaut) ;
    - `écoulé + 1,5 × durée(pas k) + réserve_contrôle > min(échéance − 1 s, début + offroad.steps_until_ms)`, avec
@@ -424,6 +435,9 @@ Des suites continues d'arêtes non revêtues roulables de plus d'un kilomètre, 
 à chaque passage revêtu ↔ non revêtu, pour que le parcours enchaîne les chemins au lieu d'alterner tous les 200 m.
 
 ### 5.2 Le coût de passage : dans le lot (5e), sous la règle R6
+
+**Abandonné le 23 novembre 2026 par R6** (relevé du 5a, §4 et §7) : au μ qui donne la médiane réelle, `run1k` généré vaut
+0,75 contre 0,65 réel et `switch_10km` 11,2 contre 14,5. Le texte ci-dessous reste pour mémoire.
 
 - **Où** : au passage d'une chaîne à la suivante, là où le moteur paie déjà le virage (`search.rs`, règle de virage, `in_head`
   et `TURN_COST_MAX`). Si `tail_off(chaîne entrante) ≠ head_off(chaîne sortante)` : + τ. À l'intérieur d'une chaîne les passages
@@ -649,8 +663,8 @@ revert` si C3 manque. La fusion et la mise en service restent au propriétaire.
 - `RouteGeneratorRequest.unpaved` : énumération **`RouteGeneratorUnpaved`** `LOW | USUAL | HIGH`, facultative. Absente =
   `USUAL` pour GRAVEL et MTB ; **ignorée pour ROAD** (le backend n'envoie rien au moteur, défaut pris : le site ne la montre pas
   en route, un client qui l'enverrait n'a pas à échouer).
-- Les **valeurs numériques restent dans le backend** (`RouteGeneratorService`, à côté de `DEFAULT_DISCOVERY`) : `LOW` 0,20,
-  `USUAL` 0,38, `HIGH` 0,55, recalées par R1. Une énumération au contrat plutôt qu'un nombre : les valeurs se règlent sans
+- Les **valeurs numériques restent dans le backend** (`RouteGeneratorService`, à côté de `DEFAULT_DISCOVERY`) : `LOW` **0,25**,
+  `USUAL` **0,47**, `HIGH` **0,65**, fixées par R1 au 5a (d'abord 0,20 · 0,38 · 0,55). Une énumération au contrat plutôt qu'un nombre : les valeurs se règlent sans
   toucher aux clients.
 - `GeneratedRouteDto.unpavedShare` : lit désormais `offroad_share` (définition route-details, la même que la page d'un parcours
   enregistré), et `unpaved_share` si le moteur ne rend pas `offroad_share` (moteur 1.14 après un retour arrière). Description du
@@ -792,7 +806,7 @@ qu'elle soit fusionnée, et l'étape 7 se joue bornes comprises.
 1. **Définition** : la part visée et rendue suit la règle de route-details (tag, puis `tracktype`, puis classe), recopiée en
    `Attrs::surface_rd` ; `is_unpaved` (tag seul) et `unpaved_share` restent pour la compatibilité et le goût.
 2. **Nom** : μ pour le multiplicateur du non-revêtu (λ est déjà le coût hors équipe dans le code) ; champ `offroad_target`.
-3. **Crans** : 0,20 · 0,38 · 0,55, recalés par R1 sur le réel mesuré dans la définition retenue ; valeurs dans le backend de
+3. **Crans** : 0,25 · 0,47 · 0,65 (R1 au 5a ; d'abord 0,20 · 0,38 · 0,55), recalés par R1 sur le réel mesuré dans la définition retenue ; valeurs dans le backend de
    Pédalons, pas dans le moteur ; mêmes valeurs en VTT (13 parcours : rien à apprendre).
 4. **Tolérance** ±0,05 ; au plus 4 pas ; pas après 10 s de calcul ; μ ∈ [1/4, 4] sur une grille de 1/8 en log₂.
 5. **Prior** général par type, appris au banc sur la table commune ; pas de prior par équipe.
