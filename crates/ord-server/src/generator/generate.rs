@@ -170,6 +170,15 @@ fn r1(x: f64) -> f64 {
     (x * 10.0).round() / 10.0 + 0.0
 }
 
+/// Le délai des pas k ≥ 1 d'une recherche qui commence à `now` : aucun pas après `min(échéance − 1 s, début + max_ms)`, le
+/// début étant celui de la recherche dans la **première** fenêtre (`first`), le pas 0 gardant seul le budget entier du
+/// service ; les suivants sont jetés plutôt que de coûter un 504.
+fn steps_until_ms(now: Instant, first: Instant, deadline: Instant, max_ms: u32) -> u32 {
+    let left = deadline.saturating_duration_since(now).saturating_sub(Duration::from_secs(1));
+    let ten = Duration::from_millis(u64::from(max_ms)).saturating_sub(now.saturating_duration_since(first));
+    u32::try_from(left.min(ten).as_millis()).unwrap_or(u32::MAX)
+}
+
 impl Ready {
     pub(super) fn take_workspace(&self) -> Workspace {
         self.windows.take_workspace()
@@ -193,6 +202,8 @@ impl Ready {
         stop: &mut dyn FnMut() -> bool,
     ) -> Result<SteeredGeneration, Problem> {
         let mut extra_m = 0.0;
+        // Début de la recherche de la première fenêtre : après un échappement, la seconde ne regagne pas les 10 s de pas.
+        let mut search_start: Option<Instant> = None;
         for attempt in 0..2 {
             let plan = self.engine.plan_with(req, self.cfg.window_radius_step_m, extra_m);
             let team = entry.map(|e| TeamRef { serial: e.serial, data: &e.team, taste: e.profile.as_ref() });
@@ -207,19 +218,17 @@ impl Ready {
             let ctx = entry.zip(held.wt.as_deref()).map(|(e, wt)| TeamCtx { data: &e.team, win: wt });
             let steer = Steer {
                 offroad: offroad.map(|t| {
-                    // Aucun pas de la recherche après `min(échéance − 1 s, offroad_steps_until_ms)` : le pas 0 garde le
-                    // budget entier du service, les suivants sont jetés plutôt que de coûter un 504.
-                    let left_ms = deadline
-                        .saturating_duration_since(Instant::now())
-                        .saturating_sub(Duration::from_secs(1))
-                        .as_millis();
+                    let now = Instant::now();
                     OffroadTarget {
                         target_milli: (t * 1000.0).round() as u16,
                         tolerance_milli: (self.cfg.offroad_tolerance * 1000.0).round() as u16,
                         max_steps: self.cfg.offroad_max_steps,
-                        steps_until_ms: u32::try_from(left_ms)
-                            .unwrap_or(u32::MAX)
-                            .min(self.cfg.offroad_steps_until_ms),
+                        steps_until_ms: steps_until_ms(
+                            now,
+                            *search_start.get_or_insert(now),
+                            deadline,
+                            self.cfg.offroad_steps_until_ms,
+                        ),
                     }
                 }),
             };
@@ -568,5 +577,22 @@ mod tests {
         assert!(!offroad_result(0.47, 0.05, 1, None).reached);
         let o = offroad_result(0.25, 0.05, 3, Some(0.25));
         assert_eq!((o.target, o.tolerance, o.steps), (0.25, 0.05, 3));
+    }
+
+    /// Lot 5, C4 : les pas k ≥ 1 s'arrêtent à `min(échéance − 1 s, début + 10 s)`, le début étant celui de la première
+    /// fenêtre ; une recherche reprise après un échappement ne regagne pas ses 10 s.
+    #[test]
+    fn the_steps_stop_ten_seconds_after_the_first_window_and_a_second_before_the_deadline() {
+        let t0 = Instant::now();
+        let s = Duration::from_secs;
+        // Budget de 30 s : 10 s de pas.
+        assert_eq!(steps_until_ms(t0, t0, t0 + s(30), 10_000), 10_000);
+        // L'échéance plus proche que 10 s : elle moins 1 s ; passée ou à moins d'1 s : aucun pas k ≥ 1.
+        assert_eq!(steps_until_ms(t0, t0, t0 + s(6), 10_000), 5_000);
+        assert_eq!(steps_until_ms(t0, t0, t0 + Duration::from_millis(800), 10_000), 0);
+        // Seconde fenêtre, 4 s après la première : 6 s de pas, pas 10.
+        assert_eq!(steps_until_ms(t0 + s(4), t0, t0 + s(30), 10_000), 6_000);
+        // 12 s après : plus rien.
+        assert_eq!(steps_until_ms(t0 + s(12), t0, t0 + s(30), 10_000), 0);
     }
 }

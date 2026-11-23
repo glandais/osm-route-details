@@ -17,7 +17,6 @@
 pub(crate) const GRID_Q8: [u32; 7] = [64, 90, 128, 179, 256, 358, 512];
 
 /// Indice du μ neutre (256) dans [`GRID_Q8`].
-#[cfg(test)]
 pub(crate) const NEUTRAL: usize = 4;
 
 /// `(cible en millièmes, μ médian en millièmes)`, par cible croissante (relevé du 5a, §6.3 ; voir le haut du fichier).
