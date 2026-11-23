@@ -401,12 +401,12 @@ pub struct GeneratorConfig {
     pub rideability: GeneratorRideability,
 }
 
-/// Les bornes de roulabilité (lot 5, §6) jouent-elles ? `off` redonne les parcours de 1.14 au bit près.
+/// Les bornes de roulabilité (lot 5, §6) jouent-elles ? `on` par défaut depuis 1.15.0 ; `off` redonne les parcours de 1.14 au bit près.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GeneratorRideability {
-    On,
     #[default]
+    On,
     Off,
 }
 
@@ -479,7 +479,7 @@ impl Default for GeneratorConfig {
             offroad_tolerance: 0.05,
             offroad_max_steps: 4,
             offroad_steps_until_ms: 10_000,
-            rideability: GeneratorRideability::Off,
+            rideability: GeneratorRideability::On,
         }
     }
 }
@@ -878,6 +878,7 @@ mod tests {
     #[test]
     fn the_offroad_and_rideability_settings_are_validated_and_come_from_the_environment() {
         let g = GeneratorConfig::default();
+        assert_eq!(g.rideability, GeneratorRideability::On);
         assert_eq!((g.offroad_tolerance, g.offroad_max_steps, g.offroad_steps_until_ms), (0.05, 4, 10_000));
         figment::Jail::expect_with(|jail| {
             jail.set_env("ORD_GENERATOR__RIDEABILITY", "on");

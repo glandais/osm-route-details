@@ -811,8 +811,9 @@ stable et `./format.sh` côté tribly ; arrêt et relecture marqués **[arrêt]*
    `offroad_m` / `offroad_share` par parcours, `offroad` en réponse (`reached` recalculé sur la première proposition que le
    contrôleur garde, crochet de test `corrupt_first_route`), `generator.offroad` dans les capacités, réglages
    `offroad_tolerance` / `offroad_max_steps` / `offroad_steps_until_ms` / `rideability` (passé au moteur et au contrôleur),
-   métriques du §8.4, API 1.14, paquet 1.15.0, contrat régénéré. `rideability` reste `off` par défaut dans ce commit ; la bascule
-   est le commit suivant.
+   métriques du §8.4, API 1.14, paquet 1.15.0, contrat régénéré. `rideability` est `off` dans ce commit ; la bascule (`on` par
+   défaut, moteur et service) est le commit suivant : références figées re-bénies, 0 parcours changé (le graphe synthétique
+   n'a aucune arête bornée).
 9. **Relecture sur carte** — avec `tools/ord-loops-viewer`, vingt parcours GRAVEL au cran « Beaucoup » et vingt au cran
    « Comme d'habitude », tirés au hasard sur deux équipes et deux zones hors banc : chemins qui existent, enchaînement, pas de
    chemin interdit. Notes dans le relevé, sans coordonnées. **[arrêt]** : fusion par le propriétaire, mise en service

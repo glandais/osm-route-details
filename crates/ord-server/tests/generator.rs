@@ -626,7 +626,7 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     assert_eq!(
         g["offroad"],
         json!({"ride_types": ["gravel", "mtb"], "target_min": 0.0, "target_max": 0.8, "tolerance": 0.05,
-               "max_steps": 4, "rideability": "off"})
+               "max_steps": 4, "rideability": "on"})
     );
 }
 

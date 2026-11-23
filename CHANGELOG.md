@@ -6,8 +6,11 @@ Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérie
 ## 1.15.0 (API 1.14) - à publier
 
 Lot 5 du générateur (`docs/design/technique/ord-loops-lot5.md`) : une part de non-revêtu visée, des bornes de roulabilité.
-Ajouts seulement ; sans `offroad_target` et avec `generator.rideability = off` (le défaut de ce commit), les parcours sont ceux
-de 1.14 au bit près.
+Ajouts seulement dans le contrat ; sans `offroad_target` et avec `generator.rideability = off`, les parcours sont ceux de
+1.14 au bit près. **`rideability` vaut `on` par défaut** (moteur : `Params::rideability`, service : `ORD_GENERATOR__RIDEABILITY`) :
+les arêtes que le type ne peut pas rouler (§6.1) sont écartées en gravel et VTT, sauf celles que l'équipe a roulées, et le
+contrôleur refuse un parcours qui en emprunte une (`NOT_RIDEABLE`). Les parcours des références figées ne changent pas (le
+graphe synthétique n'a aucune arête bornée) ; sur des données réelles, des parcours gravel et VTT changent.
 
 ### Ajouté
 

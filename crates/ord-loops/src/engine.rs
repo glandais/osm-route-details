@@ -54,7 +54,7 @@ pub struct Params {
     /// la table commune figée ([`Taste::common`]). [`Taste::neutral`] redonne exactement les poids de 1.9.2
     /// (`cost::edge_weight`). Un goût passé au crochet d'une `WindowTeam` **remplace** ce poids, il ne s'y multiplie pas.
     pub base_taste: Taste,
-    /// Bornes de roulabilité (lot 5, §6) : `Off` (défaut pour l'instant) redonne 1.14 au bit près.
+    /// Bornes de roulabilité (lot 5, §6) : `On` (défaut depuis 1.15.0) ; `Off` redonne 1.14 au bit près.
     pub rideability: Rideability,
 }
 
@@ -138,7 +138,7 @@ impl Default for Params {
             window_margin_m: 1_000.0,
             index_threads: 2,
             base_taste: Taste::common(),
-            rideability: Rideability::Off,
+            rideability: Rideability::On,
         }
     }
 }
