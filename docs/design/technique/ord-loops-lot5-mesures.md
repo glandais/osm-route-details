@@ -718,6 +718,54 @@ variantes de cette séance), 42 requêtes du §10.1, sans cible et à chaque cra
   de plus en moyenne, dans le délai des pas. `reached` baisse en zone dense à 0,47 (9 / 24, contre 8 / 23 au §10.3 en
   conteneur, à lire avec prudence : machines et budget de mémoire différents) ; la France (C3) n'est pas rejouée.
 
+### 10.7 Nouvelle séance après correctif (C3 et C4 rejoués en conteneur)
+
+> Relevés du 23 novembre 2026 sur `a69ebd5` (pas 0 toujours à μ = 1, plus de dernier recours). Même cadre que le §10.1 (conteneur
+> de 3 Gio, mêmes requêtes et mêmes variantes, volume neuf, un conteneur à la fois, image `ord-lot5:dev` reconstruite, jamais
+> poussée) ; référence `ghcr.io/glandais/osm-route-details:1.14.0` rejouée dans la même séance, sans cible. Les §10.2 à 10.6
+> sont gardés tels quels : ce paragraphe les remplace pour le verdict.
+
+| série | variante | n | P50 (s) | P90 (s) | max (s) | issues | `reached` | pas moyen |
+|---|---|---:|---:|---:|---:|---|---|---:|
+| denses, série | 1.14.0 sans cible | 24 | 3,62 | 13,66 | 25,73 | 24 × 200 | — | — |
+| denses, série | sans cible | 24 | 3,74 | 13,62 | 26,43 | 24 × 200 | — | — |
+| denses, série | 0,25 · 0,47 · 0,60 | 24 | 7,08 · 6,59 · 6,71 | 13,35 · 13,89 · 13,74 | 25,98 · 26,13 · 26,38 | 24 × 200 | 13 · 9 · 5 / 24 | 1,79 · 1,88 · 2,00 |
+| rurales, série | 1.14.0 sans cible | 18 | 0,43 | 1,13 | 3,26 | 18 × 200 | — | — |
+| rurales, série | sans cible | 18 | 0,44 | 1,23 | 2,93 | 18 × 200 | — | — |
+| rurales, série | 0,25 · 0,47 · 0,60 | 18 | 0,57 · 0,67 · 0,63 | 2,94 · 2,59 · 1,72 | 6,27 · 8,11 · 8,59 | 18 × 200 | 12 · 9 · 13 / 18 | 2,67 · 3,00 · 2,28 |
+| 4 clients | 1.14.0 sans cible | 42 | 5,46 | 28,29 | 30,05 | 39 × 200, 2 × 503, 1 × 504 | — | — |
+| 4 clients | sans cible | 42 | 6,62 | 28,05 | 30,04 | 39 × 200, 1 × 503, 2 × 504 | — | — |
+| 4 clients | 0,25 · 0,47 · 0,60 | 42 | 8,03 · 8,82 · 9,65 | 26,2 · 25,8 · 25,4 | 30,0 | 40 × 200, 1 × 503, 1 × 504 (les trois) | 24 · 18 · 18 / 40 | 2,17 · 2,38 · 2,12 |
+| France, série | 1.14.0 sans cible | 54 | 0,53 | 0,99 | 2,00 | 54 × 200 | — | — |
+| France, série | sans cible | 54 | 0,55 | 0,90 | 1,79 | 54 × 200 | — | — |
+| France, série | 0,25 · 0,47 · 0,60 | 54 | 0,77 · 0,48 · 0,64 | 1,77 · 1,59 · 2,51 | 2,71 · 6,60 · 5,38 | 54 × 200 | 45 · 52 · 39 / 54 | 2,19 · 1,57 · 2,17 |
+| France, 4 clients | 1.14.0 sans cible | 162 | 1,02 | 2,08 | 3,41 | 162 × 200 | — | — |
+| France, 4 clients | sans cible | 162 | 0,86 | 1,73 | 3,14 | 162 × 200 | — | — |
+| France, 4 clients | 0,25 · 0,47 · 0,60 | 162 | 1,92 · 1,27 · 1,73 | 3,49 · 2,87 · 5,02 | 7,10 · 9,87 · 10,01 | 162 × 200 | 128 · 152 · 115 / 162 | 2,34 · 1,62 · 2,25 |
+
+- **Échecs** : aucun 504, 503 ni 422 de plus qu'en 1.14.0 sans cible. En série, planète et France, tout est en 200 (54 réponses
+  par variante en France, 42 sur la planète ; 162 par variante en France à 4 clients). À 4 clients sur la planète, les trois mêmes requêtes lentes
+  échouent avec ou sans cible (Tokyo 200 km en 503, Shinjuku 200 km en 504, plus un troisième cas sans cible) : avec cible, **un
+  échec de moins** que sans cible dans la même séance (Shinjuku 40 km, 504 sans cible, 200 avec). Galles 40 km : 200 aux trois
+  crans (le 422 du §10.3 a disparu). Tokyo 200 km : 200 à tous les crans, 1 pas, 16,7 à 17,6 s (sans cible 17,5 s).
+- **Règle `max(sans cible, 10 s) + 1 s`** (comparée requête par requête à la variante sans cible de la même séance) : tenue à
+  287 requêtes sur 288 pour les séries denses, rurales et France ; **un dépassement de 0,05 s** : Osaka 150 km à 0,47, 11,99 s
+  pour 10,94 s sans cible (limite 11,94 ; 1.14.0 sans cible : 11,16 s), un seul pas, au bruit de la machine. Au pire, hors ce cas,
+  +0,73 s sur 10 s (0,60) ; rurales et France, jamais. À 4 clients la règle ne se juge pas : les requêtes lentes se bousculent
+  et la durée d'une requête dépend de celles qui l'entourent, d'une variante à l'autre (planète : 9 · 10 · 13 requêtes plus
+  longues que la limite, toutes en 200, Tokyo, New York, Osaka ; France : aucune).
+- **Rapport par requête avec / sans cible** (médiane · P90), série : denses × 0,99 · 2,4, × 1,03 · 2,6, × 1,37 · 2,6 ; rurales
+  × 1,43 · 2,5, × 1,77 · 2,8, × 1,06 · 2,6 ; France × 1,36 · 2,8, × 0,80 · 2,6, × 1,11 · 3,0 (0,25 · 0,47 · 0,60). À 4 clients, France
+  × 2,07 · 3,6, × 1,45 · 2,6, × 2,04 · 3,9. Le P90 reste sous le × 3,0 du C1 réécrit sauf à 4 clients (× 3,6 et × 3,9, deux
+  places de calcul partagées).
+- **`reached`** en zone dense : 13, 9 et 5 sur 24 (0,25 · 0,47 · 0,60) ; §10.3 : 12, 8 sur 23 et 5 sur 24 ; relevé natif du §10.6 :
+  12, 9 et 5. Le correctif n'a pas dégradé la part atteinte, y compris au cran 0,25 (13 sur 24, contre 12).
+- **Mémoire** : `anon` 943 Mo au plus sur la planète (946 en 1.14.0), 847 Mo en France (825) ; `memory.peak` 3 221 Mo (pages de
+  fichier récupérables), `oom` 0, `oom_kill` 0, 0 redémarrage, `healthy`, dans les quatre séances. Conteneurs et volumes arrêtés
+  et supprimés à la fin.
+- **Verdict** : C4 tenu (plus de 504, 503 ni 422 de plus, règle des 10 s tenue à 0,05 s près, mémoire à l'identique de 1.14.0) ;
+  C3 sans 5xx ni 4xx, seuils absolus comme au §10.2 (non comparables à la séance du 4c) et P90 sous × 3,0 en série.
+
 ## 11. Relecture sur carte (étape 9, §13 de la note)
 
 > Relecture du 23 novembre 2026 sur `764f644` (moteur de la bascule, `rideability = on`). Lettres et agrégats seulement :
