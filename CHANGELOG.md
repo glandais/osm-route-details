@@ -3,6 +3,14 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.15.1 (API 1.14)
+
+### Sécurité
+
+- **`url` 2.5.9** (RUSTSEC-2026-0592) : en 2.5.8, `Url::origin()` sur une URL `blob:` imbriquée débordait la pile. Ni le
+  service ni ses dépendances ne l'appellent sur une entrée reçue (le service ne contacte que des serveurs de tuiles
+  configurés) ; montée par précaution. Parcours, contrat et réglages inchangés au bit près.
+
 ## 1.15.0 (API 1.14)
 
 Lot 5 du générateur (`docs/design/technique/ord-loops-lot5.md`) : une part de non-revêtu visée, des bornes de roulabilité.
