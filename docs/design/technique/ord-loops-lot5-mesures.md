@@ -623,15 +623,13 @@ réelle partie du même point** (une personne de l'équipe a-t-elle trouvé la p
 | 4 clients | 0,60 | 42 | 8,25 | 29,81 | 30,04 | 36 × 200, 1 × 503, 4 × 504, 1 × 422 | 13 / 36 |
 
 - **Référence 1.14.0** (mêmes requêtes sans cible) : denses 3,75 · 13,84 · 25,39 s, rurales 0,43 · 1,14 · 3,21 s, **24 + 18 × 200** ;
-  4 clients 5,29 · 28,85 · 30,37 s, 39 × 200, 1 × 503, 2 × 504 (Tokyo 200 km, Shinjuku 80 et 200 km). Les 422 des variantes avec
-  cible sont ceux de Galles 40 km (`no_candidate`), même départ qu'en 1.14 sur d'autres tirages : sans cible il rend 200 ici
-  (`reached` non applicable) ; ce sont donc **deux 200 devenus 422** dans les variantes 0,47 et 0,60 en série (un à 4 clients
-  à 0,47 et à 0,60), à vérifier (tirage de la recherche à cible, pas de refus du budget).
+  4 clients 5,29 · 28,85 · 30,37 s, 39 × 200, 1 × 503, 2 × 504. Galles 40 km (`no_candidate`) rend 200 sans cible et 422 aux cibles
+  0,47 et 0,60 (en série et à 4 clients) : **un 200 devenu 422** par cible, à examiner (échec de la recherche à cible, pas du budget).
 - **Mémoire** : `anon` 981 Mo au plus (914 en 1.14.0), `memory.peak` 3 221 Mo, `oom` 0, `oom_kill` 0, 0 redémarrage, prêt en 4,8 s.
 - **Verdict C4 : non tenu.**
-  1. **Un 504 de plus en série** : Tokyo gravel 200 km à 0,47 (30,05 s ; sans cible 16,7 s, 1.14.0 : 200). Les 504 à 4 clients sont
-     les mêmes que ceux de 1.14.0 aux variantes 0 et 0,25 (2) ; **2 de plus à 0,60** (Tokyo 150 km, Shinjuku 80 et 150 km au lieu
-     de 200 pour Shinjuku 40 ; le mélange d'une même file bouge d'une variante à l'autre).
+  1. **Un 504 de plus en série** : Tokyo gravel 200 km à 0,47 (30,05 s ; sans cible 16,7 s, 1.14.0 : 200). À 4 clients, les 504 sont 2
+     sans cible comme en 1.14.0 et à 0,25 et 0,47, **4 à 0,60** (Tokyo 150 km, Shinjuku 80, 150 et 200 km) ; à 4 clients les
+     requêtes lentes se bousculent et le détail bouge d'une variante à l'autre.
   2. **La règle « pas plus longue que max(sans cible, 10 s) + 1 s » manque** : en série, 1 requête à 0,25 (Tokyo 200 km, 16,7 → 18,0 s),
      3 à 0,47 et 6 à 0,60 (jusqu'à Tokyo 200 km à 30,1 s, rendue en 200 avec `reached = false`, 1 pas, après l'échéance du
      contrôleur). Les requêtes concernées sont toutes dans les agglomérations japonaises ou New York, où la base dépasse déjà 6 s.
