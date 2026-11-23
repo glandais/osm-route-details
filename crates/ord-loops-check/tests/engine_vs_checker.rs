@@ -12,7 +12,7 @@ use ord_loops::{
     generate, Engine, Family, FigureMix, Figures, LatLon, Mode, Organic, OrganicTune, Params, Request,
     RideType, TeamData, Workspace,
 };
-use ord_loops_check::{Checker, Config};
+use ord_loops_check::{Checker, Config, Rideability};
 
 const LAT0: f64 = 47.2;
 const LON0: f64 = -1.56;
@@ -154,13 +154,23 @@ fn check_all(figures: Figures, attractors: bool) -> usize {
         let overlay = random_overlay(&base, seed, 85);
         let files =
             attractors.then(|| (attractors_of(&base, &road, seed), attractors_of(&base, &gravel, seed)));
-        let mut engine = Engine::new(base, road, gravel, Params::default()).unwrap();
+        let mut engine = Engine::new(
+            base,
+            road,
+            gravel,
+            Params { rideability: ord_loops::Rideability::On, ..Params::default() },
+        )
+        .unwrap();
         if let Some((fr, fg)) = files {
             engine.set_attractors(0, fr).unwrap();
             engine.set_attractors(1, fg).unwrap();
         }
         let team = TeamData::build(&engine, &overlay).unwrap();
-        let checker = Checker::new(engine.base(), Some(&overlay), Config::default());
+        let checker = Checker::new(
+            engine.base(),
+            Some(&overlay),
+            Config { rideability: Rideability::On, ..Config::default() },
+        );
         let mut ws = Workspace::new();
         for (k, d) in [6_000.0, 9_000.0].into_iter().enumerate() {
             for (mi, mode) in [Mode::Strict, Mode::TeamFirst, Mode::Discovery].into_iter().enumerate() {

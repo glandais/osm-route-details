@@ -14,7 +14,7 @@ use crate::geo::{
     across_m, along, clip, cumulative_m, dist, has_connector_run, haversine_m, path_heading, point_at,
     poly_len, turn_angle_deg, LatLon, Proj, RunRule,
 };
-use crate::rules::{admitted, direction_allowed, team_edge, Admission, TypeIndex};
+use crate::rules::{admitted, direction_allowed, exempt, rideable, team_edge, Admission, TypeIndex};
 
 /// Les garanties, par code. L'ordre sert au tri des rapports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,6 +24,8 @@ pub enum Violation {
     Discontinuous,
     OneWay,
     NotAdmitted,
+    /// Arête non roulable pour le type (lot 5, §6.1), hors exemption d'équipe ; jamais en strict.
+    NotRideable,
     WrongStart,
     WrongEnd,
     /// Position de départ ou d'arrivée hors de son arête, ou incohérente avec la suite (ajout au §6).
@@ -48,6 +50,7 @@ impl Violation {
             Self::Discontinuous => "DISCONTINUOUS",
             Self::OneWay => "ONE_WAY",
             Self::NotAdmitted => "NOT_ADMITTED",
+            Self::NotRideable => "NOT_RIDEABLE",
             Self::WrongStart => "WRONG_START",
             Self::WrongEnd => "WRONG_END",
             Self::BadOffset => "BAD_OFFSET",
@@ -63,6 +66,14 @@ impl Violation {
             Self::DistanceOutOfTolerance => "DISTANCE_OUT_OF_TOLERANCE",
         }
     }
+}
+
+/// Les bornes de roulabilité du lot 5 (§6.1) : `On` les contrôle, `Off` redonne le contrôle de 1.14.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Rideability {
+    #[default]
+    On,
+    Off,
 }
 
 /// Les constantes du §6 (celles de Java, plus l'accroche à 2 km et le trou de 100 m).
@@ -99,6 +110,8 @@ pub struct Config {
     /// comme `RouteGuarantees.turnApplies` exempte un nœud que l'équipe traverse ; sans elle, la note lue à la
     /// lettre ne l'exempte que pour une grappe de nœuds.
     pub hairpin_single_node: bool,
+    /// Contrôle des bornes de roulabilité (lot 5, §6.4) ; sans effet en mode strict.
+    pub rideability: Rideability,
 }
 
 impl Default for Config {
@@ -128,6 +141,7 @@ impl Default for Config {
             run_min_piece_m: 1.0,
             loop_close_m: 1.0,
             hairpin_single_node: false,
+            rideability: Rideability::On,
         }
     }
 }
@@ -325,6 +339,13 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             }
             if !admitted(adm, info.attrs) {
                 v.insert(Violation::NotAdmitted);
+            }
+            if self.cfg.rideability == Rideability::On && req.mode != Mode::Strict {
+                let exempted =
+                    self.overlay.is_some_and(|o| exempt(req.ride_type, o.get(s.base_edge), &self.types));
+                if !rideable(req.ride_type, info.attrs, exempted) {
+                    v.insert(Violation::NotRideable);
+                }
             }
         }
         let walk_from = |s: &ord_loops::Step| {

@@ -642,3 +642,211 @@ fn overlapping_start_and_end_on_one_edge() {
     r.end.offset_m = 100.0;
     assert!(ck.check(&rq, &r).has(Violation::BadOffset));
 }
+
+// ---- Lot 5, §6 : bornes de roulabilité (écrites depuis la note seule) ----
+
+mod rideable {
+    use super::*;
+    use crate::{exempt, rideable, Rideability, TypeIndex};
+    use ord_graph::attrs::classify;
+
+    fn track(extra: &[(&str, &str)]) -> ord_graph::attrs::Attrs {
+        let mut t = vec![("highway", "track")];
+        t.extend_from_slice(extra);
+        classify(&t).expect("way gardée").attrs
+    }
+
+    const ALL: [RideType; 3] = [RideType::Road, RideType::Gravel, RideType::Mtb];
+
+    #[test]
+    fn codes_follow_the_note() {
+        // les codes mêmes, pour que le test lise les mêmes valeurs que la table du §6.1
+        assert_eq!(track(&[("smoothness", "horrible")]).smoothness(), 6);
+        assert_eq!(track(&[("smoothness", "very_horrible")]).smoothness(), 7);
+        assert_eq!(track(&[("smoothness", "impassable")]).smoothness(), 8);
+        assert_eq!(track(&[("smoothness", "very_bad")]).smoothness(), 5);
+        assert_eq!(track(&[("mtb:scale", "2")]).mtb_scale(), 3);
+        assert_eq!(track(&[("tracktype", "grade5")]).tracktype(), 5);
+    }
+
+    #[test]
+    fn smoothness_edges() {
+        for (v, gravel_ok) in
+            [("bad", true), ("very_bad", true), ("horrible", false), ("very_horrible", false)]
+        {
+            let a = track(&[("smoothness", v)]);
+            assert_eq!(rideable(RideType::Gravel, a, false), gravel_ok, "{v}");
+            assert!(rideable(RideType::Gravel, a, true), "{v} d'équipe");
+            assert!(rideable(RideType::Mtb, a, false), "{v} en VTT");
+            assert!(rideable(RideType::Road, a, false));
+        }
+        // valeur inconnue (code 15) : permise
+        assert!(rideable(RideType::Gravel, track(&[("smoothness", "weird")]), false));
+        assert!(rideable(RideType::Gravel, track(&[]), false));
+    }
+
+    #[test]
+    fn impassable_is_never_exempted() {
+        let a = track(&[("smoothness", "impassable")]);
+        for team in [false, true] {
+            assert!(!rideable(RideType::Gravel, a, team));
+            assert!(!rideable(RideType::Mtb, a, team));
+        }
+        // la vue route a ses règles : le prédicat ne s'en mêle pas
+        assert!(rideable(RideType::Road, a, false));
+    }
+
+    #[test]
+    fn mtb_scale_edges() {
+        for (v, gravel_ok, mtb_ok) in [
+            ("0", true, true),
+            ("1", true, true),
+            ("2", false, true),
+            ("3", false, true),
+            ("4", false, false),
+            ("5", false, false),
+        ] {
+            let a = track(&[("mtb:scale", v)]);
+            assert_eq!(rideable(RideType::Gravel, a, false), gravel_ok, "gravel {v}");
+            assert_eq!(rideable(RideType::Mtb, a, false), mtb_ok, "vtt {v}");
+            assert!(rideable(RideType::Gravel, a, true), "gravel d'équipe {v}");
+            assert!(rideable(RideType::Mtb, a, true), "vtt d'équipe {v}");
+        }
+        assert!(rideable(RideType::Gravel, track(&[]), false));
+    }
+
+    #[test]
+    fn tracktype_and_mud_edges() {
+        assert!(rideable(RideType::Gravel, track(&[("tracktype", "grade4")]), false));
+        assert!(!rideable(RideType::Gravel, track(&[("tracktype", "grade5")]), false));
+        assert!(rideable(RideType::Gravel, track(&[("tracktype", "grade5")]), true));
+        assert!(rideable(RideType::Mtb, track(&[("tracktype", "grade5")]), false));
+        assert!(rideable(RideType::Gravel, track(&[("tracktype", "weird")]), false));
+        assert!(!rideable(RideType::Gravel, track(&[("surface", "mud")]), false));
+        assert!(rideable(RideType::Gravel, track(&[("surface", "mud")]), true));
+        assert!(rideable(RideType::Mtb, track(&[("surface", "mud")]), false));
+        for ok in ["sand", "grass", "dirt", "gravel"] {
+            assert!(rideable(RideType::Gravel, track(&[("surface", ok)]), false), "{ok}");
+        }
+    }
+
+    #[test]
+    fn exemption_needs_a_ride_of_the_type() {
+        let ti = TypeIndex { road: Some(0), gravel: Some(1), mtb: Some(2), mixed: Some(3) };
+        let by = |t: usize| {
+            let mut c = [0u16; 8];
+            c[2 * t + 1] = 1;
+            c
+        };
+        let (road, gravel, mtb, mixed) = (by(0), by(1), by(2), by(3));
+        assert!(!exempt(RideType::Gravel, Some(&road), &ti));
+        assert!(exempt(RideType::Gravel, Some(&gravel), &ti));
+        assert!(exempt(RideType::Gravel, Some(&mixed), &ti));
+        assert!(!exempt(RideType::Gravel, Some(&mtb), &ti));
+        assert!(!exempt(RideType::Mtb, Some(&road), &ti));
+        assert!(exempt(RideType::Mtb, Some(&mtb), &ti));
+        assert!(exempt(RideType::Mtb, Some(&gravel), &ti));
+        assert!(exempt(RideType::Mtb, Some(&mixed), &ti));
+        assert!(!exempt(RideType::Gravel, None, &ti));
+        assert!(!exempt(RideType::Gravel, Some(&[0u16; 8]), &ti));
+        assert!(!exempt(RideType::Road, Some(&road), &ti));
+        let _ = ALL;
+    }
+
+    /// Carré dont l'arête 3-4 porte `extra` ; l'équipe a roulé cette arête avec le type de `by` (indice dans
+    /// ROAD, GRAVEL, MTB, MIXED) si donné.
+    fn run(
+        extra: &[(&str, &str)],
+        ride: RideType,
+        mode: Mode,
+        by: Option<usize>,
+        cfg: Config,
+    ) -> crate::Report {
+        let mut s = ring_source();
+        let mut tags = vec![("highway".to_string(), "track".to_string())];
+        tags.extend(extra.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())));
+        s.ways[2].2 = tags;
+        let fx = Fx::new(s);
+        let r = fx.route(&RING_LOOP, 0.5, 0.5);
+        let overlay = by.map(|t| {
+            let e = fx.edge(3, 4).0;
+            let meta = OverlayMeta {
+                graph: fx.g.graph_identity(),
+                team_id: 1,
+                export_xxh3: 0,
+                export_rows: 0,
+                params_hash: 0,
+                tool_version: "test".into(),
+                build_epoch: 0,
+                types: ["ROAD", "GRAVEL", "MTB", "MIXED"].iter().map(|s| (*s).to_string()).collect(),
+            };
+            let mut c = [0u16; 8];
+            c[2 * t] = 1;
+            Overlay::decode(&encode(&meta, &[e], &c).unwrap()).unwrap()
+        });
+        let mut rq = req_at(ll(0.0, 500.0), 4000.0, mode);
+        rq.ride_type = ride;
+        Checker::new(&fx.g, overlay.as_ref(), cfg).check(&rq, &r)
+    }
+
+    fn on() -> Config {
+        Config::default()
+    }
+
+    #[test]
+    fn checker_raises_not_rideable_and_exempts_the_team() {
+        let bad = [("smoothness", "horrible")];
+        assert_eq!(Config::default().rideability, Rideability::On);
+        let rep = run(&bad, RideType::Gravel, Mode::Discovery, None, on());
+        assert!(rep.has(Violation::NotRideable), "{:?}", rep.violations);
+        assert_eq!(Violation::NotRideable.code(), "NOT_RIDEABLE");
+        assert!(!run(&bad, RideType::Mtb, Mode::Discovery, None, on()).has(Violation::NotRideable));
+        // roulée par un parcours GRAVEL ou MIXED : exemptée ; par un parcours ROAD seul : non
+        assert!(!run(&bad, RideType::Gravel, Mode::TeamFirst, Some(1), on()).has(Violation::NotRideable));
+        assert!(!run(&bad, RideType::Gravel, Mode::TeamFirst, Some(3), on()).has(Violation::NotRideable));
+        assert!(run(&bad, RideType::Gravel, Mode::TeamFirst, Some(0), on()).has(Violation::NotRideable));
+        // impassable : jamais exempté
+        let imp = [("smoothness", "impassable")];
+        for t in [1, 2, 3] {
+            assert!(run(&imp, RideType::Gravel, Mode::TeamFirst, Some(t), on()).has(Violation::NotRideable));
+        }
+        assert!(run(&imp, RideType::Mtb, Mode::TeamFirst, Some(2), on()).has(Violation::NotRideable));
+        // VTT, mtb:scale 4 : exempté par un parcours MTB
+        let hard = [("mtb:scale", "4")];
+        assert!(run(&hard, RideType::Mtb, Mode::Discovery, None, on()).has(Violation::NotRideable));
+        assert!(!run(&hard, RideType::Mtb, Mode::Discovery, Some(2), on()).has(Violation::NotRideable));
+        assert!(run(&hard, RideType::Mtb, Mode::Discovery, Some(0), on()).has(Violation::NotRideable));
+    }
+
+    #[test]
+    fn off_and_strict_raise_nothing_new() {
+        let off = Config { rideability: Rideability::Off, ..Config::default() };
+        for extra in [
+            &[("smoothness", "horrible")][..],
+            &[("smoothness", "impassable")][..],
+            &[("mtb:scale", "4")][..],
+            &[("tracktype", "grade5")][..],
+            &[("surface", "mud")][..],
+        ] {
+            for mode in [Mode::Strict, Mode::TeamFirst, Mode::Discovery] {
+                for ride in [RideType::Gravel, RideType::Mtb] {
+                    assert!(!run(extra, ride, mode, None, off).has(Violation::NotRideable), "off {extra:?}");
+                }
+            }
+            // strict : jamais de NOT_RIDEABLE, même en `on`
+            assert!(!run(extra, RideType::Gravel, Mode::Strict, Some(1), on()).has(Violation::NotRideable));
+        }
+    }
+
+    #[test]
+    fn road_requests_never_raise_it() {
+        let rep = run(
+            &[("tracktype", "grade1"), ("smoothness", "impassable")],
+            RideType::Road,
+            Mode::Discovery,
+            None,
+            on(),
+        );
+        assert!(!rep.has(Violation::NotRideable));
+    }
+}

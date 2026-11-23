@@ -28,6 +28,6 @@ mod tests_bounded;
 mod tests_team_sparse;
 
 pub use bounded::{CheckPlan, GraphIndex, TeamCheck, TeamCheckEscape};
-pub use check::{Checker, Config, Report, Violation};
+pub use check::{Checker, Config, Report, Rideability, Violation};
 pub use geo::{haversine_m, LatLon};
-pub use rules::{admitted, team_edge, Admission, TypeIndex};
+pub use rules::{admitted, exempt, rideable, team_edge, Admission, TypeIndex};

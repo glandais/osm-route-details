@@ -174,6 +174,50 @@ pub fn team_edge(ride: RideType, attrs: Attrs, counts: Option<&[u16]>, ti: &Type
     }
 }
 
+/// Position de `mud` dans la table des surfaces d'`ord-graph`, code compris (position + 1).
+fn mud_code() -> u8 {
+    use ord_graph::attrs::SURFACES;
+    SURFACES.iter().position(|&s| s == "mud").map_or(0, |i| i as u8 + 1)
+}
+
+/// L'arête est-elle roulable pour ce type (note du lot 5, §6.1) ? `team` : l'arête est exemptée (§6.2), ce qui
+/// lève les bornes de la colonne de droite et jamais `smoothness=impassable`. Codes d'`ord-graph` : `smoothness`
+/// vaut la position + 1 (`horrible` 6, `very_horrible` 7, `impassable` 8, 15 inconnue, permise) ; `mtb_scale`
+/// vaut 0 si absent, sinon échelle + 1 (échelle >= 2 : code >= 3 ; >= 4 : code >= 5) ; `tracktype` 5 = `grade5`
+/// (7 inconnu, permis).
+pub fn rideable(ride: RideType, a: Attrs, team: bool) -> bool {
+    if ride == RideType::Road {
+        return true;
+    }
+    if a.smoothness() == 8 {
+        return false;
+    }
+    if team {
+        return true;
+    }
+    match ride {
+        RideType::Road => true,
+        RideType::Gravel => {
+            !(matches!(a.smoothness(), 6 | 7)
+                || (3..=7).contains(&a.mtb_scale())
+                || a.tracktype() == 5
+                || a.surface() == mud_code())
+        }
+        RideType::Mtb => !(5..=7).contains(&a.mtb_scale()),
+    }
+}
+
+/// Exemption d'équipe des bornes (§6.2) : un parcours du type a pris l'arête (gravel : `GRAVEL` ou `MIXED` ; VTT :
+/// `MTB`, `GRAVEL` ou `MIXED`), quel que soit le sens. Prédicat distinct de `team_edge`. Sans surcouche, jamais.
+pub fn exempt(ride: RideType, counts: Option<&[u16]>, ti: &TypeIndex) -> bool {
+    let Some(counts) = counts else { return false };
+    match ride {
+        RideType::Road => false,
+        RideType::Gravel => ti.rode_by(counts, &[ti.gravel, ti.mixed]),
+        RideType::Mtb => ti.rode_by(counts, &[ti.mtb, ti.gravel, ti.mixed]),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
