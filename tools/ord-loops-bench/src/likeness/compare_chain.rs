@@ -807,6 +807,8 @@ mod tests {
             n_kept: 1,
             dropped: Default::default(),
             ms: 100.0,
+            gen_ms: None,
+            steer: None,
             routes: vec![route(v)],
             best_shape: None,
             best_recovered: None,
@@ -905,6 +907,8 @@ mod tests {
             svc: None,
             org: None,
             mu_q8: None,
+            target_milli: None,
+            ride_on: false,
         };
         let cm = ChainMeta {
             stem: "rt05".into(),

@@ -12,6 +12,7 @@ pub mod compare;
 pub mod compare_attr;
 pub mod compare_chain;
 pub mod compare_org;
+pub mod compare_steer;
 pub mod compare_svc;
 pub mod export;
 #[cfg(test)]
@@ -22,6 +23,7 @@ pub mod out;
 pub mod p2p;
 pub mod play;
 pub mod shape;
+pub mod steer;
 pub mod svc;
 pub mod taste;
 pub mod variants;
@@ -397,6 +399,13 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     let listed = variants::parse_variants(&a.variants)?;
     let legacy = listed.is_empty();
     let variants = if legacy { vec![Variant::base()] } else { listed };
+    let ride_run = variants::ride_run(&variants);
+    if ride_run {
+        eprintln!(
+            "`ride:on` : les bornes de roulabilité sont posées sur le moteur, donc sur toutes les variantes de cette \
+             exécution (`base` comprise) ; les contrôles d'empreinte de référence ne s'appliquent pas"
+        );
+    }
     // Les attracteurs (4d) : une variante `attr` sans les deux fichiers est refusée avant toute phase lourde.
     if variants.iter().any(|v| v.org.is_some_and(|o| o.attr.is_some())) {
         anyhow::ensure!(
@@ -426,7 +435,12 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         open_graph(&paths.gravel)?,
         // Toujours le poids de base de 1.9.2 : les sondes du goût passent leur table au crochet (qui remplace le poids
         // de base) et les relevés passés se rejouent tels quels (§14.3.3).
-        Params { base_taste: Taste::neutral(), ..Params::default() },
+        Params {
+            base_taste: Taste::neutral(),
+            // `ride:on` (lot 5, étape 7) : les bornes se posent sur le moteur, donc sur toute l'exécution.
+            rideability: if ride_run { ord_loops::Rideability::On } else { ord_loops::Rideability::Off },
+            ..Params::default()
+        },
     )
     .map_err(|e| anyhow!("moteur : {e}"))?;
     // Les fichiers d'attracteurs (4d), chargés dans le moteur quel que soit le jeu de variantes (I1 et I5 se lisent fichier
@@ -823,6 +837,11 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
                 loops: report.loops,
             });
         }
+        // Les empreintes de référence sont celles de 1.14 sans bornes : avec `ride:on` elles ne s'appliquent pas, et une
+        // variante `target` ne rend pas les parcours de 1.14 non plus.
+        if ride_run || v.target_milli.is_some() {
+            continue;
+        }
         // « Pas 1 = `rc05` » : la chaîne commune à 72 cases, γ = 0,5, sans familiarité, aux réglages du 4a.
         if matches!(v.name.as_str(), "rc05" | "rc05-p1") && a.at_4a_defaults() && a.taste_at_4a_defaults() {
             let taste = report.variant.as_ref().map_or("", |m| m.taste_xxh3.as_str());
@@ -955,7 +974,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
             ),
             cursors: a.cursors.clone(),
             params: tp.clone(),
-            at_4a_defaults: a.at_4a_defaults(),
+            at_4a_defaults: a.at_4a_defaults() && !ride_run,
             base_4a_fingerprint: BASE_4A_FINGERPRINT.to_string(),
             holdout_share: a.holdout_share,
             step1_check,
@@ -1102,6 +1121,7 @@ impl Bench<'_> {
                             req,
                             ride: play::ride_of(self.loops[i].ty),
                             mu_q8: v.mu_q8,
+                            target_milli: v.target_milli,
                         });
                     }
                 }

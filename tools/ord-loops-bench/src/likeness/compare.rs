@@ -86,7 +86,7 @@ impl Reading {
     }
 
     /// La boucle est-elle dans le groupe de cette lecture ?
-    fn keeps(self, holdout: bool) -> bool {
+    pub(super) fn keeps(self, holdout: bool) -> bool {
         match self {
             Self::All => true,
             Self::Gap | Self::GapIn => holdout,
@@ -312,6 +312,8 @@ pub struct Compare {
     pub org: Option<super::compare_org::OrgSection>,
     /// Le 4d (§17.11) : attracteurs OSM contre `svc-org` ; `None` sans variante `attr` ni `svc-org`.
     pub attr: Option<super::compare_attr::AttrSection>,
+    /// La consigne de part (lot 5, étape 7, §9) : `target:<t>` contre la même variante sans cible ; `None` sans `target`.
+    pub steer: Option<super::compare_steer::SteerSection>,
 }
 
 const NAMED: [(&str, &[&str]); 2] = [
@@ -537,10 +539,12 @@ pub fn compare(conds: &Conditions, done: &[Done]) -> Compare {
         three_b: None,
         org: None,
         attr: None,
+        steer: None,
     };
     cmp.three_b = super::compare_svc::three_b(&cmp, done);
     cmp.org = super::compare_org::org_section(&cmp, done);
     cmp.attr = super::compare_attr::attr_section(&cmp, done);
+    cmp.steer = super::compare_steer::steer_section(&cmp, done);
     cmp
 }
 
@@ -859,6 +863,7 @@ pub fn markdown(cmp: &Compare, done: &[Done]) -> String {
     super::compare_svc::section_md(&mut s, cmp, done);
     super::compare_org::section_md(&mut s, cmp);
     super::compare_attr::section_md(&mut s, cmp);
+    super::compare_steer::section_md(&mut s, cmp);
     s
 }
 

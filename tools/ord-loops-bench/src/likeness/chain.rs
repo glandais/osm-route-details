@@ -990,6 +990,8 @@ mod tests {
             n_kept: 1,
             dropped: Default::default(),
             ms: 1.0,
+            gen_ms: None,
+            steer: None,
             routes: Vec::new(),
             best_shape: None,
             best_recovered: None,

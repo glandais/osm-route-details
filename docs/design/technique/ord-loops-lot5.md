@@ -796,6 +796,12 @@ stable et `./format.sh` côté tribly ; arrêt et relecture marqués **[arrêt]*
 7. **Banc de la consigne** — `likeness` : variantes `target:<t>` (passe par `generate_steered_in`) et `tau:<m>`, sorties O1 à
    O5, E1, E2, nombre de pas ; campagnes aux trois crans, deux curseurs, et réglages de `score_weight` et τ. **[arrêt]** :
    critères du §9 ; relevé complété.
+   *Code livré (23 novembre, sans campagne)* : `--variants svc+org+target:0.47` (cibles dans ]0, 1[, ne se compose pas avec
+   `mu`) et `svc+org+ride:on` ; `likeness/{steer,compare_steer}.rs`, section 11 du `-compare.md` : O1 à O5, E1, E2, pas, C1
+   réécrit (rapport des quantiles de `gen_ms`, le temps des appels au moteur seuls, contre la même variante sans cible). ROAD
+   est joué sans consigne ; `ride:on` pose les bornes sur le moteur donc sur toute l'exécution (`base` comprise) et coupe les
+   contrôles d'empreinte de référence ; pour comparer avec et sans bornes, deux exécutions. `score_weight` et τ ne se règlent
+   pas encore au banc (constante du moteur ; le 5e est abandonné).
 8. **5f, service** — `crates/ord-server/src/generator/{routes,generate}.rs` (`offroad_target`, validation, `offroad` et
    `offroad_*` dans la réponse, depuis le `Report` du contrôleur, `reached` sur la première proposition rendue ; réglage
    `rideability` passé au `Config` du contrôleur), `capabilities.rs`, `config.rs`, `lib.rs` (`API_VERSION =

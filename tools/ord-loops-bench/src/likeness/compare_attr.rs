@@ -1107,6 +1107,8 @@ mod tests {
             n_kept: 1,
             dropped: Default::default(),
             ms: 100.0,
+            gen_ms: None,
+            steer: None,
             routes: vec![route(far)],
             best_shape: None,
             best_recovered: None,

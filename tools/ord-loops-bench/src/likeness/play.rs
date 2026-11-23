@@ -15,8 +15,8 @@ use memmap2::Mmap;
 use ord_graph::mmap::MappedGraph;
 use ord_graph::overlay::Overlay;
 use ord_loops::{
-    generate_with_figures_in, Engine, Failure, FigureDiagnostics, Request, RideType, Route, Taste, TeamCtx,
-    TeamData, Window, WindowCache, WindowTeam, Workspace,
+    generate_steered_in, generate_with_figures_in, Engine, Failure, FigureDiagnostics, Request, RideType,
+    Route, Taste, TeamCtx, TeamData, Window, WindowCache, WindowTeam, Workspace,
 };
 use ord_loops_check::{team_edge, Checker, TypeIndex};
 use serde::Serialize;
@@ -373,6 +373,13 @@ pub struct PlayRec {
     /// Parcours refusés par le contrôleur, par code de violation.
     pub dropped: BTreeMap<String, u32>,
     pub ms: f64,
+    /// Temps de la génération seule (les appels au moteur), sans la fenêtre ni le contrôle : la mesure de C1 (lot 5,
+    /// étape 7), qui ne dépend pas de l'ordre des variantes (le cache de fenêtres passe de l'une à l'autre).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gen_ms: Option<f64>,
+    /// La recherche de la consigne (`target:<t>`, gravel et VTT) ; absent sinon.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steer: Option<super::steer::SteerRec>,
     /// Les gardés, dans l'ordre du moteur.
     pub routes: Vec<GenRoute>,
     pub best_shape: Option<usize>,
@@ -394,6 +401,8 @@ pub struct Task {
     pub ride: RideType,
     /// Sonde μ (lot 5, §3.4) : le multiplicateur de la variante, en 256es ; `None` pour toutes les autres.
     pub mu_q8: Option<u32>,
+    /// Consigne de part (lot 5, étape 7) : la cible en millièmes, `None` pour toutes les autres variantes.
+    pub target_milli: Option<u16>,
 }
 
 /// Ce que les jeux lisent pour une équipe et une surcouche.
@@ -481,6 +490,8 @@ pub fn play_one(
         n_kept: 0,
         dropped: BTreeMap::new(),
         ms: 0.0,
+        gen_ms: None,
+        steer: None,
         routes: Vec::new(),
         best_shape: None,
         best_recovered: None,
@@ -489,13 +500,34 @@ pub fn play_one(
     };
     // Les compteurs de la génération organique, pris dans l'appel qui a rendu le résultat.
     let fig_cell = std::cell::RefCell::new(FigureDiagnostics::default());
+    // Lot 5, étape 7 : la consigne (gravel et VTT), ce que la recherche a rendu, et le temps des appels au moteur seuls.
+    let steer = super::steer::steer_of(task.target_milli, req.ride_type);
+    let outcome_cell: std::cell::Cell<Option<ord_loops::OffroadOutcome>> = std::cell::Cell::new(None);
+    let gen_cell = std::cell::Cell::new(0.0f64);
     let call = |ws: &mut Workspace, win: &Window, wt: &WindowTeam| {
-        catch_unwind(AssertUnwindSafe(|| {
+        let t_gen = Instant::now();
+        let out = catch_unwind(AssertUnwindSafe(|| {
             let tc = TeamCtx { data: env.team, win: wt };
-            let (res, _, fig) = generate_with_figures_in(ctx.engine, win, Some(tc), req, ws, &mut || false);
-            *fig_cell.borrow_mut() = fig;
-            res
-        }))
+            match &steer {
+                None => {
+                    let (res, _, fig) =
+                        generate_with_figures_in(ctx.engine, win, Some(tc), req, ws, &mut || false);
+                    *fig_cell.borrow_mut() = fig;
+                    res
+                }
+                Some(st) => {
+                    let (res, _, fig) =
+                        generate_steered_in(ctx.engine, win, Some(tc), req, st, ws, &mut || false);
+                    *fig_cell.borrow_mut() = fig;
+                    res.map(|sg| {
+                        outcome_cell.set(sg.offroad);
+                        sg.generation
+                    })
+                }
+            }
+        }));
+        gen_cell.set(gen_cell.get() + t_gen.elapsed().as_secs_f64() * 1000.0);
+        out
     };
     // Le `Workspace` passe d'une variante à l'autre : μ est posé à chaque jeu, neutre compris.
     ws.set_mu_q8(task.mu_q8);
@@ -506,6 +538,7 @@ pub fn play_one(
         res = call(ws, &win, &wt);
     }
     rec.ms = t0.elapsed().as_secs_f64() * 1000.0;
+    rec.gen_ms = Some(gen_cell.get());
     // La sonde point à point (4c), hors du temps mesuré, sur la fenêtre du jeu.
     if super::p2p::wanted(req, overlay) {
         let (outcome, diag) = match &res {
@@ -584,6 +617,20 @@ pub fn play_one(
         });
     }
     rec.n_kept = rec.routes.len();
+    // O5 : la cible est-elle tenue sur le premier parcours gardé ? Sinon, ce que le disque D / 2 offrait (hors du temps).
+    if let (Some(st), Some(o)) = (steer.and_then(|s| s.offroad), outcome_cell.get()) {
+        let target = f64::from(st.target_milli) / 1000.0;
+        let kept_share = rec.routes.first().map(|g| g.m.offroad);
+        let held = kept_share.is_some_and(|x| super::steer::within(x, target));
+        rec.steer = Some(super::steer::SteerRec {
+            target,
+            steps: o.steps,
+            mu: f64::from(o.mu_q8) / 256.0,
+            reached_engine: o.reached,
+            kept_share,
+            disc: if held { None } else { super::steer::disc_offroad(gf, req, req.distance_m / 2.0) },
+        });
+    }
     rec.outcome = if rec.n_routes == 0 {
         "NO_ROUTES".into()
     } else if rec.n_kept == 0 {

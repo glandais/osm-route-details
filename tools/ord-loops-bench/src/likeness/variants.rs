@@ -277,6 +277,13 @@ pub struct Variant {
     pub org: Option<Org>,
     /// `Some` avec `mu:<μ>` (lot 5, §3.4) : le multiplicateur du non-revêtu de la sonde, en 256es (256 : neutre).
     pub mu_q8: Option<u32>,
+    /// `Some` avec `target:<t>` (lot 5, étape 7) : la part de non-revêtu visée, en millièmes ; le jeu passe par
+    /// `generate_steered_in` (gravel et VTT seulement). Ne se compose pas avec `mu`.
+    pub target_milli: Option<u16>,
+    /// `ride:on` : les bornes de roulabilité (lot 5, 5c). Elles se posent sur le **moteur**, donc sur toute l'exécution :
+    /// dès qu'une variante les demande, toutes les variantes jouées (`base` comprise) les ont, et les contrôles
+    /// d'empreinte de référence ne s'appliquent plus.
+    pub ride_on: bool,
 }
 
 impl Variant {
@@ -290,11 +297,18 @@ impl Variant {
             svc: None,
             org: None,
             mu_q8: None,
+            target_milli: None,
+            ride_on: false,
         }
     }
 
     pub fn is_base(&self) -> bool {
-        self.fam.is_none() && self.taste.is_none() && self.svc.is_none() && self.mu_q8.is_none()
+        self.fam.is_none()
+            && self.taste.is_none()
+            && self.svc.is_none()
+            && self.mu_q8.is_none()
+            && self.target_milli.is_none()
+            && !self.ride_on
     }
 
     /// Variante de recalé (commun ou par équipe).
@@ -336,6 +350,9 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     let mut sonde = false;
     // La sonde μ (lot 5, §3.4) : `mu:<μ>`, en 256es.
     let mut mu_q8: Option<u32> = None;
+    // La consigne de part (lot 5, étape 7) : `target:<t>` ; les bornes de roulabilité : `ride:on`.
+    let mut target_milli: Option<u16> = None;
+    let mut ride_on = false;
     // Les figures organiques (4c) : `org`, puis ses options, dans l'ordre donné pour le nom.
     let mut org: Option<Org> = None;
     // Options données avant `org` : posées quand il paraît.
@@ -498,6 +515,20 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 mu_q8 = Some((x * 256.0).round() as u32);
                 names.push(format!("mu{:03}", (x * 100.0).round() as u32));
             }
+            "target" => {
+                ensure!(target_milli.is_none(), "variante « {spec} » : deux `target`");
+                let x = number("`target`", val)?;
+                ensure!(x > 0.0 && x < 1.0, "variante : `target` hors de ]0, 1[ : « {val} »");
+                let milli = (x * 1000.0).round() as u16;
+                target_milli = Some(milli);
+                names.push(format!("target{milli:03}"));
+            }
+            "ride" => {
+                ensure!(!ride_on, "variante « {spec} » : deux `ride`");
+                ensure!(val == "on", "variante : `ride` ne vaut que `on` (le défaut est coupé) : « {val} »");
+                ride_on = true;
+                names.push("ride".into());
+            }
             "cap" | "capt" => {
                 ensure!(cap.is_none(), "variante « {spec} » : `cap` et `capt` ne vont pas ensemble");
                 let n: usize =
@@ -611,6 +642,10 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
             "variante « {spec} » : `common` et `svc` n'acceptent ni autre goût, ni `fam`, ni `famroad`, ni `n`, ni `dim`"
         );
     }
+    ensure!(
+        target_milli.is_none() || mu_q8.is_none(),
+        "variante « {spec} » : `target` et `mu` ne vont pas ensemble (la recherche choisit μ)"
+    );
     let svc = kind.map(|kind| Svc { kind, norm, cap, sonde });
     let recal = matches!(taste, Some((TasteSource::Recal | TasteSource::RecalTeam, _)));
     ensure!(
@@ -630,6 +665,8 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         svc,
         org,
         mu_q8,
+        target_milli,
+        ride_on,
     };
     if !recal {
         return Ok(vec![mk(stem, None)]);
@@ -674,6 +711,11 @@ pub fn parse_variants(s: &[String]) -> Result<Vec<Variant>> {
         }
     }
     Ok(out)
+}
+
+/// `ride:on` pose les bornes sur le moteur, donc sur toute l'exécution (voir [`Variant::ride_on`]).
+pub fn ride_run(variants: &[Variant]) -> bool {
+    variants.iter().any(|v| v.ride_on)
 }
 
 /// La requête d'une variante : celle du 4a, puis `fam` — en équipe d'abord, `familiarity = f` ; en découverte
@@ -1274,5 +1316,31 @@ mod tests {
         assert!(err("svc+org+mu:4.5").contains("hors de"));
         assert!(err("svc+org+mu:x").contains("illisible"));
         assert!(err("svc+org+mu:2+mu:3").contains("deux `mu`"));
+    }
+
+    /// Lot 5, étape 7 : `target:<t>` et `ride:on` se lisent, se nomment, se composent et se bornent.
+    #[test]
+    fn the_target_and_ride_variants_parse_compose_and_are_bounded() {
+        let base = || "base".to_string();
+        let one = |spec: &str| -> Variant {
+            let v = parse_variants(&[base(), spec.to_string()]).unwrap_or_else(|e| panic!("{spec} : {e}"));
+            v.into_iter().nth(1).unwrap()
+        };
+        let err = |spec: &str| parse_variants(&[base(), spec.to_string()]).unwrap_err().to_string();
+        let v = one("svc+org+target:0.47");
+        assert_eq!((v.name.as_str(), v.target_milli, v.ride_on), ("svc-org-target470", Some(470), false));
+        assert!(v.svc.is_some() && v.org.is_some() && !v.is_base());
+        let v = one("svc+org+ride:on+target:0.6");
+        assert_eq!((v.name.as_str(), v.target_milli, v.ride_on), ("svc-org-ride-target600", Some(600), true));
+        assert_eq!(one("ride:on").name, "ride");
+        assert!(!one("ride:on").is_base() && !one("target:0.25").is_base());
+        assert!(ride_run(&[Variant::base(), one("ride:on")]) && !ride_run(&[Variant::base()]));
+        assert!(err("svc+target:0").contains("hors de"));
+        assert!(err("svc+target:1").contains("hors de"));
+        assert!(err("svc+target:x").contains("illisible"));
+        assert!(err("svc+target:0.3+target:0.4").contains("deux `target`"));
+        assert!(err("svc+ride:off").contains("ne vaut que"));
+        assert!(err("svc+ride:on+ride:on").contains("deux `ride`"));
+        assert!(err("svc+mu:1+target:0.4").contains("ne vont pas ensemble"));
     }
 }
