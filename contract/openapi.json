@@ -2110,7 +2110,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Share of the route (by length) to ride off pavement, from 0 to 0.8 (gravel and mtb only; 400 for a road ride). The\ngenerator tries several settings and returns the routes closest to it; the answer's `offroad` says whether the\nfirst one lies within the tolerance. See `capabilities.generator.offroad`. Absent: no steering."
+            "description": "Share of the route (by length) to ride off pavement, from 0 to 0.8 (gravel and mtb only; 400 for a road ride). The\ngenerator tries several settings and returns the routes closest to it; the answer's `offroad` says whether the\nfirst one lies within the tolerance. Rounded to 0.01. See `capabilities.generator.offroad`. Absent: no steering."
           },
           "ride_type": {
             "$ref": "#/components/schemas/RideTypeV1"

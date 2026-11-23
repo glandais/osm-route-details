@@ -97,7 +97,7 @@ pub struct GenerateRequestV1 {
     pub figures: Option<FiguresV1>,
     /// Share of the route (by length) to ride off pavement, from 0 to 0.8 (gravel and mtb only; 400 for a road ride). The
     /// generator tries several settings and returns the routes closest to it; the answer's `offroad` says whether the
-    /// first one lies within the tolerance. See `capabilities.generator.offroad`. Absent: no steering.
+    /// first one lies within the tolerance. Rounded to 0.01. See `capabilities.generator.offroad`. Absent: no steering.
     #[serde(default)]
     pub offroad_target: Option<f64>,
 }
@@ -570,7 +570,8 @@ fn validate(req: &GenerateRequestV1, ready: &Ready) -> Result<(GenInput, u32), P
         },
         applied: cursor::apply(h),
         seed: req.seed.unwrap_or(0),
-        offroad_target: req.offroad_target,
+        // Arrondie au centième (lot 5, §4.1), après la validation des bornes sur la valeur reçue.
+        offroad_target: req.offroad_target.map(|t| (t * 100.0).round() / 100.0),
         figures: req.figures.unwrap_or(match ready.cfg.figures {
             crate::config::GeneratorFigures::Classic => FiguresV1::Classic,
             crate::config::GeneratorFigures::Organic => FiguresV1::Organic,

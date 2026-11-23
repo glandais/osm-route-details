@@ -676,7 +676,8 @@ async fn the_steering_outcome_and_the_checkers_offroad_share_are_returned() {
     let r = w.send(generate(None, None, &b)).await.json();
     assert_eq!(r["offroad"], json!({"target": 0.0, "tolerance": 0.05, "reached": true, "steps": 1}));
     assert!(!r["routes"].as_array().unwrap().is_empty());
-    b["offroad_target"] = json!(0.47);
+    // La cible est arrondie au centième (§4.1) : 0,473 vise 0,47.
+    b["offroad_target"] = json!(0.473);
     let r = w.send(generate(None, None, &b)).await.json();
     assert_eq!(r["offroad"]["reached"], false);
     assert_eq!(r["offroad"]["target"], 0.47);
