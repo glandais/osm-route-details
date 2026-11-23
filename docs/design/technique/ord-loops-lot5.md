@@ -25,6 +25,23 @@ Les choix que cette note prend sans réponse du propriétaire sont marqués **(d
 >    parcours du type, sans effet en mode strict ; bornes du §6.1 telles quelles. **R4** (cran par équipe) : repoussé à un
 >    lot suivant (changement du format de profil).
 
+> **Révision du 23 novembre 2026, après le C4** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §10.5
+> et §10.6 ; elle prime sur le §4.3) : avec une consigne, la réponse n'est jamais pire que sans.
+> 1. **Le pas 0 n'est jamais joué sous μ = 1** : il est joué à `max(prior, 1)`. Sous 1, une génération coûte plus que sans
+>    cible dans les agglomérations (× 1,7 à × 3,6 à μ ≤ 0,35 sur toutes les requêtes mesurées, × 0,9 à × 2,2 à 0,7, états fixés
+>    de l'A* en proportion, §10.5), et le pas 0 est le seul à garder le budget entier du service : c'était le 504 de Tokyo à
+>    0,47 (pas 0 à 0,7 : 33,9 s contre 15,1 s à μ = 1). À μ = 1, le pas 0 est la génération sans cible au bit près ; le prior
+>    (0,7 pour 0,47, 0,35 pour 0,60) est joué au **pas 1** si la part est trop basse ou s'il n'y a aucune proposition.
+>    Au-dessus de 1 (cran 0,25, prior 1,4), le pas 0 reste au prior : × 0,8 à × 1,9 (plus cher sur 2 requêtes sur 5, §10.5),
+>    pas de 504 de plus au relevé ; la garantie n'y est donc pas stricte (écart laissé au propriétaire, §10.6).
+> 2. **Dernier recours** : si aucun pas n'a de candidat et que μ = 1 n'a pas été joué, la génération sans cible est jouée,
+>    dans le budget du service seul (hors `max_steps` et hors délai des pas). `DistanceTooShort`, qui suit μ (plus court chemin
+>    d'un aller simple), compte comme un pas sans candidat au lieu d'arrêter la recherche.
+> 3. **Arrêt avant un pas k ≥ 1** : `écoulé + 1,5 × durée(plus long pas joué, pas 0 compris) > until` ; la réserve de 0,2 ×
+>    pas 0 disparaît, l'estimation n'est plus jamais sous le pas 0. Un pas lancé reste coupé à `until` et jeté.
+> 4. **Les 10 s se comptent depuis la première fenêtre** : après un échappement de fenêtre, la seconde recherche ne regagne
+>    pas 10 s de pas.
+
 > **Mise à jour du 23 novembre 2026, après le 5a** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §7) :
 > les règles du §3.5 sont appliquées. **R1** : crans **0,25 · 0,47 · 0,65** en `offroad` (réel GRAVEL P10 0,264, P50 0,470,
 > P90 0,611 ; M2 ne confirme pas les 20 / 38 / 49 %), reportés au §10.1 et au §14. **R2** déclenchée (écart médian 0,083, P90
@@ -341,7 +358,7 @@ w′ = ⌈w × (256 + (μ_q8 − 256) × f / 256) / 256⌉,   f = part offroad d
 Chaque pas est une génération complète à μ donné (arbres, jambes, contrôle interne), **sans** le contrôleur indépendant, qui
 ne passe qu'une fois, sur les parcours finalement rendus.
 
-1. **Pas 0** : μ₀ = `prior(type, cible)`, table linéaire par morceaux apprise au 5a (μ médian qui atteint chaque cible,
+1. **Pas 0** (révisé après le C4, encadré du haut : joué à `max(prior, 1)`, le prior au pas 1) : μ₀ = `prior(type, cible)`, table linéaire par morceaux apprise au 5a (μ médian qui atteint chaque cible,
    §3.4), figée dans le moteur comme la table commune (`offroad_prior.rs`, constantes générées par le banc, provenance sans
    donnée privée). Le prior est général, pas par équipe (défaut pris, à contredire).
 2. **Mesure** : part `offroad` de la première proposition après le choix (§4.5). Dans `[cible − tol, cible + tol]` → arrêt.
@@ -352,7 +369,8 @@ ne passe qu'une fois, sur les parcours finalement rendus.
    meilleur des candidats mis en commun gardé, sans sécante ni bissection.
 4. **Arrêt** au premier pas dans la tolérance, ou si l'une de ces conditions tombe avant de lancer le pas k + 1 :
    - k + 1 > `offroad.max_steps` (**4** par défaut) ;
-   - `écoulé + 1,5 × durée(pas k) + réserve_contrôle > min(échéance − 1 s, début + offroad.steps_until_ms)`, avec
+   - `écoulé + 1,5 × durée(pas k) + réserve_contrôle > min(échéance − 1 s, début + offroad.steps_until_ms)` (révisé après le
+     C4 : `1,5 × durée(plus long pas joué)`, sans réserve, le début étant celui de la première fenêtre), avec
      `offroad.steps_until_ms` = **10 000** et `réserve_contrôle` = 0,2 × durée(pas 0) ;
    - x sort de `[−2, 2]` (μ hors de `[1/4, 4]`) ;
    - le stop du moteur (client parti, échéance).

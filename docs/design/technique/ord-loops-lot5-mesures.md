@@ -647,6 +647,74 @@ réelle partie du même point** (une personne de l'équipe a-t-elle trouvé la p
   avec un coût de 15 s dépasse 30 s. Pistes (non faites) : ne lancer un pas que si la durée du premier pas, ajoutée au temps
   écoulé, tient dans le budget ; ou ramener `steps_until_ms`.
 
+### 10.5 Causes des deux défauts du C4
+
+> Reproduits le 23 novembre 2026 sur `d5f5eda`, service natif (binaire `release`, pas de conteneur) sur le graphe planète,
+> défauts du service, mêmes requêtes que le §10.1 (découverte, gravel, graine 1). Pour les coûts par μ : un seul pas permis
+> (`OFFROAD_MAX_STEPS` 1, `OFFROAD_STEPS_UNTIL_MS` 0), budget porté à 120 s, le point de grille du pas 0 forcé par un crochet
+> temporaire jamais commité, fenêtre chaude. Durées en secondes, états fixés de l'A* en millions (Mé).
+
+**Le 504 de plus vient du pas 0, pas des pas k ≥ 1.** Tokyo 200 km à 0,47 : un seul pas joué, au prior (μ = 0,7), coupé par
+l'échéance à 29,99 s ; sans cible, 17,8 à 19,9 s. Les pas k ≥ 1 sont bien coupés à `until` (le stop est consulté tous les
+2 048 états fixés, quelques millisecondes), et une fenêtre reprise ou la file d'attente n'y sont pour rien : c'est le pas 0,
+seul à garder le budget entier, qui coûte plus cher sous μ = 1.
+
+| requête | μ = 1 | 1,4 | 0,7 | 0,5 | 0,35 | 0,25 | 2 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Tokyo 200 km | 15,1 | 17,8 | 33,9 | 23,1 | 53,7 | 41,1 | 15,5 |
+| Tokyo 150 km | 12,1 (4,0 Mé) | 12,5 (3,9) | 13,8 (5,1) | — | 25,9 (8,2) | — | — |
+| Shinjuku 150 km | 11,7 (3,4 Mé) | 10,0 (2,0) | 12,0 (3,2) | — | 31,3 (4,2) | — | — |
+| New York 200 km | 9,1 (9,0 Mé) | 7,4 (8,5) | 8,3 (8,9) | — | 15,2 (18,0) | — | — |
+| Séoul 200 km | 2,3 (0,5 Mé) | 4,4 (1,2) | 4,5 (1,4) | — | 4,8 (1,4) | — | — |
+
+- Rapport au pas à μ = 1 : **× 1,7 à × 3,6 à μ ≤ 0,35** sur les cinq requêtes, × 0,9 à × 2,2 à 0,7 (plus cher sur 3 sur 5),
+  × 0,8 à × 1,9 à 1,4 (plus cher sur 2 sur 5). Sous 1, le non-revêtu bon marché ouvre les réseaux de chemins des parcs et
+  des berges : plus d'A* (New York : 108 → 198), plus d'états fixés, plus de candidats refusés (`SharpTurn` surtout) avant
+  les trois gardés.
+- Le pas 0 au prior coûtait donc, aux crans 0,47 et 0,60 (prior 0,7 et 0,35), plus que la génération sans cible, de façon
+  systématique à 0,35 ; c'est aussi ce qui faisait dépasser `max(sans cible, 10 s) + 1 s` (§10.3, point 2 : Tokyo 200 km à
+  0,60 rendu en 30,1 s après un seul pas).
+
+**Le 422 de plus vient de l'ordre des pas.** Galles 40 km : à μ = 0,7, 0,5, 0,35 et 0,25, aucun candidat dans la tolérance de
+distance (24 à 29 candidats trouvés, 0 gardé : les chemins rallongent la boucle) ; à μ = 1 et 1,4, deux à trois parcours. La
+recherche partait du prior (0,7 à 0,47, 0,35 à 0,60), et sans proposition elle n'a pas de sens : elle prenait le point le plus
+proche non joué, à égalité le plus bas, et épuisait ses quatre pas sous 1 (0,7 · 0,5 · 0,35 · 0,25), sans jamais jouer μ = 1.
+
+### 10.6 Correction et relevé après
+
+Correction (encadré du haut de la note, révision après le C4) : pas 0 à `max(prior, 1)`, le prior au pas 1 ; dernier recours à
+μ = 1 si aucun pas n'a de candidat ; `DistanceTooShort` traité comme un pas sans candidat ; aucun pas k ≥ 1 si `écoulé + 1,5 ×
+plus long pas joué > until` ; 10 s comptées depuis la première fenêtre. Tests : `tests_steer.rs`
+(`step_zero_is_never_below_one_and_the_prior_comes_next`, `a_target_never_fails_where_the_plain_engine_succeeds`,
+`when_no_step_has_a_candidate_mu_one_is_played`, `a_step_is_launched_only_if_it_fits_before_the_limit`) et
+`the_steps_stop_ten_seconds_after_the_first_window_and_a_second_before_the_deadline` (service).
+
+Rejoué le 23 novembre sur la correction, service natif (pas le conteneur de 3 Gio du §10.1 : les durées ne se comparent qu'entre
+variantes de cette séance), 42 requêtes du §10.1, sans cible et à chaque cran, l'une après l'autre pour une même requête.
+
+| série | variante | P50 (s) | P90 (s) | max (s) | issues | `reached` | pas moyen | rapport / sans cible, méd. · P90 |
+|---|---|---:|---:|---:|---|---|---:|---|
+| denses | sans cible | 3,39 | 13,71 | 24,90 | 24 × 200 | — | — | — |
+| denses | 0,25 | 6,11 | 12,58 | 15,95 | 24 × 200 | 12 / 24 | 1,88 | × 1,03 · × 2,75 |
+| denses | 0,47 | 6,25 | 12,05 | 23,85 | 24 × 200 | 9 / 24 | 1,96 | × 0,96 · × 3,16 |
+| denses | 0,60 | 6,33 | 12,17 | 23,67 | 24 × 200 | 5 / 24 | 2,04 | × 1,61 · × 2,64 |
+| rurales | sans cible | 0,43 | 1,06 | 2,63 | 18 × 200 | — | — | — |
+| rurales | 0,25 | 0,48 | 1,76 | 4,27 | 18 × 200 | 12 / 18 | 2,39 | × 1,30 · × 2,41 |
+| rurales | 0,47 | 0,67 | 1,70 | 7,58 | 18 × 200 | 9 / 18 | 3,00 | × 2,08 · × 2,88 |
+| rurales | 0,60 | 0,61 | 0,96 | 7,58 | 18 × 200 | 13 / 18 | 2,28 | × 1,03 · × 2,40 |
+
+- **Aucun 504, aucun 422** ; **aucune requête au-delà de `max(sans cible, 10 s) + 1 s`**. Tokyo 200 km : 200 à toutes les
+  cibles. Galles 40 km : 200 aux trois crans (0,25 et 0,47 : 4 pas, part 0,554, `reached = false` ; 0,60 : atteint au pas 0,
+  0,626).
+- **4 clients** (même 42 requêtes par variante) : sans cible 39 × 200, 1 × 503, 2 × 504 (Tokyo 200, Shinjuku 40 et 200) ;
+  0,25 et 0,60 : 40 × 200, 1 × 503, 1 × 504 ; 0,47 : 39 × 200, 1 × 503, 2 × 504, les mêmes requêtes que sans cible. P50 5,71 ·
+  7,55 · 8,97 · 9,25 s, P90 23,5 à 26,6 s. Aucun échec de plus qu'à la même requête sans cible ; à 4 clients les requêtes
+  lentes se bousculent dans les deux places de calcul et l'échec dépend de l'ordre d'arrivée, comme en 1.14.0.
+- **Ce qui reste** : au cran 0,25, le pas 0 est au prior 1,4, dont le coût est × 0,8 à × 1,9 celui de μ = 1 (§10.5) ; pas de
+  504 de plus au relevé, mais la garantie n'y est pas stricte. La lever demanderait le pas 0 à μ = 1 pour toutes les cibles,
+  un pas de plus en moyenne au cran 0,25 : laissé au propriétaire. `reached` baisse en zone dense à 0,47 (9 / 24, contre 8 / 23
+  au §10.3 en conteneur, à lire avec prudence : machines et budget de mémoire différents) ; la France (C3) n'est pas rejouée.
+
 ## 11. Relecture sur carte (étape 9, §13 de la note)
 
 > Relecture du 23 novembre 2026 sur `764f644` (moteur de la bascule, `rideability = on`). Lettres et agrégats seulement :
