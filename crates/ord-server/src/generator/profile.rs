@@ -15,7 +15,7 @@ use ord_graph_match::profile::format::{encode, hex16, ProfileMeta, FORMAT};
 use ord_graph_match::profile::learn::{learn, Learned};
 use ord_graph_match::profile::{first_kept_class_meters, Player, Stopped};
 use ord_loops::{generate_in, Failure, Mode, Request, Taste, TeamCtx, TeamData, Workspace, TASTE_CLASSES};
-use ord_loops_check::{Checker, Config as CheckConfig, TeamCheck};
+use ord_loops_check::{Checker, TeamCheck};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -169,7 +169,7 @@ impl Player for ServicePlayer<'_> {
                         let checker = Checker::with_tables(
                             r.engine.base(),
                             Some(self.overlay),
-                            CheckConfig::default(),
+                            super::check_config(&r.engine),
                             &r.graph_index,
                             Some(self.check),
                         );

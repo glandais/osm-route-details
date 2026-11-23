@@ -298,6 +298,17 @@ pub fn iso8601(epoch: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
 }
 
+/// Le réglage du contrôleur indépendant : ses bornes de roulabilité suivent celles du moteur (lot 5, §6.4), pour la
+/// génération comme pour la phase de profil d'un dépôt. Un service à `off` dont le contrôleur garderait les bornes jetterait
+/// des parcours que 1.14 rendait, et apprendrait un autre goût.
+pub(crate) fn check_config<B: AsRef<[u8]>>(engine: &Engine<B>) -> ord_loops_check::Config {
+    let rideability = match engine.params().rideability {
+        ord_loops::Rideability::On => ord_loops_check::Rideability::On,
+        ord_loops::Rideability::Off => ord_loops_check::Rideability::Off,
+    };
+    ord_loops_check::Config { rideability, ..ord_loops_check::Config::default() }
+}
+
 fn disabled(reason: DisabledReason) -> Generator {
     Generator { state: GeneratorState::Disabled(reason) }
 }

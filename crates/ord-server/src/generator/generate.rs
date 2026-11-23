@@ -13,7 +13,7 @@ use ord_loops::{
     generate_steered_in, route_geometry, Bearing8, Failure, Family, LatLon, Mode, NoRouteDetail,
     OffroadTarget, Request, RideType, Route, Steer, SteeredGeneration, TeamCtx, Workspace,
 };
-use ord_loops_check::{Checker, Config};
+use ord_loops_check::Checker;
 
 use super::crypto::Credentials;
 use super::cursor::Applied;
@@ -448,13 +448,7 @@ impl Ready {
         let checker = Checker::with_tables(
             self.engine.base(),
             entry.as_ref().map(|e| &e.overlay),
-            Config {
-                rideability: match self.cfg.rideability {
-                    crate::config::GeneratorRideability::On => ord_loops_check::Rideability::On,
-                    crate::config::GeneratorRideability::Off => ord_loops_check::Rideability::Off,
-                },
-                ..Config::default()
-            },
+            super::check_config(&self.engine),
             &self.graph_index,
             entry.as_ref().map(|e| &e.check),
         );

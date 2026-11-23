@@ -16,7 +16,7 @@ use ord_graph::format::GraphIdentity;
 use ord_graph::overlay::Overlay;
 use ord_graph_match::profile::format::{decode as decode_profile, Incompatible, ProfileMeta};
 use ord_loops::{Engine, Taste, TeamData};
-use ord_loops_check::{Config as CheckConfig, GraphIndex, TeamCheck};
+use ord_loops_check::{GraphIndex, TeamCheck};
 
 use serde::{Deserialize, Serialize};
 
@@ -266,7 +266,7 @@ pub(crate) fn build_team_pair<B: AsRef<[u8]> + Sync>(
     reserve: Reserve<'_>,
 ) -> Result<(TeamData, TeamCheck), ReadyError> {
     let stale = || ReadyError::State(State::Stale(StaleReason::Graph));
-    let check_cfg = CheckConfig::default();
+    let check_cfg = super::check_config(engine);
     let plan = TeamData::plan_build(engine, overlay).map_err(|_| stale())?;
     let check_plan = TeamCheck::plan(engine.base(), overlay, &check_cfg);
     let guard = reserve(plan.estimated_bytes + check_plan.estimated_bytes)?;
