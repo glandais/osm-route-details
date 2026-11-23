@@ -1,4 +1,4 @@
-//! Route `POST /v1/router/route` (api 1.15) : un itinéraire vélo de A à B sur le graphe du générateur (lot 2 du plan
+//! Route `POST /v1/router/route` (api 1.15, préférence de voie en 1.16) : un itinéraire vélo de A à B sur le graphe du générateur (lot 2 du plan
 //! Pédalons `2026-11-23-itineraire-velo-osm.md`, moteur : `docs/design/technique/ord-route-lot1.md`).
 //!
 //! - **En-têtes d'équipe facultatifs** : sans eux, découverte au goût commun. Avec eux, le curseur donne mode,
@@ -8,9 +8,13 @@
 //!   prend sa fenêtre dans le cache des générations et rejoue une fois, élargi, si la recherche en touche le bord.
 //! - **Sa propre file** (`router_max_concurrent`, `router_max_queued`) et son budget (`router_budget_ms`) : un
 //!   itinéraire n'attend jamais derrière une génération. Fenêtres, espaces de travail et budget de mémoire sont partagés.
+//! - **Préférence de voie facultative** (api 1.16, `use_roads` rapporté à `use_roads_neutral`, le réglage du profil de
+//!   l'appelant) : des multiplicateurs par type de voie ([`ord_loops::way_factors`], note `ord-route-lot1.md` §8), avec
+//!   ou sans équipe ; sans ces champs, les poids sont ceux de 1.15 au bit près. `avoid_main_roads` (api 1.16) renchérit
+//!   les grandes routes par-dessus ([`ord_loops::avoid_main_roads`]), cumulable avec `use_roads`.
 //!
 //! Rien de privé n'est journalisé : ni coordonnée, ni polyligne, ni clé, ni équipe ; une ligne par requête (type, mode,
-//! bande de vol d'oiseau, issue, durée, `ns8`). Les `///` des types sérialisés vont au contrat : ils sont en anglais.
+//! bande de vol d'oiseau, issue, durée, `ns8`, et le sens de la préférence de voie, jamais sa valeur). Les `///` des types sérialisés vont au contrat : ils sont en anglais.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -40,7 +44,8 @@ use crate::app::AppState;
 use crate::problem::{CoverageSource, FieldError, GenerationReason, Problem, ProblemCode, ProblemDetails};
 use crate::strict_json::read_json;
 
-/// What the service publishes about routes from A to B (`/v1/capabilities`, api 1.15).
+/// What the service publishes about routes from A to B (`/v1/capabilities`, api 1.15; `use_roads` and
+/// `avoid_main_roads` since 1.16).
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 pub struct RouterCapabilities {
     /// `POST /v1/router/route` answers; otherwise 503 `data_unavailable`, like the `/v1/generator/*` routes. Follows
@@ -54,6 +59,11 @@ pub struct RouterCapabilities {
     /// Longest distance from a point to the way it is snapped to, in metres: beyond, 422 `generation_failed` (reason
     /// `start_too_far` or `end_too_far`).
     pub snap_m: f64,
+    /// The request takes `use_roads` and `use_roads_neutral` (api 1.16). Absent (older services): do not send them,
+    /// the request would be refused as carrying an unknown field.
+    pub use_roads: bool,
+    /// The request takes `avoid_main_roads` (api 1.16). Absent (older services): do not send it.
+    pub avoid_main_roads: bool,
 }
 
 impl RouterCapabilities {
@@ -64,6 +74,8 @@ impl RouterCapabilities {
             ride_types: vec!["road", "gravel", "mtb"],
             crow_m_max: tune.crow_max_m,
             snap_m: tune.snap_m,
+            use_roads: true,
+            avoid_main_roads: true,
         }
     }
 }
@@ -80,6 +92,22 @@ pub struct RouterRequestV1 {
     /// still validated within [0, 1].
     #[serde(default)]
     pub cursor: Option<f64>,
+    /// Preference between tracks and roads (api 1.16, see `capabilities.router.use_roads`), within [0, 1]: 0 favours
+    /// tracks, cycleways and small ways, 1 roads. Applies with or without the team headers, in every mode. Requires
+    /// `use_roads_neutral`: without it, 400 `invalid_input` (pointer `/use_roads_neutral`). Both absent: no preference.
+    /// The weights are an estimate, not fitted to measured rides.
+    #[serde(default)]
+    pub use_roads: Option<f64>,
+    /// The caller's profile setting of `use_roads`, within [0, 1], for which the route keeps the weights it has without
+    /// a preference: `use_roads` acts as its distance from this value. Alone, it has no effect (but is validated).
+    #[serde(default)]
+    pub use_roads_neutral: Option<f64>,
+    /// Main roads cost more (api 1.16, see `capabilities.router.avoid_main_roads`): `secondary` twice, `primary` and
+    /// `trunk` one and a half times, on top of `use_roads` if given. They are not forbidden and are still ridden where
+    /// nothing else goes. Applies with or without the team headers. Absent, null or false: no effect. An estimate, tuned
+    /// on no measure.
+    #[serde(default)]
+    pub avoid_main_roads: Option<bool>,
 }
 
 /// A route from the start to the end. Distances are measured on the graph, in metres.
@@ -123,6 +151,54 @@ pub(crate) struct RouteInput {
     pub cursor: u32,
     /// Vol d'oiseau (m), pour la bande journalisée.
     pub crow_m: f64,
+    /// Multiplicateurs par voie : [`ord_loops::WAY_NEUTRAL`] sans préférence.
+    pub way_q8: [u16; ord_loops::WAY_NEUTRAL.len()],
+    /// Sens de la préférence, seule trace journalisée du réglage.
+    pub use_roads: UseRoads,
+    /// Grandes routes renchéries ([`ord_loops::avoid_main_roads`], déjà dans `way_q8`).
+    pub avoid_main_roads: bool,
+}
+
+/// Le réglage de voie comparé à son neutre : une étiquette à quatre valeurs, jamais le nombre reçu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UseRoads {
+    /// Pas de `use_roads`.
+    None,
+    /// Plus de pistes que le profil.
+    Less,
+    Same,
+    /// Plus de routes que le profil.
+    More,
+}
+
+impl UseRoads {
+    fn of(asked: f64, neutral: f64) -> Self {
+        match asked.partial_cmp(&neutral) {
+            Some(std::cmp::Ordering::Less) => UseRoads::Less,
+            Some(std::cmp::Ordering::Greater) => UseRoads::More,
+            _ => UseRoads::Same,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            UseRoads::None => "none",
+            UseRoads::Less => "less",
+            UseRoads::Same => "same",
+            UseRoads::More => "more",
+        }
+    }
+}
+
+/// Un réglage de voie dans [0 ; 1], fini.
+fn unit(raw: Option<f64>, pointer: &str, errors: &mut Vec<FieldError>) -> Option<f64> {
+    let v = raw?;
+    if v.is_finite() && (0.0..=1.0).contains(&v) {
+        Some(v)
+    } else {
+        errors.push(FieldError::new(pointer, "must be within [0, 1]"));
+        None
+    }
 }
 
 fn validate(req: &RouterRequestV1) -> Result<RouteInput, Problem> {
@@ -141,6 +217,19 @@ fn validate(req: &RouterRequestV1) -> Result<RouteInput, Problem> {
         RideTypeV1::Gravel => RideType::Gravel,
         RideTypeV1::Mtb => RideType::Mtb,
     };
+    // Le neutre dépend du profil de l'appelant : le service ne le devine pas.
+    let asked = unit(req.use_roads, "/use_roads", &mut errors);
+    let neutral = unit(req.use_roads_neutral, "/use_roads_neutral", &mut errors);
+    if req.use_roads.is_some() && req.use_roads_neutral.is_none() {
+        errors.push(FieldError::new("/use_roads_neutral", "required with use_roads"));
+    }
+    let (way_q8, use_roads) = match (asked, neutral) {
+        (Some(u), Some(n)) => (ord_loops::way_factors(ride, u, n), UseRoads::of(u, n)),
+        _ => (ord_loops::WAY_NEUTRAL, UseRoads::None),
+    };
+    // Par-dessus la préférence de voie, ou sur les poids neutres.
+    let avoid_main_roads = req.avoid_main_roads == Some(true);
+    let way_q8 = if avoid_main_roads { ord_loops::avoid_main_roads(way_q8) } else { way_q8 };
     let mut crow_m = 0.0;
     if errors.is_empty() {
         // La borne du moteur, vérifiée ici : un 400 sur l'entrée passe avant la couverture et la file.
@@ -151,6 +240,7 @@ fn validate(req: &RouterRequestV1) -> Result<RouteInput, Problem> {
             mode: Mode::Discovery,
             familiarity: cursor::FAMILIARITY,
             off_team_cost_q8: 256,
+            way_q8: ord_loops::WAY_NEUTRAL,
         };
         crow_m = probe.crow_m();
         if crow_m > RouteTune::default().crow_max_m {
@@ -160,7 +250,7 @@ fn validate(req: &RouterRequestV1) -> Result<RouteInput, Problem> {
     if !errors.is_empty() {
         return Err(Problem::invalid_input("invalid request", errors));
     }
-    Ok(RouteInput { start, end, ride, cursor: h.unwrap_or(100), crow_m })
+    Ok(RouteInput { start, end, ride, cursor: h.unwrap_or(100), crow_m, way_q8, use_roads, avoid_main_roads })
 }
 
 /// La limite dans le message, jamais la valeur reçue ni la distance mesurée.
@@ -258,6 +348,8 @@ impl Ready {
         };
         let mode = mode_name(mode);
         let ride = ride_name(input.ride);
+        let use_roads = input.use_roads.name();
+        let avoid_main_roads = if input.avoid_main_roads { "true" } else { "false" };
         metrics::histogram!("ord_router_duration_seconds", "mode" => mode, "ride_type" => ride)
             .record(duration.as_secs_f64());
         let (result, reason) = match &outcome {
@@ -273,7 +365,7 @@ impl Ready {
                 (p.code.as_str(), reason)
             }
         };
-        metrics::counter!("ord_router_requests_total", "outcome" => result, "reason" => reason.clone())
+        metrics::counter!("ord_router_requests_total", "outcome" => result, "reason" => reason.clone(), "use_roads" => use_roads, "avoid_main_roads" => avoid_main_roads)
             .increment(1);
         if outcome.is_ok() {
             metrics::counter!("ord_router_routes_total", "zone" => zone.clone(), "sharp_relaxed" => if sharp { "true" } else { "false" })
@@ -283,6 +375,8 @@ impl Ready {
             mode,
             ride_type = ride,
             distance_band = band(input.crow_m),
+            use_roads,
+            avoid_main_roads = input.avoid_main_roads,
             outcome = result,
             reason = reason.as_str(),
             zone = zone.as_str(),
@@ -351,6 +445,7 @@ impl Ready {
             mode: applied.mode,
             familiarity: applied.familiarity,
             off_team_cost_q8: applied.off_team_cost_q8,
+            way_q8: input.way_q8,
         };
         let tune = RouteTune::default();
         let mut stop = || cancel.load(Ordering::Relaxed) || Instant::now() >= deadline;
@@ -448,8 +543,9 @@ impl Ready {
     description = "One route from a start to an end for a ride type, on the generator's graph and with its weights \
 (road class, surface, access, taste). Without the team headers the route is a discovery with the common taste. With \
 them, `cursor` maps to the engine as for a generation, strict mode excepted; an absent or stale overlay does not \
-block: the route is a discovery and the answer says so (`mode`, `overlay: null`). The search widens once if the first \
-area holds no path. Routes have their own queue and budget, apart from the generations. Nothing from the request is \
+block: the route is a discovery and the answer says so (`mode`, `overlay: null`). `use_roads`, relative to the caller's \
+`use_roads_neutral`, scales the weights by way type (api 1.16, with or without a team); `avoid_main_roads` makes main roads \
+cost more, without forbidding them; without these fields, the route is the one of api 1.15. The search widens once if the first area holds no path. Routes have their own queue and budget, apart from the generations. Nothing from the request is \
 logged.",
     operation_id = "postRouterRoute",
     tag = "router",
@@ -460,7 +556,7 @@ logged.",
     request_body(content = RouterRequestV1, content_type = "application/json"),
     responses(
         (status = 200, description = "Route", body = RouterResponseV1),
-        (status = 400, description = "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`; an end farther than `capabilities.router.crow_m_max` from the start: pointer `/end`)", body = crate::problem::ProblemBody, content_type = "application/problem+json"),
+        (status = 400, description = "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`; an end farther than `capabilities.router.crow_m_max` from the start: pointer `/end`; `use_roads` without `use_roads_neutral`: pointer `/use_roads_neutral`)", body = crate::problem::ProblemBody, content_type = "application/problem+json"),
         (status = 413, description = "Request body above 64 KiB", body = crate::problem::ProblemBody, content_type = "application/problem+json"),
         (status = 415, description = "Content-Type is not application/json", body = crate::problem::ProblemBody, content_type = "application/problem+json"),
         (status = 422, description = "Out of coverage (`out_of_coverage`, `details.coverage = graph`) or no route (`generation_failed`, `details.reason` = `start_too_far`, `end_too_far` or `no_route`)", body = crate::problem::ProblemBody, content_type = "application/problem+json"),
@@ -498,6 +594,14 @@ mod tests {
         assert_eq!(band(5_000.0), "5-20km");
         assert_eq!(band(49_999.0), "20-50km");
         assert_eq!(band(100_000.0), ">=50km");
+    }
+
+    #[test]
+    fn the_road_setting_is_logged_as_a_direction_only() {
+        assert_eq!(UseRoads::of(0.2, 0.25).name(), "less");
+        assert_eq!(UseRoads::of(0.25, 0.25).name(), "same");
+        assert_eq!(UseRoads::of(0.9, 0.25).name(), "more");
+        assert_eq!(UseRoads::None.name(), "none");
     }
 
     #[test]

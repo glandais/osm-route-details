@@ -20,6 +20,7 @@ fn req(start: LatLon, end: LatLon) -> RouteRequest {
         mode: Mode::Discovery,
         familiarity: 0.5,
         off_team_cost_q8: crate::DEFAULT_OFF_TEAM_COST_Q8,
+        way_q8: crate::WAY_NEUTRAL,
     }
 }
 
@@ -233,4 +234,91 @@ fn the_unpaved_spans_cover_exactly_the_track() {
     // Sur la vue route, la piste n'existe pas : pas d'itinéraire entre les deux rues.
     r.ride_type = RideType::Road;
     assert!(run(&e, None, &r).is_err());
+}
+
+#[test]
+fn the_way_factors_are_neutral_at_the_profile_setting_and_follow_the_table() {
+    use crate::route::{way_factors, WAY_NEUTRAL};
+    for ride in RideType::ALL {
+        for d in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            assert_eq!(way_factors(ride, d, d), WAY_NEUTRAL, "{ride:?} {d}");
+        }
+    }
+    // Profil à 0,25 (vélo, gravel, VTT) : grande route ×1,33 à « pistes », ×0,33 à « routes » ; voie cyclable à l'inverse.
+    let big = |u: f64| way_factors(RideType::Road, u, 0.25)[0];
+    assert_eq!([big(0.0), big(0.5), big(0.75), big(1.0)], [341, 171, 128, 85]);
+    assert_eq!(way_factors(RideType::Road, 1.0, 0.25)[4], 443);
+    // Profil à 1 (route) : grande route ×4 à « pistes » (la borne haute), voie cyclable ×0,5.
+    assert_eq!(way_factors(RideType::Road, 0.0, 1.0), [1024, 588, 446, 388, 128, 256, 1024]);
+    // Le chemin ne bouge qu'en gravel et VTT, comme la voie cyclable.
+    let g = way_factors(RideType::Gravel, 1.0, 0.25);
+    assert_eq!((g[5], g[4]), (443, 443));
+    assert_eq!(way_factors(RideType::Road, 1.0, 0.25)[5], 256);
+}
+
+/// Deux rues en impasse reliées par une grande route directe (1 000 m) et par un détour de rues (1 600 m, quatre virages).
+fn primary_or_streets() -> MemSource {
+    main_road_or_streets("primary", true)
+}
+
+/// Comme `primary_or_streets`, avec la classe de la route directe, et sans le détour si `streets` est faux.
+fn main_road_or_streets(class: &str, streets: bool) -> MemSource {
+    let mut s = MemSource::default();
+    for (id, n, east) in [(1, 0.0, -400.0), (2, 0.0, 0.0), (3, 0.0, 1000.0), (4, 0.0, 1400.0)] {
+        pt(&mut s, id, n, east);
+    }
+    pt(&mut s, 5, 300.0, 0.0);
+    pt(&mut s, 6, 300.0, 1000.0);
+    s.way(101, &[1, 2], &tags("residential", &[]));
+    s.way(102, &[2, 3], &tags(class, &[]));
+    s.way(103, &[3, 4], &tags("residential", &[]));
+    if streets {
+        s.way(104, &[2, 5, 6, 3], &tags("residential", &[]));
+    }
+    s
+}
+
+#[test]
+fn avoiding_main_roads_leaves_a_secondary_for_the_streets_but_takes_it_when_nothing_else_goes() {
+    use crate::route::{avoid_main_roads, WAY_NEUTRAL, WAY_SECONDARY};
+    let avoid = avoid_main_roads(WAY_NEUTRAL);
+    assert_eq!((avoid[WAY_SECONDARY], avoid[0], avoid[3]), (512, 384, 256));
+    // Bornée, et par-dessus un réglage : « routes » sur un profil à 0,25, puis éviter.
+    let both = avoid_main_roads(crate::route::way_factors(RideType::Road, 1.0, 0.25));
+    assert_eq!((both[WAY_SECONDARY], both[0]), (170, 127));
+    assert_eq!(avoid_main_roads([1024; crate::route::WAYS])[WAY_SECONDARY], 1024);
+
+    let e = engine_of(&mut main_road_or_streets("secondary", true));
+    let mut r = req(ll(0.0, -200.0), ll(0.0, 1200.0));
+    let plain = run(&e, None, &r).expect("un itinéraire");
+    assert!((plain.route.length_m - 1400.0).abs() < 5.0, "par la secondary : {}", plain.route.length_m);
+    r.way_q8 = avoid;
+    let avoided = run(&e, None, &r).expect("un itinéraire");
+    assert!((avoided.route.length_m - 2000.0).abs() < 5.0, "par les rues : {}", avoided.route.length_m);
+
+    // Sans autre passage, la secondary est prise quand même, plus chère.
+    let e = engine_of(&mut main_road_or_streets("secondary", false));
+    let only = run(&e, None, &r).expect("un itinéraire, par la secondary");
+    assert!((only.route.length_m - 1400.0).abs() < 5.0, "{}", only.route.length_m);
+    r.way_q8 = WAY_NEUTRAL;
+    assert!(run(&e, None, &r).expect("un itinéraire").cost < only.cost);
+}
+
+#[test]
+fn the_road_setting_moves_the_route_between_the_main_road_and_the_streets() {
+    use crate::route::way_factors;
+    let e = engine_of(&mut primary_or_streets());
+    let mut r = req(ll(0.0, -200.0), ll(0.0, 1200.0));
+    let neutral = run(&e, None, &r).expect("un itinéraire");
+    assert!((neutral.route.length_m - 2000.0).abs() < 5.0, "par les rues : {}", neutral.route.length_m);
+    // « Routes » sur un profil réglé à 0,25 : la grande route.
+    r.way_q8 = way_factors(RideType::Road, 1.0, 0.25);
+    let roads = run(&e, None, &r).expect("un itinéraire");
+    assert_joins(&e, &r, &roads, 2.0);
+    assert!((roads.route.length_m - 1400.0).abs() < 5.0, "par la grande route : {}", roads.route.length_m);
+    assert!(roads.cost < neutral.cost);
+    // « Pistes » : les rues, plus chères qu'au neutre (×1,09), la grande route plus encore.
+    r.way_q8 = way_factors(RideType::Road, 0.0, 0.25);
+    let tracks = run(&e, None, &r).expect("un itinéraire");
+    assert!((tracks.route.length_m - 2000.0).abs() < 5.0 && tracks.cost > neutral.cost);
 }

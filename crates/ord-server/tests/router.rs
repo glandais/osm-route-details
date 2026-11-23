@@ -1,4 +1,4 @@
-//! L'itinéraire de A à B servi par le service (`POST /v1/router/route`, api 1.15) : graphe, vues et surcouches
+//! L'itinéraire de A à B servi par le service (`POST /v1/router/route`, api 1.15, préférence de voie en 1.16) : graphe, vues et surcouches
 //! **synthétiques** (la grille de 21 × 21 rues de 300 m des tests du générateur, l'équipe roule les lignes et colonnes
 //! 6 à 14 paires).
 
@@ -231,10 +231,11 @@ async fn invalid_fields_are_listed_by_pointer() {
 async fn capabilities_publish_the_router_next_to_the_generator() {
     let w = World::new();
     let c = w.send(get("/v1/capabilities")).await.json();
-    assert_eq!(c["api_version"], "1.15");
+    assert_eq!(c["api_version"], "1.16");
     assert_eq!(
         c["router"],
-        json!({"enabled": true, "ride_types": ["road", "gravel", "mtb"], "crow_m_max": 100000.0, "snap_m": 500.0})
+        json!({"enabled": true, "ride_types": ["road", "gravel", "mtb"], "crow_m_max": 100000.0, "snap_m": 500.0,
+            "use_roads": true, "avoid_main_roads": true})
     );
     assert_eq!(c["generator"]["enabled"], true);
     // La raison `no_route` est au contrat.
@@ -245,6 +246,140 @@ async fn capabilities_publish_the_router_next_to_the_generator() {
     let names: Vec<&str> =
         op["parameters"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ord-Namespace-Key", "Ord-Team"]);
+    // Les deux champs de la préférence de voie sont au contrat, facultatifs.
+    let req = &doc["components"]["schemas"]["RouterRequestV1"];
+    for f in ["use_roads", "use_roads_neutral", "avoid_main_roads"] {
+        assert!(req["properties"][f].is_object(), "{f}");
+        assert!(!req["required"].as_array().unwrap().contains(&json!(f)), "{f}");
+    }
+}
+
+#[tokio::test]
+async fn a_road_setting_equal_to_its_neutral_changes_nothing() {
+    let w = World::new();
+    let plain = assert_route(&w.route(None, None, &body((10, 2), (10, 18))).await);
+    for (ride, u) in [("road", 0.25), ("gravel", 1.0), ("mtb", 0.0)] {
+        let mut b = body((10, 2), (10, 18));
+        b["ride_type"] = json!(ride);
+        let without = assert_route(&w.route(None, None, &b).await);
+        b["use_roads"] = json!(u);
+        b["use_roads_neutral"] = json!(u);
+        let same = assert_route(&w.route(None, None, &b).await);
+        assert_eq!(same, without, "{ride} {u}");
+        // Le neutre seul : sans effet.
+        b.as_object_mut().unwrap().remove("use_roads");
+        assert_eq!(assert_route(&w.route(None, None, &b).await), without, "{ride}");
+    }
+    assert_eq!(
+        plain["polyline"],
+        assert_route(&w.route(None, None, &body((10, 2), (10, 18))).await)["polyline"]
+    );
+}
+
+#[tokio::test]
+async fn a_road_setting_away_from_its_neutral_is_served_with_or_without_a_team() {
+    let w = World::new();
+    // La grille n'a qu'une classe de voie (rues résidentielles) : tout est multiplié pareil, le plus court reste le
+    // même ; l'effet sur le tracé est vérifié par les tests du moteur (`tests_route.rs`).
+    for (u, n) in [(0.0, 1.0), (1.0, 0.25), (0.5, 0.0)] {
+        let mut b = body((10, 2), (10, 18));
+        b["use_roads"] = json!(u);
+        b["use_roads_neutral"] = json!(n);
+        let v = assert_route(&w.route(None, None, &b).await);
+        assert_eq!(v["mode"], "discovery");
+        let d = v["distance_m"].as_f64().unwrap();
+        assert!((d - 4_800.0).abs() < 10.0, "{u} {n} {d}");
+    }
+    let (k, team) = (key(1), "team-a");
+    let r = w.send(put_digest(&k, team, "d1", team_deposit())).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let mut b = body((6, 6), (6, 14));
+    b["cursor"] = json!(0.25);
+    b["use_roads"] = json!(0.0);
+    b["use_roads_neutral"] = json!(1.0);
+    let v = assert_route(&w.route(Some(&k), Some(team), &b).await);
+    assert_eq!(v["mode"], "team_first");
+    assert!(v["team_share"].as_f64().unwrap() > 0.9, "{}", v["team_share"]);
+}
+
+#[tokio::test]
+async fn avoiding_main_roads_is_optional_and_false_changes_nothing() {
+    let w = World::new();
+    for ride in ["road", "gravel", "mtb"] {
+        let mut b = body((10, 2), (10, 18));
+        b["ride_type"] = json!(ride);
+        let without = assert_route(&w.route(None, None, &b).await);
+        for off in [json!(false), Value::Null] {
+            b["avoid_main_roads"] = off;
+            assert_eq!(assert_route(&w.route(None, None, &b).await), without, "{ride}");
+        }
+    }
+    // `true` : la grille n'a qu'une classe de voie (rues résidentielles), aucune grande route à éviter ; l'effet sur le
+    // tracé est vérifié par les tests du moteur (`tests_route.rs`). Seul, puis avec `use_roads`, puis avec l'équipe.
+    let mut b = body((10, 2), (10, 18));
+    b["avoid_main_roads"] = json!(true);
+    let v = assert_route(&w.route(None, None, &b).await);
+    assert!((v["distance_m"].as_f64().unwrap() - 4_800.0).abs() < 10.0, "{}", v["distance_m"]);
+    b["use_roads"] = json!(0.0);
+    b["use_roads_neutral"] = json!(1.0);
+    let v = assert_route(&w.route(None, None, &b).await);
+    assert!((v["distance_m"].as_f64().unwrap() - 4_800.0).abs() < 10.0, "{}", v["distance_m"]);
+    let (k, team) = (key(1), "team-a");
+    let r = w.send(put_digest(&k, team, "d1", team_deposit())).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text);
+    let mut b = body((6, 6), (6, 14));
+    b["cursor"] = json!(0.25);
+    b["avoid_main_roads"] = json!(true);
+    let v = assert_route(&w.route(Some(&k), Some(team), &b).await);
+    assert_eq!(v["mode"], "team_first");
+    // Pas un booléen.
+    for bad in [json!("true"), json!(1), json!(0.0)] {
+        let mut b = body((10, 2), (10, 18));
+        b["avoid_main_roads"] = bad.clone();
+        assert_problem(&w.route(None, None, &b).await, StatusCode::BAD_REQUEST, "invalid_input");
+    }
+}
+
+#[tokio::test]
+async fn a_road_setting_needs_its_neutral_and_both_stay_within_bounds() {
+    let w = World::new();
+    let pointers = |p: &Value| -> Vec<String> {
+        p["details"]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["pointer"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    // `use_roads` seul : le neutre dépend du profil, le service ne le devine pas.
+    let mut b = body((10, 2), (10, 18));
+    b["use_roads"] = json!(0.5);
+    let p = assert_problem(&w.route(None, None, &b).await, StatusCode::BAD_REQUEST, "invalid_input");
+    assert_eq!(pointers(&p), ["/use_roads_neutral"]);
+    // Hors bornes, chacun à son pointeur.
+    for (u, n, expected) in [
+        (json!(1.5), json!(0.25), vec!["/use_roads"]),
+        (json!(-0.1), json!(0.25), vec!["/use_roads"]),
+        (json!(0.5), json!(2.0), vec!["/use_roads_neutral"]),
+        (json!(-1.0), json!(1.01), vec!["/use_roads", "/use_roads_neutral"]),
+    ] {
+        let mut b = body((10, 2), (10, 18));
+        b["use_roads"] = u;
+        b["use_roads_neutral"] = n;
+        let r = w.route(None, None, &b).await;
+        let p = assert_problem(&r, StatusCode::BAD_REQUEST, "invalid_input");
+        assert_eq!(pointers(&p), expected, "{}", r.text);
+    }
+    // Le neutre seul est validé lui aussi.
+    let mut b = body((10, 2), (10, 18));
+    b["use_roads_neutral"] = json!(-0.5);
+    let p = assert_problem(&w.route(None, None, &b).await, StatusCode::BAD_REQUEST, "invalid_input");
+    assert_eq!(pointers(&p), ["/use_roads_neutral"]);
+    // Pas un nombre.
+    let mut b = body((10, 2), (10, 18));
+    b["use_roads"] = json!("routes");
+    b["use_roads_neutral"] = json!(0.25);
+    assert_problem(&w.route(None, None, &b).await, StatusCode::BAD_REQUEST, "invalid_input");
 }
 
 #[tokio::test]

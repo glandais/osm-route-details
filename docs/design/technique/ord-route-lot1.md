@@ -120,3 +120,64 @@ ne coupe presque rien au-delà de 30 km (les états fixés approchent le nombre 
   `generation_failed` (raisons `start_too_far`, `end_too_far`, `no_route`, la dernière ajoutée à `GenerationReason`).
 - **Tests** : `crates/ord-server/tests/router.rs` (grille synthétique des tests du générateur) et `router_sentinel.rs`
   (aucune coordonnée, clé ni équipe dans les logs et les métriques).
+
+## 8. Préférence de voie (curseur routes / pistes) (1.17.0, api 1.16)
+
+Deux champs facultatifs de `POST /v1/router/route` : `use_roads`, le réglage demandé, et `use_roads_neutral`, celui du
+profil de l'appelant, tous deux dans [0 ; 1] (0 : pistes et petites voies, 1 : routes). Le moteur reçoit
+`RouteRequest::way_q8 = way_factors(ride, use_roads, use_roads_neutral)`, un multiplicateur en 256es par case de voie
+(`WayQ8`, `WAYS` = 7 cases). Un troisième champ, `avoid_main_roads`, renchérit les grandes routes par-dessus (plus bas).
+Sans ces champs, `WAY_NEUTRAL` (256 partout) : rien n'est multiplié, l'itinéraire est celui de 1.16.0 au bit près.
+`use_roads` sans son neutre est un 400 (pointeur `/use_roads_neutral`) : le neutre dépend du profil, le service ne le
+devine pas ; le neutre seul est sans effet. Le réglage vaut avec ou sans équipe, dans tous les modes ; les générations
+ne le voient pas.
+
+- **Cases** : les six voies du goût (`taste_way` : 0 grande route, 1 `tertiary`, 2 petite route, 3 rue, 4 voie cyclable
+  ou verte, 5 chemin), plus une case 6 (`WAY_SECONDARY`) pour `secondary` et `secondary_link`, sortis de la case 0. Le
+  goût commun met `secondary` au prix d'une rue (0,77 × 88/64 en route) : l'éviter sans toucher à `primary` / `trunk`,
+  ou l'éviter plus qu'eux, demande de la séparer.
+- **Formule** (doc de `way_factors`), transposée du `road_factor` de Valhalla (`bicyclecost.cc`) :
+  `f(u) = 1,5 − u` si `u ≥ 0,5`, sinon `2 − 2u` ; `g = f(use_roads) / f(neutral)` ; le multiplicateur d'une case vaut
+  `g^α`, avec α = 1 (grande route, case 0), 0,6 (`tertiary`), 0,4 (petite route), 0,3 (rue), −0,5 (voie cyclable ou
+  verte), pour le chemin 0 en route et −0,5 en gravel et VTT, et 1 pour `secondary` (case 6, qui suit les autres
+  grandes routes) ; borné à [64 ; 1 024] comme une table de goût. Au neutre, `g = 1` : 256 partout.
+- **Par chaîne** (`WayScale`) : le multiplicateur d'une chaîne est la moyenne, pondérée par la longueur, de ceux de ses
+  arêtes de base, calculée à la première lecture de la chaîne et gardée pour la requête ; le poids du générateur est
+  multiplié par lui (arrondi, jamais nul, `INF` reste `INF`).
+- **Morceaux partiels** : les coûts d'accroche du départ et de l'arrivée (`out_cost`, `in_cost`) suivent la moyenne de
+  leur chaîne ; l'écart à la voie exacte du morceau est borné par sa longueur.
+- **Heuristique** : le plus petit coût par décimètre (`min_factor`) est recalculé avec les poids modifiés, pour que
+  l'A* reste admissible quand une voie devient moins chère que le meilleur facteur d'avant.
+- **Journaux et métriques** : la valeur du réglage n'en sort pas ; une étiquette `use_roads` = `none|less|same|more`
+  (le réglage comparé à son neutre) et une étiquette `avoid_main_roads` = `true|false` s'ajoutent à
+  `ord_router_requests_total` et à la ligne `route from A to B`.
+
+Premier relevé [mesuré], Pays de la Loire, Nantes → Ancenis (32,8 km à vol d'oiseau), découverte, un fil :
+
+| Type, neutre du profil | 0 | 0,25 | 0,5 | 0,75 | 1 |
+|---|---|---|---|---|---|
+| route, neutre 0,25 | 39,9 km | 39,7 km | 39,6 km | 39,6 km | 39,3 km |
+| route, neutre 1 | 43,6 km | 41,8 km | 41,8 km | 40,2 km | 39,7 km |
+| gravel, neutre 0,25 | 41,7 km, 64 % non revêtu | 38,4 km, 46 % | — | — | 39,8 km, 0 % |
+
+Temps à chaud de 33 à 64 ms, comme sans réglage.
+
+**Éviter les grandes routes** (`avoid_main_roads: true`, `ord_loops::avoid_main_roads`) : par-dessus la préférence
+issue de `use_roads` (ou `WAY_NEUTRAL`), la case `secondary` est doublée et la case 0 (`primary`, `trunk`) multipliée
+par 1,5, bornées à 1 024. Doublée, `secondary` passe derrière toute petite route, et `primary` reste derrière elle. Les
+grandes routes ne sont pas interdites : elles restent prises quand rien d'autre ne passe. Absent, `null` ou `false` :
+aucun effet. Indépendant de `use_roads` et cumulable, avec ou sans équipe. Relevé [mesuré], Pays de la Loire,
+découverte, un fil, sans réglage `use_roads` :
+
+| Trajet, type | Sans | Avec `avoid_main_roads` |
+|---|---|---|
+| Nantes → Ancenis, route | 39,7 km | 41,4 km |
+| Nantes → Ancenis, gravel | 38,4 km | 38,6 km |
+| Nantes → Angers, route | 94,2 km | 96,2 km |
+| Nantes → Angers, gravel | 99,6 km | 101,1 km |
+
+Temps à chaud de 45 à 140 ms, contre 34 à 115 ms sans.
+
+**Limites** : les α et les pénalités de `avoid_main_roads` (× 2, × 1,5) sont choisis à la main ; aucune mesure sur des
+traces réelles ; la longueur parcourue sur `secondary` avant et après `avoid_main_roads` n'a pas été mesurée ; `infra`
+(l'aménagement cyclable) est hors de la table. À caler sur le banc du lot 1 bis (§6).

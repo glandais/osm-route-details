@@ -37,6 +37,13 @@ fn main() {
         Some("team") => Mode::TeamFirst,
         _ => Mode::Discovery,
     };
+    // `ORD_USE_ROADS=<réglage>,<neutre du profil>` (0 : pistes, 1 : routes) : la préférence de voie ; absent : aucune.
+    let way = std::env::var("ORD_USE_ROADS").ok().map_or(ord_loops::WAY_NEUTRAL, |s| {
+        let (u, d) = s.split_once(',').expect("réglage,neutre");
+        ord_loops::way_factors(ride, u.parse().expect("réglage"), d.parse().expect("neutre"))
+    });
+    // `ORD_AVOID_MAIN=1` : éviter les grandes routes, par-dessus la préférence.
+    let way = if std::env::var("ORD_AVOID_MAIN").is_ok() { ord_loops::avoid_main_roads(way) } else { way };
     let overlay = a.get(10).map(|p| Overlay::read(Path::new(p)).expect("surcouche"));
     let team = overlay.as_ref().map(|o| TeamData::build(&engine, o).expect("équipe"));
     let r = RouteRequest {
@@ -46,6 +53,7 @@ fn main() {
         mode,
         familiarity: 0.75,
         off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
+        way_q8: way,
     };
     let tune = RouteTune::default();
     let crow = r.crow_m();

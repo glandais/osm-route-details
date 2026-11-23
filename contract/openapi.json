@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.15"
+    "version": "1.16"
   },
   "paths": {
     "/health/live": {
@@ -706,7 +706,7 @@
           "router"
         ],
         "summary": "Bicycle route from A to B",
-        "description": "One route from a start to an end for a ride type, on the generator's graph and with its weights (road class, surface, access, taste). Without the team headers the route is a discovery with the common taste. With them, `cursor` maps to the engine as for a generation, strict mode excepted; an absent or stale overlay does not block: the route is a discovery and the answer says so (`mode`, `overlay: null`). The search widens once if the first area holds no path. Routes have their own queue and budget, apart from the generations. Nothing from the request is logged.",
+        "description": "One route from a start to an end for a ride type, on the generator's graph and with its weights (road class, surface, access, taste). Without the team headers the route is a discovery with the common taste. With them, `cursor` maps to the engine as for a generation, strict mode excepted; an absent or stale overlay does not block: the route is a discovery and the answer says so (`mode`, `overlay: null`). `use_roads`, relative to the caller's `use_roads_neutral`, scales the weights by way type (api 1.16, with or without a team); `avoid_main_roads` makes main roads cost more, without forbidding them; without these fields, the route is the one of api 1.15. The search widens once if the first area holds no path. Routes have their own queue and budget, apart from the generations. Nothing from the request is logged.",
         "operationId": "postRouterRoute",
         "parameters": [
           {
@@ -756,7 +756,7 @@
             }
           },
           "400": {
-            "description": "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`; an end farther than `capabilities.router.crow_m_max` from the start: pointer `/end`)",
+            "description": "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`; an end farther than `capabilities.router.crow_m_max` from the start: pointer `/end`; `use_roads` without `use_roads_neutral`: pointer `/use_roads_neutral`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1124,7 +1124,7 @@
           },
           "router": {
             "$ref": "#/components/schemas/RouterCapabilities",
-            "description": "Routes from A to B (`POST /v1/router/route`, api 1.15), on the generator's graph: `enabled` follows\n`generator.enabled`."
+            "description": "Routes from A to B (`POST /v1/router/route`, api 1.15), on the generator's graph: `enabled` follows\n`generator.enabled`; `use_roads` says whether the request takes the way preference (api 1.16)."
           },
           "rules_version": {
             "type": "string"
@@ -3733,14 +3733,20 @@
       },
       "RouterCapabilities": {
         "type": "object",
-        "description": "What the service publishes about routes from A to B (`/v1/capabilities`, api 1.15).",
+        "description": "What the service publishes about routes from A to B (`/v1/capabilities`, api 1.15; `use_roads` and\n`avoid_main_roads` since 1.16).",
         "required": [
           "enabled",
           "ride_types",
           "crow_m_max",
-          "snap_m"
+          "snap_m",
+          "use_roads",
+          "avoid_main_roads"
         ],
         "properties": {
+          "avoid_main_roads": {
+            "type": "boolean",
+            "description": "The request takes `avoid_main_roads` (api 1.16). Absent (older services): do not send it."
+          },
           "crow_m_max": {
             "type": "number",
             "format": "double",
@@ -3761,6 +3767,10 @@
             "type": "number",
             "format": "double",
             "description": "Longest distance from a point to the way it is snapped to, in metres: beyond, 422 `generation_failed` (reason\n`start_too_far` or `end_too_far`)."
+          },
+          "use_roads": {
+            "type": "boolean",
+            "description": "The request takes `use_roads` and `use_roads_neutral` (api 1.16). Absent (older services): do not send them,\nthe request would be refused as carrying an unknown field."
           }
         }
       },
@@ -3773,6 +3783,13 @@
           "ride_type"
         ],
         "properties": {
+          "avoid_main_roads": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Main roads cost more (api 1.16, see `capabilities.router.avoid_main_roads`): `secondary` twice, `primary` and\n`trunk` one and a half times, on top of `use_roads` if given. They are not forbidden and are still ridden where\nnothing else goes. Applies with or without the team headers. Absent, null or false: no effect. An estimate, tuned\non no measure."
+          },
           "cursor": {
             "type": [
               "number",
@@ -3789,6 +3806,22 @@
           },
           "start": {
             "$ref": "#/components/schemas/GeoPointV1"
+          },
+          "use_roads": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Preference between tracks and roads (api 1.16, see `capabilities.router.use_roads`), within [0, 1]: 0 favours\ntracks, cycleways and small ways, 1 roads. Applies with or without the team headers, in every mode. Requires\n`use_roads_neutral`: without it, 400 `invalid_input` (pointer `/use_roads_neutral`). Both absent: no preference.\nThe weights are an estimate, not fitted to measured rides."
+          },
+          "use_roads_neutral": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The caller's profile setting of `use_roads`, within [0, 1], for which the route keeps the weights it has without\na preference: `use_roads` acts as its distance from this value. Alone, it has no effect (but is validated)."
           }
         }
       },

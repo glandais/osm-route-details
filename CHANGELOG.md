@@ -3,6 +3,38 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.17.0 (API 1.16)
+
+Préférence de voie pour l'itinéraire de A à B (curseur « routes ou pistes », `docs/design/technique/ord-route-lot1.md`
+§8) et évitement des grandes routes. Un ajout pur au contrat : **sans les nouveaux champs, les itinéraires sont ceux de
+1.16.0 au bit près**, et **les
+générations sont inchangées** (elles ne lisent pas la préférence).
+
+### Ajouté
+
+- **`use_roads` et `use_roads_neutral`** dans la requête de `POST /v1/router/route`, facultatifs, dans [0 ; 1] (0 : pistes
+  et petites voies, 1 : routes). `use_roads` est le réglage demandé, `use_roads_neutral` celui du profil de l'appelant,
+  pour lequel les poids sont ceux d'avant. Le moteur multiplie le poids de chaque chaîne par un facteur par case de voie
+  (sept cases : les six voies du goût, plus `secondary` séparée des autres grandes routes ; `ord_loops::way_factors`, moyenne pondérée par la longueur sur la chaîne, morceaux d'accroche compris, heuristique
+  recalculée). Avec ou sans équipe, dans tous les modes. `use_roads` sans `use_roads_neutral` : 400 `invalid_input` au
+  pointeur `/use_roads_neutral` (le neutre dépend du profil, le service ne le devine pas) ; le neutre seul : sans effet,
+  mais validé ; hors bornes : 400 au pointeur du champ.
+- **La table est une estimation transposée du `road_factor` de Valhalla, calée sur aucune mesure** : les exposants par
+  voie sont choisis à la main, l'aménagement cyclable (`infra`) n'y entre pas ; elle sera revue sur le banc du lot 1 bis.
+  Premier relevé (Nantes → Ancenis, 32,8 km à vol d'oiseau) : de 39,3 à 43,6 km en route selon le réglage, de 0 à 64 %
+  non revêtu en gravel, temps inchangés.
+- **`avoid_main_roads`** dans la même requête, booléen facultatif : `secondary` coûte deux fois plus, `primary` et
+  `trunk` une fois et demie (`ord_loops::avoid_main_roads`, borné à 1 024), par-dessus `use_roads` s'il est là. Les
+  grandes routes ne sont pas interdites : elles restent prises quand rien d'autre ne passe. Absent, `null` ou `false` :
+  aucun effet. Cumulable avec `use_roads`, avec ou sans équipe. **Même réserve : une estimation, calée sur aucune
+  mesure.** Premier relevé : Nantes → Ancenis 39,7 → 41,4 km en route, Nantes → Angers 94,2 → 96,2 km ; temps à chaud de
+  45 à 140 ms contre 34 à 115 ms sans.
+- **Capacités : `router.use_roads: true` et `router.avoid_main_roads: true`** : le service accepte ces champs. Un client
+  doit les lire avant de les envoyer : un service antérieur refuse un champ inconnu (400).
+- **Métriques et journaux** : étiquettes `use_roads` (`none`, `less`, `same`, `more` : le réglage comparé à son neutre) et
+  `avoid_main_roads` (`true`, `false`) sur `ord_router_requests_total` et la ligne `route from A to B` ; jamais la valeur
+  du réglage.
+
 ## 1.16.0 (API 1.15)
 
 Itinéraire vélo de A à B, lots 1 et 2 du plan Pédalons `2026-11-23-itineraire-velo-osm.md` (moteur et service :

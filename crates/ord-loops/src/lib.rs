@@ -81,7 +81,10 @@ pub use generate::{
 pub use geo::LatLon;
 pub use index::{cap_dm_of, foreign_index, short_components};
 pub use offroad::{OffroadOutcome, OffroadTarget, Steer, SteeredGeneration};
-pub use route::{route, route_geometry_spans, route_in, RouteFailure, RouteRequest, RouteTune, Routed};
+pub use route::{
+    avoid_main_roads, route, route_geometry_spans, route_in, way_factors, RouteFailure, RouteRequest,
+    RouteTune, Routed, WAY_NEUTRAL,
+};
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};

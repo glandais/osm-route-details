@@ -55,7 +55,7 @@ pub struct Capabilities {
     /// (with a `reason`) when no graph is loaded: the `/v1/generator/*` routes then answer 503.
     pub generator: GeneratorCapabilities,
     /// Routes from A to B (`POST /v1/router/route`, api 1.15), on the generator's graph: `enabled` follows
-    /// `generator.enabled`.
+    /// `generator.enabled`; `use_roads` says whether the request takes the way preference (api 1.16).
     pub router: RouterCapabilities,
 }
 

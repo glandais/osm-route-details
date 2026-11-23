@@ -44,6 +44,106 @@ pub struct RouteRequest {
     /// Comme [`Request::familiarity`] et [`Request::off_team_cost_q8`].
     pub familiarity: f32,
     pub off_team_cost_q8: u32,
+    /// Multiplicateur du poids par voie, en 256es : les six voies du goût ([`crate::taste_way`] : 0 grande route,
+    /// 1 `tertiary`, 2 petite route, 3 rue, 4 voie cyclable ou verte, 5 chemin), `secondary` ayant sa case à part (6)
+    /// au lieu de la 0. [`WAY_NEUTRAL`] : les poids du générateur, au bit près.
+    pub way_q8: WayQ8,
+}
+
+/// Aucune préférence de voie : 256 partout.
+pub const WAY_NEUTRAL: WayQ8 = [256; WAYS];
+
+/// Nombre de cases d'une préférence de voie.
+pub const WAYS: usize = 7;
+/// Case de `secondary` (et `secondary_link`) : voie 0 du goût, tenue à part pour pouvoir l'éviter seule.
+pub const WAY_SECONDARY: usize = 6;
+/// Une préférence de voie : un multiplicateur en 256es par case.
+pub type WayQ8 = [u16; WAYS];
+
+/// Case d'une arête de base dans une préférence de voie.
+fn way_index(a: ord_graph::attrs::Attrs) -> usize {
+    if a.class() == Some(ord_graph::attrs::HighwayClass::Secondary) {
+        WAY_SECONDARY
+    } else {
+        crate::cost::taste_way(a)
+    }
+}
+
+/// Évite les grandes routes sans les interdire : `secondary` coûte deux fois plus, les autres grandes routes
+/// (`primary`, `trunk`) une fois et demie, par-dessus la préférence `q` ; borné à 1 024. Sans la pénalité, le goût
+/// commun met `secondary` au prix d'une rue (0,77 × 88/64 en route) : la doubler la passe derrière toute petite route,
+/// et `primary` reste derrière elle. Une grande route reste prise quand rien d'autre ne passe. **Estimation**, comme
+/// [`way_factors`].
+pub fn avoid_main_roads(mut q: WayQ8) -> WayQ8 {
+    q[WAY_SECONDARY] = (u32::from(q[WAY_SECONDARY]) * 2).min(1024) as u16;
+    q[0] = (u32::from(q[0]) * 3 / 2).min(1024) as u16;
+    q
+}
+
+/// Les multiplicateurs par voie d'un réglage « routes ou pistes » `use_roads` dans [0 ; 1] (0 : pistes, 1 : routes),
+/// rapporté au réglage `neutral` du profil, pour lequel tout vaut 256.
+///
+/// Transposé du `road_factor` de Valhalla (`bicyclecost.cc`) : `f(u) = 1,5 − u` si `u ≥ 0,5`, sinon `2 − 2u` ;
+/// `g = f(use_roads) / f(neutral)` ; le multiplicateur d'une voie vaut `g^α`, avec α = 1 (grande route), 0,6
+/// (`tertiary`), 0,4 (petite route), 0,3 (rue), −0,5 (voie cyclable ou verte) et, pour le chemin, 0 en route et −0,5
+/// en gravel et VTT. Borné à [64 ; 1 024] comme une table de goût. **Estimation** : les α ne sont calés sur aucune
+/// mesure (note `ord-route-lot1.md`, §8).
+pub fn way_factors(ride: RideType, use_roads: f64, neutral: f64) -> WayQ8 {
+    let f = |u: f64| {
+        let u = u.clamp(0.0, 1.0);
+        if u >= 0.5 {
+            1.5 - u
+        } else {
+            2.0 - 2.0 * u
+        }
+    };
+    let g = f(use_roads) / f(neutral);
+    let path = if ride == RideType::Road { 0.0 } else { -0.5 };
+    // `secondary` (dernière case) suit les autres grandes routes.
+    [1.0, 0.6, 0.4, 0.3, -0.5, path, 1.0].map(|a: f64| (g.powf(a) * 256.0).round().clamp(64.0, 1024.0) as u16)
+}
+
+/// Les multiplicateurs par voie d'une requête, ramenés à la chaîne : la moyenne, pondérée par la longueur, de ceux de
+/// ses arêtes de base. Calculée à la première lecture de chaque chaîne, puis gardée pour la requête.
+struct WayScale<'a, B> {
+    e: &'a Engine<B>,
+    v: &'a ViewData,
+    q8: WayQ8,
+    /// 0 : pas encore calculé.
+    memo: Vec<Cell<u16>>,
+}
+
+impl<B: AsRef<[u8]>> WayScale<'_, B> {
+    fn of(&self, c: u32) -> u64 {
+        let slot = &self.memo[c as usize];
+        if slot.get() == 0 {
+            let (mut num, mut den) = (0u64, 0u64);
+            for &l in self.v.links(c) {
+                let (a, len) = self.e.attrs_len(l & !ord_graph::format::DIR_BIT);
+                num += u64::from(len) * u64::from(self.q8[way_index(a)]);
+                den += u64::from(len);
+            }
+            let m = (num + den / 2).checked_div(den).unwrap_or(256);
+            slot.set(m.clamp(1, u64::from(u16::MAX)) as u16);
+        }
+        u64::from(slot.get())
+    }
+
+    /// `w × M(c) / 256`, arrondi, jamais nul ; `INF` reste `INF`.
+    fn apply(&self, w: u32, c: u32) -> u32 {
+        if w == INF {
+            return INF;
+        }
+        ((u64::from(w) * self.of(c) + 128) >> 8).clamp(1, u64::from(u32::MAX / 2)) as u32
+    }
+}
+
+/// Poids d'une chaîne pour la requête : celui du générateur, puis la préférence de voie s'il y en a une.
+fn chain_w<B: AsRef<[u8]>>(w: &Weighter<'_>, scale: Option<&WayScale<'_, B>>, c: u32) -> u32 {
+    match scale {
+        None => w.chain(c),
+        Some(s) => s.apply(w.chain(c), c),
+    }
 }
 
 /// Réglages du calcul d'itinéraire ; `Default` = les valeurs du service.
@@ -170,14 +270,14 @@ fn turn_relaxed(
 }
 
 /// Plus petit coût par décimètre des chaînes ouvertes de la fenêtre, à peine minoré.
-fn min_factor(v: &ViewData, w: &Weighter<'_>) -> f64 {
+fn min_factor<B: AsRef<[u8]>>(v: &ViewData, w: &Weighter<'_>, scale: Option<&WayScale<'_, B>>) -> f64 {
     let mut m = f64::INFINITY;
     for c in 0..v.n_chains as u32 {
         let l = v.len_dm[c as usize];
         if l == 0 {
             continue;
         }
-        let wc = w.chain(c);
+        let wc = chain_w(w, scale, c);
         if wc != INF {
             m = m.min(f64::from(wc) / f64::from(l));
         }
@@ -196,8 +296,10 @@ struct Found {
 
 /// A* du départ à l'arrivée. Les états d'arrivée ont leurs propres cases (`2 n_chains + sens`) : la chaîne d'arrivée
 /// peut aussi être celle du départ, ou être traversée en entier avant d'y revenir.
-fn search(
+#[allow(clippy::too_many_arguments)]
+fn search<B: AsRef<[u8]>>(
     cx: &Ctx<'_>,
+    scale: Option<&WayScale<'_, B>>,
     ta: &mut Tree,
     end_xy: (f64, f64),
     f_min: f64,
@@ -275,7 +377,7 @@ fn search(
                     }
                 }
             }
-            let w = cx.w.chain(c);
+            let w = chain_w(cx.w, scale, c);
             if w == INF {
                 continue;
             }
@@ -384,8 +486,25 @@ pub fn route_in<B: AsRef<[u8]>>(
     };
     let s_snap = snap(r.start, RouteFailure::StartTooFar)?;
     let e_snap = snap(r.end, RouteFailure::EndTooFar)?;
-    let sa = make_anchor(e, v, &w, s_snap);
-    let ea = make_anchor(e, v, &w, e_snap);
+    let scale = (r.way_q8 != WAY_NEUTRAL).then(|| WayScale {
+        e,
+        v,
+        q8: r.way_q8,
+        memo: vec![Cell::new(0); v.n_chains],
+    });
+    let scale = scale.as_ref();
+    // Les morceaux partiels suivent la préférence de leur chaîne (sa moyenne : un écart borné par le morceau).
+    let anchor = |snap: Snap| {
+        let mut a = make_anchor(e, v, &w, snap);
+        if let Some(s) = scale {
+            for cost in a.out_cost.iter_mut().chain(a.in_cost.iter_mut()) {
+                *cost = s.apply(*cost, snap.chain);
+            }
+        }
+        a
+    };
+    let sa = anchor(s_snap);
+    let ea = anchor(e_snap);
     let disc = Disc::new(r.start.to_e7(), r.end.to_e7(), reach_m, false);
     let esc = Cell::new(false);
     let forb = Forbidden::default();
@@ -394,13 +513,13 @@ pub fn route_in<B: AsRef<[u8]>>(
     let mut found: Option<(Found, bool)> =
         direct(&sa, &ea).map(|(f, cost)| (Found { fields: vec![f], cost }, false));
     if found.is_none() {
-        let f_min = min_factor(v, &w);
+        let f_min = min_factor(v, &w, scale);
         // Position réelle de l'arrivée sur sa voie, dans le repère de la zone.
         let end_pt = slice(&e.edge_polyline(e_snap.edge), 0.0, e_snap.offset_m).last().copied();
         let end_xy = disc.xy_of(end_pt.unwrap_or_else(|| r.end.to_e7()));
         let ta = &mut ws.views[vi].ta;
         for relaxed in [false, true] {
-            match search(&cx, ta, end_xy, f_min, relaxed, &mut settled, stop) {
+            match search(&cx, scale, ta, end_xy, f_min, relaxed, &mut settled, stop) {
                 Ok(Some(f)) => {
                     found = Some((f, relaxed));
                     break;

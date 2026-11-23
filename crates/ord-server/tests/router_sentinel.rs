@@ -1,4 +1,4 @@
-//! Rien de privé ne sort d'un itinéraire de A à B (api 1.15), sur le modèle de `generator_sentinel.rs` : des itinéraires
+//! Rien de privé ne sort d'un itinéraire de A à B (api 1.15 et 1.16), sur le modèle de `generator_sentinel.rs` : des itinéraires
 //! (avec et sans équipe, en échec) traversent le service sous un collecteur de logs JSON (`trace` pour le service) et un
 //! exporteur de métriques. Aucune ligne, aucun span, aucune métrique ne contient une coordonnée (brute ou arrondie), la
 //! clé d'environnement, la référence d'équipe, ni les noms dérivés.
@@ -93,6 +93,13 @@ async fn router_leaves_no_coordinate_key_or_team_in_logs_or_metrics() {
     assert_eq!(ok.status, StatusCode::OK, "{}", ok.text);
     assert_eq!(ok.json()["mode"], "team_first");
     assert_eq!(send(app.clone(), route(None, None, &body)).await.status, StatusCode::OK);
+    // Une préférence de voie aux valeurs reconnaissables : seul son sens (`less`) peut sortir.
+    let (roads, roads_neutral) = (0.137_245_9, 0.862_754_1);
+    let mut pref = body.clone();
+    pref["use_roads"] = json!(roads);
+    pref["use_roads_neutral"] = json!(roads_neutral);
+    pref["avoid_main_roads"] = json!(true);
+    assert_eq!(send(app.clone(), route(Some(&k), Some(team), &pref)).await.status, StatusCode::OK);
     // Équipe sans surcouche, hors couverture, trop loin d'une voie, clé invalide.
     assert_eq!(send(app.clone(), route(Some(&key(8)), Some(team), &body)).await.status, StatusCode::OK);
     let mut out = body.clone();
@@ -114,6 +121,8 @@ async fn router_leaves_no_coordinate_key_or_team_in_logs_or_metrics() {
     assert!(rendered.contains("ord_router_requests_total"), "métriques actives");
     assert!(rendered.contains("ord_router_duration_seconds"));
     assert!(rendered.contains("ord_router_routes_total"));
+    assert!(rendered.contains("use_roads=\"less\""), "le sens de la préférence, jamais sa valeur");
+    assert!(rendered.contains("avoid_main_roads=\"true\""));
 
     let creds = Credentials::derive(&decode_key(&k).unwrap(), team);
     let mut forbidden =
@@ -121,6 +130,13 @@ async fn router_leaves_no_coordinate_key_or_team_in_logs_or_metrics() {
     for v in [lat, lon, lat2, lon2, 48.5123456, 2.3123456, lat2 + 0.0723456, node(0, 10)[0] - 0.007_234_5] {
         number(&mut forbidden, v);
     }
+    // Les décimales des réglages, pas leurs préfixes (« 0.14 » pourrait être une durée).
+    forbidden.extend([
+        roads.to_string(),
+        roads_neutral.to_string(),
+        "1372459".to_owned(),
+        "8627541".to_owned(),
+    ]);
     for fragment in &forbidden {
         for (what, text) in [("logs", &logs), ("métriques", &rendered)] {
             if let Some(line) = text.lines().find(|l| l.contains(fragment.as_str())) {
