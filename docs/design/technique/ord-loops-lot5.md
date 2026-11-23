@@ -211,9 +211,9 @@ seuils B du lot 4 incomparables. Il s'ajoute à `NAMED` pour GRAVEL. ROAD le rap
 ```
 cargo build --release -p ord-loops-bench
 # essai court (déterminisme du relevé, quelques minutes)
-$B likeness --teams B,C --limit 20 --holdout-share 0.25 --variants svc+org --label 5a-smoke --out $G/lot5/5a
+$B likeness --teams B,C --limit 20 --holdout-share 0.25 --variants base,svc+org --label 5a-smoke --out $G/lot5/5a
 # relevé complet, toutes équipes, deux curseurs, ROAD et GRAVEL (les MTB sont trop peu : rapportés sans critère)
-$B likeness --holdout-share 0.25 --variants svc+org --label 5a --out $G/lot5/5a
+$B likeness --holdout-share 0.25 --variants base,svc+org --label 5a --out $G/lot5/5a
 ```
 
 Garde-fou : à mesures ajoutées près, la variante `svc+org` doit redonner l'**empreinte de résultat** de la campagne finale
@@ -234,7 +234,7 @@ un tableau de poids non revêtus par goût, donc par équipe et par requête) ; 
 
 ```
 $B likeness --holdout-share 0.25 --ride-types gravel --label 5a-mu --out $G/lot5/5a-mu \
-  --variants svc+org,svc+org+mu:0.25,svc+org+mu:0.35,svc+org+mu:0.5,svc+org+mu:0.7,svc+org+mu:1.4,svc+org+mu:2
+  --variants base,svc+org,svc+org+mu:0.25,svc+org+mu:0.35,svc+org+mu:0.5,svc+org+mu:0.7,svc+org+mu:1.4,svc+org+mu:2
 ```
 
 `mu:1` redonne `svc+org` au bit près (contrôle du crochet). Rapporté, par requête puis agrégé :
