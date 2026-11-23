@@ -599,7 +599,7 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     // Capacités : ce qui est couvert, avec ses limites.
     let c = w.send(get("/v1/capabilities")).await.json();
     let g = &c["generator"];
-    assert_eq!(c["api_version"], "1.13");
+    assert_eq!(c["api_version"], "1.14");
     assert_eq!(g["enabled"], true);
     assert!(g["graph"]["data_date"].as_str().unwrap().ends_with("Z"));
     assert!(g["graph"]["id"].as_str().unwrap().len() == 16);
@@ -622,6 +622,108 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     // 4c : les figures offertes et celle d'une requête qui n'en nomme pas (organique depuis 1.12).
     assert_eq!(g["figures"], json!({"default": "organic", "values": ["classic", "organic"]}));
     assert!(g["matcher_hash"].as_str().unwrap().len() == 16);
+    // Lot 5 (api 1.14) : la consigne de part de non-revêtu et les bornes de roulabilité.
+    assert_eq!(
+        g["offroad"],
+        json!({"ride_types": ["gravel", "mtb"], "target_min": 0.0, "target_max": 0.8, "tolerance": 0.05,
+               "max_steps": 4, "rideability": "off"})
+    );
+}
+
+fn gravel_body(cursor: f64) -> Value {
+    let mut b = generate_body(cursor);
+    b["ride_type"] = json!("gravel");
+    b
+}
+
+#[tokio::test]
+async fn offroad_target_is_validated_and_refused_for_road_rides() {
+    let w = World::new();
+    // En route : 400, le pointeur nomme le champ.
+    let mut b = generate_body(1.0);
+    b["offroad_target"] = json!(0.3);
+    let body =
+        assert_problem(&w.send(generate(None, None, &b)).await, StatusCode::BAD_REQUEST, "invalid_input");
+    assert_eq!(body["details"]["errors"][0]["pointer"], "/offroad_target");
+    // Hors bornes (même en gravel), négative, trop haute, pas un nombre.
+    for bad in [json!(0.81), json!(-0.01), json!(1.0), json!("0.3")] {
+        let mut b = gravel_body(1.0);
+        b["offroad_target"] = bad.clone();
+        let r = w.send(generate(None, None, &b)).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{bad}: {}", r.text);
+    }
+    // Les bornes sont incluses, null vaut absent.
+    for ok in [json!(0.0), json!(0.8), json!(null)] {
+        let mut b = gravel_body(1.0);
+        b["offroad_target"] = ok.clone();
+        let r = w.send(generate(None, None, &b)).await;
+        assert_eq!(r.status, StatusCode::OK, "{ok}: {}", r.text);
+    }
+}
+
+#[tokio::test]
+async fn the_steering_outcome_and_the_checkers_offroad_share_are_returned() {
+    let w = World::new();
+    // Sans cible : `offroad` est nul, chaque parcours porte sa part mesurée par le contrôleur (route comprise).
+    let r = w.send(generate(None, None, &generate_body(1.0))).await.json();
+    assert!(r["offroad"].is_null());
+    let r0 = &r["routes"][0];
+    assert_eq!(r0["offroad_m"], 0.0);
+    assert_eq!(r0["offroad_share"], 0.0);
+    // La grille de test est revêtue : la cible 0 est tenue au premier pas, 0,47 ne l'est pas et les pas sont comptés.
+    let mut b = gravel_body(1.0);
+    b["offroad_target"] = json!(0.0);
+    let r = w.send(generate(None, None, &b)).await.json();
+    assert_eq!(r["offroad"], json!({"target": 0.0, "tolerance": 0.05, "reached": true, "steps": 1}));
+    assert!(!r["routes"].as_array().unwrap().is_empty());
+    b["offroad_target"] = json!(0.47);
+    let r = w.send(generate(None, None, &b)).await.json();
+    assert_eq!(r["offroad"]["reached"], false);
+    assert_eq!(r["offroad"]["target"], 0.47);
+    let steps = r["offroad"]["steps"].as_u64().unwrap();
+    assert!((2..=4).contains(&steps), "la recherche a tenté d'autres μ : {steps}");
+    // Les parcours sont rendus quand même, le plus proche en tête.
+    assert!(!r["routes"].as_array().unwrap().is_empty());
+    // Strict (curseur 0, équipe déposée) : la cible est acceptée, un seul pas.
+    let (k, team) = (key(1), "team-a");
+    assert_eq!(w.deposit(&k, team, "d1").await.status, StatusCode::OK);
+    let mut b = gravel_body(0.0);
+    b["offroad_target"] = json!(0.47);
+    let r = w.send(generate(Some(&k), Some(team), &b)).await;
+    if r.status == StatusCode::OK {
+        assert_eq!(r.json()["offroad"]["steps"], 1);
+    }
+}
+
+#[tokio::test]
+async fn reached_follows_the_first_route_the_checker_kept() {
+    let w = World::new();
+    let hooks = w.state.generator().hooks().unwrap();
+    let mut b = gravel_body(1.0);
+    b["offroad_target"] = json!(0.0);
+    let full = w.send(generate(None, None, &b)).await.json();
+    let n = full["routes"].as_array().unwrap().len();
+    // Le contrôleur jette la première proposition du moteur : elle est comptée, la suivante porte `reached`.
+    hooks.corrupt_first_route.store(true, std::sync::atomic::Ordering::Relaxed);
+    let r = w.send(generate(None, None, &b)).await.json();
+    hooks.corrupt_first_route.store(false, std::sync::atomic::Ordering::Relaxed);
+    assert!(n > 1, "le graphe de test rend plusieurs propositions : {n}");
+    assert_eq!(r["dropped"], 1);
+    assert_eq!(r["routes"].as_array().unwrap().len(), n - 1);
+    assert_eq!(r["offroad"]["reached"], true, "la part de la première gardée est 0");
+    assert_eq!(r["routes"][0]["offroad_share"], 0.0);
+}
+
+#[tokio::test]
+async fn rideability_setting_is_published_and_the_generator_serves_in_both_states() {
+    let w = World::with(|c| c.generator.rideability = ord_server::config::GeneratorRideability::On);
+    let g = w.send(get("/v1/capabilities")).await.json();
+    assert_eq!(g["generator"]["offroad"]["rideability"], "on");
+    let mut b = gravel_body(1.0);
+    b["offroad_target"] = json!(0.0);
+    assert_eq!(w.send(generate(None, None, &b)).await.status, StatusCode::OK);
+    let off = World::with(|c| c.generator.rideability = ord_server::config::GeneratorRideability::Off);
+    assert_eq!(off.send(generate(None, None, &b)).await.status, StatusCode::OK);
 }
 
 #[tokio::test]
@@ -747,7 +849,7 @@ async fn a_stored_overlay_of_the_graph_is_not_the_one_of_the_contract_version_al
     let names: Vec<&str> =
         put["parameters"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ord-Namespace-Key", "Ord-Team", "Ord-Source-Digest"]);
-    assert_eq!(doc["info"]["version"], "1.13");
+    assert_eq!(doc["info"]["version"], "1.14");
 }
 
 // --- Revue : file, budget, équité, quotas -----------------------------------------------------------------------------

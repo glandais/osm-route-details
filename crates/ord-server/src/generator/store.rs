@@ -74,6 +74,8 @@ pub struct TestHooks {
     pub fail_commit: AtomicBool,
     /// Chaque parcours est altéré avant le contrôleur (une arête de moins).
     pub corrupt_routes: AtomicBool,
+    /// Seule la première proposition du moteur est altérée avant le contrôleur (elle est jetée, les autres restent).
+    pub corrupt_first_route: AtomicBool,
     /// Le `fsync` du dossier échoue après le `rename` (le dépôt est quand même réussi).
     pub fail_dir_sync: AtomicBool,
     /// Constructions de `TeamData` faites (une par équipe et par fichier, jamais deux en parallèle).

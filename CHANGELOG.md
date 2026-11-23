@@ -3,6 +3,29 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.15.0 (API 1.14) - à publier
+
+Lot 5 du générateur (`docs/design/technique/ord-loops-lot5.md`) : une part de non-revêtu visée, des bornes de roulabilité.
+Ajouts seulement ; sans `offroad_target` et avec `generator.rideability = off` (le défaut de ce commit), les parcours sont ceux
+de 1.14 au bit près.
+
+### Ajouté
+
+- **`offroad_target`** (requête de `POST /v1/generator/routes`, gravel et VTT, dans [0 ; 0,8], 400 en route ou hors bornes) :
+  part de la longueur à rouler hors revêtement (règle de `/v1/route-details` : tag `surface`, puis `tracktype`, puis classe).
+  Le moteur joue au plus `generator.offroad_max_steps` (4) générations à des multiplicateurs μ du non-revêtu pris sur une
+  grille {0,25 ; 0,35 ; 0,5 ; 0,7 ; 1 ; 1,4 ; 2}, mélange leurs candidats et rend les trois meilleurs, notés avec l'écart à la
+  cible ; plus aucun pas après `min(échéance - 1 s, generator.offroad_steps_until_ms)` (10 s). En mode strict : un seul pas.
+- **Par parcours : `offroad_m` et `offroad_share`**, mesurés par le contrôleur indépendant, pour tous les types (route
+  comprise). `unpaved_m`, `unpaved_share` et `presumed_surface_m` restent le tag seul.
+- **Réponse : `offroad`** (`null` sans cible, sinon `{ target, tolerance, reached, steps }`). `reached` se lit sur la première
+  proposition **que le contrôleur a gardée**, avec sa part à lui.
+- **Capacités : `generator.offroad`** (`ride_types`, `target_min`, `target_max`, `tolerance`, `max_steps`, `rideability`).
+- **Réglages** (`ORD_GENERATOR__...`) : `OFFROAD_TOLERANCE` (0,05), `OFFROAD_MAX_STEPS` (4, de 1 à 7),
+  `OFFROAD_STEPS_UNTIL_MS` (10 000) et `RIDEABILITY` (`on` | `off`), passé au moteur **et** au contrôleur du service.
+- **Métriques** : histogramme `ord_generator_offroad_steps` (`ride_type`), compteur `ord_generator_offroad_total`
+  (`ride_type`, `target_band`, `reached`).
+
 ## 1.14.0 (API 1.13)
 
 ### Ajouté

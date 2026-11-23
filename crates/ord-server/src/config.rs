@@ -389,6 +389,25 @@ pub struct GeneratorConfig {
     /// globaux du moteur, calculés hors ligne (`ord-graph-build index`). Absent, le service les calcule au démarrage ;
     /// présent mais d'un autre graphe, le générateur est éteint (note `ord-loops-planete.md` §5.3).
     pub index: Option<PathBuf>,
+    /// Écart toléré entre la part de non-revêtu visée (`offroad_target`) et celle du parcours (lot 5, §8.3) : 0,05 = cinq
+    /// points. Publié dans `generator.offroad.tolerance`.
+    pub offroad_tolerance: f64,
+    /// Générations complètes au plus par requête à consigne, la première comprise (la grille de μ en a 7).
+    pub offroad_max_steps: u8,
+    /// Aucune génération de la recherche n'est lancée après ce délai (ms) de calcul, et celle en cours est jetée ; le service
+    /// y met aussi `échéance − 1 s`. 0 : un seul pas.
+    pub offroad_steps_until_ms: u32,
+    /// Bornes dures de roulabilité du gravel et du VTT, pour le moteur et pour le contrôleur (lot 5, §6) : `on` ou `off`.
+    pub rideability: GeneratorRideability,
+}
+
+/// Les bornes de roulabilité (lot 5, §6) jouent-elles ? `off` redonne les parcours de 1.14 au bit près.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeneratorRideability {
+    On,
+    #[default]
+    Off,
 }
 
 /// Les attracteurs OSM jouent-ils quand leurs fichiers sont là ?
@@ -457,6 +476,10 @@ impl Default for GeneratorConfig {
             attractors: GeneratorAttractors::Off,
             attractors_road: None,
             attractors_gravel: None,
+            offroad_tolerance: 0.05,
+            offroad_max_steps: 4,
+            offroad_steps_until_ms: 10_000,
+            rideability: GeneratorRideability::Off,
         }
     }
 }
@@ -735,6 +758,16 @@ impl Config {
         if g.overlay_ttl_days == 0 || g.purge_interval_s == 0 {
             return invalid("generator.overlay_ttl_days", "ttl and purge interval must be positive");
         }
+        // Lot 5, §8.3 : la tolérance au millième près, dans ]0, 0,5] ; la grille de μ a 7 points. Le délai des pas est borné à
+        // l'exécution par l'échéance de la requête.
+        if !(g.offroad_tolerance >= 0.001 && g.offroad_tolerance <= 0.5)
+            || !(1..=7).contains(&g.offroad_max_steps)
+        {
+            return invalid(
+                "generator.offroad_tolerance",
+                "tolerance must lie within [0.001, 0.5] and max_steps within 1..=7",
+            );
+        }
         let d = &g.deposit;
         if d.max_concurrent == 0 || d.budget_s == 0 || d.idle_timeout_s == 0 || d.memo_entries == 0 {
             return invalid("generator.deposit", "concurrency, budgets and memo_entries must be positive");
@@ -837,6 +870,46 @@ mod tests {
             jail.set_env("ORD_GENERATOR__MAX_CONCURRENT", "0");
             let err = Config::load(None).expect_err("sans place de calcul");
             assert!(err.to_string().contains("generator"), "{err}");
+            Ok(())
+        });
+    }
+
+    /// Lot 5, §8.3 : réglages de la consigne et des bornes, par variable d'environnement, valeurs connues seulement.
+    #[test]
+    fn the_offroad_and_rideability_settings_are_validated_and_come_from_the_environment() {
+        let g = GeneratorConfig::default();
+        assert_eq!((g.offroad_tolerance, g.offroad_max_steps, g.offroad_steps_until_ms), (0.05, 4, 10_000));
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("ORD_GENERATOR__RIDEABILITY", "on");
+            jail.set_env("ORD_GENERATOR__OFFROAD_MAX_STEPS", "3");
+            jail.set_env("ORD_GENERATOR__OFFROAD_TOLERANCE", "0.1");
+            jail.set_env("ORD_GENERATOR__OFFROAD_STEPS_UNTIL_MS", "5000");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.rideability, GeneratorRideability::On);
+            assert_eq!(
+                (
+                    c.generator.offroad_max_steps,
+                    c.generator.offroad_tolerance,
+                    c.generator.offroad_steps_until_ms
+                ),
+                (3, 0.1, 5_000)
+            );
+            jail.set_env("ORD_GENERATOR__RIDEABILITY", "maybe");
+            assert!(Config::load(None).is_err(), "valeur inconnue refusée");
+            jail.set_env("ORD_GENERATOR__RIDEABILITY", "off");
+            for (k, v) in [
+                ("ORD_GENERATOR__OFFROAD_MAX_STEPS", "0"),
+                ("ORD_GENERATOR__OFFROAD_MAX_STEPS", "8"),
+                ("ORD_GENERATOR__OFFROAD_TOLERANCE", "0"),
+                ("ORD_GENERATOR__OFFROAD_TOLERANCE", "0.6"),
+            ] {
+                let (ms, tol, until) = ("3", "0.05", "10000");
+                jail.set_env("ORD_GENERATOR__OFFROAD_MAX_STEPS", ms);
+                jail.set_env("ORD_GENERATOR__OFFROAD_TOLERANCE", tol);
+                jail.set_env("ORD_GENERATOR__OFFROAD_STEPS_UNTIL_MS", until);
+                jail.set_env(k, v);
+                assert!(Config::load(None).is_err(), "{k}={v} refusé");
+            }
             Ok(())
         });
     }

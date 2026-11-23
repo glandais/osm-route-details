@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.13"
+    "version": "1.14"
   },
   "paths": {
     "/health/live": {
@@ -456,7 +456,7 @@
           "generator"
         ],
         "summary": "Generate routes",
-        "description": "Up to 3 routes from a start (and optionally an arrival), a bearing, a distance and a ride type. `cursor` runs from the team's roads (0, strict) to discovery (1); below 1 the team overlay must have been deposited and be `ready`. Every route is verified by an independent checker before the answer; a route that fails is dropped and counted in `dropped`. A request outside the covered area gets 422 `out_of_coverage`.",
+        "description": "Up to 3 routes from a start (and optionally an arrival), a bearing, a distance and a ride type. `cursor` runs from the team's roads (0, strict) to discovery (1); below 1 the team overlay must have been deposited and be `ready`. Every route is verified by an independent checker before the answer; a route that fails is dropped and counted in `dropped`. `offroad_target` (gravel and mtb) steers the share of the route ridden off pavement; the answer's `offroad` says whether it was reached. A request outside the covered area gets 422 `out_of_coverage`.",
         "operationId": "postGeneratorRoutes",
         "parameters": [
           {
@@ -2104,6 +2104,14 @@
               }
             ]
           },
+          "offroad_target": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Share of the route (by length) to ride off pavement, from 0 to 0.8 (gravel and mtb only; 400 for a road ride). The\ngenerator tries several settings and returns the routes closest to it; the answer's `offroad` says whether the\nfirst one lies within the tolerance. See `capabilities.generator.offroad`. Absent: no steering."
+          },
           "ride_type": {
             "$ref": "#/components/schemas/RideTypeV1"
           },
@@ -2160,6 +2168,17 @@
           },
           "mode": {
             "$ref": "#/components/schemas/ModeV1"
+          },
+          "offroad": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OffroadResultV1",
+                "description": "What the steering of `offroad_target` achieved; null when the request had no target."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "overlay": {
             "oneOf": [
@@ -2285,6 +2304,17 @@
               "null"
             ],
             "description": "Fingerprint of the matcher: a change makes the stored overlays `stale` (reason `matcher`)."
+          },
+          "offroad": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OffroadInfo",
+                "description": "Steering of the share ridden off pavement (`offroad_target`, api 1.14)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "overlay_ttl_days": {
             "type": [
@@ -2553,6 +2583,82 @@
           "min": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "OffroadInfo": {
+        "type": "object",
+        "description": "What `offroad_target` accepts and how the generator steers.",
+        "required": [
+          "ride_types",
+          "target_min",
+          "target_max",
+          "tolerance",
+          "max_steps",
+          "rideability"
+        ],
+        "properties": {
+          "max_steps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Full generations tried per request, at most.",
+            "minimum": 0
+          },
+          "ride_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ride types that accept a target."
+          },
+          "rideability": {
+            "type": "string",
+            "description": "`on`: edges that cannot be ridden by the ride type are excluded (except the team's own), and the checker refuses a\nroute that uses one; `off`: no such bound."
+          },
+          "target_max": {
+            "type": "number",
+            "format": "double"
+          },
+          "target_min": {
+            "type": "number",
+            "format": "double"
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double",
+            "description": "A route is `reached` when its `offroad_share` is within this of the target."
+          }
+        }
+      },
+      "OffroadResultV1": {
+        "type": "object",
+        "description": "The outcome of an `offroad_target`.",
+        "required": [
+          "target",
+          "tolerance",
+          "reached",
+          "steps"
+        ],
+        "properties": {
+          "reached": {
+            "type": "boolean",
+            "description": "The first route returned has an `offroad_share` within `tolerance` of `target` (measured by the independent\nchecker, on what it kept)."
+          },
+          "steps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Full generations tried, the first included.",
+            "minimum": 0
+          },
+          "target": {
+            "type": "number",
+            "format": "double",
+            "description": "The target asked for."
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double",
+            "description": "`capabilities.generator.offroad.tolerance`."
           }
         }
       },
@@ -3393,6 +3499,8 @@
           "unpaved_m",
           "unpaved_share",
           "presumed_surface_m",
+          "offroad_m",
+          "offroad_share",
           "family",
           "start_snap_m",
           "end_snap_m"
@@ -3441,6 +3549,15 @@
           "family": {
             "type": "string",
             "description": "`turnaround` or `triangle`; `polygon` is never returned."
+          },
+          "offroad_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length off pavement as the independent checker measures it (surface tag, then `tracktype`, then road class: the\nrule of `/v1/route-details`), and its share of `distance_m`. `unpaved_m` and `unpaved_share` above stay the\nsurface tag alone."
+          },
+          "offroad_share": {
+            "type": "number",
+            "format": "double"
           },
           "polyline": {
             "type": "string",

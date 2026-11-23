@@ -94,6 +94,25 @@ pub struct GeneratorCapabilities {
     /// OSM attractors of the far points of organic rides (api 1.13).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attractors: Option<AttractorsInfo>,
+    /// Steering of the share ridden off pavement (`offroad_target`, api 1.14).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offroad: Option<OffroadInfo>,
+}
+
+/// What `offroad_target` accepts and how the generator steers.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+pub struct OffroadInfo {
+    /// Ride types that accept a target.
+    pub ride_types: Vec<&'static str>,
+    pub target_min: f64,
+    pub target_max: f64,
+    /// A route is `reached` when its `offroad_share` is within this of the target.
+    pub tolerance: f64,
+    /// Full generations tried per request, at most.
+    pub max_steps: u8,
+    /// `on`: edges that cannot be ridden by the ride type are excluded (except the team's own), and the checker refuses a
+    /// route that uses one; `off`: no such bound.
+    pub rideability: &'static str,
 }
 
 /// Why the attractor files are not available.
@@ -437,6 +456,10 @@ impl Generator {
         let params = Params {
             window_margin_m: cfg.window_margin_m,
             index_threads: cfg.index_threads,
+            rideability: match cfg.rideability {
+                crate::config::GeneratorRideability::On => ord_loops::Rideability::On,
+                crate::config::GeneratorRideability::Off => ord_loops::Rideability::Off,
+            },
             ..Params::default()
         };
         if cfg.distance_m_max > params.max_distance_m {
@@ -652,6 +675,17 @@ impl Generator {
             matcher_hash: Some(format!("{matcher_hash:016x}")),
             ascent: false,
             attractors: Some(attractors),
+            offroad: Some(OffroadInfo {
+                ride_types: vec!["gravel", "mtb"],
+                target_min: routes::OFFROAD_TARGET_MIN,
+                target_max: routes::OFFROAD_TARGET_MAX,
+                tolerance: cfg.offroad_tolerance,
+                max_steps: cfg.offroad_max_steps,
+                rideability: match cfg.rideability {
+                    crate::config::GeneratorRideability::On => "on",
+                    crate::config::GeneratorRideability::Off => "off",
+                },
+            }),
             figures: Some(FiguresInfo {
                 default: match cfg.figures {
                     crate::config::GeneratorFigures::Classic => "classic",
@@ -720,6 +754,7 @@ impl Generator {
                 ascent: false,
                 figures: None,
                 attractors: None,
+                offroad: None,
             },
         }
     }

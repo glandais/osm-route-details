@@ -22,6 +22,10 @@ use crate::app::AppState;
 use crate::problem::{FieldError, Problem, ProblemCode};
 use crate::strict_json::read_json;
 
+/// Bornes de `offroad_target` (publiées dans `capabilities.generator.offroad`).
+pub(crate) const OFFROAD_TARGET_MIN: f64 = 0.0;
+pub(crate) const OFFROAD_TARGET_MAX: f64 = 0.8;
+
 pub const KEY_HEADER: &str = "ord-namespace-key";
 pub const TEAM_HEADER: &str = "ord-team";
 pub const DIGEST_HEADER: &str = "ord-source-digest";
@@ -91,6 +95,11 @@ pub struct GenerateRequestV1 {
     /// triangles). Defaults to `capabilities.generator.figures.default`. No effect in strict mode or for a one-way ride.
     #[serde(default)]
     pub figures: Option<FiguresV1>,
+    /// Share of the route (by length) to ride off pavement, from 0 to 0.8 (gravel and mtb only; 400 for a road ride). The
+    /// generator tries several settings and returns the routes closest to it; the answer's `offroad` says whether the
+    /// first one lies within the tolerance. See `capabilities.generator.offroad`. Absent: no steering.
+    #[serde(default)]
+    pub offroad_target: Option<f64>,
 }
 
 /// The figures a generation tried.
@@ -158,6 +167,11 @@ pub struct RouteV1 {
     pub unpaved_m: f64,
     pub unpaved_share: f64,
     pub presumed_surface_m: f64,
+    /// Length off pavement as the independent checker measures it (surface tag, then `tracktype`, then road class: the
+    /// rule of `/v1/route-details`), and its share of `distance_m`. `unpaved_m` and `unpaved_share` above stay the
+    /// surface tag alone.
+    pub offroad_m: f64,
+    pub offroad_share: f64,
     /// Gap to the requested bearing, in degrees; null without a bearing.
     pub bearing_deviation_deg: Option<f64>,
     /// `turnaround` or `triangle`; `polygon` is never returned.
@@ -186,7 +200,23 @@ pub struct GenerateResponseV1 {
     pub dropped: u32,
     /// The figures applied: the request's, else `capabilities.generator.figures.default`.
     pub figures: FiguresV1,
+    /// What the steering of `offroad_target` achieved; null when the request had no target.
+    pub offroad: Option<OffroadResultV1>,
     pub routes: Vec<RouteV1>,
+}
+
+/// The outcome of an `offroad_target`.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, ToSchema)]
+pub struct OffroadResultV1 {
+    /// The target asked for.
+    pub target: f64,
+    /// `capabilities.generator.offroad.tolerance`.
+    pub tolerance: f64,
+    /// The first route returned has an `offroad_share` within `tolerance` of `target` (measured by the independent
+    /// checker, on what it kept).
+    pub reached: bool,
+    /// Full generations tried, the first included.
+    pub steps: u32,
 }
 
 /// State of a team overlay.
@@ -514,6 +544,16 @@ fn validate(req: &GenerateRequestV1, ready: &Ready) -> Result<(GenInput, u32), P
     if h.is_none() {
         errors.push(FieldError::new("/cursor", "must be within [0, 1]"));
     }
+    if let Some(t) = req.offroad_target {
+        if !(t.is_finite() && (OFFROAD_TARGET_MIN..=OFFROAD_TARGET_MAX).contains(&t)) {
+            errors.push(FieldError::new("/offroad_target", "must be within [0, 0.8]"));
+        } else if matches!(req.ride_type, RideTypeV1::Road) {
+            errors.push(FieldError::new(
+                "/offroad_target",
+                "not available for road rides (gravel and mtb only)",
+            ));
+        }
+    }
     if !errors.is_empty() {
         return Err(Problem::invalid_input("invalid request", errors));
     }
@@ -530,6 +570,7 @@ fn validate(req: &GenerateRequestV1, ready: &Ready) -> Result<(GenInput, u32), P
         },
         applied: cursor::apply(h),
         seed: req.seed.unwrap_or(0),
+        offroad_target: req.offroad_target,
         figures: req.figures.unwrap_or(match ready.cfg.figures {
             crate::config::GeneratorFigures::Classic => FiguresV1::Classic,
             crate::config::GeneratorFigures::Organic => FiguresV1::Organic,
@@ -546,7 +587,8 @@ fn validate(req: &GenerateRequestV1, ready: &Ready) -> Result<(GenInput, u32), P
     description = "Up to 3 routes from a start (and optionally an arrival), a bearing, a distance and a ride type. \
 `cursor` runs from the team's roads (0, strict) to discovery (1); below 1 the team overlay must have been deposited \
 and be `ready`. Every route is verified by an independent checker before the answer; a route that fails is dropped \
-and counted in `dropped`. A request outside the covered area gets 422 `out_of_coverage`.",
+and counted in `dropped`. `offroad_target` (gravel and mtb) steers the share of the route ridden off pavement; \
+the answer's `offroad` says whether it was reached. A request outside the covered area gets 422 `out_of_coverage`.",
     operation_id = "postGeneratorRoutes",
     tag = "generator",
     params(

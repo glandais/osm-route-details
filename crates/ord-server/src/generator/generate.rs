@@ -10,14 +10,16 @@ use std::time::{Duration, Instant};
 
 use ord_graph_match::geo::encode_polyline6;
 use ord_loops::{
-    generate_in, route_geometry, Bearing8, Failure, Family, Generation, LatLon, Mode, NoRouteDetail, Request,
-    RideType, Route, TeamCtx, Workspace,
+    generate_steered_in, route_geometry, Bearing8, Failure, Family, LatLon, Mode, NoRouteDetail,
+    OffroadTarget, Request, RideType, Route, Steer, SteeredGeneration, TeamCtx, Workspace,
 };
 use ord_loops_check::{Checker, Config};
 
 use super::crypto::Credentials;
 use super::cursor::Applied;
-use super::routes::{CoverageV1, FiguresV1, GenerateResponseV1, ModeV1, OverlayInfoV1, RouteV1, TasteV1};
+use super::routes::{
+    CoverageV1, FiguresV1, GenerateResponseV1, ModeV1, OffroadResultV1, OverlayInfoV1, RouteV1, TasteV1,
+};
 use super::store::{Entry, ReadyError, StaleReason, State};
 use super::windows::{AcquireError, TeamRef};
 use super::Ready;
@@ -37,6 +39,8 @@ pub(crate) struct GenInput {
     pub applied: Applied,
     pub seed: u64,
     pub figures: FiguresV1,
+    /// Part de non-revêtu visée (validée dans [0 ; 0,8], jamais en route), lot 5.
+    pub offroad_target: Option<f64>,
 }
 
 /// Une place dans la file d'attente de calcul ; rendue à la chute.
@@ -63,6 +67,24 @@ struct Computed {
     overlay: Option<OverlayInfoV1>,
     /// Le goût servi : celui de l'équipe (profil appris) ou la table commune.
     taste: TasteV1,
+    /// `None` sans cible.
+    offroad: Option<OffroadResultV1>,
+}
+
+/// La cible est tenue : la part (au millième, celle que le client lit) est dans la tolérance. La même marge que le moteur.
+fn within(share: f64, target: f64, tolerance: f64) -> bool {
+    (share - target).abs() <= tolerance + 1e-9
+}
+
+/// La consigne rendue au client : `reached` se lit sur la **première proposition gardée par le contrôleur** (le moteur a pu
+/// voir sa première proposition jetée), `None` quand rien n'est gardé.
+fn offroad_result(target: f64, tolerance: f64, steps: u8, first_kept_share: Option<f64>) -> OffroadResultV1 {
+    OffroadResultV1 {
+        target,
+        tolerance,
+        reached: first_kept_share.is_some_and(|s| within(s, target, tolerance)),
+        steps: u32::from(steps),
+    }
 }
 
 fn band(distance_m: f64) -> &'static str {
@@ -166,9 +188,10 @@ impl Ready {
         &self,
         req: &Request,
         entry: Option<&Entry>,
+        offroad: Option<f64>,
         deadline: Instant,
         stop: &mut dyn FnMut() -> bool,
-    ) -> Result<Generation, Problem> {
+    ) -> Result<SteeredGeneration, Problem> {
         let mut extra_m = 0.0;
         for attempt in 0..2 {
             let plan = self.engine.plan_with(req, self.cfg.window_radius_step_m, extra_m);
@@ -182,7 +205,25 @@ impl Ready {
             };
             let mut ws = self.take_workspace();
             let ctx = entry.zip(held.wt.as_deref()).map(|(e, wt)| TeamCtx { data: &e.team, win: wt });
-            let result = generate_in(&self.engine, &held.win, ctx, req, &mut ws, stop);
+            let steer = Steer {
+                offroad: offroad.map(|t| {
+                    // Aucun pas de la recherche après `min(échéance − 1 s, offroad_steps_until_ms)` : le pas 0 garde le
+                    // budget entier du service, les suivants sont jetés plutôt que de coûter un 504.
+                    let left_ms = deadline
+                        .saturating_duration_since(Instant::now())
+                        .saturating_sub(Duration::from_secs(1))
+                        .as_millis();
+                    OffroadTarget {
+                        target_milli: (t * 1000.0).round() as u16,
+                        tolerance_milli: (self.cfg.offroad_tolerance * 1000.0).round() as u16,
+                        max_steps: self.cfg.offroad_max_steps,
+                        steps_until_ms: u32::try_from(left_ms)
+                            .unwrap_or(u32::MAX)
+                            .min(self.cfg.offroad_steps_until_ms),
+                    }
+                }),
+            };
+            let result = generate_steered_in(&self.engine, &held.win, ctx, req, &steer, &mut ws, stop).0;
             self.give_workspace(ws);
             self.windows.release(held);
             match result {
@@ -239,6 +280,14 @@ impl Ready {
         };
         metrics::histogram!("ord_generator_duration_seconds", "mode" => mode, "ride_type" => ride_name(input.ride))
             .record(duration.as_secs_f64());
+        if let Ok(GenerateResponseV1 { offroad: Some(o), .. }) = &outcome {
+            let ride = ride_name(input.ride);
+            metrics::histogram!("ord_generator_offroad_steps", "ride_type" => ride)
+                .record(f64::from(o.steps));
+            let band = format!("{:.1}", (o.target * 10.0).round() / 10.0);
+            metrics::counter!("ord_generator_offroad_total", "ride_type" => ride, "target_band" => band, "reached" => if o.reached { "true" } else { "false" })
+                .increment(1);
+        }
         let (result, reason, routes, dropped) = match &outcome {
             Ok(r) => ("ok", String::new(), r.routes.len(), r.dropped),
             Err(p) => {
@@ -310,6 +359,7 @@ impl Ready {
             taste: computed.taste,
             dropped: computed.dropped,
             figures: input.figures,
+            offroad: computed.offroad,
             routes: computed.routes,
         })
     }
@@ -391,24 +441,38 @@ impl Ready {
             },
         };
         let mut stop = || cancel.load(Ordering::Relaxed) || Instant::now() >= deadline;
-        let generation = self.generate_windowed(&req, entry.as_deref(), deadline, &mut stop)?;
+        let steered =
+            self.generate_windowed(&req, entry.as_deref(), input.offroad_target, deadline, &mut stop)?;
+        let generation = steered.generation;
 
         let checker = Checker::with_tables(
             self.engine.base(),
             entry.as_ref().map(|e| &e.overlay),
-            Config::default(),
+            Config {
+                rideability: match self.cfg.rideability {
+                    crate::config::GeneratorRideability::On => ord_loops_check::Rideability::On,
+                    crate::config::GeneratorRideability::Off => ord_loops_check::Rideability::Off,
+                },
+                ..Config::default()
+            },
             &self.graph_index,
             entry.as_ref().map(|e| &e.check),
         );
         let (mut routes, mut dropped) = (Vec::new(), 0u32);
         let snaps = (generation.diagnostics.start_snap_m, generation.diagnostics.end_snap_m);
-        for mut route in generation.routes {
-            if self.hooks.corrupt_routes.load(Ordering::Relaxed) && route.steps.len() > 1 {
+        let mut first_kept_share: Option<f64> = None;
+        let corrupt_first = self.hooks.corrupt_first_route.load(Ordering::Relaxed);
+        for (i, mut route) in generation.routes.into_iter().enumerate() {
+            if (self.hooks.corrupt_routes.load(Ordering::Relaxed) || (corrupt_first && i == 0))
+                && route.steps.len() > 1
+            {
                 route.steps.remove(0);
             }
             let report = checker.check(&req, &route);
             if report.ok() {
-                routes.push(self.render(&route, &report, snaps));
+                let rendered = self.render(&route, &report, snaps);
+                first_kept_share.get_or_insert(rendered.offroad_share);
+                routes.push(rendered);
             } else {
                 dropped += 1;
                 let codes: Vec<&str> = report.violations.iter().map(|v| v.code()).collect();
@@ -439,6 +503,11 @@ impl Ready {
             } else {
                 TasteV1::Common
             },
+            offroad: input.offroad_target.map(|t| {
+                // Sans consigne rendue par le moteur (jamais : elle suit la cible), un seul pas.
+                let steps = steered.offroad.map_or(1, |o| o.steps);
+                offroad_result(t, self.cfg.offroad_tolerance, steps, first_kept_share)
+            }),
             overlay: entry.map(|e| OverlayInfoV1 { deposited_at: super::iso8601(e.meta.deposited_at) }),
         })
     }
@@ -458,6 +527,8 @@ impl Ready {
             unpaved_m: r1(route.unpaved_m),
             unpaved_share: (route.unpaved_m / len * 1000.0).round() / 1000.0,
             presumed_surface_m: r1(route.presumed_surface_m),
+            offroad_m: r1(report.offroad_m),
+            offroad_share: (report.offroad_m / len * 1000.0).round() / 1000.0,
             bearing_deviation_deg: route.bearing_deviation_deg.map(r1),
             family: match route.family {
                 Family::Turnaround => "turnaround",
@@ -485,5 +556,23 @@ mod tests {
         }
         assert_eq!(r1(12.34), 12.3);
         assert_eq!(r1(-1.26), -1.3);
+    }
+
+    /// Lot 5, §8.2 : `reached` se lit sur la première proposition que le contrôleur a gardée, avec sa part à lui.
+    #[test]
+    fn reached_is_read_on_the_first_route_the_checker_kept() {
+        // Le moteur visait 0,47 et avait trouvé 0,46 en première ; le contrôleur la jette, la seconde (0,30) est la première
+        // rendue : la cible n'est plus tenue.
+        let kept = [0.30, 0.44];
+        assert!(!offroad_result(0.47, 0.05, 2, kept.first().copied()).reached);
+        // L'inverse : la première jetée était loin, la suivante est dans la tolérance.
+        assert!(offroad_result(0.47, 0.05, 2, Some(0.50)).reached);
+        // Les bords sont inclus ; rien de gardé : jamais atteinte (la réponse est alors une erreur).
+        assert!(offroad_result(0.47, 0.05, 1, Some(0.52)).reached);
+        assert!(offroad_result(0.47, 0.05, 1, Some(0.42)).reached);
+        assert!(!offroad_result(0.47, 0.05, 1, Some(0.419)).reached);
+        assert!(!offroad_result(0.47, 0.05, 1, None).reached);
+        let o = offroad_result(0.25, 0.05, 3, Some(0.25));
+        assert_eq!((o.target, o.tolerance, o.steps), (0.25, 0.05, 3));
     }
 }
