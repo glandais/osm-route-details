@@ -53,7 +53,7 @@ impl Drop for QueueSlot<'_> {
 }
 
 /// Lève le drapeau quand le futur du handler est lâché (client parti) : le moteur s'arrête à son prochain contrôle.
-struct CancelOnDrop(Arc<AtomicBool>);
+pub(super) struct CancelOnDrop(pub(super) Arc<AtomicBool>);
 
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
@@ -96,7 +96,7 @@ fn band(distance_m: f64) -> &'static str {
     }
 }
 
-fn ride_name(r: RideType) -> &'static str {
+pub(super) fn ride_name(r: RideType) -> &'static str {
     match r {
         RideType::Road => "road",
         RideType::Gravel => "gravel",
@@ -104,7 +104,7 @@ fn ride_name(r: RideType) -> &'static str {
     }
 }
 
-fn mode_v1(m: Mode) -> ModeV1 {
+pub(super) fn mode_v1(m: Mode) -> ModeV1 {
     match m {
         Mode::Strict => ModeV1::Strict,
         Mode::TeamFirst => ModeV1::TeamFirst,
@@ -166,7 +166,7 @@ pub(crate) fn unavailable() -> Problem {
 }
 
 /// Au dixième ; `-0.0` devient `0.0` (un parcours sans arête d'équipe rendait `"team_m":-0.0`, relevé sur la région).
-fn r1(x: f64) -> f64 {
+pub(super) fn r1(x: f64) -> f64 {
     (x * 10.0).round() / 10.0 + 0.0
 }
 
@@ -177,6 +177,31 @@ fn steps_until_ms(now: Instant, first: Instant, deadline: Instant, max_ms: u32) 
     let left = deadline.saturating_duration_since(now).saturating_sub(Duration::from_secs(1));
     let ten = Duration::from_millis(u64::from(max_ms)).saturating_sub(now.saturating_duration_since(first));
     u32::try_from(left.min(ten).as_millis()).unwrap_or(u32::MAX)
+}
+
+/// Une place d'une file de calcul (`slots` en calcul, `max_queued` en attente au plus), dans le budget. `Err(true)` : la
+/// file est pleine (503 `overloaded`) ; `Err(false)` : l'échéance passe pendant l'attente (504 `timeout`).
+pub(super) async fn queue_slot(
+    slots: &Arc<tokio::sync::Semaphore>,
+    waiting: &std::sync::atomic::AtomicUsize,
+    max_queued: usize,
+    deadline: Instant,
+) -> Result<tokio::sync::OwnedSemaphorePermit, bool> {
+    if let Ok(p) = Arc::clone(slots).try_acquire_owned() {
+        return Ok(p);
+    }
+    if waiting.fetch_add(1, Ordering::AcqRel) >= max_queued {
+        waiting.fetch_sub(1, Ordering::AcqRel);
+        return Err(true);
+    }
+    // Libérée en sortie d'attente, y compris quand le futur est lâché (client parti, délai du proxy).
+    let _queued = QueueSlot(waiting);
+    let wait = deadline.saturating_duration_since(Instant::now());
+    match tokio::time::timeout(wait, Arc::clone(slots).acquire_owned()).await {
+        Ok(Ok(p)) => Ok(p),
+        Ok(Err(_)) => Err(true),
+        Err(_) => Err(false),
+    }
 }
 
 impl Ready {
@@ -254,22 +279,31 @@ impl Ready {
 
     /// Une place de calcul, dans le budget ; 503 `overloaded` si la file est pleine, 504 si le budget s'écoule.
     pub(crate) async fn slot(&self, deadline: Instant) -> Result<tokio::sync::OwnedSemaphorePermit, Problem> {
-        if let Ok(p) = Arc::clone(&self.gen_slots).try_acquire_owned() {
-            return Ok(p);
-        }
-        if self.gen_waiting.fetch_add(1, Ordering::AcqRel) >= self.cfg.max_queued {
-            self.gen_waiting.fetch_sub(1, Ordering::AcqRel);
-            return Err(overloaded());
-        }
-        // Libérée en sortie d'attente, y compris quand le futur est lâché (client parti, délai du proxy).
-        let _queued = QueueSlot(&self.gen_waiting);
-        let wait = deadline.saturating_duration_since(Instant::now());
-        let got = tokio::time::timeout(wait, Arc::clone(&self.gen_slots).acquire_owned()).await;
-        match got {
-            Ok(Ok(p)) => Ok(p),
-            Ok(Err(_)) => Err(overloaded()),
-            Err(_) => Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded while waiting")),
-        }
+        queue_slot(&self.gen_slots, &self.gen_waiting, self.cfg.max_queued, deadline).await.map_err(|full| {
+            if full {
+                overloaded()
+            } else {
+                Problem::new(ProblemCode::Timeout, "generation budget exceeded while waiting")
+            }
+        })
+    }
+
+    /// L'entrée d'une équipe, prête à servir (données construites dans le budget de mémoire, à l'échéance de la requête).
+    pub(super) fn team_entry(
+        &self,
+        creds: &Credentials,
+        deadline: Instant,
+        cancel: &AtomicBool,
+    ) -> Result<Arc<Entry>, ReadyError> {
+        self.store.ready(creds, &self.engine, &self.graph_index, &|bytes| {
+            self.windows
+                .reserve_build(bytes, deadline, &|| cancel.load(Ordering::Relaxed))
+                .map(|g| Box::new(g) as Box<dyn Send + '_>)
+                .map_err(|e| match e {
+                    AcquireError::Stopped => ReadyError::Stopped,
+                    AcquireError::Overloaded => ReadyError::Overloaded,
+                })
+        })
     }
 
     pub(crate) async fn generate(
@@ -383,15 +417,7 @@ impl Ready {
     ) -> Result<Computed, Problem> {
         let need_team = input.applied.mode != Mode::Discovery;
         let entry: Option<Arc<Entry>> = match creds {
-            Some(c) => match self.store.ready(c, &self.engine, &self.graph_index, &|bytes| {
-                self.windows
-                    .reserve_build(bytes, deadline, &|| cancel.load(Ordering::Relaxed))
-                    .map(|g| Box::new(g) as Box<dyn Send + '_>)
-                    .map_err(|e| match e {
-                        AcquireError::Stopped => ReadyError::Stopped,
-                        AcquireError::Overloaded => ReadyError::Overloaded,
-                    })
-            }) {
+            Some(c) => match self.team_entry(c, deadline, cancel) {
                 Ok(e) => Some(e),
                 // Même en découverte : sans la mémoire de l'équipe, la réponse dirait `overlay: null` et `team_m: 0`
                 // alors qu'une surcouche existe, et dépendrait de la charge du service. Mieux vaut 503 (`Retry-After`).

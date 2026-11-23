@@ -192,7 +192,8 @@ pub struct ProblemDetails {
     pub coverage: Option<CoverageSource>,
 }
 
-/// Why a generation produced no route.
+/// Why a generation, or a route from A to B (`POST /v1/router/route`, api 1.15), produced no route. A route from A to B
+/// gives `start_too_far`, `end_too_far` or `no_route` only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GenerationReason {
@@ -207,6 +208,8 @@ pub enum GenerationReason {
     Budget,
     /// Every route the engine found was rejected by the independent checker.
     CheckerRejected,
+    /// Route from A to B only (api 1.15): no path joins the start to the end, even through the wider search area.
+    NoRoute,
 }
 
 /// State of an overlay that cannot serve a team-first or strict generation.

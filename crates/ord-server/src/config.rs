@@ -343,6 +343,13 @@ pub struct GeneratorConfig {
     /// Budget d'une génération, attente comprise (30 s depuis 1.14.0 : zones denses de la planète, voir
     /// `ord-1-14-planete-mesures.md`). Publié dans `/v1/capabilities`, `generator.limits.budget_ms`.
     pub budget_ms: u64,
+    /// Itinéraires de A à B (`POST /v1/router/route`, api 1.15) : **leur propre file**, à côté de celle des générations
+    /// (un itinéraire de quelques dizaines de ms n'attend jamais derrière une génération de 30 s). Calculs en même temps,
+    /// attentes au plus (au-delà, 503 `overloaded`), budget attente comprise (504 `timeout` au-delà). Fenêtres, espaces
+    /// de travail et budget de mémoire sont ceux des générations.
+    pub router_max_concurrent: usize,
+    pub router_max_queued: usize,
+    pub router_budget_ms: u64,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
     /// Équipes gardées en mémoire au plus (plafond en nombre) et leur plafond en octets (Mo) : leurs octets (surcouche,
@@ -457,6 +464,9 @@ impl Default for GeneratorConfig {
             max_concurrent: 2,
             max_queued: 8,
             budget_ms: 30_000,
+            router_max_concurrent: 2,
+            router_max_queued: 6,
+            router_budget_ms: 5_000,
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
             team_cache_entries: 64,
@@ -732,6 +742,12 @@ impl Config {
         if g.max_concurrent == 0 || g.budget_ms == 0 || g.team_cache_entries == 0 {
             return invalid("generator", "max_concurrent, budget_ms and team_cache_entries must be positive");
         }
+        if g.router_max_concurrent == 0 || g.router_budget_ms == 0 {
+            return invalid(
+                "generator.router_max_concurrent",
+                "router_max_concurrent and router_budget_ms must be positive",
+            );
+        }
         if !(g.distance_m_min > 0.0 && g.distance_m_min <= g.distance_m_max && g.distance_m_max.is_finite()) {
             return invalid("generator.distance_m_min", "must be positive and not above distance_m_max");
         }
@@ -929,6 +945,27 @@ mod tests {
             assert_eq!(c.generator.budget_ms, 8_000);
             jail.set_env("ORD_GENERATOR__BUDGET_MS", "0");
             assert!(Config::load(None).is_err(), "budget nul");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_router_queue_has_its_own_keys_and_defaults() {
+        figment::Jail::expect_with(|jail| {
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            let g = &c.generator;
+            assert_eq!((g.router_max_concurrent, g.router_max_queued, g.router_budget_ms), (2, 6, 5_000));
+            jail.set_env("ORD_GENERATOR__ROUTER_MAX_CONCURRENT", "3");
+            jail.set_env("ORD_GENERATOR__ROUTER_MAX_QUEUED", "0");
+            jail.set_env("ORD_GENERATOR__ROUTER_BUDGET_MS", "2000");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            let g = &c.generator;
+            assert_eq!((g.router_max_concurrent, g.router_max_queued, g.router_budget_ms), (3, 0, 2_000));
+            jail.set_env("ORD_GENERATOR__ROUTER_BUDGET_MS", "0");
+            assert!(Config::load(None).is_err(), "budget nul");
+            jail.set_env("ORD_GENERATOR__ROUTER_BUDGET_MS", "2000");
+            jail.set_env("ORD_GENERATOR__ROUTER_MAX_CONCURRENT", "0");
+            assert!(Config::load(None).is_err(), "aucune place");
             Ok(())
         });
     }

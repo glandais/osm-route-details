@@ -220,6 +220,9 @@ tous `None` par défaut), `overlay_dir`, `max_concurrent`, `max_queued`, `budget
 [`ord-loops-lot6.md`](ord-loops-lot6.md) §11), `overlay_ttl_days`, `stale_grace_h`, `storage.{max_namespaces, max_overlays_per_namespace,
 max_namespace_mb, max_total_mb, allowed_namespaces}`, `deposit.{max_concurrent, queue_wait_s, budget_s, idle_timeout_s, max_body_bytes, max_document_bytes, max_tracks,
 memo_entries, index_cache_mb}`. **Aucun secret** dans la configuration : elle reste journalisée au démarrage.
+Depuis 1.16.0 (api 1.15), l'itinéraire de A à B (`POST /v1/router/route`, [`ord-route-lot1.md`](ord-route-lot1.md) §7) a
+sa propre file : `router_max_concurrent` (2), `router_max_queued` (6), `router_budget_ms` (5 000, attente comprise) ; il
+partage les fenêtres, les espaces de travail et `memory_budget_mb` des générations.
 
 Sans chemin, ou fichier absent, illisible, vue d'un autre graphe (`EngineError::ViewMismatch`), polygone dont la boîte
 s'écarte de plus de 5 km de celle des nœuds : un `warn` au démarrage, le service **démarre** et sert l'altitude ;

@@ -290,7 +290,7 @@ fn header_error(name: &str, message: &str) -> Problem {
 }
 
 /// La clé de l'environnement, puis ce qu'on en dérive. Jamais la valeur dans l'erreur.
-fn credentials(headers: &HeaderMap, team: bool) -> Result<Credentials, Problem> {
+pub(super) fn credentials(headers: &HeaderMap, team: bool) -> Result<Credentials, Problem> {
     let key = headers
         .get(KEY_HEADER)
         .ok_or_else(|| header_error("Ord-Namespace-Key", "required"))?
@@ -522,7 +522,7 @@ pub(crate) async fn delete_overlays(
     .map_err(|_| Problem::internal())?
 }
 
-fn point(p: GeoPointV1, pointer: &str, errors: &mut Vec<FieldError>) -> LatLon {
+pub(super) fn point(p: GeoPointV1, pointer: &str, errors: &mut Vec<FieldError>) -> LatLon {
     if !(p.lat.is_finite() && (-90.0..=90.0).contains(&p.lat)) {
         errors.push(FieldError::new(format!("{pointer}/lat"), "must be within [-90, 90]"));
     }

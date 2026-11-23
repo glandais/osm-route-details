@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.14"
+    "version": "1.15"
   },
   "paths": {
     "/health/live": {
@@ -699,6 +699,134 @@
           }
         }
       }
+    },
+    "/v1/router/route": {
+      "post": {
+        "tags": [
+          "router"
+        ],
+        "summary": "Bicycle route from A to B",
+        "description": "One route from a start to an end for a ride type, on the generator's graph and with its weights (road class, surface, access, taste). Without the team headers the route is a discovery with the common taste. With them, `cursor` maps to the engine as for a generation, strict mode excepted; an absent or stale overlay does not block: the route is a discovery and the answer says so (`mode`, `overlay: null`). The search widens once if the first area holds no path. Routes have their own queue and budget, apart from the generations. Nothing from the request is logged.",
+        "operationId": "postRouterRoute",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret; with `Ord-Team`, weights the route with the team overlay. Never logged.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference, [A-Za-z0-9_-]{1,64}; with `Ord-Namespace-Key`. Never logged.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouterRequestV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouterResponseV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`; an end farther than `capabilities.router.crow_m_max` from the start: pointer `/end`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above 64 KiB",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Out of coverage (`out_of_coverage`, `details.coverage = graph`) or no route (`generation_failed`, `details.reason` = `start_too_far`, `end_too_far` or `no_route`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Router unavailable (`data_unavailable`, `details.source = graph`) or queue full (`overloaded`); with `Retry-After`",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Route budget exceeded (`timeout`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -946,7 +1074,8 @@
           "elevation_rules",
           "typology_rules",
           "profiles",
-          "generator"
+          "generator",
+          "router"
         ],
         "properties": {
           "api_version": {
@@ -992,6 +1121,10 @@
               "$ref": "#/components/schemas/ProfileV1"
             },
             "description": "Processing profiles (`options.profile`, api 1.5)."
+          },
+          "router": {
+            "$ref": "#/components/schemas/RouterCapabilities",
+            "description": "Routes from A to B (`POST /v1/router/route`, api 1.15), on the generator's graph: `enabled` follows\n`generator.enabled`."
           },
           "rules_version": {
             "type": "string"
@@ -2205,7 +2338,7 @@
       },
       "GenerationReason": {
         "type": "string",
-        "description": "Why a generation produced no route.",
+        "description": "Why a generation, or a route from A to B (`POST /v1/router/route`, api 1.15), produced no route. A route from A to B\ngives `start_too_far`, `end_too_far` or `no_route` only.",
         "enum": [
           "start_too_far",
           "end_too_far",
@@ -2216,7 +2349,8 @@
           "tail_too_long",
           "no_candidate",
           "budget",
-          "checker_rejected"
+          "checker_rejected",
+          "no_route"
         ]
       },
       "GeneratorCapabilities": {
@@ -3597,6 +3731,157 @@
           }
         }
       },
+      "RouterCapabilities": {
+        "type": "object",
+        "description": "What the service publishes about routes from A to B (`/v1/capabilities`, api 1.15).",
+        "required": [
+          "enabled",
+          "ride_types",
+          "crow_m_max",
+          "snap_m"
+        ],
+        "properties": {
+          "crow_m_max": {
+            "type": "number",
+            "format": "double",
+            "description": "Longest distance from the start to the end as the crow flies, in metres: beyond, 400 `invalid_input` (pointer\n`/end`)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "`POST /v1/router/route` answers; otherwise 503 `data_unavailable`, like the `/v1/generator/*` routes. Follows\n`generator.enabled`; the area covered is `generator.coverage`."
+          },
+          "ride_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accepted ride types (`ride_type`)."
+          },
+          "snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Longest distance from a point to the way it is snapped to, in metres: beyond, 422 `generation_failed` (reason\n`start_too_far` or `end_too_far`)."
+          }
+        }
+      },
+      "RouterRequestV1": {
+        "type": "object",
+        "description": "Bicycle route request from a start to an end.",
+        "required": [
+          "start",
+          "end",
+          "ride_type"
+        ],
+        "properties": {
+          "cursor": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "With the team headers only (`Ord-Namespace-Key` and `Ord-Team`), as for a generation (see\n`capabilities.generator.cursor`), except that strict mode is not offered: 0 routes team first with the highest\noff-team cost. Absent: 1 (discovery; the team's share is still measured). Ignored without the team headers, but\nstill validated within [0, 1]."
+          },
+          "end": {
+            "$ref": "#/components/schemas/GeoPointV1"
+          },
+          "ride_type": {
+            "$ref": "#/components/schemas/RideTypeV1"
+          },
+          "start": {
+            "$ref": "#/components/schemas/GeoPointV1"
+          }
+        }
+      },
+      "RouterResponseV1": {
+        "type": "object",
+        "description": "A route from the start to the end. Distances are measured on the graph, in metres.",
+        "required": [
+          "graph_id",
+          "mode",
+          "polyline",
+          "distance_m",
+          "team_m",
+          "bridged_m",
+          "team_share",
+          "offroad_m",
+          "unpaved",
+          "start_snap_m",
+          "end_snap_m",
+          "sharp_relaxed"
+        ],
+        "properties": {
+          "bridged_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "distance_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "end_snap_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "graph_id": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ModeV1",
+            "description": "Mode applied: `discovery` without the team headers, or when the team overlay is absent or stale (then `overlay`\nis null); never `strict`."
+          },
+          "offroad_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length off pavement (surface tag, then `tracktype`, then road class: the rule of `/v1/route-details`)."
+          },
+          "overlay": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverlayInfoV1",
+                "description": "The team overlay the route was weighted and measured with; null without one."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "polyline": {
+            "type": "string",
+            "description": "Google polyline, precision 6 (the one `/v1/route-details` takes), from the point snapped near the start to the\npoint snapped near the end."
+          },
+          "sharp_relaxed": {
+            "type": "boolean",
+            "description": "No path keeps to the generator's turn rule: the route takes at least one sharp turn (150 degrees or more at a\njunction), or a U-turn at a dead end."
+          },
+          "start_snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Distance from the asked start and end to the graph, in metres."
+          },
+          "team_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length on edges the team has ridden, and on short holes bridged between them (0 without a team)."
+          },
+          "team_share": {
+            "type": "number",
+            "format": "double",
+            "description": "(team_m + bridged_m) / distance_m."
+          },
+          "unpaved": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            },
+            "description": "Ranges of polyline point indices ridden off pavement (same rule as `offroad_m`): `[i, j]` covers points `i` to `j`\nincluded; adjacent unpaved edges make one range."
+          }
+        }
+      },
       "SamplingDefaults": {
         "type": "object",
         "required": [
@@ -4366,6 +4651,10 @@
     {
       "name": "generator",
       "description": "Route generator: team overlay (deposit, status, delete) and route generation"
+    },
+    {
+      "name": "router",
+      "description": "Bicycle route from A to B on the generator's graph"
     },
     {
       "name": "service",

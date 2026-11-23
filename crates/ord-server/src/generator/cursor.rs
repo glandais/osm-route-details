@@ -56,9 +56,42 @@ pub fn apply(h: u32) -> Applied {
     }
 }
 
+/// Ce que reçoit le moteur pour un **itinéraire** (api 1.15) : la génération, sauf que le mode strict n'est pas offert.
+/// Un curseur qui donnerait le strict (0) route en équipe d'abord au λ le plus haut (3), à la familiarité neutre : un
+/// itinéraire qui doit relier deux points posés sur la carte ne peut pas refuser toute arête hors de l'équipe.
+pub fn apply_route(h: u32) -> Applied {
+    match apply(h) {
+        Applied { mode: Mode::Strict, .. } => Applied {
+            mode: Mode::TeamFirst,
+            lambda: Some(LAMBDA_MAX),
+            familiarity: FAMILIARITY,
+            off_team_cost_q8: 768,
+        },
+        a => a,
+    }
+}
+
+/// Ce que reçoit le moteur pour un itinéraire sans équipe, ou dont l'équipe n'a pas de surcouche servable : la découverte.
+pub fn discovery() -> Applied {
+    apply(100)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_route_is_never_strict_and_otherwise_follows_the_generation() {
+        let a = apply_route(0);
+        assert_eq!(a.mode, Mode::TeamFirst);
+        assert_eq!((a.lambda, a.familiarity, a.off_team_cost_q8), (Some(3.0), FAMILIARITY, 768));
+        // Le pas suivant ne coûte pas plus que ce plancher : λ ne croît jamais avec le curseur.
+        assert!(apply_route(1).off_team_cost_q8 <= a.off_team_cost_q8);
+        for h in 1..=100 {
+            assert_eq!(apply_route(h), apply(h), "{h}");
+        }
+        assert_eq!(discovery().mode, Mode::Discovery);
+    }
 
     #[test]
     fn ends_are_strict_and_discovery_and_lambda_decreases_by_the_hundredth() {

@@ -28,6 +28,7 @@ pub mod cursor;
 mod deposit;
 mod generate;
 mod profile;
+pub mod router;
 pub mod routes;
 pub mod store;
 #[cfg(test)]
@@ -248,6 +249,9 @@ pub struct Ready {
     pub(crate) windows: Arc<windows::WindowManager>,
     gen_slots: Arc<Semaphore>,
     gen_waiting: AtomicUsize,
+    /// La file des itinéraires de A à B (api 1.15), à part de celle des générations.
+    router_slots: Arc<Semaphore>,
+    router_waiting: AtomicUsize,
     deposit_slots: Arc<Semaphore>,
     /// Phases de profil de goût en cours (3b), tous environnements : une seule par défaut.
     profile_slots: Arc<Semaphore>,
@@ -730,6 +734,8 @@ impl Generator {
                 windows,
                 gen_slots: Arc::new(Semaphore::new(cfg.max_concurrent)),
                 gen_waiting: AtomicUsize::new(0),
+                router_slots: Arc::new(Semaphore::new(cfg.router_max_concurrent)),
+                router_waiting: AtomicUsize::new(0),
                 deposit_slots: Arc::new(Semaphore::new(cfg.deposit.max_concurrent)),
                 profile_slots: Arc::new(Semaphore::new(cfg.profile.max_concurrent)),
                 profile,
@@ -747,6 +753,11 @@ impl Generator {
             GeneratorState::Ready(r) => Some(r),
             GeneratorState::Disabled(_) => None,
         }
+    }
+
+    /// Ce que `/v1/capabilities` publie des itinéraires de A à B (`router`) : servis quand le générateur l'est.
+    pub fn router_capabilities(&self) -> router::RouterCapabilities {
+        router::RouterCapabilities::new(self.ready().is_some())
     }
 
     pub fn capabilities(&self) -> GeneratorCapabilities {

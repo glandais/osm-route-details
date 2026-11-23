@@ -3,6 +3,37 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.16.0 (API 1.15)
+
+Itinéraire vélo de A à B, lots 1 et 2 du plan Pédalons `2026-11-23-itineraire-velo-osm.md` (moteur et service :
+`docs/design/technique/ord-route-lot1.md`). Un ajout pur au contrat : **les générations sont inchangées au bit près**
+(elles n'appellent rien du calcul d'itinéraire ; leurs réglages, leur file et leurs réponses ne bougent pas).
+
+### Ajouté
+
+- **`POST /v1/router/route`** : `{ start, end, ride_type, cursor? }` → un itinéraire sur le graphe du générateur, avec ses
+  poids (classe, revêtement, accès, goût, roulabilité) et sa règle de virage : `graph_id`, `mode`, `polyline`
+  (précision 6), `distance_m`, `team_m`, `bridged_m`, `team_share`, `offroad_m`, `unpaved` (plages `[i, j]` d'indices de
+  la polyligne, hors revêtement au sens de `/v1/route-details`), `start_snap_m`, `end_snap_m`, `sharp_relaxed` (un virage
+  serré ou un demi-tour d'impasse était inévitable), `overlay`.
+- **En-têtes d'équipe facultatifs** : sans eux, la découverte au goût commun ; avec eux, le curseur donne mode,
+  familiarité et λ comme pour une génération, **sans le mode strict** (0 route en équipe d'abord à λ = 3) ; sans
+  `cursor`, la découverte, part d'équipe mesurée. Une surcouche absente ou périmée **ne bloque pas** : découverte,
+  `overlay: null`. `cursor` sans en-têtes : ignoré (mais validé). Un seul des deux en-têtes, ou un en-tête mal formé : 400.
+- **Deux zones** de recherche (ellipses de somme `max(1,5 d ; d + 4 km)` puis `max(2,5 d ; d + 15 km)`), dans les fenêtres
+  du cache des générations ; un échappement de fenêtre est rejoué une fois dans une fenêtre élargie.
+- **Erreurs** : `out_of_coverage` (422) ; `generation_failed` (422) avec les raisons `start_too_far`, `end_too_far` (plus
+  de 500 m d'une voie roulable) et la nouvelle **`no_route`** (le code garde son nom : c'est la taxonomie de la génération) ;
+  vol d'oiseau au-delà de 100 km : 400 `invalid_input` au pointeur `/end`, la limite dans le message ; `overloaded`,
+  `timeout`, et le 503 `data_unavailable` des routes du générateur quand il est éteint.
+- **Capacités : `router`** (`enabled`, qui suit `generator.enabled`, `ride_types`, `crow_m_max`, `snap_m`).
+- **Une file à part** de celle des générations : un itinéraire n'attend jamais derrière une génération de 30 s.
+  Réglages (`ORD_GENERATOR__...`) : `ROUTER_MAX_CONCURRENT` (2), `ROUTER_MAX_QUEUED` (6), `ROUTER_BUDGET_MS` (5 000, attente
+  comprise).
+- **Métriques** : `ord_router_requests_total` (`outcome`, `reason`), `ord_router_duration_seconds` (`mode`, `ride_type`),
+  `ord_router_routes_total` (`zone`, `sharp_relaxed`), `ord_router_window_escapes_total`. Une ligne `route from A to B` par
+  requête (type, mode, bande de vol d'oiseau, issue, zone, durée, `ns8`) : ni coordonnée, ni clé, ni équipe.
+
 ## 1.15.1 (API 1.14)
 
 ### Sécurité

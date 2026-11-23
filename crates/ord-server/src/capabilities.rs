@@ -21,6 +21,7 @@ use crate::dto::{
     AccessV1, EdgeOnewayV1, SamplingModeV1, SectionV1, TrackTypeV1, UnmatchedReasonV1, EDGE_NODE_ID_PREFIX,
     EDGE_POLYLINE_PRECISION,
 };
+use crate::generator::router::RouterCapabilities;
 use crate::generator::GeneratorCapabilities;
 use crate::problem::ProblemCode;
 use crate::API_VERSION;
@@ -53,6 +54,9 @@ pub struct Capabilities {
     /// Route generator (api 1.9): what the graph covers, the cursor mapping and the limits. `enabled = false`
     /// (with a `reason`) when no graph is loaded: the `/v1/generator/*` routes then answer 503.
     pub generator: GeneratorCapabilities,
+    /// Routes from A to B (`POST /v1/router/route`, api 1.15), on the generator's graph: `enabled` follows
+    /// `generator.enabled`.
+    pub router: RouterCapabilities,
 }
 
 // Profils de traitement (doc 02 §3.2, api 1.5) : un ajout au contrat.
@@ -397,7 +401,12 @@ pub struct EdgesFeatureV1 {
 }
 
 impl Capabilities {
-    pub fn build(config: &Config, catalog: &StaticCatalog, generator: GeneratorCapabilities) -> Self {
+    pub fn build(
+        config: &Config,
+        catalog: &StaticCatalog,
+        generator: GeneratorCapabilities,
+        router: RouterCapabilities,
+    ) -> Self {
         let l = &config.limits;
         let o = &l.options;
         Self {
@@ -463,6 +472,7 @@ impl Capabilities {
                 Rules::default().elevation.heuristics && config.elevation.ign.enabled,
             ),
             generator,
+            router,
         }
     }
 }

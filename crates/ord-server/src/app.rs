@@ -91,7 +91,8 @@ impl AppState {
         // Sans graphe, ou si un fichier est inutilisable, le générateur est éteint et le reste du service sert.
         let generator = Arc::new(Generator::load(&config.generator, Arc::new(TestHooks::default())));
         generator.spawn_purge();
-        let capabilities = Capabilities::build(config, &catalog, generator.capabilities());
+        let capabilities =
+            Capabilities::build(config, &catalog, generator.capabilities(), generator.router_capabilities());
         let attribution = AttributionDoc::build(catalog.as_ref());
         let orchestrator = crate::wiring::orchestrator(config, &startup, Arc::clone(&catalog), wiring)?;
         Ok(Self {
@@ -135,6 +136,7 @@ pub fn public_routes() -> Vec<(&'static str, Method, MethodRouter<AppState>)> {
         ("/v1/generator/overlay", Method::DELETE, delete(generator::routes::delete_overlay)),
         ("/v1/generator/overlays", Method::DELETE, delete(generator::routes::delete_overlays)),
         ("/v1/generator/routes", Method::POST, post(generator::routes::post_routes)),
+        ("/v1/router/route", Method::POST, post(generator::router::post_route)),
         ("/v1/attribution", Method::GET, get(attribution)),
         ("/health/live", Method::GET, get(health_live)),
         ("/health/ready", Method::GET, get(health_ready)),

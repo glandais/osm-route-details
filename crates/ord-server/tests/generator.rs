@@ -599,7 +599,7 @@ async fn coverage_is_explicit_in_errors_and_in_capabilities() {
     // Capacités : ce qui est couvert, avec ses limites.
     let c = w.send(get("/v1/capabilities")).await.json();
     let g = &c["generator"];
-    assert_eq!(c["api_version"], "1.14");
+    assert_eq!(c["api_version"], "1.15");
     assert_eq!(g["enabled"], true);
     assert!(g["graph"]["data_date"].as_str().unwrap().ends_with("Z"));
     assert!(g["graph"]["id"].as_str().unwrap().len() == 16);
@@ -850,7 +850,7 @@ async fn a_stored_overlay_of_the_graph_is_not_the_one_of_the_contract_version_al
     let names: Vec<&str> =
         put["parameters"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ord-Namespace-Key", "Ord-Team", "Ord-Source-Digest"]);
-    assert_eq!(doc["info"]["version"], "1.14");
+    assert_eq!(doc["info"]["version"], "1.15");
 }
 
 // --- Revue : file, budget, équité, quotas -----------------------------------------------------------------------------
