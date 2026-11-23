@@ -51,6 +51,8 @@ mod tests_organic;
 #[cfg(test)]
 mod tests_reference;
 #[cfg(test)]
+mod tests_rideability;
+#[cfg(test)]
 mod tests_team_sparse;
 #[cfg(test)]
 mod tests_turns;
@@ -64,7 +66,7 @@ pub use cost::{
     common_step_real_dm, is_greenway, multiplier_table, taste_class, taste_surface, taste_way, taste_weight,
     RideType, Taste, COMMON_USE_NORMALIZED, TASTE_CLASSES,
 };
-pub use engine::{Engine, EngineError, Params};
+pub use engine::{Engine, EngineError, Params, Rideability};
 pub use generate::{
     generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, generate_with_figures_in,
     route_geometry,

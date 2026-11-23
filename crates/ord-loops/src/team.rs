@@ -17,7 +17,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::cost::{self, is_greenway, RideType, Taste, TASTE_CLASSES};
 use crate::engine::{
-    chain_strong_len, rides_of_view, strong_components, strong_lengths, Engine, EngineError,
+    chain_strong_len, ride_level, ride_shift, rides_of_view, strong_components, strong_lengths, Engine,
+    EngineError, Rideability, RIDE_SOFT,
 };
 use crate::geo::M_PER_DEG;
 use crate::window::{tile_key_of, tiles_of_rect, Window};
@@ -53,9 +54,18 @@ pub(crate) struct TypeTeam {
     pub bridged_m: f64,
     /// Arêtes roulées par l'équipe (type demandé ou tous types) mais hors de la vue du type : (m du type, m tous types).
     pub outside_m: (f64, f64),
+    /// Exemption des bornes de roulabilité (lot 5, §6.2) : arêtes **non roulables mais exemptables** (`RIDE_SOFT`) que
+    /// l'équipe a roulées avec un parcours du type (GRAVEL ou MIXED ; VTT : aussi MTB), triées. Vide sans
+    /// `Rideability::On`. Prédicat à part de `TEAM` : ni les drapeaux ni `canonical_bytes` ne le portent.
+    pub nonrideable_typed: Vec<u32>,
 }
 
 impl TypeTeam {
+    /// Vrai si l'équipe a roulé cette arête non roulable avec un parcours du type (§6.2).
+    pub fn exempts(&self, e: u32) -> bool {
+        self.nonrideable_typed.binary_search(&e).is_ok()
+    }
+
     pub fn flags(&self, e: u32) -> (u8, u8) {
         match self.edges.binary_search_by_key(&e, |x| x.0) {
             Ok(i) => (self.edges[i].1, self.edges[i].2),
@@ -357,6 +367,9 @@ pub(crate) fn rough_surface(a: ord_graph::attrs::Attrs) -> bool {
 #[derive(Debug, Default)]
 pub struct WindowTeam {
     per: [Vec<ChainTeam>; 3],
+    /// Exemption des bornes (lot 5, §6.3), par type : chaînes locales (triées) marquées « non roulable exemptable » dont
+    /// **toutes** les arêtes non roulables sont exemptées par l'équipe. Vide sans bornes.
+    freed: [Vec<u32>; 3],
     /// Sonde du goût (lot 4, §12) : poids sans équipe de chaque chaîne **au goût**, par type ; vide = pas de goût.
     w_taste: [Vec<u32>; 3],
     taste: Option<Box<Taste>>,
@@ -384,8 +397,25 @@ impl WindowTeam {
         let v = &win.v;
         let mut per: [Vec<ChainTeam>; 3] = Default::default();
         let mut w_taste: [Vec<u32>; 3] = Default::default();
+        let mut freed: [Vec<u32>; 3] = Default::default();
         for &ride in rides_of_view(win.vi) {
             let tt = team.of(ride);
+            if !v.unrideable.is_empty() {
+                // Sur les seules chaînes marquées : rien par requête.
+                for (c, &bits) in v.unrideable.iter().enumerate() {
+                    let lv = bits >> ride_shift(ride) & 3;
+                    if lv != RIDE_SOFT {
+                        continue;
+                    }
+                    let all_exempt = v.links(c as u32).iter().all(|&l| {
+                        let ed = l & !DIR_BIT;
+                        ride_level(ride, e.attrs(ed)) != RIDE_SOFT || tt.exempts(ed)
+                    });
+                    if all_exempt {
+                        freed[ride.index()].push(c as u32);
+                    }
+                }
+            }
             let q8 = taste.map(|t| &t.q8[ride.index()]);
             let mut chains = vec![ChainTeam::default(); v.n_chains];
             let mut wt: Vec<u32> = if q8.is_some() { Vec::with_capacity(v.n_chains) } else { Vec::new() };
@@ -432,7 +462,7 @@ impl WindowTeam {
             per[ride.index()] = chains;
             w_taste[ride.index()] = wt;
         }
-        Self { per, w_taste, taste: taste.map(|t| Box::new(t.clone())) }
+        Self { per, freed, w_taste, taste: taste.map(|t| Box::new(t.clone())) }
     }
 
     /// Octets que tiendront les agrégats de `win` (une `ChainTeam` par chaîne et par type de sortie de la vue) : de
@@ -449,10 +479,16 @@ impl WindowTeam {
         &self.per[ride.index()]
     }
 
+    /// Chaînes locales (triées) que l'exemption d'équipe libère des bornes de roulabilité, pour un type.
+    pub(crate) fn freed_of(&self, ride: RideType) -> &[u32] {
+        &self.freed[ride.index()]
+    }
+
     /// Octets tenus (capacités réelles).
     pub fn bytes(&self) -> usize {
         self.per.iter().map(|c| c.capacity() * std::mem::size_of::<ChainTeam>()).sum::<usize>()
             + self.w_taste.iter().map(|w| w.capacity() * std::mem::size_of::<u32>()).sum::<usize>()
+            + self.freed.iter().map(|w| w.capacity() * std::mem::size_of::<u32>()).sum::<usize>()
     }
 
     /// `(poids au goût des chaînes, table du type)` si un goût a été donné et que la vue sert ce type.
@@ -652,6 +688,7 @@ fn build_type<B: AsRef<[u8]>>(
     let mut info: FxHashMap<u32, EdgeInfo> = FxHashMap::default();
     let mut max_n = 1u32;
     let mut outside_dm = (0u64, 0u64);
+    let mut nonrideable_typed: Vec<u32> = Vec::new();
     for (edge, c) in ov.iter() {
         let any = c.iter().any(|&x| x > 0);
         if !any {
@@ -697,6 +734,10 @@ fn build_type<B: AsRef<[u8]>>(
         let team = if exception { typed > 0 } else { true };
         if !team {
             continue;
+        }
+        // Exemption des bornes (lot 5, §6.2) : un parcours du type, pas la règle « d'équipe » de n'importe quel type.
+        if typed > 0 && e.params.rideability == Rideability::On && ride_level(ride, a) == RIDE_SOFT {
+            nonrideable_typed.push(edge);
         }
         let n = if typed > 0 {
             typed
@@ -825,7 +866,10 @@ fn build_type<B: AsRef<[u8]>>(
     }
 
     let strict_len = strict_components_of(e, vi, &edges, strict_cand);
+    nonrideable_typed.sort_unstable();
+    nonrideable_typed.dedup();
     Ok(TypeTeam {
+        nonrideable_typed,
         edges,
         strict_len,
         team_edges,

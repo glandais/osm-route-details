@@ -304,6 +304,7 @@ fn build_type<B: AsRef<[u8]>>(
         }
     }
     TypeTeam {
+        nonrideable_typed: Vec::new(),
         edges,
         strict_len,
         team_edges,

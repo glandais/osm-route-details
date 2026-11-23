@@ -203,6 +203,13 @@ pub(crate) struct Weighter<'a> {
     /// λ en 256es.
     lambda_q8: u64,
     mt: [u32; 256],
+    /// Bornes de roulabilité (lot 5, §6.3) : octet par chaîne (`ViewData::unrideable`), **vide** sans bornes, en strict
+    /// et hors vue gravel ; décalage du type dans l'octet ; chaînes que l'équipe libère ; arêtes non roulables exemptées.
+    unr: &'a [u8],
+    unr_shift: u32,
+    freed: &'a [u32],
+    exempt: Option<&'a TypeTeam>,
+    ride_ok: bool,
     /// Retouche, lot 0 (sonde) : bitset des chaînes interdites à toute la requête.
     #[cfg(feature = "probe")]
     keep_out: Option<&'a [u64]>,
@@ -239,6 +246,13 @@ impl<'a> Weighter<'a> {
             tt: tt.map(|t| t.0),
             lambda_q8: u64::from(off_team_cost_q8),
             mt: cost::multiplier_table(fam),
+            // Aucun effet en strict (§6.3) : il ne prend que des arêtes d'équipe et reste celui de 1.14.
+            unr: if mode == Mode::Strict { &[] } else { &v.unrideable },
+            unr_shift: crate::engine::ride_shift(ride),
+            freed: team.map_or(&[][..], |t| t.win.freed_of(ride)),
+            // L'exemption suit la surcouche, quel que soit le mode (découverte comprise) ; sans surcouche, aucune.
+            exempt: team.map(|t| t.data.of(ride)),
+            ride_ok: mode != Mode::Strict && !v.unrideable.is_empty(),
             #[cfg(feature = "probe")]
             keep_out: None,
             #[cfg(feature = "probe")]
@@ -298,6 +312,12 @@ impl<'a> Weighter<'a> {
 
     #[inline]
     fn chain_plain(&self, c: u32) -> u32 {
+        if !self.unr.is_empty() {
+            let lv = self.unr[c as usize] >> self.unr_shift & 3;
+            if lv & 2 != 0 || (lv == 1 && self.freed.binary_search(&c).is_err()) {
+                return INF;
+            }
+        }
         #[cfg(feature = "probe")]
         if let Some(k) = self.keep_out {
             if k[(c >> 6) as usize] >> (c & 63) & 1 != 0 {
@@ -337,6 +357,13 @@ impl<'a> Weighter<'a> {
 
     fn edge_plain<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
         let (attrs, len) = eng.attrs_len(e);
+        if self.ride_ok {
+            match crate::engine::ride_level(self.ride, attrs) {
+                crate::engine::RIDE_OK => {}
+                crate::engine::RIDE_SOFT if self.exempt.is_some_and(|t| t.exempts(e)) => {}
+                _ => return INF,
+            }
+        }
         let w = match self.taste {
             None => eng.base_weight(self.ride, attrs, len),
             Some(q) => cost::taste_weight(self.ride, attrs, len, q),

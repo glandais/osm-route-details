@@ -54,6 +54,69 @@ pub struct Params {
     /// la table commune figée ([`Taste::common`]). [`Taste::neutral`] redonne exactement les poids de 1.9.2
     /// (`cost::edge_weight`). Un goût passé au crochet d'une `WindowTeam` **remplace** ce poids, il ne s'y multiplie pas.
     pub base_taste: Taste,
+    /// Bornes de roulabilité (lot 5, §6) : `Off` (défaut pour l'instant) redonne 1.14 au bit près.
+    pub rideability: Rideability,
+}
+
+/// Bornes dures de roulabilité du gravel et du VTT (lot 5, §6.3), posées au montage de la fenêtre.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Rideability {
+    /// Les arêtes non roulables (§6.1) sont écartées, sauf exemption d'équipe (§6.2), sauf en strict.
+    On,
+    /// Aucune borne : le moteur de 1.14.
+    #[default]
+    Off,
+}
+
+/// Niveau d'une arête pour un type (§6.1) : roulable.
+pub(crate) const RIDE_OK: u8 = 0;
+/// Interdite sauf si l'équipe l'a roulée avec un parcours du type (§6.2).
+pub(crate) const RIDE_SOFT: u8 = 1;
+/// Interdite toujours (`smoothness=impassable`), même d'équipe.
+pub(crate) const RIDE_HARD: u8 = 2;
+
+/// Code `surface` de `mud` dans le graphe (position dans `SURFACES`, plus 1).
+const SURFACE_MUD: u8 = 17;
+
+/// Roulabilité d'une arête pour un type, selon le §6.1 de la note du lot 5, sur les **codes du graphe** :
+/// `smoothness` = position dans `SMOOTHNESS` + 1 (`horrible` 6, `very_horrible` 7, `impassable` 8, inconnu 15, permis),
+/// `mtb_scale` = échelle + 1 (« ≥ 2 » est le code ≥ 3, « ≥ 4 » le code ≥ 5), `tracktype` `grade5` = 5 (7 inconnu, permis).
+/// Route : jamais de borne (la vue route a ses règles).
+pub(crate) fn ride_level(ride: RideType, a: Attrs) -> u8 {
+    if ride == RideType::Road {
+        return RIDE_OK;
+    }
+    let sm = a.smoothness();
+    if sm == 8 {
+        return RIDE_HARD;
+    }
+    let soft = match ride {
+        RideType::Gravel => {
+            sm == 6 || sm == 7 || a.mtb_scale() >= 3 || a.tracktype() == 5 || a.surface() == SURFACE_MUD
+        }
+        _ => a.mtb_scale() >= 5,
+    };
+    if soft {
+        RIDE_SOFT
+    } else {
+        RIDE_OK
+    }
+}
+
+/// Les niveaux d'une arête pour le gravel (bits 0 et 1) et le VTT (bits 2 et 3) : l'octet que la fenêtre garde par
+/// chaîne (union des arêtes de base de la chaîne).
+pub(crate) fn ride_bits(a: Attrs) -> u8 {
+    ride_level(RideType::Gravel, a) | ride_level(RideType::Mtb, a) << 2
+}
+
+/// Niveau, dans l'octet d'une chaîne, pour un type : 0 hors vue route.
+#[inline]
+pub(crate) fn ride_shift(ride: RideType) -> u32 {
+    if ride == RideType::Mtb {
+        2
+    } else {
+        0
+    }
 }
 
 impl Default for Params {
@@ -75,6 +138,7 @@ impl Default for Params {
             window_margin_m: 1_000.0,
             index_threads: 2,
             base_taste: Taste::common(),
+            rideability: Rideability::Off,
         }
     }
 }
@@ -139,6 +203,10 @@ pub(crate) struct ViewData {
     /// Masque d'attracteurs de chaque nœud local (lot 4, 4d) : **vide** si la vue n'a pas de fichier, sinon `n_nodes` octets.
     /// Un nœud a le même masque dans toute fenêtre qui le contient.
     pub attr: Vec<u8>,
+    /// Roulabilité (lot 5, §6.3) : par chaîne, l'union des niveaux de ses arêtes de base (`ride_bits` : gravel bits 0-1,
+    /// VTT bits 2-3 ; dans chaque paire, le bit 0 vaut « un lien `RIDE_SOFT` », le bit 1 « un lien `RIDE_HARD` »).
+    /// **Vide** hors de la vue gravel ou avec `Rideability::Off`.
+    pub unrideable: Vec<u8>,
     /// Sonde μ (lot 5, §4.4) : part de la longueur de chaque chaîne sur des arêtes `offroad`, en 256es (saturée à 255) ;
     /// vide hors de la vue gravel.
     #[cfg(feature = "probe")]
@@ -218,6 +286,7 @@ impl ViewData {
             + self.deg.capacity()
             + self.complete.capacity()
             + self.attr.capacity()
+            + self.unrideable.capacity()
     }
 }
 

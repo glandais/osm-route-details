@@ -10,7 +10,7 @@ use ord_graph::format::DIR_BIT;
 use ord_graph::grid::{tile_key, tile_of_e7, tile_of_key, tile_rect_e7};
 use ord_graph::view::{heading_to_u16, polyline_heading};
 
-use crate::engine::{rides_of_view, Engine, Snap, ViewData};
+use crate::engine::{ride_bits, rides_of_view, Engine, Rideability, Snap, ViewData};
 use crate::geo::{haversine_m, point_segment, LatLon, Local, M_PER_DEG};
 use crate::{Request, RideType};
 
@@ -436,6 +436,9 @@ impl<B: AsRef<[u8]>> Engine<B> {
         }
         // Sonde μ (lot 5, §3.4 et §4.4) : part `offroad` de la longueur de chaque chaîne, en 256es (u8), pour la vue
         // gravel seulement, calculée dans la même passe que `w_osm` ; jamais dans `w_osm`, que les requêtes partagent.
+        // Roulabilité (lot 5, §6.3) : l'union des niveaux des liens de chaque chaîne, vue gravel avec bornes seulement.
+        let ride_on = weights && vi == 1 && self.params.rideability == Rideability::On;
+        let mut unrideable: Vec<u8> = Vec::with_capacity(if ride_on { n } else { 0 });
         #[cfg(feature = "probe")]
         let mut off_q8: Vec<u8> = Vec::with_capacity(if weights && vi == 1 { n } else { 0 });
         for (k, &c) in gid.iter().enumerate() {
@@ -462,8 +465,12 @@ impl<B: AsRef<[u8]>> Engine<B> {
                 let mut sums = [0u64; 3];
                 #[cfg(feature = "probe")]
                 let (mut off_dm, mut all_dm) = (0u64, 0u64);
+                let mut ride_acc = 0u8;
                 for l in links {
                     let (a, len) = self.attrs_len(l.get() & !DIR_BIT);
+                    if ride_on {
+                        ride_acc |= ride_bits(a);
+                    }
                     #[cfg(feature = "probe")]
                     {
                         all_dm += u64::from(len);
@@ -474,6 +481,9 @@ impl<B: AsRef<[u8]>> Engine<B> {
                     for &r in rides {
                         sums[r.index()] += u64::from(self.base_weight(r, a, len));
                     }
+                }
+                if ride_on {
+                    unrideable.push(ride_acc);
                 }
                 for &r in rides {
                     w_osm[r.index()].push(sums[r.index()].min(u64::from(u32::MAX / 8)) as u32);
@@ -538,6 +548,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
             ngid,
             complete,
             attr,
+            unrideable,
             #[cfg(feature = "probe")]
             off_q8,
         };
