@@ -187,6 +187,58 @@ pub const CAR_FORWARD: u8 = 1;
 pub const CAR_BACKWARD: u8 = 2;
 pub const CAR_BOTH: u8 = 3;
 
+/// Revêtement au sens de route-details (`ord_core::classification::surface`), sur les attributs du graphe.
+/// `Unknown` compte comme revêtu dans une part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SurfaceRd {
+    Paved,
+    Unpaved,
+    Unknown,
+}
+
+/// Classe Valhalla de chaque code `surface` (0 à 31), recopiée code par code depuis `RAW_SURFACE`
+/// d'ord-core (première entrée dont le motif est sous-chaîne de la valeur) ; `None` : absent, « autre »
+/// ou valeur inconnue de Valhalla (`salt`, `ice`), donc règle suivante. Le test d'accord d'`ord-graph`
+/// la compare à ord-core.
+const SURFACE_RD_BY_CODE: [Option<SurfaceRd>; 32] = {
+    const P: Option<SurfaceRd> = Some(SurfaceRd::Paved);
+    const U: Option<SurfaceRd> = Some(SurfaceRd::Unpaved);
+    [
+        None, // 0 : absent
+        P,    // asphalt
+        P,    // paved
+        P,    // concrete
+        P,    // paving_stones
+        P,    // sett
+        P,    // cobblestone
+        P,    // unhewn_cobblestone (sous-chaîne `cobblestone` : paved_rough)
+        U,    // compacted
+        U,    // fine_gravel
+        U,    // gravel
+        U,    // unpaved
+        U,    // ground
+        U,    // dirt
+        U,    // earth
+        U,    // grass
+        U,    // sand
+        U,    // mud
+        U,    // wood (compacted)
+        P,    // metal
+        U,    // pebblestone
+        U,    // rock
+        P,    // concrete:plates
+        P,    // concrete:lanes
+        U,    // clay
+        P,    // tartan
+        P,    // rubber
+        U,    // woodchips
+        None, // salt
+        None, // ice
+        P,    // grass_paver
+        None, // 31 : autre
+    ]
+};
+
 /// Les attributs d'une arête non orientée, déployés. `pack` / `unpack` sont inverses.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Fields {
@@ -300,6 +352,36 @@ impl Attrs {
                     | "unhewn_cobblestone"
             )
         )
+    }
+
+    /// Revêtement « au sens route-details » (§2.2 de la note du lot 5) : tag `surface` passé par la
+    /// table de Valhalla, puis `tracktype`, puis classe de la voie. Distinct d'[`Attrs::is_unpaved`],
+    /// qui entre dans le goût et ne doit pas bouger.
+    pub fn surface_rd(self) -> SurfaceRd {
+        if let Some(rd) = SURFACE_RD_BY_CODE.get(usize::from(self.surface())).copied().flatten() {
+            return rd;
+        }
+        match self.tracktype() {
+            1 => return SurfaceRd::Paved,
+            2..=5 => return SurfaceRd::Unpaved,
+            _ => {}
+        }
+        match self.class() {
+            Some(
+                HighwayClass::Track
+                | HighwayClass::Path
+                | HighwayClass::Footway
+                | HighwayClass::Pedestrian
+                | HighwayClass::Bridleway,
+            ) => SurfaceRd::Unpaved,
+            Some(_) => SurfaceRd::Paved,
+            None => SurfaceRd::Unknown,
+        }
+    }
+
+    /// Part du non-revêtu au sens de [`Attrs::surface_rd`].
+    pub fn offroad(self) -> bool {
+        self.surface_rd() == SurfaceRd::Unpaved
     }
 
     pub fn pack(f: &Fields) -> Attrs {
@@ -684,6 +766,81 @@ mod tests {
         assert_eq!(ok(&[("highway", "path"), ("smoothness", "meh")]).smoothness(), 15);
         assert!(ok(&[("highway", "path"), ("surface", "gravel")]).is_unpaved());
         assert!(!ok(&[("highway", "path"), ("surface", "asphalt")]).is_unpaved());
+    }
+
+    /// Accord avec ord-core (§2.2) : 32 codes `surface` x 7 `tracktype` x 18 classes.
+    #[test]
+    fn surface_rd_agrees_with_ord_core() {
+        use ord_core::classification::{tables::surface, SurfaceClass};
+        use ord_domain::street::{OnewayTag, StructureTag, SurfaceTag, TrackType, WayAttrs};
+        use std::sync::Arc;
+
+        let tracks: [(u8, Option<TrackType>); 7] = [
+            (0, None),
+            (1, Some(TrackType::Grade1)),
+            (2, Some(TrackType::Grade2)),
+            (3, Some(TrackType::Grade3)),
+            (4, Some(TrackType::Grade4)),
+            (5, Some(TrackType::Grade5)),
+            (7, None), // valeur inconnue : permise, règle suivante
+        ];
+        for code in 0..=31u8 {
+            let tag = match code {
+                0 => SurfaceTag::Absent,
+                SURFACE_OTHER => SurfaceTag::Raw(Arc::from("lunar_regolith")),
+                c => SurfaceTag::Raw(Arc::from(SURFACES[usize::from(c) - 1])),
+            };
+            for (tcode, track) in &tracks {
+                for class in HighwayClass::ALL {
+                    let way = WayAttrs {
+                        highway: Arc::from(class.name()),
+                        surface: tag.clone(),
+                        tracktype: *track,
+                        bicycle: None,
+                        foot: None,
+                        service: None,
+                        link: false,
+                        rail: false,
+                        structure: StructureTag::None,
+                        layer: None,
+                        smoothness: None,
+                        oneway: OnewayTag::No,
+                        osm_id: None,
+                        raw: None,
+                    };
+                    let expected = match surface(&way).0 {
+                        SurfaceClass::Paved => SurfaceRd::Paved,
+                        SurfaceClass::Unpaved => SurfaceRd::Unpaved,
+                        SurfaceClass::Unknown => SurfaceRd::Unknown,
+                    };
+                    let a = Attrs::pack(&Fields {
+                        class: class as u8,
+                        surface: code,
+                        tracktype: *tcode,
+                        ..Fields::default()
+                    });
+                    assert_eq!(
+                        a.surface_rd(),
+                        expected,
+                        "surface {code} tracktype {tcode} classe {}",
+                        class.name()
+                    );
+                    assert_eq!(a.offroad(), expected == SurfaceRd::Unpaved);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn surface_rd_leaves_is_unpaved_alone() {
+        // `unhewn_cobblestone` : non revêtu pour is_unpaved (goût), revêtu pour route-details.
+        let a = Attrs::pack(&Fields { class: HighwayClass::Track as u8, surface: 7, ..Fields::default() });
+        assert!(a.is_unpaved());
+        assert_eq!(a.surface_rd(), SurfaceRd::Paved);
+        // `wood` : l'inverse.
+        let w = Attrs::pack(&Fields { class: HighwayClass::Path as u8, surface: 18, ..Fields::default() });
+        assert!(!w.is_unpaved());
+        assert!(w.offroad());
     }
 
     fn dirs(tags: &[(&str, &str)]) -> (bool, bool, bool) {

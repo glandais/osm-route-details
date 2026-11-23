@@ -1381,6 +1381,7 @@ name = "ord-graph"
 version = "1.14.0"
 dependencies = [
  "memmap2 0.9.12",
+ "ord-core",
  "ord-domain",
  "osmpbf",
  "rayon",

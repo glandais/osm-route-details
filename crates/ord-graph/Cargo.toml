@@ -30,6 +30,7 @@ osmpbf = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
+ord-core.workspace = true
 ord-domain.workspace = true
 rayon.workspace = true
 tempfile.workspace = true
