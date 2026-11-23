@@ -646,3 +646,77 @@ réelle partie du même point** (une personne de l'équipe a-t-elle trouvé la p
   ne sont pas arrêtés avant 10 s (`steps_until_ms`) par une borne qui tienne compte du budget restant : un pas lancé à 9 s
   avec un coût de 15 s dépasse 30 s. Pistes (non faites) : ne lancer un pas que si la durée du premier pas, ajoutée au temps
   écoulé, tient dans le budget ; ou ramener `steps_until_ms`.
+
+## 11. Relecture sur carte (étape 9, §13 de la note)
+
+> Relecture du 23 novembre 2026 sur `764f644` (moteur de la bascule, `rideability = on`). Lettres et agrégats seulement :
+> les images et les fichiers par parcours sont restés hors dépôt et ont été effacés avec le reste des fichiers temporaires.
+
+### 11.1 Cadre et écarts à la note
+
+- **Pas la visionneuse telle quelle.** `tools/ord-loops-viewer` lit les GeoJSON du mode rejeu du lot 2 (`--geojson`) :
+  ni consigne, ni attribut d'arête ; et sa page tire MapLibre et un fond de carte du réseau, ce qui aurait envoyé des départs
+  d'équipe au-dehors. À la place : un crochet **temporaire, jamais commité**, dans `likeness/play.rs`, a écrit pour le premier
+  parcours gardé de chaque jeu à cible chaque arête prise (classe, `surface`, `tracktype`, `smoothness`, `mtb:scale`, accès,
+  `surface_rd`, longueur, arête d'équipe, exemption, `rideable` du contrôleur, géométrie) et les arêtes du graphe à quelques
+  centaines de mètres du tracé ; un script jetable en a fait une **image statique par parcours** (fond : arêtes du graphe,
+  revêtues en gris, non revêtues en beige ; tracé : revêtu en bleu, non revêtu en brun, rugueux permis — `bad`, `very_bad`,
+  `grade4`, `sand`, `grass` — en orange, non roulable en magenta), regardée à l'œil, et les mesures ci-dessous.
+- **Dans le banc, pas hors banc.** Deux équipes, A et B, dans deux zones distinctes ; boucles **mises à l'écart** de la
+  surcouche (lecture « écart », `--holdout-share 0.25`) : le départ est réel mais la boucle n'a pas nourri la surcouche jouée.
+  Aucune zone hors banc avec dépôt n'était disponible sans donnée de production nouvelle. Commande :
+  `likeness --teams <A|B> --ride-types gravel --holdout-share 0.25 --variants base,svc+org+ride:on+target:0.47,svc+org+ride:on+target:0.60`,
+  deux curseurs (0,25 et 1).
+- **Population** : 776 premiers parcours gardés (A 274, B 114, par cran), tous lus par attributs ; **tirage au hasard** (graine
+  fixe) de **10 par équipe et par cran**, soit 20 à « Beaucoup » (0,60) et 20 à « Comme d'habitude » (0,47) ; **15 des 40
+  images** regardées à l'œil (8 à 0,60, 7 à 0,47, les deux équipes), plus le pire cas d'aller-retour ci-dessous. L'existence
+  d'un chemin n'est vérifiée que **contre le graphe** (extrait OSM du 15 novembre), pas contre une imagerie ni sur le terrain.
+
+### 11.2 Ce qui tient
+
+| contrôle (776 parcours, deux crans) | obtenu |
+|---|---|
+| arête non roulable pour le contrôleur (`rideable`, §6.1, exemption comprise) | **0** |
+| arêtes bornées prises au titre de l'exemption d'équipe (`grade5`, `horrible`, `mtb:scale` ≥ 2, roulées en GRAVEL par l'équipe) | 0,13 à 0,17 % de la longueur (A), 1,05 à 1,14 % (B) |
+| raccord géométrique entre deux arêtes consécutives | 0 trou |
+| demi-tour sur une même arête | 0 |
+| arête reprise à moins de 2 km d'elle-même (cul-de-sac fait en aller-retour pour gonfler la part) | **0** |
+| accès | `yes` ou `destination` seulement (`destination` sur 66 à 76 parcours de A, 2 à 4 de B, quelques mètres) |
+
+- **Aller-retour** : les arêtes prises dans les deux sens sont des **couloirs de sortie et de retour** : 214 km cumulés à
+  moins de 3 km du départ, 40 km au-delà (dont 34 non revêtus), et entre l'aller et le retour d'une même arête il y a au
+  moins **24 km** de parcours. Le pire (3,1 km repris, boucle de 177 km à 0,60) et le cas de 200 km regardé sont des sorties
+  de ville par la même coulée verte, pas des épingles. Médiane de longueur reprise : 0,08 à 0,18 km par parcours.
+- **Enchaînement** : à l'œil, les tracés vont de chemin en chemin par de courts liens revêtus, sans zigzag de rue en rue ;
+  dans le tirage, tronçons non revêtus de 345 à 914 m en médiane par parcours (le plus long de 1,4 à 6,7 km), 0 à 8
+  tronçons de moins de 100 m par parcours. Les sorties d'agglomération se font sur le revêtu (bleu), le non revêtu commence en périphérie.
+- **Composition du non revêtu** (part des mètres non revêtus) : `path` 45 à 58 %, `track` 40 à 48 %, `cycleway` à surface non
+  revêtue 4 à 5 % (A), < 1 % (B), `footway` et `bridleway` ≤ 1,5 % ; `smoothness` absente sur 84 % (A) et 99 % (B) ;
+  `tracktype` absent sur 80 à 87 %. **79 à 93 %** des mètres non revêtus sont sur des arêtes que l'équipe a roulées en
+  GRAVEL ou MIXED (exemptées).
+
+### 11.3 Défauts et points à voir
+
+1. **La moitié de la part est présumée** : 45 à 48 % (A) et 55 % (B) des mètres non revêtus n'ont ni `surface` ni
+   `tracktype` ; c'est la classe (`path`, `track`) qui les fait non revêtus (§2.2, définition de route-details). Ils sont
+   presque tous d'équipe, donc probablement roulables ; mais « Beaucoup » repose sur cette présomption autant que sur des
+   tags. Pas un défaut du moteur, une limite de la donnée à dire dans le texte du site.
+2. **Rugueux permis hors équipe** : par parcours, médiane 0, P90 0,5 à 1,1 km de `bad` / `very_bad` / `grade4` / `sand` /
+   `grass` sur des arêtes jamais roulées par l'équipe en gravel ; **40 parcours sur 776** en ont plus d'1 km (A 15 à 0,47 et
+   25 à 0,60 sur 274 ; B 11 et 15 sur 114) ; le pire, 17,4 km sur une boucle de 144 km (`track` gravier `bad`, `path` terre
+   `very_bad`). Deux des boucles de A regardées à 0,60, dans la même zone, prennent des `path` en terre `very_bad` hors équipe (1,1 et
+   2,5 km).
+   Conforme au §6.1 (permis, rendu cher par le coût), mais c'est ce qu'une personne trouvera le plus discutable : à soumettre
+   au propriétaire avec R5 (borner `very_bad` hors équipe, ou non).
+3. **« Beaucoup » manque en B** : à 0,60, médiane de la part 0,507 en B (0,589 en A) ; dans le tirage, B va de 0,30 à 0,57.
+   À l'image, la zone de B offre peu de non revêtu au-delà des arcs déjà pris : déjà vu au §9.4 (O5), pas un tracé faux.
+4. **Peu de variété en B** : les boucles de B reprennent les mêmes arcs non revêtus d'une requête à l'autre (même plus long
+   tronçon de 5,7 km dans 11 des 20 tirées), et 104 à 108 parcours distincts sur 114 (curseurs 0,25 et 1 identiques pour
+   quelques boucles). Effet attendu du goût d'équipe et de l'exemption ; noté, pas corrigé.
+5. **Voies vertes en « non revêtu »** : sur deux boucles de A, 40 à 55 % du non revêtu est une `cycleway` en surface compactée
+   ou gravier. Roulable et juste au sens de la définition ; une personne qui choisit « Beaucoup » peut s'attendre à plus
+   sauvage.
+
+**Verdict de l'étape 9** : aucun chemin interdit, aucune rupture, aucun aller-retour fabriqué ; les chemins pris existent
+dans le graphe et leurs attributs sont ceux d'un gravel plausible. Les points 1, 2 et 5 sont des choix de définition ou de
+bornes à confirmer par le propriétaire, pas des défauts à corriger avant la fusion.

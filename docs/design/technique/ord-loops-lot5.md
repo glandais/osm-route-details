@@ -818,6 +818,9 @@ stable et `./format.sh` côté tribly ; arrêt et relecture marqués **[arrêt]*
    « Comme d'habitude », tirés au hasard sur deux équipes et deux zones hors banc : chemins qui existent, enchaînement, pas de
    chemin interdit. Notes dans le relevé, sans coordonnées. **[arrêt]** : fusion par le propriétaire, mise en service
    (`OPS`, image 1.15.0).
+   *Fait (23 novembre)* : relevé §11, dans le banc (boucles mises à l'écart de A et B) et par attributs d'arêtes et images
+   statiques plutôt que par la visionneuse ; aucun chemin interdit ni aller-retour fabriqué, points de bornes et de définition
+   pour le propriétaire.
 10. **5g, Pédalons** (dépôt tribly, après la mise en service du moteur) — contrat et backend (§10.1, §10.2), skill
     `contract-first-api`, site (§10.3), traductions, tests, e2e ; registre et plan (§10.3, dernier point).
 
