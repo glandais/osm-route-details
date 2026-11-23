@@ -324,8 +324,14 @@ impl<'a> Weighter<'a> {
     pub fn edge<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
         let w = self.edge_plain(eng, e);
         // Même crochet que `chain` ; une arête entière `offroad` pèse 255/256 comme une chaîne qui l'est tout entière.
+        // Comme pour `chain`, `f` n'existe que là où la vue a son tableau (`off_q8`, vue gravel) : sur la vue route,
+        // `f = 0` pour les arêtes partielles aussi, sinon μ y agirait sur le départ et l'arrivée seulement.
         #[cfg(feature = "probe")]
-        let w = self.mu_of(w, if eng.attrs_len(e).0.offroad() { 255 } else { 0 });
+        let w = if self.mu_q8.is_some() && !self.off_q8.is_empty() && eng.attrs_len(e).0.offroad() {
+            self.mu_of(w, 255)
+        } else {
+            w
+        };
         w
     }
 

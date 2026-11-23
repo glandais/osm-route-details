@@ -145,6 +145,27 @@ fn mu_scales_the_unpaved_chain_in_every_branch_and_leaves_the_paved_one() {
     assert_eq!(lo.edge(&e, ep), n.edge(&e, ep));
 }
 
+/// La vue route n'a pas de tableau `f` : μ n'y touche ni les chaînes ni les arêtes partielles (même règle des deux
+/// côtés, sinon μ n'agirait que sur le départ et l'arrivée).
+#[test]
+fn mu_has_no_effect_on_the_road_view_not_even_on_partial_edges() {
+    let e = engine_of(&mut two_corridors());
+    let win = e.full_window(0);
+    let v = &win.v;
+    assert!(v.off_q8.is_empty());
+    let mk =
+        |mu: Option<u32>| Weighter::new(v, None, RideType::Road, Mode::Discovery, 0.5, 768).with_mu_q8(mu);
+    let (n, lo, hi) = (mk(None), mk(Some(64)), mk(Some(1024)));
+    for c in 0..v.n_chains as u32 {
+        assert_eq!(lo.chain(c), n.chain(c));
+        assert_eq!(hi.chain(c), n.chain(c));
+    }
+    let eo = edge_between(&e, 1, 4);
+    assert!(e.base().edge(eo).attrs.offroad());
+    assert_eq!(lo.edge(&e, eo), n.edge(&e, eo));
+    assert_eq!(hi.edge(&e, eo), n.edge(&e, eo));
+}
+
 /// Bornes de l'arithmétique entière (§11) : aucun débordement aux poids maxima, 256 neutre, monotone en μ et en `f`,
 /// toujours hors de `INF`.
 #[test]
