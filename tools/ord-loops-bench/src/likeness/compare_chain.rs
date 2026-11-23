@@ -904,6 +904,7 @@ mod tests {
             chain: Some(Chain { stem: "rt05".into(), step: k, steps: 3, dims: Dims::D72 }),
             svc: None,
             org: None,
+            mu_q8: None,
         };
         let cm = ChainMeta {
             stem: "rt05".into(),

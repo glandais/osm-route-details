@@ -1099,6 +1099,7 @@ impl Bench<'_> {
                             cursor: c,
                             req,
                             ride: play::ride_of(self.loops[i].ty),
+                            mu_q8: v.mu_q8,
                         });
                     }
                 }

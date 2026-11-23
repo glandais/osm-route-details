@@ -275,6 +275,8 @@ pub struct Variant {
     pub svc: Option<Svc>,
     /// `Some` avec `org` (4c) : figures organiques, sur `common` ou `svc`.
     pub org: Option<Org>,
+    /// `Some` avec `mu:<μ>` (lot 5, §3.4) : le multiplicateur du non-revêtu de la sonde, en 256es (256 : neutre).
+    pub mu_q8: Option<u32>,
 }
 
 impl Variant {
@@ -287,11 +289,12 @@ impl Variant {
             chain: None,
             svc: None,
             org: None,
+            mu_q8: None,
         }
     }
 
     pub fn is_base(&self) -> bool {
-        self.fam.is_none() && self.taste.is_none() && self.svc.is_none()
+        self.fam.is_none() && self.taste.is_none() && self.svc.is_none() && self.mu_q8.is_none()
     }
 
     /// Variante de recalé (commun ou par équipe).
@@ -331,6 +334,8 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
     // Le chemin du service (3b) : `common` ou `svc`, `norm`, `cap:<n>`, `capt:<n>`.
     let (mut kind, mut norm, mut cap): (Option<SvcKind>, bool, Option<SvcCap>) = (None, false, None);
     let mut sonde = false;
+    // La sonde μ (lot 5, §3.4) : `mu:<μ>`, en 256es.
+    let mut mu_q8: Option<u32> = None;
     // Les figures organiques (4c) : `org`, puis ses options, dans l'ordre donné pour le nom.
     let mut org: Option<Org> = None;
     // Options données avant `org` : posées quand il paraît.
@@ -486,6 +491,13 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
                 org_opt.push(key);
                 names.push(format!("m{m}"));
             }
+            "mu" => {
+                ensure!(mu_q8.is_none(), "variante « {spec} » : deux `mu`");
+                let x = number("`mu`", val)?;
+                ensure!((0.25..=4.0).contains(&x), "variante : `mu` hors de [1/4, 4] : « {val} »");
+                mu_q8 = Some((x * 256.0).round() as u32);
+                names.push(format!("mu{:03}", (x * 100.0).round() as u32));
+            }
             "cap" | "capt" => {
                 ensure!(cap.is_none(), "variante « {spec} » : `cap` et `capt` ne vont pas ensemble");
                 let n: usize =
@@ -609,8 +621,16 @@ fn one(spec: &str) -> Result<Vec<Variant>> {
         names.insert(taste_pos.map_or(names.len(), |p| p + 1), "me".into());
     }
     let stem = names.join("-");
-    let mk =
-        |name: String, chain: Option<Chain>| Variant { name, fam, fam_road_only, taste, chain, svc, org };
+    let mk = |name: String, chain: Option<Chain>| Variant {
+        name,
+        fam,
+        fam_road_only,
+        taste,
+        chain,
+        svc,
+        org,
+        mu_q8,
+    };
     if !recal {
         return Ok(vec![mk(stem, None)]);
     }
@@ -1229,5 +1249,30 @@ mod tests {
         // Sans familiarité, rien.
         let r = adapt_request(of(0.25, RideType::Road), None, true);
         assert_ne!(r.familiarity, 1.0);
+    }
+
+    /// Lot 5, étape 2 : `mu:<μ>` se lit, se nomme, se compose avec `svc+org`, se borne et ne fait pas une variante `base`.
+    #[test]
+    fn the_mu_probe_parses_composes_and_is_bounded() {
+        let base = || "base".to_string();
+        let one = |spec: &str| -> Variant {
+            let v = parse_variants(&[base(), spec.to_string()]).unwrap_or_else(|e| panic!("{spec} : {e}"));
+            v.into_iter().nth(1).unwrap()
+        };
+        let err = |spec: &str| parse_variants(&[base(), spec.to_string()]).unwrap_err().to_string();
+        let v = one("svc+org+mu:0.5");
+        assert_eq!((v.name.as_str(), v.mu_q8), ("svc-org-mu050", Some(128)));
+        assert!(v.svc.is_some() && v.org.is_some());
+        assert_eq!(one("svc+org+mu:1").mu_q8, Some(256));
+        assert_eq!(one("svc+org+mu:0.25").mu_q8, Some(64));
+        assert_eq!(one("svc+org+mu:4").mu_q8, Some(1024));
+        assert_eq!(one("svc+org+mu:1.4").name, "svc-org-mu140");
+        assert_eq!(parse_variants(&[base(), "svc+org".into()]).unwrap()[1].mu_q8, None);
+        // `mu` seul n'est pas une variante `base`.
+        assert!(!one("mu:0.5").is_base());
+        assert!(err("svc+org+mu:0.2").contains("hors de"));
+        assert!(err("svc+org+mu:4.5").contains("hors de"));
+        assert!(err("svc+org+mu:x").contains("illisible"));
+        assert!(err("svc+org+mu:2+mu:3").contains("deux `mu`"));
     }
 }

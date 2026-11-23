@@ -139,6 +139,10 @@ pub(crate) struct ViewData {
     /// Masque d'attracteurs de chaque nœud local (lot 4, 4d) : **vide** si la vue n'a pas de fichier, sinon `n_nodes` octets.
     /// Un nœud a le même masque dans toute fenêtre qui le contient.
     pub attr: Vec<u8>,
+    /// Sonde μ (lot 5, §4.4) : part de la longueur de chaque chaîne sur des arêtes `offroad`, en 256es (saturée à 255) ;
+    /// vide hors de la vue gravel.
+    #[cfg(feature = "probe")]
+    pub off_q8: Vec<u8>,
 }
 
 impl ViewData {
@@ -191,7 +195,12 @@ impl ViewData {
     /// Octets tenus (capacités réelles des tableaux).
     pub fn bytes(&self) -> usize {
         use std::mem::size_of;
-        self.pos.capacity() * size_of::<(i32, i32)>()
+        #[cfg(feature = "probe")]
+        let probe_bytes = self.off_q8.capacity();
+        #[cfg(not(feature = "probe"))]
+        let probe_bytes = 0;
+        probe_bytes
+            + self.pos.capacity() * size_of::<(i32, i32)>()
             + self.ends.capacity() * size_of::<(u32, u32)>()
             + (self.len_dm.capacity()
                 + self.out_off.capacity()

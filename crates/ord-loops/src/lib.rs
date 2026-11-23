@@ -44,6 +44,8 @@ mod tests_attract;
 mod tests_graft;
 #[cfg(test)]
 mod tests_index;
+#[cfg(all(test, feature = "probe"))]
+mod tests_mu;
 #[cfg(test)]
 mod tests_organic;
 #[cfg(test)]

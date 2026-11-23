@@ -134,6 +134,10 @@ pub struct Workspace {
     /// Retouche, lot 0 : chaînes interdites pour le prochain appel de `generate_inner`, qui le prend (`take`).
     #[cfg(feature = "probe")]
     pub(crate) keep_out: Option<crate::probe_graft::KeepOut>,
+    /// Sonde μ (lot 5, §3.4) : multiplicateur du non-revêtu des prochaines générations (en 256es), conservé d'un appel à
+    /// l'autre : le banc le pose avant chaque jeu, `None` pour le neutre.
+    #[cfg(feature = "probe")]
+    pub(crate) mu_q8: Option<u32>,
 }
 
 impl Workspace {
@@ -146,6 +150,12 @@ impl Workspace {
     #[cfg(feature = "probe")]
     pub fn set_keep_out(&mut self, ko: Option<crate::probe_graft::KeepOut>) {
         self.keep_out = ko;
+    }
+
+    /// Sonde μ (lot 5, §3.4) : le multiplicateur de la prochaine génération et des suivantes, jusqu'au prochain appel.
+    #[cfg(feature = "probe")]
+    pub fn set_mu_q8(&mut self, mu_q8: Option<u32>) {
+        self.mu_q8 = mu_q8;
     }
 
     /// Octets tenus par les trois arbres, le `ban` et la trame du couloir de chaque vue (capacités réelles).
@@ -196,6 +206,12 @@ pub(crate) struct Weighter<'a> {
     /// Retouche, lot 0 (sonde) : bitset des chaînes interdites à toute la requête.
     #[cfg(feature = "probe")]
     keep_out: Option<&'a [u64]>,
+    /// Sonde μ (lot 5, §3.4) : le multiplicateur du non-revêtu, en 256es (256 : neutre), et la part `offroad` de chaque
+    /// chaîne de la vue (`ViewData::off_q8`). Posés par le banc seulement.
+    #[cfg(feature = "probe")]
+    mu_q8: Option<u32>,
+    #[cfg(feature = "probe")]
+    off_q8: &'a [u8],
 }
 
 impl<'a> Weighter<'a> {
@@ -225,7 +241,31 @@ impl<'a> Weighter<'a> {
             mt: cost::multiplier_table(fam),
             #[cfg(feature = "probe")]
             keep_out: None,
+            #[cfg(feature = "probe")]
+            mu_q8: None,
+            #[cfg(feature = "probe")]
+            off_q8: &v.off_q8,
         }
+    }
+
+    /// Pose le multiplicateur μ (sonde du lot 5, §3.4) ; `None` ou 256 : aucun effet.
+    #[cfg(feature = "probe")]
+    pub fn with_mu_q8(mut self, mu_q8: Option<u32>) -> Self {
+        self.mu_q8 = mu_q8;
+        self
+    }
+
+    /// `⌈w × (256 + (μ − 256) × f / 256) / 256⌉` (§4.2), en entiers : même poids en natif et en WASM. `INF` reste `INF`.
+    #[cfg(feature = "probe")]
+    #[inline]
+    pub(crate) fn mu_of(&self, w: u32, f: u8) -> u32 {
+        let Some(mu) = self.mu_q8 else { return w };
+        if w == INF || mu == 256 {
+            return w;
+        }
+        let t = 65_536 + (i64::from(mu) - 256) * i64::from(f);
+        debug_assert!(t > 0, "μ ≥ 1/4 : le facteur reste positif");
+        ((u64::from(w) * t as u64 + 65_535) >> 16).min(u64::from(u32::MAX / 2)) as u32
     }
 
     /// Pose le masque des chaînes interdites (sonde). Une chaîne masquée pèse `INF` : absente du graphe de la requête.
@@ -249,6 +289,15 @@ impl<'a> Weighter<'a> {
     /// Poids d'une arête de vue, `INF` si elle est interdite (strict, hors réseau d'équipe).
     #[inline]
     pub fn chain(&self, c: u32) -> u32 {
+        let w = self.chain_plain(c);
+        // Toutes les branches de `chain_plain` y passent, le `return w` sans surcouche compris (§4.2).
+        #[cfg(feature = "probe")]
+        let w = self.mu_of(w, self.off_q8.get(c as usize).copied().unwrap_or(0));
+        w
+    }
+
+    #[inline]
+    fn chain_plain(&self, c: u32) -> u32 {
         #[cfg(feature = "probe")]
         if let Some(k) = self.keep_out {
             if k[(c >> 6) as usize] >> (c & 63) & 1 != 0 {
@@ -273,6 +322,14 @@ impl<'a> Weighter<'a> {
 
     /// Poids d'une arête de base (pour les morceaux partiels du départ et de l'arrivée).
     pub fn edge<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
+        let w = self.edge_plain(eng, e);
+        // Même crochet que `chain` ; une arête entière `offroad` pèse 255/256 comme une chaîne qui l'est tout entière.
+        #[cfg(feature = "probe")]
+        let w = self.mu_of(w, if eng.attrs_len(e).0.offroad() { 255 } else { 0 });
+        w
+    }
+
+    fn edge_plain<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {
         let (attrs, len) = eng.attrs_len(e);
         let w = match self.taste {
             None => eng.base_weight(self.ride, attrs, len),

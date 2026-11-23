@@ -434,6 +434,10 @@ impl<B: AsRef<[u8]>> Engine<B> {
                 w_osm[r.index()] = Vec::with_capacity(n);
             }
         }
+        // Sonde μ (lot 5, §3.4 et §4.4) : part `offroad` de la longueur de chaque chaîne, en 256es (u8), pour la vue
+        // gravel seulement, calculée dans la même passe que `w_osm` ; jamais dans `w_osm`, que les requêtes partagent.
+        #[cfg(feature = "probe")]
+        let mut off_q8: Vec<u8> = Vec::with_capacity(if weights && vi == 1 { n } else { 0 });
         for (k, &c) in gid.iter().enumerate() {
             if k % 65_536 == 0 && stop() {
                 return None;
@@ -456,14 +460,27 @@ impl<B: AsRef<[u8]>> Engine<B> {
             });
             if weights {
                 let mut sums = [0u64; 3];
+                #[cfg(feature = "probe")]
+                let (mut off_dm, mut all_dm) = (0u64, 0u64);
                 for l in links {
                     let (a, len) = self.attrs_len(l.get() & !DIR_BIT);
+                    #[cfg(feature = "probe")]
+                    {
+                        all_dm += u64::from(len);
+                        if a.offroad() {
+                            off_dm += u64::from(len);
+                        }
+                    }
                     for &r in rides {
                         sums[r.index()] += u64::from(self.base_weight(r, a, len));
                     }
                 }
                 for &r in rides {
                     w_osm[r.index()].push(sums[r.index()].min(u64::from(u32::MAX / 8)) as u32);
+                }
+                #[cfg(feature = "probe")]
+                if vi == 1 {
+                    off_q8.push((256 * off_dm).checked_div(all_dm).map_or(0, |q| q.min(255) as u8));
                 }
             }
         }
@@ -521,6 +538,8 @@ impl<B: AsRef<[u8]>> Engine<B> {
             ngid,
             complete,
             attr,
+            #[cfg(feature = "probe")]
+            off_q8,
         };
         let grids = (0..tiles.len()).map(|_| OnceLock::new()).collect();
         Some(Window { vi, v, tiles: tiles.to_vec(), grids })

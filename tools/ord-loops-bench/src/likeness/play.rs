@@ -392,6 +392,8 @@ pub struct Task {
     pub cursor: f64,
     pub req: Request,
     pub ride: RideType,
+    /// Sonde μ (lot 5, §3.4) : le multiplicateur de la variante, en 256es ; `None` pour toutes les autres.
+    pub mu_q8: Option<u32>,
 }
 
 /// Ce que les jeux lisent pour une équipe et une surcouche.
@@ -495,6 +497,8 @@ pub fn play_one(
             res
         }))
     };
+    // Le `Workspace` passe d'une variante à l'autre : μ est posé à chaque jeu, neutre compris.
+    ws.set_mu_q8(task.mu_q8);
     let (mut win, mut wt) = ctx.wins.acquire(env.key, env.team, req, env.taste);
     let mut res = call(ws, &win, &wt);
     if matches!(res, Ok(Err(Failure::WindowEscape))) {

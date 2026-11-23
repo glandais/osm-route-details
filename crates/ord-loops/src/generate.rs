@@ -350,7 +350,7 @@ fn generate_inner<B: AsRef<[u8]>>(
         if let Some(k) = &keep_out {
             k.assert_window(win);
         }
-        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits))
+        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits)).with_mu_q8(ws.mu_q8)
     };
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
