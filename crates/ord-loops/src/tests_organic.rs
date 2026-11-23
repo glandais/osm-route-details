@@ -126,7 +126,7 @@ fn the_point_to_point_heuristic_is_admissible_with_the_turn_slack() {
 }
 
 /// Test 6 : `chain(c) ≥ f_min · len_dm(c)` pour toutes les chaînes que l'arbre aller atteint, trois modes,
-/// familiarités {0 ; 0,5 ; 1}, λ {1 ; 3 ; 5}, avec et sans goût d'équipe ; et le facteur ne dépend pas de la fenêtre
+/// familiarités {0 ; 0,5 ; 1}, λ {1 ; 3 ; 5}, μ {1/4 ; 1 ; 4}, avec et sans goût d'équipe ; et le facteur ne dépend pas de la fenêtre
 /// (celle des tuiles nécessaires rend celui du graphe entier, I4).
 #[test]
 fn the_minimum_factor_bounds_every_chain_cost() {
@@ -144,6 +144,10 @@ fn the_minimum_factor_bounds_every_chain_cost() {
                 for mode in [Mode::Strict, Mode::TeamFirst, Mode::Discovery] {
                     for fam in [0.0f32, 0.5, 1.0] {
                         for lambda in [256u32, 768, 1280] {
+                            // μ ∈ {1/4, 1, 4} (lot 5, §4.2, §11) : la borne suit les poids réels de T1, donc μ. Chaque
+                            // combinaison en prend un, sans corrélation avec λ, la familiarité ni le mode.
+                            let mu =
+                                [Some(64u32), None, Some(1024)][(checked + checked / 3 + checked / 9) % 3];
                             let factor = |win: &crate::Window, check: bool| {
                                 let wt = WindowTeam::build_with_taste(&e, win, &team, taste.as_ref());
                                 let v = &win.v;
@@ -154,7 +158,8 @@ fn the_minimum_factor_bounds_every_chain_cost() {
                                     mode,
                                     fam,
                                     lambda,
-                                );
+                                )
+                                .with_mu_q8(mu);
                                 let s_snap =
                                     e.snap(win, r.start, &|c| w.chain(c) != u32::MAX, 0).unwrap().unwrap();
                                 let sa: Anchor = make_anchor(&e, v, &w, s_snap);

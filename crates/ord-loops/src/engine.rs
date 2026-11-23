@@ -207,9 +207,8 @@ pub(crate) struct ViewData {
     /// VTT bits 2-3 ; dans chaque paire, le bit 0 vaut « un lien `RIDE_SOFT` », le bit 1 « un lien `RIDE_HARD` »).
     /// **Vide** hors de la vue gravel ou avec `Rideability::Off`.
     pub unrideable: Vec<u8>,
-    /// Sonde μ (lot 5, §4.4) : part de la longueur de chaque chaîne sur des arêtes `offroad`, en 256es (saturée à 255) ;
-    /// vide hors de la vue gravel.
-    #[cfg(feature = "probe")]
+    /// Consigne de part (lot 5, §4.4) : part de la longueur de chaque chaîne sur des arêtes `offroad`, en 256es (saturée à
+    /// 255) ; vide hors de la vue gravel.
     pub off_q8: Vec<u8>,
 }
 
@@ -263,11 +262,7 @@ impl ViewData {
     /// Octets tenus (capacités réelles des tableaux).
     pub fn bytes(&self) -> usize {
         use std::mem::size_of;
-        #[cfg(feature = "probe")]
-        let probe_bytes = self.off_q8.capacity();
-        #[cfg(not(feature = "probe"))]
-        let probe_bytes = 0;
-        probe_bytes
+        self.off_q8.capacity()
             + self.pos.capacity() * size_of::<(i32, i32)>()
             + self.ends.capacity() * size_of::<(u32, u32)>()
             + (self.len_dm.capacity()

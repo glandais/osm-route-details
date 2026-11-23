@@ -1,10 +1,10 @@
-//! Sonde μ (lot 5, §3.4 et §11), sous `probe` seulement : le multiplicateur du non-revêtu, sur un graphe à deux couloirs
+//! Le multiplicateur μ du non-revêtu (lot 5, §3.4, §4.2 et §11) : le multiplicateur du non-revêtu, sur un graphe à deux couloirs
 //! parallèles de même longueur (l'un résidentiel, l'autre en `track` `gravel`).
 
 use ord_graph::build::MemSource;
 
 use crate::cost::RideType;
-use crate::generate::generate_with_figures_in;
+use crate::generate::{finish, generate_with_figures_in, run_step};
 use crate::search::{Weighter, INF};
 use crate::team::{TeamCtx, TeamData, WindowTeam};
 use crate::tests::{
@@ -41,11 +41,10 @@ fn gravel_one_way() -> Request {
 /// Part de la longueur du premier parcours rendu qui roule sur des arêtes `offroad`.
 fn share(e: &Engine<Vec<u8>>, r: &Request, mu_q8: Option<u32>) -> f64 {
     let win = e.full_window(r.ride_type.view_index());
-    let mut ws = Workspace::new();
-    ws.set_mu_q8(mu_q8);
-    let g = generate_with_figures_in(e, &win, None, r, &mut ws, &mut || false).0.expect("des parcours");
+    let c = run_step(e, &win, None, r, &mut Workspace::new(), &mut || false, mu_q8).0.expect("des parcours");
+    let routes = finish(e, r, c.scored, c.organic, None);
     let (mut off, mut all) = (0.0, 0.0);
-    for s in &g.routes[0].steps {
+    for s in &routes[0].steps {
         let ev = e.base().edge(s.base_edge);
         let l = f64::from(ev.len_dm);
         all += l;
@@ -69,11 +68,10 @@ fn mu_one_is_bit_for_bit_the_plain_engine() {
     let r = gravel_one_way();
     let win = e.full_window(1);
     let plain = generate_with_figures_in(&e, &win, None, &r, &mut Workspace::new(), &mut || false).0.unwrap();
-    let mut ws = Workspace::new();
-    ws.set_mu_q8(Some(256));
-    let one = generate_with_figures_in(&e, &win, None, &r, &mut ws, &mut || false).0.unwrap();
-    assert_eq!(plain.routes.len(), one.routes.len());
-    for (a, b) in plain.routes.iter().zip(&one.routes) {
+    let c = run_step(&e, &win, None, &r, &mut Workspace::new(), &mut || false, Some(256)).0.unwrap();
+    let one = finish(&e, &r, c.scored, c.organic, None);
+    assert_eq!(plain.routes.len(), one.len());
+    for (a, b) in plain.routes.iter().zip(&one) {
         assert_eq!(a.steps, b.steps);
         assert_eq!(a.length_m.to_bits(), b.length_m.to_bits());
     }

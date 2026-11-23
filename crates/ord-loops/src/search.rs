@@ -213,11 +213,9 @@ pub(crate) struct Weighter<'a> {
     /// Retouche, lot 0 (sonde) : bitset des chaînes interdites à toute la requête.
     #[cfg(feature = "probe")]
     keep_out: Option<&'a [u64]>,
-    /// Sonde μ (lot 5, §3.4) : le multiplicateur du non-revêtu, en 256es (256 : neutre), et la part `offroad` de chaque
-    /// chaîne de la vue (`ViewData::off_q8`). Posés par le banc seulement.
-    #[cfg(feature = "probe")]
+    /// Consigne de part (lot 5, §4.2) : le multiplicateur μ du non-revêtu, en 256es (256 : neutre), et la part `offroad` de
+    /// chaque chaîne de la vue (`ViewData::off_q8`). `None` : 1.14.
     mu_q8: Option<u32>,
-    #[cfg(feature = "probe")]
     off_q8: &'a [u8],
 }
 
@@ -255,22 +253,18 @@ impl<'a> Weighter<'a> {
             ride_ok: mode != Mode::Strict && !v.unrideable.is_empty(),
             #[cfg(feature = "probe")]
             keep_out: None,
-            #[cfg(feature = "probe")]
             mu_q8: None,
-            #[cfg(feature = "probe")]
             off_q8: &v.off_q8,
         }
     }
 
-    /// Pose le multiplicateur μ (sonde du lot 5, §3.4) ; `None` ou 256 : aucun effet.
-    #[cfg(feature = "probe")]
+    /// Pose le multiplicateur μ (lot 5, §4.2) ; `None` ou 256 : aucun effet.
     pub fn with_mu_q8(mut self, mu_q8: Option<u32>) -> Self {
         self.mu_q8 = mu_q8;
         self
     }
 
     /// `⌈w × (256 + (μ − 256) × f / 256) / 256⌉` (§4.2), en entiers : même poids en natif et en WASM. `INF` reste `INF`.
-    #[cfg(feature = "probe")]
     #[inline]
     pub(crate) fn mu_of(&self, w: u32, f: u8) -> u32 {
         let Some(mu) = self.mu_q8 else { return w };
@@ -305,7 +299,6 @@ impl<'a> Weighter<'a> {
     pub fn chain(&self, c: u32) -> u32 {
         let w = self.chain_plain(c);
         // Toutes les branches de `chain_plain` y passent, le `return w` sans surcouche compris (§4.2).
-        #[cfg(feature = "probe")]
         let w = self.mu_of(w, self.off_q8.get(c as usize).copied().unwrap_or(0));
         w
     }
@@ -346,13 +339,11 @@ impl<'a> Weighter<'a> {
         // Même crochet que `chain` ; une arête entière `offroad` pèse 255/256 comme une chaîne qui l'est tout entière.
         // Comme pour `chain`, `f` n'existe que là où la vue a son tableau (`off_q8`, vue gravel) : sur la vue route,
         // `f = 0` pour les arêtes partielles aussi, sinon μ y agirait sur le départ et l'arrivée seulement.
-        #[cfg(feature = "probe")]
-        let w = if self.mu_q8.is_some() && !self.off_q8.is_empty() && eng.attrs_len(e).0.offroad() {
+        if self.mu_q8.is_some() && !self.off_q8.is_empty() && eng.attrs_len(e).0.offroad() {
             self.mu_of(w, 255)
         } else {
             w
-        };
-        w
+        }
     }
 
     fn edge_plain<B: AsRef<[u8]>>(&self, eng: &Engine<B>, e: u32) -> u32 {

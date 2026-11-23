@@ -112,7 +112,8 @@ fn reason_of(f: Failure) -> Result<GenerationReason, Problem> {
         Failure::NoTeamData => return Err(overlay_required(OverlayProblemState::Absent)),
         Failure::Stopped => return Err(Problem::new(ProblemCode::Timeout, "generation budget exceeded")),
         // Jamais attendus : la fenêtre contient les tuiles nécessaires et `distance_m_max` reste sous la borne du moteur.
-        Failure::WindowEscape | Failure::TooLong => return Err(Problem::internal()),
+        // `OffroadOnRoad` : le service ne passe aucune cible en ROAD (400 avant le moteur).
+        Failure::WindowEscape | Failure::TooLong | Failure::OffroadOnRoad => return Err(Problem::internal()),
     })
 }
 

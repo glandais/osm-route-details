@@ -20,6 +20,8 @@ mod figures;
 mod generate;
 mod geo;
 mod index;
+mod offroad;
+mod offroad_prior;
 #[cfg(feature = "probe")]
 pub mod probe;
 #[cfg(feature = "probe")]
@@ -44,7 +46,7 @@ mod tests_attract;
 mod tests_graft;
 #[cfg(test)]
 mod tests_index;
-#[cfg(all(test, feature = "probe"))]
+#[cfg(test)]
 mod tests_mu;
 #[cfg(test)]
 mod tests_organic;
@@ -52,6 +54,8 @@ mod tests_organic;
 mod tests_reference;
 #[cfg(test)]
 mod tests_rideability;
+#[cfg(test)]
+mod tests_steer;
 #[cfg(test)]
 mod tests_team_sparse;
 #[cfg(test)]
@@ -68,11 +72,12 @@ pub use cost::{
 };
 pub use engine::{Engine, EngineError, Params, Rideability};
 pub use generate::{
-    generate, generate_in, generate_with_diagnostics, generate_with_diagnostics_in, generate_with_figures_in,
-    route_geometry,
+    generate, generate_in, generate_steered_in, generate_with_diagnostics, generate_with_diagnostics_in,
+    generate_with_figures_in, route_geometry,
 };
 pub use geo::LatLon;
 pub use index::{cap_dm_of, foreign_index, short_components};
+pub use offroad::{OffroadOutcome, OffroadTarget, Steer, SteeredGeneration};
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
@@ -400,6 +405,8 @@ pub enum Failure {
     /// La recherche a touché le bord de la fenêtre (garde-fou du §5.2, jamais attendu avec les tuiles nécessaires) :
     /// le résultat est jeté, l'appelant refait la génération dans une fenêtre plus grande.
     WindowEscape,
+    /// Une cible de part de non-revêtu sur un parcours ROAD (lot 5, §4.1) : la vue route n'a rien à viser.
+    OffroadOnRoad,
     /// La distance dépasse `Params::max_distance_m` : l'index creux des composantes ne répondrait plus exactement.
     TooLong,
 }

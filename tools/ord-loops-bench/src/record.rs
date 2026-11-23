@@ -132,6 +132,7 @@ pub fn failure_code(f: &Failure) -> String {
         Failure::Stopped => "STOPPED".into(),
         Failure::WindowEscape => "WINDOW_ESCAPE".into(),
         Failure::TooLong => "TOO_LONG".into(),
+        Failure::OffroadOnRoad => "OFFROAD_ON_ROAD".into(),
         Failure::NoRoute(d) => format!(
             "NO_ROUTE:{}",
             match d {

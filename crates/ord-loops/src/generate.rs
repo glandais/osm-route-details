@@ -14,6 +14,7 @@ use crate::attract::attr_w;
 use crate::engine::{Engine, Snap, ViewData};
 use crate::figures::{self, Fixed, Scratch, TriState, FIGURE_SALT};
 use crate::geo::{heading_deg, turn_angle_deg, LatLon, Local};
+use crate::offroad::{OffroadOutcome, Steer, SteeredGeneration};
 use crate::reverse::astar_back;
 use crate::search::{
     astar, make_anchor, tree_backward, tree_forward, Anchor, Ban, Ctx, Disc, Forbidden, Tree, ViewWs,
@@ -25,7 +26,7 @@ use crate::verify::{check_route_aligned_in, check_route_in, trim_piece, Check, V
 use crate::window::Window;
 use crate::{
     Diagnostics, Failure, Family, FigureDiagnostics, Figures, Generation, Mode, NoRouteDetail, Organic,
-    Position, Request, Route, Step,
+    Position, Request, RideType, Route, Step,
 };
 
 const SECTORS: usize = 12;
@@ -107,6 +108,7 @@ pub fn route_geometry<B: AsRef<[u8]>>(base: &GraphFile<B>, r: &Route) -> Vec<Lat
     out.into_iter().map(LatLon::from_e7).collect()
 }
 
+#[derive(Clone)]
 pub(crate) struct Scored {
     pub route: Route,
     pub score: f64,
@@ -251,10 +253,81 @@ pub fn generate_with_figures_in<B: AsRef<[u8]>>(
     ws: &mut Workspace,
     stop: &mut dyn FnMut() -> bool,
 ) -> (Result<Generation, Failure>, Diagnostics, FigureDiagnostics) {
+    let (res, diag, fig) = run_step(e, win, team, r, ws, stop, None);
+    match res {
+        Ok(c) => {
+            let routes = finish(e, r, c.scored, c.organic, None);
+            let g = Generation {
+                routes,
+                network_m: diag.reached_m,
+                familiarity_fallback: false,
+                diagnostics: diag.clone(),
+            };
+            (Ok(g), diag, fig)
+        }
+        Err(f) => (Err(f), diag, fig),
+    }
+}
+
+/// Comme [`generate_with_figures_in`], avec une consigne de part de non-revêtu (lot 5, §4.7). `Steer::NONE` délègue : le
+/// moteur de 1.14, au bit près. Avec une cible, la recherche de μ de `crate::offroad` ; la requête ne gagne aucun champ.
+///
+/// - **ROAD** est refusé ([`Failure::OffroadOnRoad`]) : la vue route n'a rien à viser.
+/// - **Mode strict** : la cible est acceptée sans effet, un seul pas à μ = 1 (le strict reste celui de 1.14) ; `reached`
+///   dit la part obtenue.
+/// - Les diagnostics rendus sont ceux du pas qui a donné la première proposition.
+pub fn generate_steered_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    steer: &Steer,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+) -> (Result<SteeredGeneration, Failure>, Diagnostics, FigureDiagnostics) {
+    let Some(t) = steer.offroad else {
+        let (res, diag, fig) = generate_with_figures_in(e, win, team, r, ws, stop);
+        return (res.map(|generation| SteeredGeneration { generation, offroad: None }), diag, fig);
+    };
+    if r.ride_type == RideType::Road {
+        return (Err(Failure::OffroadOnRoad), Diagnostics::default(), FigureDiagnostics::default());
+    }
+    if !crate::offroad::steerable(r.ride_type, r.mode) {
+        let (res, diag, fig) = run_step(e, win, team, r, ws, stop, None);
+        let res = res.map(|c| {
+            let routes = finish(e, r, c.scored, c.organic, None);
+            let target = f64::from(t.target_milli) / 1000.0;
+            let reached = routes.first().is_some_and(|f| {
+                (offroad_share(f) - target).abs() <= f64::from(t.tolerance_milli) / 1000.0 + 1e-9
+            });
+            let generation = Generation {
+                routes,
+                network_m: diag.reached_m,
+                familiarity_fallback: false,
+                diagnostics: diag.clone(),
+            };
+            SteeredGeneration { generation, offroad: Some(OffroadOutcome { reached, steps: 1, mu_q8: 256 }) }
+        });
+        return (res, diag, fig);
+    }
+    crate::offroad::search(e, win, team, r, &t, ws, stop)
+}
+
+/// Une génération complète à μ donné (lot 5, §4.3) : les candidats contrôlés et notés, avant le choix. `mu_q8 = None` est
+/// 1.14 au bit près.
+pub(crate) fn run_step<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+    mu_q8: Option<u32>,
+) -> (Result<Collected, Failure>, Diagnostics, FigureDiagnostics) {
     let mut diag = Diagnostics::default();
     let mut fig = FigureDiagnostics::default();
     // Le modèle des virages et l'interdiction de l'aller-retour de l'organique (§16) ; sans effet hors boucle ou en strict,
-    // où `generate_inner` rend la main à `Classic`.
+    // où `collect` rend la main à `Classic`.
     let org_search = match r.figures {
         Figures::Organic(o) => Some(OrgSearch::new(
             o.tune.turns.then(|| TurnModel::new(e.params.max_turn_deg, o.tune.turn_margin_deg)),
@@ -262,19 +335,22 @@ pub fn generate_with_figures_in<B: AsRef<[u8]>>(
         )),
         Figures::Classic => None,
     };
-    let res = generate_inner(e, win, team, r, ws, stop, &mut diag, &mut fig, org_search.as_ref());
+    let res = collect(e, win, team, r, ws, stop, &mut diag, &mut fig, org_search.as_ref(), mu_q8);
     if let Some(o) = &org_search {
         fig.turn_cut = o.turn_cut.get();
         fig.turn_evals = o.turn_evals.get();
         fig.reuse_cut = o.reuse_cut.get();
     }
-    match res {
-        Ok(mut g) => {
-            g.diagnostics = diag.clone();
-            (Ok(g), diag, fig)
-        }
-        Err(f) => (Err(f), diag, fig),
-    }
+    (res, diag, fig)
+}
+
+/// Ce qu'une génération a contrôlé : les candidats notés, et de quoi les choisir (figure tirée, écart de note) quand la
+/// génération est organique.
+pub(crate) struct Collected {
+    pub scored: Vec<Scored>,
+    /// `(le premier parcours est un triangle, écart de note qui fait préférer une figure absente)`, génération organique
+    /// avec au moins un triangle gardé ; la graine fixe le tirage, tous les pas d'une consigne le partagent.
+    pub organic: Option<(bool, f64)>,
 }
 
 /// Les attracteurs lus par le demi-tour de la lentille (lot 4, 4d, §17.7).
@@ -319,7 +395,7 @@ pub(crate) fn lens_pick(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn generate_inner<B: AsRef<[u8]>>(
+fn collect<B: AsRef<[u8]>>(
     e: &Engine<B>,
     win: &Window,
     team: Option<TeamCtx<'_>>,
@@ -329,7 +405,8 @@ fn generate_inner<B: AsRef<[u8]>>(
     diag: &mut Diagnostics,
     fig: &mut FigureDiagnostics,
     org_search: Option<&OrgSearch>,
-) -> Result<Generation, Failure> {
+    mu_q8: Option<u32>,
+) -> Result<Collected, Failure> {
     // Retouche, lot 0 (sonde) : le masque posé par le banc, pris dès l'entrée (un appel suivant ne l'hérite jamais, même
     // après un échec précoce).
     #[cfg(feature = "probe")]
@@ -345,13 +422,15 @@ fn generate_inner<B: AsRef<[u8]>>(
     let vi = ride.view_index();
     assert_eq!(win.vi, vi, "la fenêtre n'est pas celle de la vue du type demandé");
     let v = &win.v;
-    let w = Weighter::new(v, team, ride, r.mode, r.familiarity, r.off_team_cost_q8);
+    let w = Weighter::new(v, team, ride, r.mode, r.familiarity, r.off_team_cost_q8).with_mu_q8(mu_q8);
     #[cfg(feature = "probe")]
     let w = {
         if let Some(k) = &keep_out {
             k.assert_window(win);
         }
-        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits)).with_mu_q8(ws.mu_q8)
+        // La sonde du banc (`Workspace::set_mu_q8`) ne prime pas sur une consigne : elle vaut quand il n'y en a pas.
+        let mu = mu_q8.or(ws.mu_q8);
+        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits)).with_mu_q8(mu)
     };
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
@@ -685,6 +764,29 @@ fn generate_inner<B: AsRef<[u8]>>(
         };
         return Err(Failure::NoRoute(detail));
     }
+    let organic = match (org.as_ref(), tri.as_ref()) {
+        (Some(o), Some(st)) if scored.iter().any(|s| s.route.family == Family::Triangle) => {
+            Some((st.draw.tri_first, f64::from(o.tune.near_score_milli) / 1000.0))
+        }
+        _ => None,
+    };
+    Ok(Collected { scored, organic })
+}
+
+/// Le choix ordinaire de trois parcours parmi les candidats notés. Avec une cible de part (lot 5, §4.5), la note gagne
+/// `OFFROAD_SCORE_WEIGHT × |part − cible|` avant le tri.
+pub(crate) fn finish<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    r: &Request,
+    mut scored: Vec<Scored>,
+    organic: Option<(bool, f64)>,
+    target: Option<f64>,
+) -> Vec<Route> {
+    if let Some(t) = target {
+        for s in &mut scored {
+            s.score += crate::offroad::SCORE_WEIGHT * (offroad_share(&s.route) - t).abs();
+        }
+    }
     scored.sort_by(|a, b| a.score.partial_cmp(&b.score).expect("fini").then_with(|| a.key.cmp_key(&b.key)));
     // Équipe d'abord, familiarité demandée : une proposition qui n'emprunte presque pas la route de l'équipe n'est pas
     // gardée à côté d'une autre qui s'y tient (moins de la moitié de la meilleure part d'équipe).
@@ -694,10 +796,9 @@ fn generate_inner<B: AsRef<[u8]>>(
     } else {
         0.0
     };
-    let has_triangle = scored.iter().any(|s| s.route.family == Family::Triangle);
-    let chosen: Vec<Route> = if let (Some(o), Some(st), true) = (org.as_ref(), tri.as_ref(), has_triangle) {
+    let chosen: Vec<Route> = if let Some((tri_first, near_score)) = organic {
         let pool: Vec<Scored> = scored.into_iter().filter(|s| share(&s.route) >= min_share).collect();
-        figures::choose(e, pool, st.draw.tri_first, f64::from(o.tune.near_score_milli) / 1000.0)
+        figures::choose(e, pool, tri_first, near_score)
     } else {
         let mut chosen: Vec<Route> = Vec::new();
         for s in scored {
@@ -713,12 +814,12 @@ fn generate_inner<B: AsRef<[u8]>>(
         }
         chosen
     };
-    Ok(Generation {
-        routes: chosen,
-        network_m: diag.reached_m,
-        familiarity_fallback: false,
-        diagnostics: Diagnostics::default(),
-    })
+    chosen
+}
+
+/// Part de la longueur d'un parcours contrôlé qui est non revêtue au sens route-details.
+pub(crate) fn offroad_share(r: &Route) -> f64 {
+    r.offroad_m / r.length_m.max(1.0)
 }
 
 /// Faisabilité sur les deux arbres, avant tout candidat (corrections Java §13.10 et §13.11).
