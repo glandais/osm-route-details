@@ -27,16 +27,17 @@ Les choix que cette note prend sans réponse du propriétaire sont marqués **(d
 
 > **Révision du 23 novembre 2026, après le C4** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §10.5
 > et §10.6 ; elle prime sur le §4.3) : avec une consigne, la réponse n'est jamais pire que sans.
-> 1. **Le pas 0 n'est jamais joué sous μ = 1** : il est joué à `max(prior, 1)`. Sous 1, une génération coûte plus que sans
->    cible dans les agglomérations (× 1,7 à × 3,6 à μ ≤ 0,35 sur toutes les requêtes mesurées, × 0,9 à × 2,2 à 0,7, états fixés
->    de l'A* en proportion, §10.5), et le pas 0 est le seul à garder le budget entier du service : c'était le 504 de Tokyo à
->    0,47 (pas 0 à 0,7 : 33,9 s contre 15,1 s à μ = 1). À μ = 1, le pas 0 est la génération sans cible au bit près ; le prior
->    (0,7 pour 0,47, 0,35 pour 0,60) est joué au **pas 1** si la part est trop basse ou s'il n'y a aucune proposition.
->    Au-dessus de 1 (cran 0,25, prior 1,4), le pas 0 reste au prior : × 0,8 à × 1,9 (plus cher sur 2 requêtes sur 5, §10.5),
->    pas de 504 de plus au relevé ; la garantie n'y est donc pas stricte (écart laissé au propriétaire, §10.6).
-> 2. **Dernier recours** : si aucun pas n'a de candidat et que μ = 1 n'a pas été joué, la génération sans cible est jouée,
->    dans le budget du service seul (hors `max_steps` et hors délai des pas). `DistanceTooShort`, qui suit μ (plus court chemin
->    d'un aller simple), compte comme un pas sans candidat au lieu d'arrêter la recherche.
+> 1. **Le pas 0 est toujours joué à μ = 1** (relecture du même jour : la première version de la révision le jouait à
+>    `max(prior, 1)`). Sous 1, une génération coûte plus que sans cible dans les agglomérations (× 1,7 à × 3,6 à μ ≤ 0,35 sur
+>    toutes les requêtes mesurées, × 0,9 à × 2,2 à 0,7, états fixés de l'A* en proportion, §10.5), et le pas 0 est le seul à
+>    garder le budget entier du service : c'était le 504 de Tokyo à 0,47 (pas 0 à 0,7 : 33,9 s contre 15,1 s à μ = 1).
+>    Au-dessus de 1 (cran 0,25, prior 1,4) le coût va de × 0,8 à × 1,9 : un pas 0 au prior n'y garantissait rien non plus.
+>    À μ = 1, le pas 0 est la génération sans cible au bit près (poids, stop, verdict, durée) ; le prior est joué au
+>    **pas 1** s'il n'y a aucune proposition ou si l'écart pousse de son côté (part trop basse pour un prior sous 1, trop
+>    haute pour un prior au-dessus), sinon la recherche ordinaire du §4.3.
+> 2. **Pas de dernier recours** : μ = 1 étant toujours joué en premier, la génération sans cible l'est toujours.
+>    `DistanceTooShort`, qui suit μ (plus court chemin d'un aller simple), compte comme un pas sans candidat au lieu d'arrêter
+>    la recherche ; si aucun pas n'a de candidat, le verdict est celui du pas 0, celui de la requête sans cible.
 > 3. **Arrêt avant un pas k ≥ 1** : `écoulé + 1,5 × durée(plus long pas joué, pas 0 compris) > until` ; la réserve de 0,2 ×
 >    pas 0 disparaît, l'estimation n'est plus jamais sous le pas 0. Un pas lancé reste coupé à `until` et jeté.
 > 4. **Les 10 s se comptent depuis la première fenêtre** : après un échappement de fenêtre, la seconde recherche ne regagne
@@ -358,7 +359,7 @@ w′ = ⌈w × (256 + (μ_q8 − 256) × f / 256) / 256⌉,   f = part offroad d
 Chaque pas est une génération complète à μ donné (arbres, jambes, contrôle interne), **sans** le contrôleur indépendant, qui
 ne passe qu'une fois, sur les parcours finalement rendus.
 
-1. **Pas 0** (révisé après le C4, encadré du haut : joué à `max(prior, 1)`, le prior au pas 1) : μ₀ = `prior(type, cible)`, table linéaire par morceaux apprise au 5a (μ médian qui atteint chaque cible,
+1. **Pas 0** (révisé après le C4, encadré du haut : joué à μ = 1, le prior au pas 1) : μ₀ = `prior(type, cible)`, table linéaire par morceaux apprise au 5a (μ médian qui atteint chaque cible,
    §3.4), figée dans le moteur comme la table commune (`offroad_prior.rs`, constantes générées par le banc, provenance sans
    donnée privée). Le prior est général, pas par équipe (défaut pris, à contredire).
 2. **Mesure** : part `offroad` de la première proposition après le choix (§4.5). Dans `[cible − tol, cible + tol]` → arrêt.

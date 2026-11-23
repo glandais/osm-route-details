@@ -683,10 +683,11 @@ proche non joué, à égalité le plus bas, et épuisait ses quatre pas sous 1 (
 ### 10.6 Correction et relevé après
 
 Correction (encadré du haut de la note, révision après le C4) : pas 0 à `max(prior, 1)`, le prior au pas 1 ; dernier recours à
-μ = 1 si aucun pas n'a de candidat ; `DistanceTooShort` traité comme un pas sans candidat ; aucun pas k ≥ 1 si `écoulé + 1,5 ×
+μ = 1 si aucun pas n'a de candidat (tous deux remplacés à la relecture : pas 0 toujours à μ = 1, voir plus bas) ; `DistanceTooShort` traité comme un pas sans candidat ; aucun pas k ≥ 1 si `écoulé + 1,5 ×
 plus long pas joué > until` ; 10 s comptées depuis la première fenêtre. Tests : `tests_steer.rs`
 (`step_zero_is_never_below_one_and_the_prior_comes_next`, `a_target_never_fails_where_the_plain_engine_succeeds`,
-`when_no_step_has_a_candidate_mu_one_is_played`, `a_step_is_launched_only_if_it_fits_before_the_limit`) et
+`when_no_step_has_a_candidate_mu_one_is_played`, devenu `a_low_target_plays_mu_one_first_and_shares_the_plain_verdict`,
+`a_step_is_launched_only_if_it_fits_before_the_limit`) et
 `the_steps_stop_ten_seconds_after_the_first_window_and_a_second_before_the_deadline` (service).
 
 Rejoué le 23 novembre sur la correction, service natif (pas le conteneur de 3 Gio du §10.1 : les durées ne se comparent qu'entre
@@ -710,10 +711,12 @@ variantes de cette séance), 42 requêtes du §10.1, sans cible et à chaque cra
   0,25 et 0,60 : 40 × 200, 1 × 503, 1 × 504 ; 0,47 : 39 × 200, 1 × 503, 2 × 504, les mêmes requêtes que sans cible. P50 5,71 ·
   7,55 · 8,97 · 9,25 s, P90 23,5 à 26,6 s. Aucun échec de plus qu'à la même requête sans cible ; à 4 clients les requêtes
   lentes se bousculent dans les deux places de calcul et l'échec dépend de l'ordre d'arrivée, comme en 1.14.0.
-- **Ce qui reste** : au cran 0,25, le pas 0 est au prior 1,4, dont le coût est × 0,8 à × 1,9 celui de μ = 1 (§10.5) ; pas de
-  504 de plus au relevé, mais la garantie n'y est pas stricte. La lever demanderait le pas 0 à μ = 1 pour toutes les cibles,
-  un pas de plus en moyenne au cran 0,25 : laissé au propriétaire. `reached` baisse en zone dense à 0,47 (9 / 24, contre 8 / 23
-  au §10.3 en conteneur, à lire avec prudence : machines et budget de mémoire différents) ; la France (C3) n'est pas rejouée.
+- **Ce qui restait** : au cran 0,25, le pas 0 était au prior 1,4, dont le coût est × 0,8 à × 1,9 celui de μ = 1 (§10.5) ;
+  pas de 504 de plus au relevé, mais sans garantie. **Levé à la relecture du même jour** : le pas 0 est joué à μ = 1 pour
+  toutes les cibles, le prior au pas 1 (encadré du haut de la note, point 1), et le dernier recours, devenu sans objet, est
+  retiré. Le tableau ci-dessus, cran 0,25, est celui du pas 0 au prior et **n'est pas rejoué** : on y attend environ un pas
+  de plus en moyenne, dans le délai des pas. `reached` baisse en zone dense à 0,47 (9 / 24, contre 8 / 23 au §10.3 en
+  conteneur, à lire avec prudence : machines et budget de mémoire différents) ; la France (C3) n'est pas rejouée.
 
 ## 11. Relecture sur carte (étape 9, §13 de la note)
 

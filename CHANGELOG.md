@@ -19,9 +19,9 @@ graphe synthétique n'a aucune arête bornée) ; sur des données réelles, des 
   Le moteur joue au plus `generator.offroad_max_steps` (4) générations à des multiplicateurs μ du non-revêtu pris sur une
   grille {0,25 ; 0,35 ; 0,5 ; 0,7 ; 1 ; 1,4 ; 2}, mélange leurs candidats et rend les trois meilleurs, notés avec l'écart à la
   cible ; plus aucun pas après `min(échéance - 1 s, generator.offroad_steps_until_ms)` (10 s, comptées depuis la première
-  fenêtre). En mode strict : un seul pas. **Jamais pire que sans cible** : la première génération n'est jamais jouée sous
-  μ = 1 (à μ = 1, c'est la génération sans cible), et si aucune n'a de candidat, la génération sans cible est jouée dans le
-  budget restant ; une consigne ne coûte ni 504 ni 422 que la requête sans cible n'aurait pas eu.
+  fenêtre). En mode strict : un seul pas. **Jamais pire que sans cible** : la première génération est toujours jouée à
+  μ = 1, c'est-à-dire la génération sans cible au bit près, dans le budget entier du service ; les suivantes sont coupées et
+  jetées au délai des pas : une consigne ne coûte ni 504 ni 422 que la requête sans cible n'aurait pas eu.
 - **Par parcours : `offroad_m` et `offroad_share`**, mesurés par le contrôleur indépendant, pour tous les types (route
   comprise). `unpaved_m`, `unpaved_share` et `presumed_surface_m` restent le tag seul.
 - **Réponse : `offroad`** (`null` sans cible, sinon `{ target, tolerance, reached, steps }`). `reached` se lit sur la première

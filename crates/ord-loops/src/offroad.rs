@@ -121,13 +121,11 @@ pub(crate) fn search<B: AsRef<[u8]>>(
     let mut first_err: Option<Failure> = None;
     let mut max_dur = Duration::ZERO;
     let prior = grid_index(u32::from(t.target_milli));
-    // Le pas 0 n'est jamais joué à μ < 1 : il y coûte plus cher que la génération sans cible dans les agglomérations (relevé
-    // du 23 novembre, `ord-loops-lot5-mesures.md` §10.5 : × 1,7 à × 3,6 à μ ≤ 0,35, jusqu'à × 2,2 à 0,7), et c'est lui seul
-    // qui garde le budget entier du service. À μ = 1, le pas 0 est la génération sans cible au bit près : une consigne ne
-    // coûte ni 504 ni 422 que la requête sans cible n'aurait pas eu. Le prior y est joué au pas 1 (`jump`). Au-dessus de 1
-    // (cibles basses), le pas 0 reste au prior (× 0,8 à × 1,9 au même relevé, pas de 504 de plus).
-    let mut idx = prior.max(NEUTRAL);
-    let first_idx = idx;
+    // Le pas 0 est toujours joué à μ = 1 : c'est la génération sans cible au bit près (mêmes poids, même stop, même verdict,
+    // même durée), et c'est lui seul qui garde le budget entier du service. Une consigne ne coûte donc ni 504 ni 422 que la
+    // requête sans cible n'aurait pas eu (relevé du 23 novembre, `ord-loops-lot5-mesures.md` §10.5 : sous 1, × 1,7 à × 3,6
+    // à μ ≤ 0,35 ; au-dessus, × 0,8 à × 1,9 à 1,4). Le prior est joué au pas 1 (`jump`).
+    let mut idx = NEUTRAL;
     // Anchor and direction of the next step: the grid point behind the first proposal and the sign of its gap.
     let mut next: Option<(usize, Option<i32>)>;
 
@@ -190,34 +188,15 @@ pub(crate) fn search<B: AsRef<[u8]>>(
         if recs.len() >= max_steps || !fits(start.elapsed(), max_dur, until) || stop() {
             break;
         }
-        // Après un pas 0 joué à μ = 1 à la place d'un prior plus bas : le prior, si la part est trop basse ou s'il n'y a
-        // aucune proposition ; trop haute, la recherche ordinaire (vers les μ plus chers).
+        // Après le pas 0 à μ = 1 : le prior, s'il n'y a aucune proposition ou si l'écart pousse de son côté ; sinon la
+        // recherche ordinaire.
         let dir = next.and_then(|n| n.1);
-        let jump = k == 0 && prior < first_idx && !played[prior] && dir != Some(1);
+        let toward = (prior as i32 - NEUTRAL as i32).signum();
+        let jump = k == 0 && prior != NEUTRAL && dir.is_none_or(|d| d == toward);
         let (anchor, dir) = next.unwrap_or((idx, None));
         match if jump { Some(prior) } else { next_index(&played, anchor, dir) } {
             Some(i) => idx = i,
             None => break,
-        }
-    }
-
-    // Aucun pas n'a de candidat et μ = 1 n'a pas été joué (pas 0 au-dessus de 1, pas coupés, pas comptés) : la génération
-    // sans cible, dans le budget du service seul. Avec une consigne, la réponse n'est jamais pire que sans.
-    if pool.is_empty() && !played[NEUTRAL] && !stop() {
-        let (res, diag, fig) = run_step(e, win, team, r, ws, stop, Some(GRID_Q8[NEUTRAL]));
-        match res {
-            Ok(c) => {
-                organic = organic.or(c.organic);
-                let rec = recs.len();
-                pool.extend(c.scored.into_iter().map(|s| (rec, s)));
-                recs.push(Rec { idx: NEUTRAL, diag, fig });
-            }
-            Err(f @ (Failure::NoRoute(_) | Failure::DistanceTooShort)) => {
-                first_err.get_or_insert(f);
-                recs.push(Rec { idx: NEUTRAL, diag, fig });
-            }
-            // Coupé par le service : le verdict des pas joués tient.
-            Err(_) => {}
         }
     }
 

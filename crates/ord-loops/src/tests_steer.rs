@@ -121,8 +121,8 @@ fn a_target_on_a_road_request_is_refused() {
     assert_eq!(res.err(), Some(Failure::OffroadOnRoad));
 }
 
-/// La cible d'une piste (0,85) : la piste l'emporte déjà à μ = 1 (× 0,75 du gravel), le pas 0 y est joué (le prior, μ = 1/4,
-/// est plus bas que 1) et l'atteint.
+/// La cible d'une piste (0,85) : la piste l'emporte déjà à μ = 1 (× 0,75 du gravel), le pas 0 y est joué (toujours) et
+/// l'atteint.
 #[test]
 fn a_reachable_target_is_reached_at_the_first_step() {
     let e = engine_of(&mut corridors(true));
@@ -133,10 +133,10 @@ fn a_reachable_target_is_reached_at_the_first_step() {
     assert_eq!(out.steps, 1);
     assert_eq!(out.mu_q8, 256);
     assert!(share_of(&e, &s.generation.routes[0]) > 0.8);
-    // Cible 0 : le couloir revêtu, μ = 2 au pas 0 (un prior au-dessus de 1 est joué tel quel).
+    // Cible 0 : la piste au pas 0 (μ = 1, toujours), trop haute ; le prior au-dessus de 1 (μ = 2) au pas 1, le couloir revêtu.
     let s = steered(&e, &r, &target(0, 4, 10_000), &mut || false).unwrap();
     let out = s.offroad.unwrap();
-    assert!(out.reached && out.steps == 1 && out.mu_q8 == 512, "{out:?}");
+    assert!(out.reached && out.steps == 2 && out.mu_q8 == 512, "{out:?}");
     assert!(share_of(&e, &s.generation.routes[0]) < 0.05);
 }
 
@@ -201,10 +201,10 @@ fn a_target_never_fails_where_the_plain_engine_succeeds() {
     }
 }
 
-/// Le dernier recours : aucun pas n'a de candidat et μ = 1 n'a pas été joué (cible basse, prior au-dessus de 1, un seul pas
-/// permis ou aucun délai) : la génération sans cible est jouée, dans le budget du service seul.
+/// Cible basse (prior au-dessus de 1) : le pas 0 reste à μ = 1, jamais au prior. Ici μ = 2 n'a aucun candidat ; la requête
+/// rend ce que rend la génération sans cible, et, coupée par le service pendant le pas 0, le même verdict qu'elle.
 #[test]
-fn when_no_step_has_a_candidate_mu_one_is_played() {
+fn a_low_target_plays_mu_one_first_and_shares_the_plain_verdict() {
     // Au nord une piste dans la tolérance ; au sud le résidentiel de 4,2 km, hors tolérance, moins cher à μ = 2.
     let e = engine_of(&mut corridors_of(
         Corridor { highway: "track", unpaved: true, east: 700.0 },
@@ -218,28 +218,30 @@ fn when_no_step_has_a_candidate_mu_one_is_played() {
             .is_ok()
     };
     assert!(at(256) && !at(512), "précondition");
-    for (max, until) in [(1u8, 10_000), (4, 0)] {
+    for (max, until, steps) in [(1u8, 10_000, 1u8), (4, 0, 1), (4, 10_000, 4)] {
         let s = steered(&e, &r, &target(0, max, until), &mut || false).unwrap();
         let out = s.offroad.unwrap();
         assert!(!out.reached, "{out:?}");
-        assert_eq!((out.steps, out.mu_q8), (2, 256), "{max} pas, {until} ms : {out:?}");
+        assert_eq!((out.steps, out.mu_q8), (steps, 256), "{max} pas, {until} ms : {out:?}");
         assert!(share_of(&e, &s.generation.routes[0]) > 0.8);
     }
-    // Le service a coupé : le dernier recours n'est pas joué, le verdict des pas joués tient (jamais un 504 après eux).
+    // Le service coupe au milieu du pas 0 : le verdict de la génération sans cible coupée au même appel.
     let calls = Cell::new(0u32);
-    let n0 = {
-        let _ = steered(&e, &r, &target(0, 1, 0), &mut || {
-            calls.set(calls.get() + 1);
-            false
-        });
-        calls.get()
-    };
-    let k = Cell::new(0u32);
-    let cut = steered(&e, &r, &target(0, 1, 0), &mut || {
+    let _ = generate_with_figures_in(&e, &win, None, &r, &mut Workspace::new(), &mut || {
+        calls.set(calls.get() + 1);
+        false
+    });
+    let n0 = calls.get();
+    let cut_at = |k: &Cell<u32>| {
         k.set(k.get() + 1);
         k.get() > n0 / 2 + 1
-    });
-    assert_eq!(cut.err(), Some(Failure::DistanceTooShort));
+    };
+    let k = Cell::new(0u32);
+    let plain = generate_with_figures_in(&e, &win, None, &r, &mut Workspace::new(), &mut || cut_at(&k)).0;
+    let k = Cell::new(0u32);
+    let cut = steered(&e, &r, &target(0, 4, 10_000), &mut || cut_at(&k));
+    assert!(plain.is_err());
+    assert_eq!(cut.err(), plain.err());
 }
 
 /// Aucun pas k ≥ 1 n'est lancé si le temps écoulé plus sa durée estimée, au moins une fois et demie le plus long pas joué
