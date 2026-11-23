@@ -335,6 +335,8 @@ pub struct Route {
     pub shared_m: f64,
     pub crossings: u32,
     pub unpaved_m: f64,
+    /// Longueur non revêtue au sens route-details (`Attrs::surface_rd`), mesurée par le vérificateur (lot 5, §8.2).
+    pub offroad_m: f64,
     pub presumed_surface_m: f64,
     pub bearing_deviation_deg: Option<f64>,
     pub familiarity: f32,

@@ -147,6 +147,9 @@ pub struct Report {
     pub bridged_m: f64,
     /// Longueur hors équipe, quelle qu'en soit l'issue.
     pub off_team_m: f64,
+    /// Longueur sur des arêtes non revêtues au sens route-details (`Attrs::surface_rd`, lot 5, §8.2) : une mesure,
+    /// pas une règle.
+    pub offroad_m: f64,
     pub corridor_share: f64,
     pub start_zone_m: f64,
     pub end_zone_m: f64,
@@ -410,6 +413,7 @@ impl<'a, B: AsRef<[u8]>> Checker<'a, B> {
             pieces.iter().map(|p| self.is_team(req.ride_type, p.edge, infos[&p.edge].attrs)).collect();
         rep.team_m = pieces.iter().zip(&team).filter(|(_, t)| **t).map(|(p, _)| p.len).sum();
         rep.off_team_m = total - rep.team_m;
+        rep.offroad_m = pieces.iter().filter(|p| infos[&p.edge].attrs.offroad()).map(|p| p.len).sum();
         // Degré admis des seuls nœuds du parcours (lot 6, §8.1).
         let route_nodes: Vec<u32> = pieces.iter().map(|p| p.to).collect();
         let route_deg = degrees_of(self.g, self.index(), adm, &route_nodes);

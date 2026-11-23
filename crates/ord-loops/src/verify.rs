@@ -70,6 +70,8 @@ pub struct Check {
     pub team_m: f64,
     pub bridged_m: f64,
     pub unpaved_m: f64,
+    /// Longueur non revêtue au sens route-details (`Attrs::surface_rd`, lot 5, §2.2), à côté de `unpaved_m` (goût).
+    pub offroad_m: f64,
     pub presumed_surface_m: f64,
     /// Indices `i` des nœuds (entre le morceau `i` et le suivant) où un virage trop serré a été relevé.
     pub sharp_at: Vec<usize>,
@@ -412,6 +414,9 @@ fn check_route_with<B: AsRef<[u8]>>(
         let a = e.attrs(p.edge);
         if a.is_unpaved() {
             out.unpaved_m += p.len;
+        }
+        if a.offroad() {
+            out.offroad_m += p.len;
         }
         if presumed_surface(a) {
             out.presumed_surface_m += p.len;

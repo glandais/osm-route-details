@@ -347,6 +347,7 @@ impl Walk {
             shared_m: 0.0,
             crossings: 0,
             unpaved_m: 0.0,
+            offroad_m: 0.0,
             presumed_surface_m: 0.0,
             bearing_deviation_deg: None,
             familiarity: 0.0,

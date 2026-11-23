@@ -127,6 +127,7 @@ pub(crate) fn scored_route<B: AsRef<[u8]>>(
     route.shared_m = chk.shared_m;
     route.crossings = chk.crossings;
     route.unpaved_m = chk.unpaved_m;
+    route.offroad_m = chk.offroad_m;
     route.presumed_surface_m = chk.presumed_surface_m;
     route.bearing_deviation_deg = bearing_deviation(e, r, &route);
     let dev = route.bearing_deviation_deg.unwrap_or(0.0) / 45.0;
@@ -595,6 +596,7 @@ fn generate_inner<B: AsRef<[u8]>>(
                     shared_m: 0.0,
                     crossings: 0,
                     unpaved_m: 0.0,
+                    offroad_m: 0.0,
                     presumed_surface_m: 0.0,
                     bearing_deviation_deg: None,
                     familiarity: r.familiarity,

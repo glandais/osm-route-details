@@ -222,9 +222,29 @@ fn rounded_floats_keeps_integers_and_rounds_the_rest() {
     );
 }
 
+/// Retire `offroad_m: …, ` de la sortie Debug : la mesure du lot 5b est née après les références figées, qui
+/// empreignent la sortie complète ; la lire ici ne doit pas les rouvrir (« les parcours restent ceux de 1.14 »).
+fn without_offroad(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("offroad_m: ") {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let end = tail.find(", ").map_or(tail.len(), |j| j + 2);
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+#[test]
+fn without_offroad_drops_the_field_and_nothing_else() {
+    assert_eq!(without_offroad("R { a: 1.0, offroad_m: 12.5, b: 2 }"), "R { a: 1.0, b: 2 }");
+}
+
 /// Une ligne de fixture : empreinte de la sortie complète et résumé.
 pub(crate) fn snapshot(i: usize, res: &(Result<Generation, Failure>, Diagnostics)) -> String {
-    let full = rounded_floats(&format!("{res:?}"));
+    let full = rounded_floats(&without_offroad(&format!("{res:?}")));
     let sum = match &res.0 {
         Ok(g) => {
             let steps: Vec<usize> = g.routes.iter().map(|r| r.steps.len()).collect();
