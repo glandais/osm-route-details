@@ -3,7 +3,7 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
-## 1.15.0 (API 1.14) - à publier
+## 1.15.0 (API 1.14)
 
 Lot 5 du générateur (`docs/design/technique/ord-loops-lot5.md`) : une part de non-revêtu visée, des bornes de roulabilité.
 Ajouts seulement dans le contrat ; sans `offroad_target` et avec `generator.rideability = off`, les parcours sont ceux de
