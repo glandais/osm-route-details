@@ -269,7 +269,9 @@ impl LikenessArgs {
     /// Les réglages du 4a hormis la part mise à l'écart, les équipes et la limite par équipe (l'essai de fumée du §16.10 :
     /// `--teams B,C --limit 20`).
     pub fn at_4a_defaults_but_scope(&self) -> bool {
-        self.max_km.is_none()
+        // `--ride-types` retire des boucles : aucune empreinte de référence ne vaut alors.
+        self.ride_types.is_empty()
+            && self.max_km.is_none()
             && self.cursors == [0.25, 1.0]
             && !self.no_holdout
             && self.min_km == 5.0
