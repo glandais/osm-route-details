@@ -24,6 +24,17 @@ Les choix que cette note prend sans réponse du propriétaire sont marqués **(d
 > 5. **Défauts du §14 confirmés** : sans réglage, une demande gravel vaut « Comme d'habitude » ; exemption d'équipe avec un
 >    parcours du type, sans effet en mode strict ; bornes du §6.1 telles quelles. **R4** (cran par équipe) : repoussé à un
 >    lot suivant (changement du format de profil).
+>
+> **Décisions du propriétaire, 23 novembre 2026, après le 5d** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md),
+> §9 et §10 ; elles priment sur le §9 de cette note et sur le point 3 ci-dessus) :
+> 1. **Temps : × 5 accepté au P90 par requête.** C1 devient : médiane par requête avec cible ≤ × 3,0 de la même requête sans
+>    cible, P90 par requête ≤ × 5,0 ; toujours au plus 4 pas, aucun pas lancé au-delà de 10 s de calcul, et C4 (aucun 504 de
+>    plus sur la planète) inchangé.
+> 2. **O1 « Beaucoup » (0,60)** se juge sans les équipes dont les boucles réelles n'atteignent jamais ce cran (B dans la
+>    sonde) : le moteur ne peut pas rendre une part que le réseau autour de leurs départs n'offre pas.
+> 3. **O1 « Peu » (0,25) au curseur de goût 1** (63 / 68 %, sous les 70 %) : accepté et noté, sans changement du moteur.
+> 4. **B1 (forme hors revêtement)** se juge au seul cran 0,47 ; à 0,25 et 0,60, il est relevé sans seuil, puisque la consigne
+>    y change la forme voulue. À 0,47, le seul écart est de 0,001 (« toutes », curseur 1), au bruit.
 
 > **Révision du 23 novembre 2026, après le C4** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §10.5
 > et §10.6 ; elle prime sur le §4.3) : avec une consigne, la réponse n'est jamais pire que sans.
