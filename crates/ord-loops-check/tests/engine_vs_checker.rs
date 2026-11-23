@@ -9,8 +9,8 @@ use ord_graph::overlay::{encode, Overlay, OverlayMeta};
 use ord_graph::util::SplitMix64;
 use ord_graph::view::{build_view, ViewSpec};
 use ord_loops::{
-    generate, Engine, Family, FigureMix, Figures, LatLon, Mode, Organic, OrganicTune, Params, Request,
-    RideType, TeamData, Workspace,
+    generate, generate_steered_in, Engine, Family, FigureMix, Figures, LatLon, Mode, OffroadTarget, Organic,
+    OrganicTune, Params, Request, RideType, Steer, TeamCtx, TeamData, WindowTeam, Workspace,
 };
 use ord_loops_check::{Checker, Config, Rideability};
 
@@ -206,4 +206,189 @@ fn check_all(figures: Figures, attractors: bool) -> usize {
     }
     assert!(refused.is_empty(), "{} parcours refusés sur {returned:?} : {refused:?}", refused.len());
     triangles
+}
+
+/// Grille où une arête sur deux est une piste, dont une partie porte une borne du §6.1 du lot 5 (`smoothness`, `mtb:scale`,
+/// `tracktype=grade5`, `surface=mud`, `impassable`).
+fn rough_grid(seed: u64, n: i64, step: f64) -> (MemSource, usize) {
+    let m_lon = M_LAT * LAT0.to_radians().cos();
+    let mut s = MemSource::default();
+    let id = |r: i64, c: i64| r * 100 + c + 1;
+    for r in 0..n {
+        for c in 0..n {
+            s.node(id(r, c), LAT0 + r as f64 * step / M_LAT, LON0 + c as f64 * step / m_lon);
+        }
+    }
+    let bounds: [&[(&str, &str)]; 9] = [
+        &[("smoothness", "horrible")],
+        &[("smoothness", "very_horrible")],
+        &[("smoothness", "impassable")],
+        &[("mtb:scale", "1")],
+        &[("mtb:scale", "2")],
+        &[("mtb:scale", "4")],
+        &[("tracktype", "grade5")],
+        &[("tracktype", "grade4")],
+        &[("smoothness", "bad")],
+    ];
+    let mut rng = SplitMix64(seed ^ 0x5eed);
+    let (mut way, mut bounded) = (1, 0usize);
+    for r in 0..n {
+        for c in 0..n {
+            for (dr, dc) in [(0, 1), (1, 0)] {
+                let (r2, c2) = (r + dr, c + dc);
+                if r2 >= n || c2 >= n {
+                    continue;
+                }
+                let mut tags: Vec<(&str, &str)> = Vec::new();
+                match rng.below(4) {
+                    0 | 1 => tags.push(("highway", "residential")),
+                    2 => tags.extend([("highway", "track"), ("surface", "gravel")]),
+                    _ => {
+                        let k = rng.below(10);
+                        if k == 9 {
+                            tags.extend([("highway", "track"), ("surface", "mud")]);
+                        } else {
+                            tags.extend([("highway", "track"), ("surface", "gravel")]);
+                            tags.extend_from_slice(bounds[k]);
+                        }
+                        bounded += 1;
+                    }
+                }
+                s.way(way, &[id(r, c), id(r2, c2)], &tags);
+                way += 1;
+            }
+        }
+    }
+    (s, bounded)
+}
+
+/// Une surcouche où chaque arête est roulée (probabilité `keep` sur 100) par un seul type tiré au hasard : un parcours ROAD
+/// seul n'exempte pas une arête bornée (§6.2), GRAVEL et MIXED l'exemptent, MTB l'exempte pour le VTT seulement.
+fn typed_overlay(graph: &GraphFile<Vec<u8>>, seed: u64, keep: u64) -> Overlay {
+    let mut rng = SplitMix64(seed ^ 0x7e57);
+    let mut edges: Vec<u32> = Vec::new();
+    let mut counts: Vec<u16> = Vec::new();
+    for e in 0..graph.header().edges as u32 {
+        if (rng.below(100) as u64) < keep {
+            edges.push(e);
+            let mut c = [0u16; 8];
+            let t = rng.below(4);
+            c[2 * t] = 1;
+            c[2 * t + 1] = 1;
+            counts.extend(c);
+        }
+    }
+    let meta = OverlayMeta {
+        graph: graph.graph_identity(),
+        team_id: 1,
+        export_xxh3: 0,
+        export_rows: 0,
+        params_hash: 0,
+        tool_version: "test".into(),
+        build_epoch: 0,
+        types: vec!["ROAD".into(), "GRAVEL".into(), "MTB".into(), "MIXED".into()],
+    };
+    Overlay::decode(&encode(&meta, &edges, &counts).unwrap()).unwrap()
+}
+
+/// Lot 5, §11 (« Contrôleur ») : avec les bornes de roulabilité et une cible de part, tout parcours GRAVEL et VTT que le
+/// moteur rend, dans les trois modes, avec et sans surcouche, passe le contrôleur indépendant, `NOT_RIDEABLE` compris.
+#[test]
+fn every_gravel_and_mtb_route_with_bounds_and_a_target_passes_the_independent_checker() {
+    let mut returned = 0usize;
+    let mut on_bounded = 0usize;
+    let mut refused: Vec<String> = Vec::new();
+    for seed in 0..6u64 {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut src, bounded) = rough_grid(seed, 9, 500.0);
+        assert!(bounded > 10, "la grille doit porter des arêtes bornées");
+        let data = build_graph(&mut src, &BuildOptions { zoom: 11 }, "test", &mut |_| {}).unwrap();
+        let base = open(data, dir.path(), "base.ordg");
+        let road =
+            open(build_view(&base, &ViewSpec::parse("road").unwrap()).unwrap(), dir.path(), "road.ordv");
+        let gravel =
+            open(build_view(&base, &ViewSpec::parse("gravel").unwrap()).unwrap(), dir.path(), "gravel.ordv");
+        let overlay = typed_overlay(&base, seed, 85);
+        let engine = Engine::new(
+            base,
+            road,
+            gravel,
+            Params { rideability: ord_loops::Rideability::On, ..Params::default() },
+        )
+        .unwrap();
+        let team = TeamData::build(&engine, &overlay).unwrap();
+        let cfg = Config { rideability: Rideability::On, ..Config::default() };
+        let with_team = Checker::new(engine.base(), Some(&overlay), cfg);
+        let alone = Checker::new(engine.base(), None, cfg);
+        let mut ws = Workspace::new();
+        let steers = [
+            Steer::NONE,
+            Steer {
+                offroad: Some(OffroadTarget {
+                    target_milli: 600,
+                    tolerance_milli: 50,
+                    max_steps: 4,
+                    steps_until_ms: 60_000,
+                }),
+            },
+        ];
+        for ride in [RideType::Gravel, RideType::Mtb] {
+            for (k, d) in [6_000.0, 9_000.0].into_iter().enumerate() {
+                for mode in [Mode::Strict, Mode::TeamFirst, Mode::Discovery] {
+                    for use_team in [true, false] {
+                        if !use_team && mode != Mode::Discovery {
+                            continue;
+                        }
+                        for steer in &steers {
+                            let req = Request {
+                                start: LatLon::new(
+                                    LAT0 + 2_000.0 / M_LAT,
+                                    LON0 + 2_000.0 / (M_LAT * LAT0.to_radians().cos()),
+                                ),
+                                end: None,
+                                bearing: None,
+                                distance_m: d,
+                                ride_type: ride,
+                                mode,
+                                familiarity: 0.5,
+                                off_team_cost_q8: ord_loops::DEFAULT_OFF_TEAM_COST_Q8,
+                                seed: seed * 10 + k as u64,
+                                figures: Figures::Classic,
+                            };
+                            let plan = engine.plan(&req, 0.0);
+                            let win = engine.build_window(plan.view, &plan.need, &mut || false).unwrap();
+                            let wt = WindowTeam::build(&engine, &win, &team);
+                            let ctx = use_team.then_some(TeamCtx { data: &team, win: &wt });
+                            let (res, _, _) =
+                                generate_steered_in(&engine, &win, ctx, &req, steer, &mut ws, &mut || false);
+                            let Ok(g) = res else { continue };
+                            let checker = if use_team { &with_team } else { &alone };
+                            for r in &g.generation.routes {
+                                returned += 1;
+                                let rough = r.steps.iter().any(|s| {
+                                    let a = engine.base().edge(s.base_edge).attrs;
+                                    a.smoothness() >= 6 && a.smoothness() <= 7
+                                        || a.mtb_scale() >= 3
+                                        || a.tracktype() == 5
+                                });
+                                on_bounded += usize::from(rough);
+                                let rep = checker.check(&req, r);
+                                if !rep.ok() {
+                                    refused.push(format!(
+                                        "graine {seed}, {ride:?}, D {d}, {mode:?}, équipe {use_team}, {:?} : {:?}",
+                                        steer.offroad.map(|t| t.target_milli),
+                                        rep.violations
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(returned > 0, "le moteur n'a rendu aucun parcours : le test ne prouve rien");
+    // Le strict et les arêtes exemptées (ou VTT) en prennent : le test traverse bien des arêtes bornées.
+    assert!(on_bounded > 0, "aucun parcours ne passe par une arête bornée : le test ne prouve rien");
+    assert!(refused.is_empty(), "{} parcours refusés sur {returned} : {refused:?}", refused.len());
 }
