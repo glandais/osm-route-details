@@ -383,9 +383,9 @@ impl<'a> Weighter<'a> {
 
 // --- Règle de virage -------------------------------------------------------------------------------------------
 
-const TURN_MAX16: u32 = 27_307; // ceil(150 / 180 * 32768)
-const TURN_FREE16: u32 = 8_192; // 45°
-const TURN_COST_MAX: u32 = 2_000; // 200 m équivalents (en décimètres pondérés), à 150°
+pub(crate) const TURN_MAX16: u32 = 27_307; // ceil(150 / 180 * 32768)
+pub(crate) const TURN_FREE16: u32 = 8_192; // 45°
+pub(crate) const TURN_COST_MAX: u32 = 2_000; // 200 m équivalents (en décimètres pondérés), à 150°
 
 #[inline]
 pub(crate) fn in_head(v: &ViewData, f: u32) -> u16 {

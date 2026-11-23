@@ -27,6 +27,7 @@ pub mod probe;
 #[cfg(feature = "probe")]
 pub mod probe_graft;
 mod reverse;
+mod route;
 mod search;
 mod selfcheck;
 mod shape_common;
@@ -55,6 +56,8 @@ mod tests_reference;
 #[cfg(test)]
 mod tests_rideability;
 #[cfg(test)]
+mod tests_route;
+#[cfg(test)]
 mod tests_steer;
 #[cfg(test)]
 mod tests_team_sparse;
@@ -78,6 +81,7 @@ pub use generate::{
 pub use geo::LatLon;
 pub use index::{cap_dm_of, foreign_index, short_components};
 pub use offroad::{OffroadOutcome, OffroadTarget, Steer, SteeredGeneration};
+pub use route::{route, route_geometry_spans, route_in, RouteFailure, RouteRequest, RouteTune, Routed};
 pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
