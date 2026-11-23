@@ -69,7 +69,7 @@ pub struct Report {
 
 /// Les mesures comparées, dans l'ordre (§11.5).
 pub type Getter = fn(&Measures) -> Option<f64>;
-pub const MEASURES: [(&str, Getter); 22] = [
+pub const MEASURES: [(&str, Getter); 31] = [
     ("r_over_d", |m| Some(m.r_over_d)),
     ("far_pos", |m| Some(m.far_pos)),
     ("compactness", |m| Some(m.compactness)),
@@ -92,6 +92,16 @@ pub const MEASURES: [(&str, Getter); 22] = [
     ("surf_unpaved", |m| Some(m.surface[2])),
     ("marked", |m| Some(m.marked)),
     ("destination", |m| Some(m.destination)),
+    // Lot 5, §3.1 : rapportées à part, hors de `S_GRAVEL`.
+    ("offroad", |m| Some(m.offroad)),
+    ("offroad_sc", |m| m.offroad_sc),
+    ("run_p50_m", |m| m.run_p50_m),
+    ("run1k", |m| m.run1k),
+    ("switch_10km", |m| Some(m.switch_10km)),
+    ("banned", |m| Some(m.banned)),
+    ("banned_team", |m| Some(m.banned_team)),
+    ("smooth_known", |m| Some(m.smooth_known)),
+    ("mtb_known", |m| Some(m.mtb_known)),
 ];
 
 /// Empreinte de résultat : xxh3 des lignes triées `lettre i curseur surcouche issue route_xxh3…` (sans aucun temps).

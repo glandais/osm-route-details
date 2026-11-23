@@ -552,6 +552,8 @@ pub fn play_one(
         let trace = walk.trace(gf);
         let mut m = measure(gf, &walk, &trace, Some(rep.crossings));
         m.attr = super::measure::attr_masks(gf, ctx.grids, task.ride, &walk, &trace);
+        let team = super::measure::TeamRode { overlay: env.overlay, types: env.types };
+        m.add_surface(gf, &walk, &trace, task.ride, Some(&team));
         if route.family == ord_loops::Family::Triangle {
             if let Some(f) = rec.fig.as_mut() {
                 let t = ord_loops::OrganicTune::default();

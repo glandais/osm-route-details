@@ -404,6 +404,7 @@ mod learn_tests {
                     to_node: -1,
                     wk: 0,
                     ow: 0,
+                    sc_unpaved: false,
                 }]),
             );
             let job = match_job(&gf, &idx, &poly, t, 1_200.0);

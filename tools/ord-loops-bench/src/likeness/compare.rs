@@ -314,8 +314,10 @@ pub struct Compare {
     pub attr: Option<super::compare_attr::AttrSection>,
 }
 
-const NAMED: [(&str, &[&str]); 2] =
-    [("ROAD", &["way_major", "way_cycle"]), ("GRAVEL", &["way_path", "surf_unpaved", "way_tertiary"])];
+const NAMED: [(&str, &[&str]); 2] = [
+    ("ROAD", &["way_major", "way_cycle"]),
+    ("GRAVEL", &["way_path", "surf_unpaved", "way_tertiary", "offroad"]),
+];
 const SHAPES: [&str; 7] =
     ["r_over_d", "compactness", "far_pos", "detour_far", "sinuosity_10", "turns_per_10km", "vertices_10"];
 const TYPES: [&str; 2] = ["ROAD", "GRAVEL"];

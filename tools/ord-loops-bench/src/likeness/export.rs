@@ -31,6 +31,9 @@ pub struct ExportTrack {
     /// `doc::type_code(surface_type)`.
     pub ty: u8,
     pub excluded: bool,
+    /// Part de la longueur annoncée (`trv`, repli `len`) dont `sc == "unpaved"` (la définition de `shapes.py`, lot 5
+    /// §3.1) ; `None` sans longueur.
+    pub sc_share: Option<f64>,
     /// Document lu.
     pub readable: bool,
     /// Dans l'ordre du document.
@@ -86,7 +89,27 @@ struct ParsedRow {
     id_hash: u64,
     ty: u8,
     excluded: bool,
+    sc_share: Option<f64>,
     edges: Option<Vec<ParsedEdge>>,
+}
+
+/// Part de la longueur sur `sc == "unpaved"`, pondérée par `trv` (repli `len`, sinon 0).
+pub fn sc_share_of(edges: &[ParsedEdge]) -> Option<f64> {
+    let (mut total, mut unpaved) = (0.0f64, 0.0f64);
+    for e in edges {
+        let m = f64::from(if !e.trv.is_nan() {
+            e.trv
+        } else if !e.len.is_nan() {
+            e.len
+        } else {
+            0.0
+        });
+        total += m;
+        if e.sc_unpaved {
+            unpaved += m;
+        }
+    }
+    (total > 0.0).then(|| unpaved / total)
 }
 
 fn parse_row(cols: &Columns, fields: &[Vec<u8>], wanted: &[u64]) -> Option<ParsedRow> {
@@ -97,12 +120,14 @@ fn parse_row(cols: &Columns, fields: &[Vec<u8>], wanted: &[u64]) -> Option<Parse
     if !wanted.is_empty() && !wanted.contains(&team_id) {
         return None;
     }
+    let edges = parse_document(&fields[cols.doc]);
     Some(ParsedRow {
         team_id,
         id_hash: xxh3_64(&fields[cols.track]),
         ty: type_code(std::str::from_utf8(&fields[cols.surface]).unwrap_or("")),
         excluded: matches!(fields[cols.excluded].as_slice(), b"t" | b"true" | b"True" | b"TRUE" | b"1"),
-        edges: parse_document(&fields[cols.doc]),
+        sc_share: edges.as_deref().and_then(sc_share_of),
+        edges,
     })
 }
 
@@ -143,6 +168,7 @@ pub fn ingest(path: &Path, wanted: &[u64]) -> Result<Ingest> {
                 ing.teams.len() - 1
             });
             let readable = row.edges.is_some();
+            let sc_share = row.sc_share;
             let mut edges = Vec::new();
             for e in row.edges.unwrap_or_default() {
                 let key = (xxh3_64(e.g.as_bytes()), e.g.len() as u32, e.trv.to_bits());
@@ -157,6 +183,7 @@ pub fn ingest(path: &Path, wanted: &[u64]) -> Result<Ingest> {
                 id_hash: row.id_hash,
                 ty: row.ty,
                 excluded: row.excluded,
+                sc_share,
                 readable,
                 edges,
             });
@@ -302,6 +329,8 @@ pub struct Loop {
     pub walk: Walk,
     pub trace: Trace,
     pub matched_share: f64,
+    /// `sc == "unpaved"` sur la trace entière (`ExportTrack::sc_share`) : l'`offroad_sc` du réel.
+    pub sc_share: Option<f64>,
 }
 
 /// Juge une trace (§11.3) : la boucle retenue (sans rang) ou la cause du refus.
@@ -324,6 +353,7 @@ pub fn judge(
         walk,
         trace,
         matched_share: m.matched_share(),
+        sc_share: t.sc_share,
     })
 }
 
@@ -369,4 +399,35 @@ pub fn retain(
         }
     }
     (loops, counts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edge(trv: f32, len: f32, sc_unpaved: bool) -> ParsedEdge {
+        ParsedEdge {
+            g: String::new(),
+            trv,
+            len,
+            fm: f32::NAN,
+            tm: f32::NAN,
+            from_off: f32::NAN,
+            to_off: f32::NAN,
+            from_node: -1,
+            to_node: -1,
+            wk: 0,
+            ow: 0,
+            sc_unpaved,
+        }
+    }
+
+    #[test]
+    fn sc_share_weights_by_trv_and_falls_back_on_len() {
+        let edges = [edge(300.0, 1.0, true), edge(f32::NAN, 100.0, false), edge(600.0, 600.0, false)];
+        let s = sc_share_of(&edges).unwrap();
+        assert!((s - 0.3).abs() < 1e-6, "{s}");
+        assert_eq!(sc_share_of(&[]), None);
+        assert_eq!(sc_share_of(&[edge(f32::NAN, f32::NAN, true)]), None);
+    }
 }

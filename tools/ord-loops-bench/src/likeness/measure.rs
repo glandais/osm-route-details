@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ord_graph::attrs::{Access, Attrs};
 use ord_graph::mmap::MappedGraph;
+use ord_graph::overlay::Overlay;
 use ord_graph_match::agg::{coverage_threshold, union_coverage, Cov};
+use ord_loops_check::TypeIndex;
 use serde::Serialize;
 
 use super::shape;
@@ -45,6 +47,206 @@ pub struct Measures {
     /// Attracteurs OSM (lot 4, 4d, §17.11) : masques seulement, jamais une position. `None` sans fichier ni pour le MTB.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attr: Option<AttrMasks>,
+    /// Lot 5, §3.1 : part de la longueur où `Attrs::surface_rd()` est `Unpaved` (la définition route-details).
+    pub offroad: f64,
+    /// Réel seulement : part de la longueur annoncée des `network_edges` dont `sc == "unpaved"` (`shapes.py`).
+    pub offroad_sc: Option<f64>,
+    /// Médiane, pondérée par la longueur, des tronçons non revêtus ; `None` sans non-revêtu.
+    pub run_p50_m: Option<f64>,
+    /// Part de la longueur non revêtue prise dans des tronçons d'au moins 1 km ; `None` sans non-revêtu.
+    pub run1k: Option<f64>,
+    /// Passages revêtu / non revêtu par 10 km.
+    pub switch_10km: f64,
+    /// Part de la longueur sur des arêtes que les bornes du §6.1 écarteraient, équipe non exemptée.
+    pub banned: f64,
+    /// La même, après l'exemption d'équipe du §6.2 (sans surcouche : égale à `banned`).
+    pub banned_team: f64,
+    /// Part de la longueur dont `smoothness` est renseigné.
+    pub smooth_known: f64,
+    /// Part de la longueur dont `mtb:scale` est renseigné.
+    pub mtb_known: f64,
+}
+
+/// Un trou revêtu plus court que cela (cumulé, en m) n'interrompt pas un tronçon non revêtu (§3.1).
+pub const RUN_BRIDGE_M: f64 = 50.0;
+/// Seuil de la « chaîne » du plan §6.4, en m.
+pub const RUN_LONG_M: f64 = 1000.0;
+
+/// Les tronçons non revêtus d'une suite `(longueur m, non revêtu)` : suites maximales d'arêtes non revêtues, un trou
+/// revêtu de moins de [`RUN_BRIDGE_M`] ne les coupe pas (sa longueur n'est pas comptée dans le tronçon). Rend
+/// `(médiane pondérée par la longueur, part de la longueur en tronçons d'au moins 1 km, passages)`.
+pub fn run_stats(segs: &[(f64, bool)]) -> (Option<f64>, Option<f64>, u32) {
+    let mut runs: Vec<f64> = Vec::new();
+    let (mut cur, mut active, mut gap) = (0.0f64, false, 0.0f64);
+    for &(len, off) in segs {
+        if off {
+            if active {
+                cur += len;
+            } else {
+                active = true;
+                cur = len;
+            }
+            gap = 0.0;
+        } else if active {
+            gap += len;
+            if gap >= RUN_BRIDGE_M {
+                runs.push(cur);
+                (cur, active, gap) = (0.0, false, 0.0);
+            }
+        }
+    }
+    if active {
+        runs.push(cur);
+    }
+    let switches = segs.windows(2).filter(|w| w[0].1 != w[1].1).count() as u32;
+    let total: f64 = runs.iter().sum();
+    if total <= 0.0 {
+        return (None, None, switches);
+    }
+    runs.sort_by(f64::total_cmp);
+    let mut acc = 0.0;
+    let mut p50 = runs[runs.len() - 1];
+    for &r in &runs {
+        acc += r;
+        if acc * 2.0 >= total {
+            p50 = r;
+            break;
+        }
+    }
+    let long: f64 = runs.iter().filter(|&&r| r >= RUN_LONG_M).sum();
+    (Some(p50), Some(long / total), switches)
+}
+
+/// Ce que les bornes de roulabilité du §6.1 disent d'une arête pour un type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ban {
+    Free,
+    /// Écartée sauf si l'équipe l'a roulée avec un parcours du type (§6.2).
+    Exemptible,
+    /// Écartée même d'équipe (`smoothness=impassable`).
+    Always,
+}
+
+const SMOOTH_HORRIBLE: u8 = 6;
+const SMOOTH_VERY_HORRIBLE: u8 = 7;
+const SMOOTH_IMPASSABLE: u8 = 8;
+
+/// Les bornes du §6.1, écrites sur les codes du graphe : `mtb_scale()` vaut échelle + 1 (« ≥ 2 » est le code 3, « ≥ 4 »
+/// le code 5), `smoothness()` la position + 1, `tracktype()` 5 pour `grade5`.
+pub fn ban_of(ride: ord_loops::RideType, a: Attrs) -> Ban {
+    let sm = a.smoothness();
+    match ride {
+        ord_loops::RideType::Road => Ban::Free,
+        ord_loops::RideType::Gravel => {
+            if sm == SMOOTH_IMPASSABLE {
+                Ban::Always
+            } else if sm == SMOOTH_HORRIBLE
+                || sm == SMOOTH_VERY_HORRIBLE
+                || a.mtb_scale() >= 3
+                || a.tracktype() == 5
+                || Some(a.surface()) == mud_code()
+            {
+                Ban::Exemptible
+            } else {
+                Ban::Free
+            }
+        }
+        ord_loops::RideType::Mtb => {
+            if sm == SMOOTH_IMPASSABLE {
+                Ban::Always
+            } else if a.mtb_scale() >= 5 {
+                Ban::Exemptible
+            } else {
+                Ban::Free
+            }
+        }
+    }
+}
+
+fn mud_code() -> Option<u8> {
+    ord_graph::attrs::SURFACES.iter().position(|s| *s == "mud").map(|p| p as u8 + 1)
+}
+
+/// La surcouche d'une équipe lue pour l'exemption du §6.2.
+#[derive(Clone, Copy, Debug)]
+pub struct TeamRode<'a> {
+    pub overlay: &'a Overlay,
+    pub types: TypeIndex,
+}
+
+impl TeamRode<'_> {
+    /// L'arête a-t-elle été roulée par l'équipe avec un parcours du type : GRAVEL ou MIXED (VTT : aussi MTB) ?
+    pub fn exempt(&self, ride: ord_loops::RideType, edge: u32) -> bool {
+        let Some(counts) = self.overlay.get(edge) else { return false };
+        let ti = &self.types;
+        let types: &[Option<usize>] = match ride {
+            ord_loops::RideType::Road => return false,
+            ord_loops::RideType::Gravel => &[ti.gravel, ti.mixed],
+            ord_loops::RideType::Mtb => &[ti.mtb, ti.gravel, ti.mixed],
+        };
+        types.iter().flatten().any(|&t| {
+            counts.get(2 * t).copied().unwrap_or(0) > 0 || counts.get(2 * t + 1).copied().unwrap_or(0) > 0
+        })
+    }
+}
+
+/// Les mesures de revêtement et de roulabilité d'une suite de jambes `(arête, longueur m, attributs)` ; `exempt`
+/// rend vrai pour une arête roulée par l'équipe avec un parcours du type.
+pub fn surface_measures(
+    segs: &[(u32, f64, Attrs)],
+    ride: ord_loops::RideType,
+    exempt: &dyn Fn(u32) -> bool,
+) -> Measures {
+    let total: f64 = segs.iter().map(|s| s.1).sum();
+    if total <= 0.0 {
+        return Measures::default();
+    }
+    let flags: Vec<(f64, bool)> = segs.iter().map(|&(_, l, a)| (l, a.offroad())).collect();
+    let (run_p50_m, run1k, switches) = run_stats(&flags);
+    let share = |f: &dyn Fn(u32, Attrs) -> bool| -> f64 {
+        segs.iter().filter(|&&(e, _, a)| f(e, a)).map(|s| s.1).sum::<f64>() / total
+    };
+    Measures {
+        offroad: share(&|_, a| a.offroad()),
+        run_p50_m,
+        run1k,
+        switch_10km: f64::from(switches) / (total / 10_000.0),
+        banned: share(&|_, a| ban_of(ride, a) != Ban::Free),
+        banned_team: share(&|e, a| match ban_of(ride, a) {
+            Ban::Free => false,
+            Ban::Always => true,
+            Ban::Exemptible => !exempt(e),
+        }),
+        smooth_known: share(&|_, a| a.smoothness() != 0),
+        mtb_known: share(&|_, a| a.mtb_scale() != 0),
+        ..Measures::default()
+    }
+}
+
+impl Measures {
+    /// Ajoute les mesures du lot 5 (§3.1) d'une marche : par la longueur de chaque jambe (`Trace::leg_m`), pour le type
+    /// `ride` et, si on l'a, l'équipe dont la surcouche donne l'exemption. Ne change aucune autre mesure.
+    pub fn add_surface(
+        &mut self,
+        gf: &MappedGraph,
+        walk: &Walk,
+        t: &Trace,
+        ride: ord_loops::RideType,
+        team: Option<&TeamRode<'_>>,
+    ) {
+        let segs: Vec<(u32, f64, Attrs)> =
+            walk.legs.iter().zip(&t.leg_m).map(|(l, &m)| (l.edge, m, gf.edge(l.edge).attrs)).collect();
+        let exempt = |e: u32| team.is_some_and(|t| t.exempt(ride, e));
+        let s = surface_measures(&segs, ride, &exempt);
+        self.offroad = s.offroad;
+        self.run_p50_m = s.run_p50_m;
+        self.run1k = s.run1k;
+        self.switch_10km = s.switch_10km;
+        self.banned = s.banned;
+        self.banned_team = s.banned_team;
+        self.smooth_known = s.smooth_known;
+        self.mtb_known = s.mtb_known;
+    }
 }
 
 /// Les grilles d'ancrages des vues `road` et `gravel` (le VTT n'a pas d'attracteur).
@@ -229,6 +431,7 @@ pub fn measure(gf: &MappedGraph, walk: &Walk, t: &Trace, crossings: Option<u32>)
         destination: norm(destination),
         gap_share: if t.d_graph > 0.0 { t.holes_m / t.d_graph } else { 0.0 },
         attr: None,
+        ..Measures::default()
     }
 }
 
@@ -244,6 +447,119 @@ mod tests {
         let l = len_m(gf, e) as f32;
         let (a, b) = if rev { (l, 0.0) } else { (0.0, l) };
         Piece { edge: e, from: a, to: b, elen: l }
+    }
+
+    fn tagged(tags: &[(&str, &str)]) -> Attrs {
+        ord_graph::attrs::classify(tags).expect("way gardée").attrs
+    }
+
+    #[test]
+    fn a_short_paved_gap_does_not_break_a_run_but_a_long_one_does() {
+        // Trois morceaux de 600 m non revêtus séparés par 40 m revêtus : un seul tronçon de 1 800 m.
+        let bridged = [(600.0, true), (40.0, false), (600.0, true), (40.0, false), (600.0, true)];
+        let (p50, r1k, sw) = run_stats(&bridged);
+        assert_eq!((p50, r1k, sw), (Some(1800.0), Some(1.0), 4));
+        // Séparés par 60 m : trois tronçons de 600 m, aucun d'un kilomètre.
+        let split = [(600.0, true), (60.0, false), (600.0, true), (60.0, false), (600.0, true)];
+        let (p50, r1k, sw) = run_stats(&split);
+        assert_eq!((p50, r1k, sw), (Some(600.0), Some(0.0), 4));
+        // Un trou fait de deux arêtes de 30 m coupe aussi (somme cumulée de 60 m).
+        let two = [(600.0, true), (30.0, false), (30.0, false), (600.0, true)];
+        assert_eq!(run_stats(&two).0, Some(600.0));
+        // Une borne exacte de 50 m coupe ; 49,9 m ne coupe pas.
+        assert_eq!(run_stats(&[(600.0, true), (50.0, false), (600.0, true)]).0, Some(600.0));
+        assert_eq!(run_stats(&[(600.0, true), (49.9, false), (600.0, true)]).0, Some(1200.0));
+    }
+
+    #[test]
+    fn run_median_is_weighted_by_length_and_empty_without_offroad() {
+        // Un tronçon de 3 km et deux de 200 m : la médiane pondérée est celle du long (3 000 m de 3 400).
+        let segs = [(200.0, true), (100.0, false), (3000.0, true), (100.0, false), (200.0, true)];
+        let (p50, r1k, _) = run_stats(&segs);
+        assert_eq!(p50, Some(3000.0));
+        assert!((r1k.unwrap() - 3000.0 / 3400.0).abs() < 1e-12);
+        assert_eq!(run_stats(&[(500.0, false), (500.0, false)]), (None, None, 0));
+        assert_eq!(run_stats(&[]), (None, None, 0));
+    }
+
+    #[test]
+    fn switches_count_every_change_between_paved_and_offroad() {
+        let segs = [(100.0, false), (100.0, true), (100.0, true), (100.0, false), (100.0, true)];
+        assert_eq!(run_stats(&segs).2, 3);
+    }
+
+    #[test]
+    fn bans_follow_the_edges_of_section_6_1() {
+        use ord_loops::RideType::{Gravel, Mtb, Road};
+        let track = |extra: &[(&str, &str)]| {
+            let mut t = vec![("highway", "track"), ("surface", "gravel")];
+            t.extend_from_slice(extra);
+            tagged(&t)
+        };
+        let plain = track(&[]);
+        assert_eq!(ban_of(Gravel, plain), Ban::Free);
+        assert_eq!(ban_of(Mtb, plain), Ban::Free);
+        // smoothness : bad (5) et very_bad restent permis, horrible et very_horrible écartés, impassable toujours.
+        assert_eq!(ban_of(Gravel, track(&[("smoothness", "very_bad")])), Ban::Free);
+        assert_eq!(ban_of(Gravel, track(&[("smoothness", "horrible")])), Ban::Exemptible);
+        assert_eq!(ban_of(Gravel, track(&[("smoothness", "very_horrible")])), Ban::Exemptible);
+        assert_eq!(ban_of(Gravel, track(&[("smoothness", "impassable")])), Ban::Always);
+        assert_eq!(ban_of(Mtb, track(&[("smoothness", "horrible")])), Ban::Free);
+        assert_eq!(ban_of(Mtb, track(&[("smoothness", "impassable")])), Ban::Always);
+        // mtb:scale : 1 permis en gravel, 2 écarté ; en VTT 3 permis, 4 écarté.
+        assert_eq!(ban_of(Gravel, track(&[("mtb:scale", "1")])), Ban::Free);
+        assert_eq!(ban_of(Gravel, track(&[("mtb:scale", "2")])), Ban::Exemptible);
+        assert_eq!(ban_of(Mtb, track(&[("mtb:scale", "3")])), Ban::Free);
+        assert_eq!(ban_of(Mtb, track(&[("mtb:scale", "4")])), Ban::Exemptible);
+        // tracktype : grade4 permis, grade5 écarté (gravel seulement).
+        assert_eq!(ban_of(Gravel, track(&[("tracktype", "grade4")])), Ban::Free);
+        assert_eq!(ban_of(Gravel, track(&[("tracktype", "grade5")])), Ban::Exemptible);
+        assert_eq!(ban_of(Mtb, track(&[("tracktype", "grade5")])), Ban::Free);
+        // surface=mud écarté en gravel ; sand et grass permis.
+        assert_eq!(ban_of(Gravel, tagged(&[("highway", "track"), ("surface", "mud")])), Ban::Exemptible);
+        assert_eq!(ban_of(Gravel, tagged(&[("highway", "track"), ("surface", "sand")])), Ban::Free);
+        assert_eq!(ban_of(Gravel, tagged(&[("highway", "track"), ("surface", "grass")])), Ban::Free);
+        // ROAD : aucune borne nouvelle.
+        assert_eq!(ban_of(Road, track(&[("smoothness", "impassable")])), Ban::Free);
+    }
+
+    #[test]
+    fn unknown_values_of_the_tags_stay_permitted() {
+        use ord_loops::RideType::Gravel;
+        let a = tagged(&[("highway", "track"), ("smoothness", "strange"), ("tracktype", "gradeX")]);
+        assert_eq!(a.smoothness(), 15);
+        assert_eq!(ban_of(Gravel, a), Ban::Free);
+        assert_eq!(a.tracktype(), 7);
+    }
+
+    #[test]
+    fn surface_measures_split_the_ban_with_and_without_the_team_exemption() {
+        use ord_loops::RideType::Gravel;
+        let road = tagged(&[("highway", "residential"), ("surface", "asphalt")]);
+        let rough = tagged(&[("highway", "track"), ("surface", "gravel"), ("smoothness", "horrible")]);
+        let dead = tagged(&[("highway", "track"), ("surface", "gravel"), ("smoothness", "impassable")]);
+        let segs = [(1, 600.0, road), (2, 200.0, rough), (3, 100.0, dead), (4, 100.0, road)];
+        let none = surface_measures(&segs, Gravel, &|_| false);
+        assert!((none.banned - 0.3).abs() < 1e-12 && (none.banned_team - 0.3).abs() < 1e-12);
+        // L'équipe a roulé les arêtes 2 et 3 : la 2 est exemptée, la 3 (impassable) ne l'est jamais.
+        let team = surface_measures(&segs, Gravel, &|e| e == 2 || e == 3);
+        assert!((team.banned - 0.3).abs() < 1e-12);
+        assert!((team.banned_team - 0.1).abs() < 1e-12, "{}", team.banned_team);
+        // Le non-revêtu est celui de `surface_rd` : les deux tracks de gravier, 300 m sur 1 000.
+        assert!((team.offroad - 0.3).abs() < 1e-12);
+        // Trois changements de revêtement : route / chemin, chemin / chemin (aucun), chemin / route.
+        assert!((team.switch_10km - 2.0 / 0.1).abs() < 1e-9, "{}", team.switch_10km);
+        assert!((team.smooth_known - 0.3).abs() < 1e-12);
+        assert_eq!(team.mtb_known, 0.0);
+        assert_eq!(team.run_p50_m, Some(300.0));
+        assert_eq!(team.run1k, Some(0.0));
+    }
+
+    #[test]
+    fn surface_measures_of_an_empty_suite_are_zero() {
+        let m = surface_measures(&[], ord_loops::RideType::Gravel, &|_| false);
+        assert_eq!((m.offroad, m.banned, m.switch_10km), (0.0, 0.0, 0.0));
+        assert_eq!(m.run_p50_m, None);
     }
 
     #[test]

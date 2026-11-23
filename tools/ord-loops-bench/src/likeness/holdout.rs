@@ -201,6 +201,7 @@ mod tests {
                 l_poly: 0.0,
             },
             matched_share: 1.0,
+            sc_share: None,
         }
     }
 

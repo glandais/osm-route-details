@@ -87,6 +87,10 @@ pub struct LikenessArgs {
     /// Équipes jouées (lettres, séparées par des virgules) ; toutes par défaut.
     #[arg(long, value_delimiter = ',')]
     pub teams: Vec<String>,
+    /// Types de parcours joués (`road`, `gravel`, `mtb`, séparés par des virgules) ; tous par défaut (lot 5, §3.4 : évite
+    /// de rejouer ROAD).
+    #[arg(long, value_delimiter = ',')]
+    pub ride_types: Vec<String>,
     /// Au plus ce nombre de boucles retenues par équipe (les premières dans l'ordre de l'export).
     #[arg(long)]
     pub limit: Option<usize>,
@@ -481,7 +485,11 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
         max_km: a.max_km,
         loop_gap: a.loop_gap,
     };
-    let (loops, mut counts) = export::retain(gf, &ing, &jobs, &rp, a.limit);
+    let (mut loops, mut counts) = export::retain(gf, &ing, &jobs, &rp, a.limit);
+    if !a.ride_types.is_empty() {
+        let wanted = ride_type_filter(&a.ride_types)?;
+        loops.retain(|l| wanted[usize::from(l.ty).min(2)]);
+    }
     // La mise à l'écart : stable, par rang d'empreinte de l'id de trace, équipe par équipe.
     let held: std::collections::HashSet<usize> = if a.no_holdout {
         std::collections::HashSet::new()
@@ -585,7 +593,7 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     // 7. Les mesures du réel : la forme, et le contrôleur sur les marches continues.
     let checker0 = Checker::with_tables(gf, None, Config::default(), &graph_index, None);
     let reals: Vec<(Measures, Option<Vec<String>>)> =
-        loops.par_iter().map(|l| measure_real(gf, &checker0, &grids, l)).collect();
+        loops.par_iter().map(|l| measure_real(gf, &checker0, &grids, &overlays[l.team], l)).collect();
     let real_shape: Vec<[f64; 3]> =
         reals.iter().map(|(m, _)| [m.r_over_d, m.far_pos, m.compactness]).collect();
     let real_edges: Vec<std::collections::BTreeSet<u32>> =
@@ -1330,16 +1338,35 @@ pub(crate) fn build_team(
     Ok((team?, check?))
 }
 
+/// `--ride-types` : pour chacun de ROAD, GRAVEL, MTB, le type est-il joué ? Un nom inconnu est refusé.
+fn ride_type_filter(names: &[String]) -> Result<[bool; 3]> {
+    let mut wanted = [false; 3];
+    for n in names {
+        let k = out::TYPE_NAMES
+            .iter()
+            .position(|t| t.eq_ignore_ascii_case(n.trim()))
+            .ok_or_else(|| anyhow!("--ride-types : type inconnu « {n} » (road, gravel, mtb)"))?;
+        wanted[k] = true;
+    }
+    Ok(wanted)
+}
+
 /// Mesures d'une boucle réelle, et le contrôleur sur sa marche si elle est continue (découverte : aucune règle
 /// d'équipe).
 fn measure_real(
     gf: &MappedGraph,
     checker: &Checker<'_, memmap2::Mmap>,
     grids: &measure::AttrGrids,
+    overlay: &Overlay,
     l: &export::Loop,
 ) -> (Measures, Option<Vec<String>>) {
     let (mut m, codes) = measure_real_plain(gf, checker, l);
-    m.attr = measure::attr_masks(gf, grids, play::ride_of(l.ty), &l.walk, &l.trace);
+    let ride = play::ride_of(l.ty);
+    m.attr = measure::attr_masks(gf, grids, ride, &l.walk, &l.trace);
+    // Lot 5, §3.1 : le revêtement, les tronçons et les bornes, l'exemption lue sur la surcouche complète de l'équipe.
+    let team = measure::TeamRode { overlay, types: TypeIndex::of(overlay) };
+    m.add_surface(gf, &l.walk, &l.trace, ride, Some(&team));
+    m.offroad_sc = l.sc_share;
     (m, codes)
 }
 
@@ -1467,4 +1494,17 @@ fn calibrate_only(a: &LikenessArgs, p: &Paths) -> Result<()> {
     print!("{text}");
     eprintln!("étalonnage : {} ({:.1} s)", path.display(), t.elapsed().as_secs_f64());
     Ok(())
+}
+
+#[cfg(test)]
+mod ride_types_tests {
+    use super::ride_type_filter;
+
+    #[test]
+    fn ride_types_are_read_case_insensitively_and_unknown_ones_refused() {
+        let f = |v: &[&str]| ride_type_filter(&v.iter().map(|s| (*s).to_string()).collect::<Vec<_>>());
+        assert_eq!(f(&["gravel"]).unwrap(), [false, true, false]);
+        assert_eq!(f(&["Road", "MTB"]).unwrap(), [true, false, true]);
+        assert!(f(&["bike"]).is_err());
+    }
 }

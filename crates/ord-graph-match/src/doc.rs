@@ -65,6 +65,8 @@ struct RawEdge {
     from_off: Option<f64>,
     #[serde(rename = "to")]
     to_off: Option<f64>,
+    /// Classe de revêtement de route-details (`unpaved` pour le non-revêtu) : lue par le banc seulement.
+    sc: Option<String>,
 }
 
 /// Une arête d'équipe, telle que lue (polyligne encore en texte).
@@ -83,6 +85,8 @@ pub struct ParsedEdge {
     pub to_node: i32,
     pub wk: u8,
     pub ow: u8,
+    /// `sc == "unpaved"` dans le document (la définition de `shapes.py`) ; faux si absent.
+    pub sc_unpaved: bool,
 }
 
 fn f32_of(v: Option<f64>) -> f32 {
@@ -110,6 +114,7 @@ impl Document {
                 to_node: node_of(e.to_node),
                 wk: wk_code(e.wk.as_deref()),
                 ow: ow_code(e.ow.as_deref()),
+                sc_unpaved: e.sc.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("unpaved")),
             })
             .collect()
     }
@@ -118,4 +123,17 @@ impl Document {
 /// Lit un document `network_edges` ; `None` s'il est illisible.
 pub fn parse_document(bytes: &[u8]) -> Option<Vec<ParsedEdge>> {
     serde_json::from_slice::<Document>(bytes).ok().map(Document::into_edges)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sc_is_read_and_defaults_to_not_unpaved() {
+        let doc = br#"{"edges":[{"g":"a","trv":10,"sc":"unpaved"},{"g":"b","trv":20,"sc":"paved"},{"g":"c","trv":5}]}"#;
+        let edges = parse_document(doc).unwrap();
+        let flags: Vec<bool> = edges.iter().map(|e| e.sc_unpaved).collect();
+        assert_eq!(flags, [true, false, false]);
+    }
 }
