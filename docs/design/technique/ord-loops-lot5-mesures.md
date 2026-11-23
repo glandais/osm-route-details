@@ -555,3 +555,96 @@ réelle partie du même point** (une personne de l'équipe a-t-elle trouvé la p
 4. **B1 aux crans « Peu » et « Beaucoup »** : critère à réécrire (contre une référence à la même part, ou à 0,47 seulement).
 5. **B2 `surf_unpaved`** : manque de peu à 0,47 ; la cause est la définition (R2, `API-214`), pas la consigne.
 6. **Non mesuré ici** : K1 et I1 en ROAD (campagne GRAVEL seule), C3 (conteneur), C4 (planète), relecture sur carte (étape 9).
+
+## 10. Service : C3 (France, conteneur de 3 Gio) et C4 (planète)
+
+> Relevés du 23 novembre 2026, sur `d0bea13` (paquet 1.15.0, API 1.14). Image `ord-lot5:dev` construite du `Dockerfile` du
+> dépôt (41 Mo, jamais poussée) ; référence : l'image publiée `ghcr.io/glandais/osm-route-details:1.14.0` (API 1.13), sur
+> les mêmes requêtes **sans** cible (elle n'a pas la consigne). Rien n'est tiré d'une donnée de production.
+
+### 10.1 Cadre
+
+- `docker run --memory 3g --memory-swap 3g`, environnement du service partagé (`MALLOC_ARENA_MAX=2`,
+  `MALLOC_MMAP_THRESHOLD_=1048576`, caches d'altitude et de rues 256 Mo, hors ligne, pas d'altitude IGN), fichiers du graphe
+  montés **un à un en lecture seule** (pas de `.orda` : attracteurs absents, comme en production), volume neuf, **défauts du
+  service** (budget 30 s, `max_concurrent` 2, `max_queued` 8, `rideability = on`). Mémoire lue dans le groupe du conteneur
+  (`anon`, `memory.peak`, `memory.events`) toutes les 0,5 s ; état par `docker inspect`. Pages de fichier évincées avant le
+  démarrage seulement, pas entre les requêtes.
+- **Requêtes** : gravel, découverte (`cursor` 1, aucune équipe, **aucun dépôt** : les profils d'équipe et le test « dépôts en
+  200 » du C3 ne sont pas joués, la donnée est privée), graine 1, quatre variantes : sans cible, 0,25, 0,47, 0,60. Ce ne sont
+  **pas** les départs d'équipe de la séance du 4c : ils vont de 40 à 80 km au lieu de 30 à 50 km, donc le seuil absolu du C3
+  ne se compare pas tel quel (sans cible, le P50 est déjà 0,55 s ici).
+  - France : 18 villes × gravel 40, 60, 80 km = 54 requêtes en série par variante ; 162 à 4 clients (graines 1 à 3).
+  - Planète : zones denses (Paris, Tokyo, Shinjuku, New York, Séoul, Osaka) × gravel 40, 80, 150, 200 km = 24 ; rurales
+    (Périgord, Castille, Iowa, Tokachi, Bavière, Galles) × 40, 80, 150 km = 18 ; 4 clients sur les 42 (même ordre, mélange
+    dense puis rural, donc très japonais en tête, comme le pire cas du 1.14 §4).
+- Outil : un pilote Python hors dépôt (dérivé de celui du relevé 1.14), pas conservé ici.
+
+### 10.2 C3, France
+
+| série | variante | n | P50 (s) | P90 (s) | max (s) | `reached` | pas moyen |
+|---|---|---:|---:|---:|---:|---|---:|
+| série | sans cible | 54 | 0,55 | 0,87 | 1,80 | — | — |
+| série | 0,25 | 54 | 0,59 | 1,78 | 2,93 | 45 / 54 | 1,85 |
+| série | 0,47 | 54 | 0,61 | 2,10 | 6,62 | 51 / 54 | 1,87 |
+| série | 0,60 | 54 | 0,74 | 2,48 | 5,41 | 39 / 54 | 2,06 |
+| 4 clients | sans cible | 162 | 0,87 | 1,67 | 3,19 | — | — |
+| 4 clients | 0,25 | 162 | 1,63 | 3,11 | 7,20 | 128 / 162 | 2,01 |
+| 4 clients | 0,47 | 162 | 1,47 | 3,88 | 8,26 | 150 / 162 | 1,80 |
+| 4 clients | 0,60 | 162 | 1,82 | 4,75 | 12,00 | 115 / 162 | 2,19 |
+
+- Image 1.14.0, mêmes requêtes sans cible : série 0,54 · 1,05 · 2,01 ; 4 clients 0,91 · 2,10 · 3,22. L'image du lot 5 sans cible
+  est à l'identique (0,55 · 0,87 ; 0,87 · 1,67).
+- Rapport par requête avec / sans cible, en série : médiane × 1,21 · × 1,35 · × 1,26 (0,25 · 0,47 · 0,60), P90 × 2,8 · × 2,6 ·
+  × 3,1 : sous le × 3,0 / × 3,5 du C1 réécrit.
+- 162 + 54 réponses par variante, **toutes en 200** : aucun 503, aucun 504, aucun 422. **Mémoire** : `anon` 841 Mo au plus
+  (818 en série), `memory.peak` 3 221 Mo (pages de fichier récupérables, comme au 1.14 §7), `oom` 0, `oom_kill` 0, 0 redémarrage,
+  `healthy`, prêt en 8,4 s.
+- **Verdict C3 : seuils absolus non tenus à la lettre, aucun défaut de fond.** Le P50 en série avec cible (0,59 · 0,61 · 0,74 s)
+  dépasse 0,50 s, et le P50 à 4 clients (1,47 à 1,82 s) dépasse 1,00 s ; mais ces seuils datent de requêtes plus courtes avec
+  équipe (0,30 s), et la base sans cible est ici déjà à 0,55 s et 0,87 s : le surcoût propre à la consigne est de × 1,07 à × 1,35
+  en série (P50 des séries), × 1,7 à × 2,1 à 4 clients (les pas d'une même requête se partagent deux places de calcul). Sur le
+  sous-ensemble de 40 km seulement (le plus proche des départs du 4c) : série 0,43 · 0,46 · 0,84 s, 4 clients 1,44 · 1,37 ·
+  1,73 s. Pic `anon` ≤ 1,6 Gio (0,84), 0 `oom` : tenus. « Dépôts en 200 » : non joué.
+
+### 10.3 C4, planète
+
+| série | variante | n | P50 (s) | P90 (s) | max (s) | issues | `reached` |
+|---|---|---:|---:|---:|---:|---|---|
+| denses, série | sans cible | 24 | 3,65 | 13,58 | 26,61 | 24 × 200 | — |
+| denses, série | 0,25 | 24 | 6,77 | 13,16 | 17,97 | 24 × 200 | 12 / 24 |
+| denses, série | 0,47 | 24 | 6,99 | 15,79 | 30,05 | 23 × 200, **1 × 504** | 8 / 23 |
+| denses, série | 0,60 | 24 | 6,90 | 21,39 | 30,12 | 24 × 200 | 5 / 24 |
+| rurales, série | sans cible | 18 | 0,45 | 1,25 | 2,84 | 18 × 200 | — |
+| rurales, série | 0,25 · 0,47 · 0,60 | 18 | 0,51 · 0,79 · 0,65 | 2,50 · 2,72 · 2,37 | 4,47 · 8,03 · 6,62 | 18 · 17 · 17 × 200, 0 · 1 · 1 × 422 | 12 / 18 · 8 / 17 · 8 / 17 |
+| 4 clients | sans cible | 42 | 5,42 | 28,34 | 30,14 | 39 × 200, 1 × 503, 2 × 504 | — |
+| 4 clients | 0,25 | 42 | 7,89 | 27,38 | 30,04 | 39 × 200, 1 × 503, 2 × 504 | 22 / 39 |
+| 4 clients | 0,47 | 42 | 8,19 | 28,86 | 30,04 | 37 × 200, 2 × 503, 2 × 504, 1 × 422 | 16 / 37 |
+| 4 clients | 0,60 | 42 | 8,25 | 29,81 | 30,04 | 36 × 200, 1 × 503, 4 × 504, 1 × 422 | 13 / 36 |
+
+- **Référence 1.14.0** (mêmes requêtes sans cible) : denses 3,75 · 13,84 · 25,39 s, rurales 0,43 · 1,14 · 3,21 s, **24 + 18 × 200** ;
+  4 clients 5,29 · 28,85 · 30,37 s, 39 × 200, 1 × 503, 2 × 504 (Tokyo 200 km, Shinjuku 80 et 200 km). Les 422 des variantes avec
+  cible sont ceux de Galles 40 km (`no_candidate`), même départ qu'en 1.14 sur d'autres tirages : sans cible il rend 200 ici
+  (`reached` non applicable) ; ce sont donc **deux 200 devenus 422** dans les variantes 0,47 et 0,60 en série (un à 4 clients
+  à 0,47 et à 0,60), à vérifier (tirage de la recherche à cible, pas de refus du budget).
+- **Mémoire** : `anon` 981 Mo au plus (914 en 1.14.0), `memory.peak` 3 221 Mo, `oom` 0, `oom_kill` 0, 0 redémarrage, prêt en 4,8 s.
+- **Verdict C4 : non tenu.**
+  1. **Un 504 de plus en série** : Tokyo gravel 200 km à 0,47 (30,05 s ; sans cible 16,7 s, 1.14.0 : 200). Les 504 à 4 clients sont
+     les mêmes que ceux de 1.14.0 aux variantes 0 et 0,25 (2) ; **2 de plus à 0,60** (Tokyo 150 km, Shinjuku 80 et 150 km au lieu
+     de 200 pour Shinjuku 40 ; le mélange d'une même file bouge d'une variante à l'autre).
+  2. **La règle « pas plus longue que max(sans cible, 10 s) + 1 s » manque** : en série, 1 requête à 0,25 (Tokyo 200 km, 16,7 → 18,0 s),
+     3 à 0,47 et 6 à 0,60 (jusqu'à Tokyo 200 km à 30,1 s, rendue en 200 avec `reached = false`, 1 pas, après l'échéance du
+     contrôleur). Les requêtes concernées sont toutes dans les agglomérations japonaises ou New York, où la base dépasse déjà 6 s.
+  3. Médiane par requête avec / sans cible (denses, série) : × 1,13 · × 1,65 · × 1,88, P90 × 2,6 à × 2,8 ; rurales × 1,26 · × 1,81 ·
+     × 1,83, P90 × 2,7 à × 3,0 (sous le × 3,0 / × 3,5 du C1 réécrit, comme en France).
+  4. Part des pas : 1 pas pour 41 des 96 jeux denses, 4 pas pour 10 ; rurales 4 pas pour 23 sur 53 ; `reached` 5 / 24 à 0,60 en
+     zone dense.
+
+### 10.4 Ce qui demande le propriétaire
+
+- **C3** : le seuil absolu (0,50 s · 1,00 s) n'est pas comparable à la séance du 4c ; le rapport avec / sans cible (× 1,07 à × 1,35
+  en série) tient. Choisir : lire C3 en rapport, ou rejouer la séance du 4c avec dépôts (équipes, hors de ce relevé).
+- **C4** : le 504 de plus est dans l'agglomération de Tokyo à 200 km, au pire de 1.14.0 (16,7 s sans cible). Les pas k ≥ 1
+  ne sont pas arrêtés avant 10 s (`steps_until_ms`) par une borne qui tienne compte du budget restant : un pas lancé à 9 s
+  avec un coût de 15 s dépasse 30 s. Pistes (non faites) : ne lancer un pas que si la durée du premier pas, ajoutée au temps
+  écoulé, tient dans le budget ; ou ramener `steps_until_ms`.
