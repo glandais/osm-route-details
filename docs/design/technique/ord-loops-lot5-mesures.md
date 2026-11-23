@@ -6,7 +6,8 @@
 > 1.9.0, réplication 1794777748) ; export de production du 14 novembre (3 377 lignes, empreinte xxh3 `ca53159cc90498d6`).
 > Sorties complètes, **privées et hors dépôt**, sous `~/.cache/osm-route-details/graph/lot5/5a/` (essai et relevé complet) et
 > `…/lot5/5a-mu/` (sonde). Lettres d'équipes et agrégats seulement : ni départ, ni coordonnée, ni identifiant d'équipe, de
-> trace ou d'arête, ni nom de lieu. Rien n'a été poussé ni déployé.
+> trace ou d'arête, ni nom de lieu. Rien n'a été poussé ni déployé. Le §9 ajoute la campagne de la consigne (5d, étape 7),
+> sorties sous `…/lot5/5d/`, `…/lot5/5d-off/` et `…/lot5/5d-smoke/`.
 >
 > Marques : **[mesuré]** vient des rapports du banc (résumés `*-summary.md`, comparaisons `*-compare.md`) ; **[calculé]** d'un
 > calcul fait pour ce relevé sur les rapports JSON par requête (variantes jointes sur l'identifiant de requête équipe × indice ×
@@ -374,3 +375,183 @@ Un pas coûte une génération entière, à ±10 % : deux pas médians doublerai
   4. **R4** : un « Comme d'habitude » propre à chaque équipe (B à 0,31, appris au dépôt, changement de format du profil).
   5. **R2** : la page du parcours enregistré montrera ≈ 8 points de moins que la carte du générateur. Corriger la couverture de
      la typologie dans route-details (hors lot), ou afficher sur la carte du générateur la part attendue après enregistrement.
+
+## 9. 5d — la consigne au banc (étape 7, §13 de la note)
+
+Relevé du 23 novembre 2026, sur les **crans et le C1 décidés par le propriétaire** (encadré en tête de la note : 0,25 · 0,47 ·
+0,60 ; médiane avec cible ≤ × 3,0 de la même requête sans cible, P90 ≤ × 3,5). Même poste, même graphe, même export que
+le 5a. **Lettres et agrégats seulement.** Marques comme plus haut : **[mesuré]** vient du `5d-compare.md` (section 11 « 5d »,
+sections 3 à 7 et 10) ; **[calculé]** d'un script jetable hors dépôt sur les rapports JSON par requête (W1 / IQR et `S`
+recalculés redonnent ceux du banc au millième).
+
+### 9.1 Conditions
+
+| campagne | commande (`$B likeness …`, `--out $G/lot5/<dossier>`) | binaire | durée | pic anonyme |
+|---|---|---|---:|---:|
+| essai | équipes B et C, 17 boucles GRAVEL, mêmes variantes, `--label 5d-smoke` | `f5ee718` | ≈ 6 min | — |
+| complète | `--holdout-share 0.25 --ride-types gravel --variants base,svc+org,svc+org+ride:on,svc+org+ride:on+target:0.25,…:0.47,…:0.60 --label 5d` (reconstituée d'après les noms de variantes du rapport) | `f5ee718` | 27 min 47 | 13,5 Go |
+| sans bornes (ajoutée pour ce relevé) | `--holdout-share 0.25 --ride-types gravel --variants base,svc+org --label 5d-off` | `f5ee718` | 6 min 02 | 12,9 Go |
+
+Les 780 boucles GRAVEL de la sonde (A 545, B 228, C 5, H et I 1), deux curseurs (0,25 et 1), lectures « toutes » (surcouche
+complète) et « écart » (194 boucles mises à l'écart). ROAD n'est pas joué (`--ride-types gravel`). Temps à 16 fils
+simultanés, comparables entre variantes d'une même campagne seulement.
+
+**Écart à la note : la campagne complète ne mesure pas l'effet des bornes.** `ride:on` pose les bornes sur le moteur de toute
+l'exécution (§13, étape 7) : dans `5d`, `base` et `svc+org` sont déjà bornés, et `svc+org` rend l'empreinte de
+`svc+org+ride:on` au bit près (`211044881d80a2e9`). D'où la troisième campagne, sans `ride:on`, au même commit. Elle sert aussi
+de **référence 1.14** des critères A et B (le §9 dit « 1.14 (`svc+org`) dans la même séance ») ; la référence des critères O,
+E et C reste `svc+org+ride:on`, celle du banc.
+
+Garde-fous [mesuré] :
+
+| contrôle | attendu | obtenu | |
+|---|---|---|---|
+| `5d-off` : `base` · `svc+org` = sonde du 5a (`c9335e7`) | `c3d03271f978f182` · `e590568823f7377a` | les mêmes | tient : les étapes 3 à 8 ne changent aucun parcours sans bornes ni cible (I2 en GRAVEL) |
+| `5d` : `svc+org` = `svc+org+ride:on` | même empreinte | `211044881d80a2e9` des deux côtés | tient (et explique l'écart ci-dessus) |
+| refus du contrôleur indépendant (K1), GRAVEL, toutes variantes | 0 | 0 sur 5 297 à 5 656 parcours rendus par variante | tient |
+| PANIC, WINDOW_ESCAPE | 0 | 0 | tient |
+
+### 9.2 L'effet des bornes seules (`svc+org` sans bornes contre `svc+org+ride:on`)
+
+[calculé, `5d-off` contre `5d`]
+
+| | `base` 0,25 · 1 | `svc+org` 0,25 · 1 |
+|---|---|---|
+| empreinte | `c3d03271…` → `46f6a1c8…` | `e5905688…` → `21104488…` |
+| profil appris (`taste_xxh3`) | — | `34f4c22e…` → `9702f000…` : **le goût change**, l'apprentissage rejoue le moteur borné |
+| premier parcours changé, « toutes » | 8,6 % · 23,3 % | **69,4 % · 83,6 %** |
+| une proposition au moins changée, « toutes » | 17,7 % · 46,0 % | 94,1 % · 97,2 % |
+| idem, « écart » (premier · une au moins) | 7,7 % · 26,8 % ; 17,0 % · 46,9 % | 68,0 % · 84,5 % ; 95,9 % · 99,0 % |
+| `NO_CANDIDATE` (sur 780) | 22 → 21 · 22 → 22 | 6 → 6 · 8 → 9 |
+| parcours rendus passant sur une arête bornée hors exemption (`banned_team` > 0) | 494 → **0** (sur 5 315 · 5 297) | 636 → **0** (sur 5 434 · 5 427) ; max 7,2 % de la longueur → 0 |
+| part `offroad` médiane du premier | 0,212 → 0,211 · 0,244 → 0,242 | 0,416 → 0,415 · 0,456 → 0,457 |
+| ms P50 · P90 | 252 · 567 → 251 · 569 ; 212 · 439 → 217 · 430 | 570 · 1 132 → 575 · 1 143 ; 564 · 1 151 → 536 · 1 125 |
+
+Goût et formes, `svc+org` sans → avec bornes (`S / S_base` contre la `base` sans bornes) [calculé] :
+
+| lecture · curseur | `S / S_base` | B1 (classes hors revêtement) | r/D | compacité | `far_pos` | `detour_far` | `sinuosity_10` | `turns_per_10km` | v2 · tri |
+|---|---|---|---|---|---|---|---|---|---|
+| toutes · 0,25 | 0,278 → 0,292 | 0,289 → 0,304 | 0,738 → 0,728 | 0,372 → 0,337 | 0,173 → 0,191 | 0,581 → 0,604 | 0,775 → 0,784 | 0,831 → 0,825 | 0,460 · 0,355 → 0,477 · 0,359 |
+| écart · 0,25 | 0,285 → 0,265 | 0,288 → 0,270 | 0,726 → 0,703 | 0,341 → 0,327 | 0,288 → 0,231 | 0,718 → 0,642 | 0,884 → 0,863 | 0,916 → 0,906 | 0,505 · 0,381 → 0,495 · 0,392 |
+| toutes · 1 | 0,227 → 0,203 | 0,234 → 0,204 | 0,795 → 0,780 | 0,258 → 0,222 | 0,206 → 0,182 | 0,659 → 0,628 | 0,767 → 0,763 | 0,615 → 0,575 | 0,408 · 0,313 → 0,407 · 0,324 |
+| écart · 1 | 0,263 → 0,230 | 0,289 → 0,249 | 0,803 → 0,805 | 0,209 → 0,212 | 0,295 → 0,275 | 0,748 → 0,734 | 0,836 → 0,843 | 0,642 → 0,654 | 0,407 · 0,304 → 0,397 · 0,314 |
+
+- **Les bornes changent beaucoup de parcours, peu de choses mesurées.** Sur `base`, l'effet direct touche 9 à 27 % des premiers
+  parcours ; sous le goût, 68 à 85 %, parce que le profil appris change avec elles. Aucune mesure de forme ou de goût ne se
+  dégrade au-delà de +0,03 (W1 / IQR) ; trois lectures sur quatre s'améliorent en `S`. Ni temps ni issue ne bougent
+  (`NO_CANDIDATE` + 1 sur 780 au curseur 1 : 0,13 %, sous le 1 % de K2).
+- **K2** : `banned` avec exemption sur le réel, médiane 0, P90 0, max 0,34 % (le 5a disait la même chose) ; `no_candidate` de
+  plus dû aux bornes 0 et 1 sur 780 : **tient**. Les bornes font ce qu'elles disent : plus aucun parcours rendu sur une arête
+  bornée hors exemption.
+
+### 9.3 Les critères du §9, par cran et par curseur
+
+Valeurs « toutes / écart » ; ✓ tient, ✗ ne tient pas. O1, O2, E, pas et C1 : [mesuré] ; A, B, C1 par requête, O5 détaillé :
+[calculé]. A et B sont jugés contre 1.14 (`svc+org` sans bornes, `5d-off`) ; contre `svc+org+ride:on`, les verdicts sont les
+mêmes sauf deux cases signalées.
+
+| critère (seuil) | Peu 0,25 · c 0,25 | Peu 0,25 · c 1 | Habitude 0,47 · c 0,25 | Habitude 0,47 · c 1 | Beaucoup 0,60 · c 0,25 | Beaucoup 0,60 · c 1 |
+|---|---|---|---|---|---|---|
+| **O1** (≥ 70 % ; 80 % à 0,47) | 74 / 78 % ✓ | 63 / 68 % ✗ | 82 / 86 % ✓ | 83 / **78 %** ✓ / ✗ | 62 / 62 % ✗ | 67 / 69 % ✗ |
+| **O2** (médiane ∈ ±0,02) | +0,015 / +0,010 ✓ | +0,017 / +0,013 ✓ | −0,003 / −0,003 ✓ | +0,006 / +0,011 ✓ | −0,038 / −0,039 ✗ | −0,024 / −0,022 ✗ |
+| pas P50 · P90 · max ; réglés au pas 0 | 2 · 4 · 4 ; 42 / 44 % | 2 · 4 · 4 ; 27 / 25 % | 1 · 4 · 4 ; 56 / 59 % | 1 · 4 · 4 / 2 · 4 · 4 ; 51 / 46 % | 1 · 4 · 4 ; 52 / 52 % | 1 · 4 · 4 ; 55 / 55 % |
+| **C1**, rapport des quantiles P50 · P90 (≤ 3,0 · 3,5) | × 1,58 · 2,38 / 1,44 · 2,73 ✓ | × 2,25 · 2,83 / 2,07 · 2,77 ✓ | × 1,26 · 2,44 / 1,18 · 2,09 ✓ | × 1,53 · 2,14 / 1,52 · 2,33 ✓ | × 1,38 · 2,34 / 1,30 · 2,37 ✓ | × 1,40 · 2,10 / 1,38 · 2,13 ✓ |
+| **C1**, par requête P50 · P90 (≤ 3,0 · 3,5) | × 1,86 · **4,40** / 1,83 · **4,16** ✗ | × 2,15 · **4,43** / 2,14 · **4,34** ✗ | × 1,32 · **4,23** / 1,19 · **3,97** ✗ | × 1,50 · **3,87** / 1,76 · **4,36** ✗ | × 1,84 · **4,56** / 1,83 · **4,49** ✗ | × 1,71 · **4,47** / 1,88 · **4,72** ✗ |
+| **A1** r/D, compacité (≤ 1.14 + 0,05) | 0,886 · 0,492 contre 0,738 · 0,372 ✗ / ✗ | 1,003 · 0,379 contre 0,795 · 0,258 ✗ / ✗ | 0,519 · 0,313 ✓ / ✓ | 0,595 · 0,278 ✓ / ✓ (¹) | 0,373 · 0,273 ✓ / ✓ | 0,379 · 0,213 ✓ / ✓ |
+| **A2** v2 ∈ [0,32 ; 0,50], tri ≥ 1.14 − 0,05 | 0,481 · 0,376 ✓ / **0,505** ✗ (²) | 0,442 · 0,352 ✓ / ✓ | 0,475 · 0,378 ✓ / ✓ | 0,427 · 0,346 ✓ / ✓ | 0,444 · 0,351 ✓ / ✓ | 0,397 · 0,323 ✓ / ✓ |
+| **A3** `shared_share` P50 · P90 | 0,003 · 0,012 ✓ | 0,003 · 0,014 ✓ | 0,003 · 0,023 ✓ | 0,003 · 0,020 ✓ | 0,003 · 0,026 ✓ | 0,003 · 0,025 ✓ |
+| **A3** `far_pos`, `detour_far`, `sinuosity_10`, `turns_per_10km` (≤ 1.14 + 0,10) | sinuosité 0,945 contre 0,775, virages 1,013 contre 0,831, détour 0,690 contre 0,581 ✗ / ✗ | sinuosité 1,018 contre 0,767, virages 0,903 contre 0,615 ✗ / ✗ | ✓ / ✓ (`far_pos` + 0,035, les trois autres en baisse) | ✓ / ✓ | ✓ / ✓ | ✓ / ✓ |
+| **B1** `S / S_base` hors revêtement (≤ 1.14 + 0,03) | 0,598 contre 0,289 ✗ / 0,558 contre 0,288 ✗ | 0,598 contre 0,234 ✗ / 0,627 contre 0,289 ✗ | 0,256 ✓ / 0,270 ✓ | **0,2645 contre 0,2636** ✗ (de 0,001) / 0,286 ✓ | 0,336 contre 0,319 ✗ / 0,343 contre 0,318 ✗ | 0,398 contre 0,264 ✗ / 0,407 contre 0,319 ✗ |
+| **B2** (0,47 seul) écart à la médiane réelle ≤ ½ de 1.14 : `way_path` | — | — | 0,011 contre 0,050 ✓ / 0,017 contre 0,062 ✓ | 0,002 contre 0,017 ✓ / 0,006 contre 0,025 ✓ | — | — |
+| **B2** `surf_unpaved` | — | — | 0,022 contre 0,040 ✗ / 0,018 contre 0,026 ✗ | 0,028 contre 0,043 ✗ / 0,026 contre 0,038 ✗ | — | — |
+| **E1** (0,47 seul ; `run1k` ≥ réel − 0,10 et ≥ sans cible) | (0,639 sous 0,706 sans cible) | (0,615 sous 0,699) | 0,744 / 0,727 contre 0,644 · 0,706 ✓ | 0,715 / 0,720 ✓ | (0,774) | (0,748) |
+| **E2** `switch_10km` ≤ 1,5 × réel | 8,2 / 8,1 contre 14,6 ✓ | 8,6 / 8,7 ✓ | 11,2 / 11,3 ✓ | 12,4 / 12,5 ✓ | 12,4 / 12,3 ✓ | 13,0 / 12,8 ✓ |
+| **K1** `VIOLATION` (0) | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ |
+
+(¹) Contre `svc+org+ride:on` : compacité 0,278 > 0,222 + 0,05, ✗ (lecture « toutes ») ; contre 1.14 (0,258) ✓. Pareil pour
+B1 « écart » curseur 1 (0,282 contre 0,245 + 0,03, ✗ contre la référence bornée ; ✓ contre 1.14).
+(²) La référence 1.14 elle-même est à 0,505 dans cette case : hors bande sans consigne.
+
+- **O3** (O1 par équipe de plus de 30 boucles au cran 0,47, ≥ 60 %) [mesuré, « toutes »] : A 86 · 91 %, **B 70 · 63 %** :
+  tient, de peu pour B au curseur 1. En lecture « écart » (57 boucles de B) : A 88 · 87 %, **B 79 · 58 %** [calculé] : sous
+  60 % au curseur 1.
+- **O4** : au banc, `reached` du moteur égal à la mesure du banc sur le premier parcours gardé dans **100 %** des jeux, à chaque
+  cran. Au service, le test `reached_follows_the_first_route_the_checker_kept` (crochet `corrupt_first_route`) est celui de
+  l'étape 8 ; il n'a pas été rejoué ici.
+- **E1, E2** : **sans objet au sens strict** (5e abandonné, R6) ; rapportés. E1 n'est défini qu'au cran 0,47, où il tient ; les
+  « ✗ » du `-compare.md` à 0,25 viennent de ce que le banc l'applique à tous les crans : avec moins de chemins, `run1k` baisse
+  naturellement sous la variante sans cible.
+- **C1, le reste** : au plus 4 pas partout ✓. Le banc n'enregistre pas l'instant de lancement de chaque pas : « aucun pas lancé
+  au-delà de 10 s » ne se vérifie pas directement. Indice : 0 à 3 jeux par groupe dépassent 10 s de génération (max 17,4 s), tous
+  en 1 pas sauf un (2 pas, 10,0 s) [calculé] ; aucun ne montre de pas lancé tard.
+
+Par équipe, O1 · O2 (« toutes », curseur 0,25 · 1) [calculé] :
+
+| équipe | Peu 0,25 | Habitude 0,47 | Beaucoup 0,60 |
+|---|---|---|---|
+| A (545) | 75 % · +0,017 ; 57 % · +0,031 | 86 % · +0,003 ; 91 % · +0,011 | 77 % · −0,021 ; 86 % · −0,004 |
+| B (222 jeux `OK`) | 73 % · +0,010 ; 79 % · −0,004 | 70 % · −0,019 ; 63 % · −0,033 | **24 % · −0,087 ; 18 % · −0,111** |
+
+C, H et I (5, 1 et 1 boucles) : sans critère.
+
+### 9.4 O5 : d'où viennent les cibles manquées
+
+[calculé] Pour chaque jeu manqué : sens de l'écart, puis, quand la part rendue est trop basse, la part `offroad` de la **boucle
+réelle partie du même point** (une personne de l'équipe a-t-elle trouvé la part visée à cet endroit ?).
+
+| cran · curseur | manqués | trop haut · trop bas | trop bas : la boucle réelle atteint la cible − 0,05 | trop bas, par équipe (A · B) |
+|---|---:|---|---|---|
+| 0,25 · 0,25 | 197 | 151 · 46 | 42 sur 46 | — |
+| 0,25 · 1 | 283 | **238** · 45 | 41 sur 45 | — |
+| 0,47 · 0,25 | 141 | 30 · 111 | 41 sur 111 | 51 · 60 |
+| 0,47 · 1 | 133 | 35 · 98 | 25 sur 98 | 23 · 75 |
+| 0,60 · 0,25 | 296 | 5 · **291** | 34 sur 291 | 120 · 169 |
+| 0,60 · 1 | 257 | 6 · **251** | 14 sur 251 | 69 · 182 |
+
+- **« Peu » manque par excès de chemins, surtout pour A au curseur 1** (39 % des jeux de A trop hauts) : le goût appris de A
+  (chemins) tire contre la consigne et la grille ne descend pas assez (μ ≤ 2). Ce n'est pas un secteur sans routes.
+- **« Beaucoup » manque par défaut, et c'est B** : 76 à 82 % des jeux de B sont trop bas. **La part réelle de B est à 0,31 en
+  médiane, 0,42 au P90 ; 0,4 % de ses boucles atteignent 0,55** : autour de ses départs, personne ne roule à 0,60, et la boucle
+  réelle du même départ n'atteint la cible que dans 1 cas sur 169 · 182. C'est un **secteur sans assez de chemins pour 0,60**
+  (et le R4 du 5a, un « Comme d'habitude » propre à B, déjà posé). A, dont 36 % des boucles réelles dépassent 0,55, tient O1 à
+  77 · 86 %.
+- **La colonne « secteur sans chemins » du `-compare.md` surestime.** Elle range un manqué dans ce cas quand la part de
+  non-revêtu des arêtes du disque D / 2 est sous la cible − 0,05 ; or ce disque vaut 0,25 à 0,37 presque partout (P90 0,373 ;
+  42 à 63 valeurs distinctes seulement, beaucoup de boucles partant des mêmes points), y compris là où A tient 0,47 et 0,60. À
+  0,47, 37 des 51 manqués trop bas de A ont une boucle réelle au-dessus de 0,42 au même départ : ce sont des **échecs de la
+  recherche**, pas du secteur. La mesure par la boucle réelle du même départ est plus parlante ; le disque est trop large pour
+  trancher.
+
+### 9.5 Lecture
+
+- **« Comme d'habitude » (0,47) tient l'essentiel** : O1 82 à 86 % (78 % en « écart » au curseur 1), O2 à 0,01 près, formes
+  **meilleures** que 1.14 sauf `far_pos` (W1 / IQR de r/D − 0,20 à − 0,22), goût hors revêtement égal (B1 0,256 à
+  0,286 ; une case à 0,001 au-dessus du seuil), `way_path` ramené au réel (B2 ✓). **B2 `surf_unpaved` ne tient pas** : l'écart
+  au réel baisse d’un tiers à 45 % (0,040 → 0,022 ; 0,043 → 0,028), pas de moitié ; la consigne vise `offroad` (classe de route-details), pas
+  le tag `surface` seul, et le reste de l'écart est dans les chemins sans tag de revêtement.
+- **« Peu » (0,25) tient la part au curseur 0,25, pas au curseur 1** (63 · 68 %), par excès de chemins chez A ; il **dégrade
+  les formes et le goût** : r/D et compacité + 0,12 à + 0,21 en W1 / IQR, sinuosité et virages + 0,17 à + 0,30, B1 doublé
+  (0,56 à 0,63 contre 0,23 à 0,29). Une partie est structurelle — le réel contre lequel A et B mesurent est la boucle de l'équipe,
+  à 0,47 en médiane : un parcours à 0,25 roule d'autres classes et tourne moins (`turns_per_10km` 19,5 contre 27,6) — mais r/D
+  et compacité ne s'expliquent pas par les classes.
+- **« Beaucoup » (0,60) ne tient pas O1 ni O2** (62 à 69 %, −0,02 à −0,04), à cause de B (O1 18 à 24 %) ; sans B, il tiendrait
+  (A 77 · 86 %). Formes ✓ ; B1 ✗ (0,34 à 0,41 contre ≤ 0,26 à 0,32) : par construction, puisque la cible s'écarte du réel des
+  équipes.
+- **B1 aux crans « Peu » et « Beaucoup » ne peut pas tenir tel qu'écrit** : il compare au réel des boucles de l'équipe, qui sont
+  à « Comme d'habitude ». Il ne mesure là que l'écart demandé.
+- **C1 réécrit : il tient ou non selon la lecture du texte.** En rapport de quantiles (ce que le banc calcule), tient partout
+  (P50 × 1,18 à 2,25, P90 × 2,09 à 2,83). En rapport **par requête** (« de la même requête sans cible »), la médiane tient
+  (× 1,19 à 2,15) mais le **P90 est à × 3,87 à 4,72 partout** : 14 à 32 % des requêtes paient plus de × 3,5, celles qui vont à 4
+  pas (15 à 38 % des jeux).
+
+### 9.6 Ce qui demande une décision
+
+1. **C1** : quelle lecture vaut, quantiles (tient) ou par requête (P90 manque partout, × 3,9 à × 4,7) ? Si c'est par requête :
+   accepter, ou ramener le P90 par un pas de moins (3 au plus) au prix d'O1.
+2. **« Beaucoup » pour B** : 0,4 % des boucles réelles de B passent 0,55 ; O1 0,60 ne tiendra pas tant que le cran est commun.
+   R4 (cran par équipe, repoussé à un lot suivant) est la seule réponse qui ne relâche pas O1 ; sinon, juger O1 « Beaucoup » hors
+   des équipes dont le réel n'y va pas.
+3. **« Peu » au curseur 1** (O1 63 · 68 %) et ses formes (A1, A3, B1) : élargir la grille vers μ > 2 pour A, ou accepter.
+4. **B1 aux crans « Peu » et « Beaucoup »** : critère à réécrire (contre une référence à la même part, ou à 0,47 seulement).
+5. **B2 `surf_unpaved`** : manque de peu à 0,47 ; la cause est la définition (R2, `API-214`), pas la consigne.
+6. **Non mesuré ici** : K1 et I1 en ROAD (campagne GRAVEL seule), C3 (conteneur), C4 (planète), relecture sur carte (étape 9).
