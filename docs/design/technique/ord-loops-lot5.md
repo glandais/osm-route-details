@@ -12,6 +12,19 @@ Les équipes sont désignées par leur lettre, comme dans les relevés du lot 4 
 
 Les choix que cette note prend sans réponse du propriétaire sont marqués **(défaut pris, à contredire)** et repris au §14.
 
+> **Décisions du propriétaire, 23 novembre 2026, après le 5a** (elles priment sur le reste de la note) :
+> 1. **Crans : 0,25 · 0,47 · 0,60.** « Beaucoup » est ramené de 0,65 à 0,60 (environ 76 % des requêtes l'atteignent au
+>    mieux, contre 46 à 58 % à 0,65) ; au-delà, le parcours le plus proche est rendu avec `reached = false`.
+> 2. **Grille élargie** : μ ∈ {0,25 ; 0,35 ; 0,5 ; 0,7 ; 1 ; 1,4 ; 2}, au plus 4 pas par requête, choisis selon la cible
+>    (prior lu sur la sonde), sans hypothèse de monotonie.
+> 3. **Temps : environ ×3 accepté.** C1 est réécrit : médiane avec cible ≤ ×3,0 de la même requête sans cible, P90 ≤ ×3,5 ;
+>    toujours au plus 4 pas et aucun pas lancé au-delà de 10 s de calcul ; C4 (aucun 504 de plus sur la planète) inchangé.
+> 4. **Écart de définition (R2)** : accepté pour ce lot ; la couverture de la typologie des tuiles est un chantier à part
+>    (registre tribly `API-214`).
+> 5. **Défauts du §14 confirmés** : sans réglage, une demande gravel vaut « Comme d'habitude » ; exemption d'équipe avec un
+>    parcours du type, sans effet en mode strict ; bornes du §6.1 telles quelles. **R4** (cran par équipe) : repoussé à un
+>    lot suivant (changement du format de profil).
+
 > **Mise à jour du 23 novembre 2026, après le 5a** (relevé : [`ord-loops-lot5-mesures.md`](ord-loops-lot5-mesures.md), §7) :
 > les règles du §3.5 sont appliquées. **R1** : crans **0,25 · 0,47 · 0,65** en `offroad` (réel GRAVEL P10 0,264, P50 0,470,
 > P90 0,611 ; M2 ne confirme pas les 20 / 38 / 49 %), reportés au §10.1 et au §14. **R2** déclenchée (écart médian 0,083, P90
