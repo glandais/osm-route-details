@@ -136,8 +136,13 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
         open(&paths.graph)?,
         open(&paths.road)?,
         open(&paths.gravel)?,
-        // Toujours le poids de base de 1.9.2, comme `likeness` : les relevés passés se rejouent tels quels.
-        Params { base_taste: Taste::neutral(), ..Params::default() },
+        // Toujours le poids de base de 1.9.2, comme `likeness` : les relevés passés se rejouent tels quels ; pour la même
+        // raison, sans les bornes de roulabilité du lot 5 (§6.3), moteur et contrôleur.
+        Params {
+            base_taste: Taste::neutral(),
+            rideability: ord_loops::Rideability::Off,
+            ..Params::default()
+        },
     )
     .map_err(|e| anyhow!("moteur : {e}"))?;
     let gf = engine.base();
@@ -278,8 +283,13 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
         let overlay =
             Overlay::read(&file).map_err(|e| anyhow!("équipe {letter} : surcouche illisible : {e}"))?;
         let (team, team_check) = build_team(&engine, &graph_index, &overlay, letter)?;
-        let checker =
-            Checker::with_tables(gf, Some(&overlay), Config::default(), &graph_index, Some(&team_check));
+        let checker = Checker::with_tables(
+            gf,
+            Some(&overlay),
+            Config { rideability: ord_loops_check::Rideability::Off, ..Config::default() },
+            &graph_index,
+            Some(&team_check),
+        );
         let env = Env {
             engine: &engine,
             wins: &wins,

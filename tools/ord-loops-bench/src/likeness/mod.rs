@@ -607,7 +607,9 @@ pub fn run(a: &LikenessArgs) -> Result<()> {
     ph.end("libération");
 
     // 7. Les mesures du réel : la forme, et le contrôleur sur les marches continues.
-    let checker0 = Checker::with_tables(gf, None, Config::default(), &graph_index, None);
+    // Sans bornes de roulabilité : le réel se mesure comme en 1.14 (ce que les bornes écarteraient du réel est M4, `banned`).
+    let real_cfg = Config { rideability: ord_loops_check::Rideability::Off, ..Config::default() };
+    let checker0 = Checker::with_tables(gf, None, real_cfg, &graph_index, None);
     let reals: Vec<(Measures, Option<Vec<String>>)> =
         loops.par_iter().map(|l| measure_real(gf, &checker0, &grids, &overlays[l.team], l)).collect();
     let real_shape: Vec<[f64; 3]> =
@@ -1166,7 +1168,7 @@ impl Bench<'_> {
                 let checker = Checker::with_tables(
                     gf,
                     Some(overlay),
-                    Config::default(),
+                    check_config(self.engine),
                     self.graph_index,
                     Some(&team_check),
                 );
@@ -1248,7 +1250,7 @@ impl Bench<'_> {
         let checker = Checker::with_tables(
             self.gf,
             Some(overlay),
-            Config::default(),
+            check_config(self.engine),
             self.graph_index,
             Some(&team_check),
         );
@@ -1339,6 +1341,17 @@ fn taste_tables(source: &str, overlay: &str, t: &Taste) -> Vec<TasteTable> {
         .collect()
 }
 
+/// Le réglage du contrôleur des parcours générés : ses bornes de roulabilité suivent celles du moteur (lot 5, §6.4), sinon
+/// un moteur sans bornes (toute exécution sans `ride:on`) verrait jeter en `NOT_RIDEABLE` des parcours que 1.14 gardait, et
+/// les empreintes de référence ne se rejoueraient plus.
+pub(crate) fn check_config(engine: &Eng) -> Config {
+    let rideability = match engine.params().rideability {
+        ord_loops::Rideability::On => ord_loops_check::Rideability::On,
+        ord_loops::Rideability::Off => ord_loops_check::Rideability::Off,
+    };
+    Config { rideability, ..Config::default() }
+}
+
 /// Données d'équipe et tables du contrôleur d'une surcouche, construites en parallèle comme le fait le service.
 pub(crate) fn build_team(
     engine: &Eng,
@@ -1346,7 +1359,7 @@ pub(crate) fn build_team(
     overlay: &Overlay,
     letter: &str,
 ) -> Result<(TeamData, TeamCheck)> {
-    let cfg = Config::default();
+    let cfg = check_config(engine);
     let plan = TeamData::plan_build(engine, overlay).map_err(|e| anyhow!("équipe {letter} : {e}"))?;
     let check_plan = TeamCheck::plan(engine.base(), overlay, &cfg);
     let (team, check) = std::thread::scope(|sc| {
