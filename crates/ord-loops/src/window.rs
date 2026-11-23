@@ -264,7 +264,10 @@ impl<B: AsRef<[u8]>> Engine<B> {
     /// type pour l'équipe). Sert à réserver la place avant de construire.
     pub fn estimate_window_bytes(&self, vi: usize, tiles: &[u32]) -> usize {
         // Un octet de plus par chaîne avec un fichier d'attracteurs (le masque d'un nœud ; au plus un nœud par chaîne).
-        self.window_chain_count(vi, tiles) * (WINDOW_BYTES_PER_CHAIN + usize::from(self.attr[vi].is_some()))
+        // Vue gravel (lot 5, §4.4 et §6.3) : un octet de part `offroad` par chaîne, un autre de roulabilité avec les bornes.
+        let lot5 = if vi == 1 { 1 + usize::from(self.params.rideability == Rideability::On) } else { 0 };
+        self.window_chain_count(vi, tiles)
+            * (WINDOW_BYTES_PER_CHAIN + usize::from(self.attr[vi].is_some()) + lot5)
     }
 
     /// Nombre de chaînes de la fenêtre de `tiles` (celles que possèdent les cellules, plus les étrangères : un
