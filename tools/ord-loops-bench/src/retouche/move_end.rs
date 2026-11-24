@@ -73,6 +73,14 @@ pub struct MeLine {
     pub win_ms: f64,
     /// Somme des temps de tous les appels à `move_end_in` de l'essai, échecs et reprises compris, ms.
     pub call_ms: f64,
+    /// `--impl engine` : sorties refusées à la couture par la règle des grappes, refus de `check_spliced_in` par code, coutures
+    /// écartées par la fenêtre (règle 2, nœud incomplet, chaîne partielle), coutures aux états gardés incomplets, temps des
+    /// contrôles indépendants (hors `call_ms`, qui est le temps du moteur).
+    pub junction_cut: u32,
+    pub spliced_refused: std::collections::BTreeMap<String, u32>,
+    pub seams_refused_window: [u32; 3],
+    pub short_leads: u32,
+    pub indep_ms: f64,
     pub fp: String,
 }
 

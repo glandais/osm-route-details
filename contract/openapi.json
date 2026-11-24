@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "1.16"
+    "version": "1.17"
   },
   "paths": {
     "/health/live": {
@@ -588,6 +588,144 @@
         }
       }
     },
+    "/v1/generator/routes/edit": {
+      "post": {
+        "tags": [
+          "generator"
+        ],
+        "summary": "Edit a saved route",
+        "description": "Changes a saved route and keeps the rest of it exactly as it was drawn. `resize` aims at a total distance by replacing one stretch of the route by a shorter or longer one that leaves and rejoins it at a junction; `move_end` keeps the route up to a junction and leads from there to a new end (or cuts the route when the new end is on it). The route is the `polyline` and the `network_edges` document of its track (the edges the matcher found along it, as the overlay deposit takes them): the service matches the document to its graph the way a deposit does, so a route that cannot be matched is refused. Up to three routes are returned, each with the whole polyline, the stretch that changed (`changed`) and the share of the saved route that was kept. A refusal is an answer, not a failure. Measured on recorded tracks: moving the end succeeds in 98.4 percent of cases, lengthening in 96.1 percent, shortening in 57.2 percent (38.9 percent for a one-way ride; most often the reason is `no_economy`, otherwise `off_target`, `checker_rejected`, `no_seam` or `order_anomaly`), and 5 percent of tracks cannot be posed at all (reason `order_anomaly`). The change of a `resize` is bounded (`capabilities.generator.edit`): beyond, generate a new route. Without the team headers the edit is a discovery with the common taste; with them, `cursor` maps to the engine as for a route from A to B, and an absent or stale overlay does not block (the answer says `mode` and `overlay: null`). The engine's P90 for a `resize` is 1.1 seconds, without the matching of the document. Edits share the queue and the budget of the generations. Nothing from the request is logged.",
+        "operationId": "postGeneratorRoutesEdit",
+        "parameters": [
+          {
+            "name": "Ord-Namespace-Key",
+            "in": "header",
+            "description": "Environment secret; with `Ord-Team`, weights the edit with the team overlay. Never logged.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "Ord-Team",
+            "in": "header",
+            "description": "Opaque team reference, [A-Za-z0-9_-]{1,64}; with `Ord-Namespace-Key`. Never logged.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditRequestV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Edited routes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditResponseV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (fields listed by JSON pointer, headers by `/headers/<name>`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above `capabilities.generator.edit.request_body_bytes`, more points than `points_max`, or a route longer than `limits.distance_m_max` (`details.limit`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type is not application/json",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Out of coverage (`out_of_coverage`, `details.coverage = graph`: the new end) or no edit (`generation_failed`, `details.reason`: `change_too_small`, `change_too_large`, `route_off_coverage`, `route_not_matched`, `order_anomaly`, `route_mismatch`, `no_seam`, `end_too_far`, `end_unreachable`, `junction_cut`, `no_economy`, `no_window`, `no_candidate`, `checker_rejected`, `off_target` or `budget`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generator unavailable or without a per-cell spatial index (`data_unavailable`, `details.source = graph`) or queue full (`overloaded`); with `Retry-After`",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Generation budget exceeded (`timeout`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/route-details": {
       "post": {
         "tags": [
@@ -1132,6 +1270,87 @@
           "typology_rules": {
             "$ref": "#/components/schemas/TypologyRulesV1",
             "description": "Typology rules that shape the output."
+          }
+        }
+      },
+      "ChangedV1": {
+        "type": "object",
+        "description": "The new stretch of a returned route.",
+        "required": [
+          "from_m",
+          "to_m",
+          "new_m",
+          "points",
+          "team_m",
+          "bridged_m",
+          "team_share",
+          "offroad_m",
+          "offroad_share",
+          "unpaved",
+          "crossings"
+        ],
+        "properties": {
+          "bridged_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "crossings": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "from_m": {
+            "type": "number",
+            "format": "double",
+            "description": "The stretch of the saved route that was replaced, as distances along the saved polyline, in metres. `to_m` is the\nroute length for `move_end` and `truncate` (the rest is dropped)."
+          },
+          "new_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length of the new stretch, in metres (0 for `truncate`)."
+          },
+          "offroad_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "offroad_share": {
+            "type": "number",
+            "format": "double"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Indices, in the returned `polyline`, of the first and the last point of the new stretch. Up to the first one the\npolyline is the saved one; a gap of 15 m at most may remain between the cut of the saved line and the junction."
+          },
+          "team_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Measures of the new stretch alone, by the independent checker (the kept parts of the route are not a path of the\ngraph, their measures are not known here)."
+          },
+          "team_share": {
+            "type": "number",
+            "format": "double",
+            "description": "(team_m + bridged_m) / new_m."
+          },
+          "to_m": {
+            "type": "number",
+            "format": "double"
+          },
+          "unpaved": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            },
+            "description": "Ranges of indices of the returned `polyline` ridden off pavement in the new stretch (as in a route from A to B)."
           }
         }
       },
@@ -1808,6 +2027,307 @@
           }
         }
       },
+      "EditCapabilities": {
+        "type": "object",
+        "description": "What the service publishes about route edits (`/v1/capabilities`, api 1.17).",
+        "required": [
+          "operations",
+          "ride_types",
+          "change_share_max",
+          "change_m_min",
+          "tolerance",
+          "end_snap_m",
+          "proposals_max",
+          "points_max",
+          "request_body_bytes"
+        ],
+        "properties": {
+          "change_m_min": {
+            "type": "number",
+            "format": "double",
+            "description": "Smallest change of `resize`, in metres: below, 422 `generation_failed` (reason `change_too_small`)."
+          },
+          "change_share_max": {
+            "type": "number",
+            "format": "double",
+            "description": "Largest change of `resize`, as a share of the route length: beyond, 422 `generation_failed` (reason\n`change_too_large`); generate a new route instead."
+          },
+          "end_snap_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Longest distance from the asked end of `move_end` to a way of the ride type, in metres: beyond, 422\n`generation_failed` (reason `end_too_far`)."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accepted `operation` keys: `resize` and `move_end`."
+          },
+          "points_max": {
+            "type": "integer",
+            "description": "Points of the polyline at most (413 `route_too_large`, `details.limit = points`).",
+            "minimum": 0
+          },
+          "proposals_max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Routes returned at most.",
+            "minimum": 0
+          },
+          "request_body_bytes": {
+            "type": "integer",
+            "description": "Body of an edit request, in bytes.",
+            "minimum": 0
+          },
+          "ride_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accepted ride types (`ride_type`)."
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double",
+            "description": "Largest relative gap between the distance asked (`resize`) and the one of a returned route."
+          }
+        }
+      },
+      "EditKindV1": {
+        "type": "string",
+        "description": "What changed in a returned route.",
+        "enum": [
+          "shorten",
+          "lengthen",
+          "move_end",
+          "truncate"
+        ]
+      },
+      "EditOperationKindV1": {
+        "type": "string",
+        "description": "The operation an edit response answers.",
+        "enum": [
+          "resize",
+          "move_end"
+        ]
+      },
+      "EditOperationV1": {
+        "type": "object",
+        "description": "What to do to the route: exactly one key.",
+        "properties": {
+          "move_end": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MoveEndV1",
+                "description": "Finish elsewhere: the route is kept up to a junction and a new stretch leads to the point."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resize": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ResizeV1",
+                "description": "Reach a total distance by replacing a stretch of the route."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EditRequestV1": {
+        "type": "object",
+        "description": "Request to edit a saved route.",
+        "required": [
+          "polyline",
+          "network_edges",
+          "ride_type",
+          "operation"
+        ],
+        "properties": {
+          "cursor": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "As for a route from A to B (`POST /v1/router/route`): with the team headers only, 0 routes team first with the\nhighest off-team cost (strict mode is not offered), 1 is discovery. Absent: 1. Ignored without the team headers,\nbut still validated within [0, 1]."
+          },
+          "network_edges": {
+            "type": "object",
+            "description": "The `network_edges` document of the route's track, as the overlay deposit takes it (the edges\n`/v1/route-details` matched along this polyline, with `fm`, `tm` and `trv`). Unknown keys are tolerated. Without\n`fm` and `tm` on every edge, `unmatched_m` is an upper bound."
+          },
+          "operation": {
+            "$ref": "#/components/schemas/EditOperationV1",
+            "description": "Exactly one of `resize` or `move_end`."
+          },
+          "polyline": {
+            "type": "string",
+            "description": "The saved route, as a Google polyline of precision 6 (at least two distinct points, at most\n`capabilities.generator.edit.points_max`, a length within `capabilities.generator.limits.distance_m_max`)."
+          },
+          "ride_type": {
+            "$ref": "#/components/schemas/RideTypeV1"
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Seed of the choice among equivalent edits (default 0); another seed asks for other proposals.",
+            "minimum": 0
+          }
+        }
+      },
+      "EditResponseV1": {
+        "type": "object",
+        "description": "Edited routes, the best first.",
+        "required": [
+          "graph_id",
+          "mode",
+          "taste",
+          "operation",
+          "original_m",
+          "dropped",
+          "routes"
+        ],
+        "properties": {
+          "dropped": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Routes the engine found and the independent checker refused.",
+            "minimum": 0
+          },
+          "graph_id": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ModeV1",
+            "description": "Mode applied: `discovery` without the team headers, or when the team overlay is absent or stale (then `overlay`\nis null); never `strict`."
+          },
+          "operation": {
+            "$ref": "#/components/schemas/EditOperationKindV1"
+          },
+          "original_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Length of the saved polyline, in metres."
+          },
+          "overlay": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverlayInfoV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditedRouteV1"
+            },
+            "description": "One to three routes."
+          },
+          "target_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The distance asked (`resize`), null otherwise."
+          },
+          "taste": {
+            "$ref": "#/components/schemas/TasteV1",
+            "description": "The taste the edit was served with."
+          }
+        }
+      },
+      "EditedRouteV1": {
+        "type": "object",
+        "description": "An edited route.",
+        "required": [
+          "kind",
+          "polyline",
+          "distance_m",
+          "kept_m",
+          "kept_share",
+          "unmatched_m",
+          "changed"
+        ],
+        "properties": {
+          "abandoned_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Metres of the saved route dropped after the junction (`move_end` and `truncate` only)."
+          },
+          "changed": {
+            "$ref": "#/components/schemas/ChangedV1"
+          },
+          "distance_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Distance of the edited route, in metres: the saved parts as they were drawn, plus the new stretch on the graph."
+          },
+          "end_snap_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Distance from the asked end to the last point of the polyline, in metres (`move_end` only)."
+          },
+          "error_share": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "`|distance_m - distance asked| / distance asked` (`resize` only)."
+          },
+          "kept_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Metres of the saved route kept, and their share of it."
+          },
+          "kept_share": {
+            "type": "number",
+            "format": "double"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EditKindV1"
+          },
+          "polyline": {
+            "type": "string",
+            "description": "The whole edited route, Google polyline of precision 6: the saved polyline up to the change, the new stretch, then\n(`shorten` and `lengthen`) the saved polyline again."
+          },
+          "unmatched_m": {
+            "type": "number",
+            "format": "double",
+            "description": "Metres of the kept parts that `network_edges` did not match to the graph: there, the route may ride an edge twice\nand no check was made. An upper bound when an edge of the document has no `fm` or `tm`."
+          },
+          "variant": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MoveEndVariantV1",
+                "description": "For `move_end` only."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "EleMethodV1": {
         "type": "string",
         "description": "Elevation method of a point or station.",
@@ -2338,7 +2858,7 @@
       },
       "GenerationReason": {
         "type": "string",
-        "description": "Why a generation, or a route from A to B (`POST /v1/router/route`, api 1.15), produced no route. A route from A to B\ngives `start_too_far`, `end_too_far` or `no_route` only.",
+        "description": "Why a generation, a route from A to B (`POST /v1/router/route`, api 1.15) or a route edit (`POST\n/v1/generator/routes/edit`, api 1.17) produced no route. A route from A to B gives `start_too_far`, `end_too_far` or\n`no_route` only; an edit gives the values marked \"edit only\", plus `end_too_far` (the new end is more than\n`capabilities.generator.edit.end_snap_m` from a way), `end_unreachable`, `no_candidate`, `checker_rejected` and\n`budget`.",
         "enum": [
           "start_too_far",
           "end_too_far",
@@ -2350,7 +2870,18 @@
           "no_candidate",
           "budget",
           "checker_rejected",
-          "no_route"
+          "no_route",
+          "change_too_small",
+          "change_too_large",
+          "route_off_coverage",
+          "route_not_matched",
+          "order_anomaly",
+          "route_mismatch",
+          "no_seam",
+          "junction_cut",
+          "no_economy",
+          "no_window",
+          "off_target"
         ]
       },
       "GeneratorCapabilities": {
@@ -2391,6 +2922,17 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/CursorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "edit": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EditCapabilities",
+                "description": "Route edit (`POST /v1/generator/routes/edit`, api 1.17): the operations and their bounds. Absent when the service\ncannot edit (no per-cell spatial index) and on a service older than 1.18.0: do not call the route then."
               },
               {
                 "type": "null"
@@ -2696,6 +3238,27 @@
           "strict",
           "team_first",
           "discovery"
+        ]
+      },
+      "MoveEndV1": {
+        "type": "object",
+        "required": [
+          "point"
+        ],
+        "properties": {
+          "point": {
+            "$ref": "#/components/schemas/GeoPointV1",
+            "description": "The new end. Within the covered polygon (422 `out_of_coverage` otherwise) and within\n`capabilities.generator.edit.end_snap_m` of a way of the ride type (422 `end_too_far`). On the route itself, the\nroute is cut there (kind `truncate`)."
+          }
+        }
+      },
+      "MoveEndVariantV1": {
+        "type": "string",
+        "description": "Which choice a `move_end` route makes.",
+        "enum": [
+          "best",
+          "keep_all",
+          "nearest"
         ]
       },
       "NumberBounds": {
@@ -3500,6 +4063,19 @@
           },
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "ResizeV1": {
+        "type": "object",
+        "required": [
+          "distance_m"
+        ],
+        "properties": {
+          "distance_m": {
+            "type": "number",
+            "format": "double",
+            "description": "The total distance aimed at, in metres (not the change): within 1,000 m and 30 percent of the route length\n(`capabilities.generator.edit`), and at most `capabilities.generator.limits.distance_m_max`."
           }
         }
       },

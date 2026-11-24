@@ -335,7 +335,7 @@ pub(crate) fn run_step<B: AsRef<[u8]>>(
         )),
         Figures::Classic => None,
     };
-    let res = collect(e, win, team, r, ws, stop, &mut diag, &mut fig, org_search.as_ref(), mu_q8);
+    let res = collect(e, win, team, r, ws, stop, &mut diag, &mut fig, org_search.as_ref(), mu_q8, None);
     if let Some(o) = &org_search {
         fig.turn_cut = o.turn_cut.get();
         fig.turn_evals = o.turn_evals.get();
@@ -394,6 +394,35 @@ pub(crate) fn lens_pick(
     }
 }
 
+/// La lentille posée entre deux coutures d'un parcours gardé (retouche, lot 7a, §7.1 de `ord-retouche-lot1.md`) : le masque
+/// des chaînes gardées, et les accroches de couture qui remplacent l'accroche du départ et de l'arrivée (cap de la jambe
+/// gardée imposé, demi-tour fermé). `None` pour toute génération ordinaire : le corps de `collect` est alors celui d'avant.
+pub(crate) struct LensGraft<'a> {
+    pub keep_out: &'a crate::graft::KeepOut,
+    pub start: Anchor,
+    pub end: Anchor,
+    /// Nœuds de base des deux coutures, pour ramener chaque candidat à ses nœuds.
+    pub node_i: u32,
+    pub node_j: u32,
+}
+
+/// Les candidats contrôlés et notés d'une lentille posée entre deux coutures : `r.start` et `r.end` sont les nœuds des
+/// coutures, `r.distance_m = ℓ + Δ`.
+pub(crate) fn generate_graft_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<TeamCtx<'_>>,
+    r: &Request,
+    graft: &LensGraft<'_>,
+    ws: &mut Workspace,
+    stop: &mut dyn FnMut() -> bool,
+) -> (Result<Vec<Scored>, Failure>, Diagnostics) {
+    let mut diag = Diagnostics::default();
+    let mut fig = FigureDiagnostics::default();
+    let res = collect(e, win, team, r, ws, stop, &mut diag, &mut fig, None, None, Some(graft));
+    (res.map(|c| c.scored), diag)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn collect<B: AsRef<[u8]>>(
     e: &Engine<B>,
@@ -406,6 +435,7 @@ fn collect<B: AsRef<[u8]>>(
     fig: &mut FigureDiagnostics,
     org_search: Option<&OrgSearch>,
     mu_q8: Option<u32>,
+    graft: Option<&LensGraft<'_>>,
 ) -> Result<Collected, Failure> {
     // Retouche, lot 0 (sonde) : le masque posé par le banc, pris dès l'entrée (un appel suivant ne l'hérite jamais, même
     // après un échec précoce).
@@ -430,26 +460,47 @@ fn collect<B: AsRef<[u8]>>(
         }
         // La sonde du banc (`Workspace::set_mu_q8`) ne prime pas sur une consigne : elle vaut quand il n'y en a pas.
         let mu = mu_q8.or(ws.mu_q8);
-        w.with_keep_out(keep_out.as_ref().map(crate::probe_graft::KeepOut::bits)).with_mu_q8(mu)
+        assert!(graft.is_none() || keep_out.is_none(), "un masque de sonde et une lentille posée à la fois");
+        w.with_keep_out(keep_out.as_ref().map(crate::graft::KeepOut::bits)).with_mu_q8(mu)
+    };
+    let w = match graft {
+        Some(g) => {
+            g.keep_out.assert_window(win);
+            w.with_keep_out(Some(g.keep_out.bits()))
+        }
+        None => w,
     };
     let min_dm = (e.params.min_component_share * d * 10.0) as u64;
     let strict_tt = if w.strict() { w.tt() } else { None };
     let ok = |c: u32| -> bool {
         w.chain(c) != INF && strict_tt.is_none_or(|tt| tt.strict_len_of(v.gid[c as usize]) >= min_dm)
     };
-    let s_snap =
-        e.snap(win, r.start, &ok, min_dm).map_err(|()| Failure::WindowEscape)?.ok_or(Failure::StartTooFar)?;
+    let s_snap = match graft {
+        Some(g) => g.start.snap,
+        None => e
+            .snap(win, r.start, &ok, min_dm)
+            .map_err(|()| Failure::WindowEscape)?
+            .ok_or(Failure::StartTooFar)?,
+    };
     let is_loop = r.end.is_none();
-    let e_snap = match r.end {
-        None => s_snap,
-        Some(p) => {
+    let e_snap = match (graft, r.end) {
+        (Some(g), _) => g.end.snap,
+        (None, None) => s_snap,
+        (None, Some(p)) => {
             e.snap(win, p, &ok, min_dm).map_err(|()| Failure::WindowEscape)?.ok_or(Failure::EndTooFar)?
         }
     };
     let esc = Cell::new(false);
     let halted = || if esc.get() { Failure::WindowEscape } else { Failure::Stopped };
-    let sa: Anchor = make_anchor(e, v, &w, s_snap);
-    let ea: Anchor = if is_loop { sa } else { make_anchor(e, v, &w, e_snap) };
+    let sa: Anchor = match graft {
+        Some(g) => g.start,
+        None => make_anchor(e, v, &w, s_snap),
+    };
+    let ea: Anchor = match graft {
+        Some(g) => g.end,
+        None if is_loop => sa,
+        None => make_anchor(e, v, &w, e_snap),
+    };
     let s_e7 = r.start.to_e7();
     let e_e7 = r.end.unwrap_or(r.start).to_e7();
     let disc = Disc::new(s_e7, e_e7, d, is_loop);
@@ -664,7 +715,7 @@ fn collect<B: AsRef<[u8]>>(
                     continue;
                 }
                 diag.within_tolerance += 1;
-                let (steps, step_field) = steps_of(v, &fields, &s_snap, &e_snap);
+                let (steps, mut step_field) = steps_of(v, &fields, &s_snap, &e_snap);
                 let route = Route {
                     start: Position { edge: s_snap.edge, offset_m: s_snap.offset_m },
                     end: Position { edge: e_snap.edge, offset_m: e_snap.offset_m },
@@ -680,6 +731,27 @@ fn collect<B: AsRef<[u8]>>(
                     bearing_deviation_deg: None,
                     familiarity: r.familiarity,
                     family: Family::Turnaround,
+                };
+                // Lentille posée entre deux coutures : le tronçon est ramené aux nœuds avant tout contrôle (l'étape de
+                // longueur nulle de l'accroche de couture lui donnerait un cap dégénéré).
+                let route = match graft {
+                    None => route,
+                    Some(g) => match crate::graft::normalize_between(e, &route, g.node_i, g.node_j) {
+                        Some(n) => {
+                            if n.head_removed {
+                                step_field.remove(0);
+                            }
+                            if n.tail_removed {
+                                step_field.pop();
+                            }
+                            n.route
+                        }
+                        None => {
+                            *rejected.entry(Violation::Discontinuous).or_insert(0) += 1;
+                            rho = rho_seen;
+                            continue;
+                        }
+                    },
                 };
                 let chk = if org.is_some_and(|o| o.tune.turns) {
                     check_route_aligned_in(e, win, team.map(|t| t.data), r, &route)

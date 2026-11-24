@@ -46,6 +46,15 @@ pub fn type_code(s: &str) -> u8 {
 pub struct Document {
     #[serde(default)]
     edges: Vec<RawEdge>,
+    /// Longueur de la trace sur l'axe de `fm` et `tm`, m (ignorée du dépôt ; lue par la retouche, lot 7b).
+    #[serde(default, deserialize_with = "lenient_number")]
+    len: Option<f64>,
+}
+
+/// Un nombre, ou `None` pour tout autre type : un `len` racine mal typé ne rend pas le document illisible (le dépôt
+/// ignorait cette clé avant la retouche).
+fn lenient_number<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    Ok(serde_json::Value::deserialize(d)?.as_f64())
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +107,11 @@ fn node_of(v: Option<i64>) -> i32 {
 }
 
 impl Document {
+    /// Longueur de l'axe de `fm` et `tm`, si le document la porte.
+    pub fn len_m(&self) -> Option<f64> {
+        self.len
+    }
+
     /// Les arêtes du document, dépouillées de leurs noms de champs.
     pub fn into_edges(self) -> Vec<ParsedEdge> {
         self.edges
@@ -135,5 +149,14 @@ mod tests {
         let edges = parse_document(doc).unwrap();
         let flags: Vec<bool> = edges.iter().map(|e| e.sc_unpaved).collect();
         assert_eq!(flags, [true, false, false]);
+    }
+
+    #[test]
+    fn a_root_len_of_another_type_does_not_make_the_document_unreadable() {
+        let doc = Document::deserialize(&serde_json::json!({"len": "12", "edges": [{"g": "a"}]})).unwrap();
+        assert_eq!(doc.len_m(), None);
+        let doc = Document::deserialize(&serde_json::json!({"len": 12.5, "edges": []})).unwrap();
+        assert_eq!(doc.len_m(), Some(12.5));
+        assert!(parse_document(br#"{"len":"x","edges":[{"g":"a","trv":1}]}"#).is_some());
     }
 }

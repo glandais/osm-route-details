@@ -136,6 +136,7 @@ pub fn public_routes() -> Vec<(&'static str, Method, MethodRouter<AppState>)> {
         ("/v1/generator/overlay", Method::DELETE, delete(generator::routes::delete_overlay)),
         ("/v1/generator/overlays", Method::DELETE, delete(generator::routes::delete_overlays)),
         ("/v1/generator/routes", Method::POST, post(generator::routes::post_routes)),
+        ("/v1/generator/routes/edit", Method::POST, post(generator::edit::post_edit)),
         ("/v1/router/route", Method::POST, post(generator::router::post_route)),
         ("/v1/attribution", Method::GET, get(attribution)),
         ("/health/live", Method::GET, get(health_live)),

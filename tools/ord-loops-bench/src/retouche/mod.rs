@@ -11,6 +11,7 @@
 pub mod continuity;
 pub mod control;
 pub mod draw;
+pub mod engine;
 pub mod move_end;
 pub mod out;
 pub mod out_play;
@@ -277,4 +278,6 @@ pub struct Env<'a> {
     pub max_windows: usize,
     pub max_controls: usize,
     pub no_keep_out: bool,
+    /// Réglages de la retouche du moteur (`--impl engine`).
+    pub tune: ord_loops::RetouchTune,
 }

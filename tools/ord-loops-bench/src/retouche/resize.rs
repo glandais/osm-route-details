@@ -86,6 +86,25 @@ pub struct RsLine {
     /// Contrôles réellement joués (C1 à C3), et le plafond `max_controls` a été atteint avec des candidats restants.
     pub controls_run: usize,
     pub capped: bool,
+    /// `--impl engine` : arbres bâtis, fenêtres de lentille jouées, arrêt anticipé, échéance atteinte, sorties refusées par la
+    /// règle des grappes, refus de `check_spliced_in` par code, coutures écartées par la fenêtre, coutures aux états gardés
+    /// incomplets, temps des contrôles indépendants (hors `total_ms`, qui est le temps du moteur).
+    pub trees: u32,
+    pub windows_tried: u32,
+    pub stopped_early: bool,
+    pub deadline_hit: bool,
+    pub junction_cut: u32,
+    pub spliced_refused: BTreeMap<String, u32>,
+    pub seams_refused_window: [u32; 3],
+    pub short_leads: u32,
+    /// Raccourcir (moteur) : coutures `j` lues, `j` refusées au virage d'entrée, chemins à tête inattendue, chemins reprenant une
+    /// jambe gardée d'après `j`, meilleur écart `err₀` lu sur tous les arbres (`None` : aucun `j` atteint).
+    pub shorten_reached: u32,
+    pub shorten_turn_refused: u32,
+    pub shorten_head_mismatch: u32,
+    pub shorten_reuse_refused: u32,
+    pub best_err0: Option<f64>,
+    pub indep_ms: f64,
     pub fp: String,
 }
 

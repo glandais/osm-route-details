@@ -115,6 +115,23 @@ impl<'e> SharedWindows<'e> {
         taste: Option<&Taste>,
     ) -> (Arc<Window>, Arc<WindowTeam>) {
         let plan = self.engine.plan(req, self.step_m);
+        self.acquire_plan(team_key, team, &plan, taste)
+    }
+
+    /// Le pas d'arrondi du rayon de classe, pour que l'appelant bâtisse ses plans comme `acquire`.
+    pub fn step_m(&self) -> f64 {
+        self.step_m
+    }
+
+    /// Comme [`SharedWindows::acquire`], pour un plan déjà bâti (la retouche du lot 7a : le moteur dimensionne la fenêtre de
+    /// ses recherches, `plan_move_end` et `plan_resize`).
+    pub fn acquire_plan(
+        &self,
+        team_key: u64,
+        team: &TeamData,
+        plan: &ord_loops::WindowPlan,
+        taste: Option<&Taste>,
+    ) -> (Arc<Window>, Arc<WindowTeam>) {
         let vi = plan.view;
         let hit = self.lock().lookup(vi, &plan.need);
         let win = match hit {
@@ -145,6 +162,20 @@ impl<'e> SharedWindows<'e> {
                 }
             }
         };
+        (win, wt)
+    }
+
+    /// La reprise d'un plan élargi (`extra_m` posé par l'appelant dans son plan) : fenêtre construite hors cache.
+    pub fn acquire_plan_wide(
+        &self,
+        team: &TeamData,
+        vi: usize,
+        plan: &ord_loops::WindowPlan,
+        taste: Option<&Taste>,
+    ) -> (Arc<Window>, Arc<WindowTeam>) {
+        self.escapes.fetch_add(1, Ordering::Relaxed);
+        let win = Arc::new(self.engine.build_window(vi, &plan.class, &mut || false).expect("jamais coupée"));
+        let wt = Arc::new(self.build_team(&win, team, taste));
         (win, wt)
     }
 

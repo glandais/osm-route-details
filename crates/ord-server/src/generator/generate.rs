@@ -87,7 +87,7 @@ fn offroad_result(target: f64, tolerance: f64, steps: u8, first_kept_share: Opti
     }
 }
 
-fn band(distance_m: f64) -> &'static str {
+pub(super) fn band(distance_m: f64) -> &'static str {
     match distance_m {
         d if d < 20_000.0 => "<20km",
         d if d < 50_000.0 => "20-50km",

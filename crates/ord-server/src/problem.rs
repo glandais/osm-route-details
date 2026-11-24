@@ -192,8 +192,11 @@ pub struct ProblemDetails {
     pub coverage: Option<CoverageSource>,
 }
 
-/// Why a generation, or a route from A to B (`POST /v1/router/route`, api 1.15), produced no route. A route from A to B
-/// gives `start_too_far`, `end_too_far` or `no_route` only.
+/// Why a generation, a route from A to B (`POST /v1/router/route`, api 1.15) or a route edit (`POST
+/// /v1/generator/routes/edit`, api 1.17) produced no route. A route from A to B gives `start_too_far`, `end_too_far` or
+/// `no_route` only; an edit gives the values marked "edit only", plus `end_too_far` (the new end is more than
+/// `capabilities.generator.edit.end_snap_m` from a way), `end_unreachable`, `no_candidate`, `checker_rejected` and
+/// `budget`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GenerationReason {
@@ -210,6 +213,32 @@ pub enum GenerationReason {
     CheckerRejected,
     /// Route from A to B only (api 1.15): no path joins the start to the end, even through the wider search area.
     NoRoute,
+    /// Edit only (api 1.17), `resize`: the change is below `capabilities.generator.edit.change_m_min`.
+    ChangeTooSmall,
+    /// Edit only, `resize`: the change is above `capabilities.generator.edit.change_share_max` of the route: generate a
+    /// new route instead.
+    ChangeTooLarge,
+    /// Edit only: a point of the saved route lies outside the covered polygon.
+    RouteOffCoverage,
+    /// Edit only: none of the `network_edges` could be matched to the graph, so the route cannot be edited.
+    RouteNotMatched,
+    /// Edit only: the matched edges come in an order the saved route does not follow (about 5 percent of recorded
+    /// tracks): the route cannot be edited, generate a new one.
+    OrderAnomaly,
+    /// Edit only: the `network_edges` do not describe the given polyline (length drift): compute them again.
+    RouteMismatch,
+    /// Edit only: the route has no junction where a new stretch can leave and rejoin it.
+    NoSeam,
+    /// Edit only: every way out of the route reaches a junction cut by the engine's cluster rule: no connection without
+    /// a sharp turn.
+    JunctionCut,
+    /// Edit only, `resize` shortening: no pair of junctions saves the distance asked. A normal answer, not a failure of
+    /// the service: shortening succeeds in 57.2 percent of measured cases, 38.9 percent for a one-way ride.
+    NoEconomy,
+    /// Edit only, `resize` lengthening: no stretch of the route can be replaced by a longer one of the right scale.
+    NoWindow,
+    /// Edit only: stretches were found, none within `capabilities.generator.edit.tolerance` of the distance asked.
+    OffTarget,
 }
 
 /// State of an overlay that cannot serve a team-first or strict generation.

@@ -14,7 +14,7 @@ pub mod validate;
 pub mod wiring;
 
 /// Version du contrat, montée à la main quand il change de façon observable (T01 §9).
-pub const API_VERSION: &str = "1.16";
+pub const API_VERSION: &str = "1.17";
 
 pub use app::{internal_router, router, AppState};
 pub use openapi::{openapi, render_contract};

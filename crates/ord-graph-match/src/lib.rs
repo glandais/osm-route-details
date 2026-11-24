@@ -16,6 +16,7 @@ pub mod index;
 pub mod job;
 pub mod matcher;
 pub mod plane;
+pub mod posed;
 pub mod profile;
 pub mod walk;
 

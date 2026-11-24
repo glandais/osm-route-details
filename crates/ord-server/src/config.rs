@@ -350,6 +350,10 @@ pub struct GeneratorConfig {
     pub router_max_concurrent: usize,
     pub router_max_queued: usize,
     pub router_budget_ms: u64,
+    /// Retouche d'un parcours (`POST /v1/generator/routes/edit`, api 1.17) : mémoire (Mo) de l'index spatial par cellule bâti
+    /// à chaque requête pour apparier le document de la trace, comme celui d'un dépôt. La retouche prend la file, le budget
+    /// et les fenêtres des générations.
+    pub edit_index_cache_mb: usize,
     pub distance_m_min: f64,
     pub distance_m_max: f64,
     /// Équipes gardées en mémoire au plus (plafond en nombre) et leur plafond en octets (Mo) : leurs octets (surcouche,
@@ -467,6 +471,7 @@ impl Default for GeneratorConfig {
             router_max_concurrent: 2,
             router_max_queued: 6,
             router_budget_ms: 5_000,
+            edit_index_cache_mb: 64,
             distance_m_min: 5_000.0,
             distance_m_max: 200_000.0,
             team_cache_entries: 64,
@@ -748,6 +753,9 @@ impl Config {
                 "router_max_concurrent and router_budget_ms must be positive",
             );
         }
+        if g.edit_index_cache_mb == 0 {
+            return invalid("generator.edit_index_cache_mb", "must be positive");
+        }
         if !(g.distance_m_min > 0.0 && g.distance_m_min <= g.distance_m_max && g.distance_m_max.is_finite()) {
             return invalid("generator.distance_m_min", "must be positive and not above distance_m_max");
         }
@@ -945,6 +953,20 @@ mod tests {
             assert_eq!(c.generator.budget_ms, 8_000);
             jail.set_env("ORD_GENERATOR__BUDGET_MS", "0");
             assert!(Config::load(None).is_err(), "budget nul");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_edit_index_has_its_own_key_and_must_be_positive() {
+        figment::Jail::expect_with(|jail| {
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.edit_index_cache_mb, 64);
+            jail.set_env("ORD_GENERATOR__EDIT_INDEX_CACHE_MB", "16");
+            let c = Config::load(None).map_err(|e| e.to_string())?;
+            assert_eq!(c.generator.edit_index_cache_mb, 16);
+            jail.set_env("ORD_GENERATOR__EDIT_INDEX_CACHE_MB", "0");
+            assert!(Config::load(None).is_err(), "index sans mémoire");
             Ok(())
         });
     }

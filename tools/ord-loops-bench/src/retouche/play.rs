@@ -1,7 +1,7 @@
 //! `retouche-play` (note : `ord-retouche-lot0.md` §7) : jouer `move_end` et `resize` sur les traces de l'export, avec
 //! les surcouches complètes du lot 6, et contrôler chaque recollé.
 //!
-//! **Privé** : les sorties vont sous `~/.cache/osm-route-details/graph/retouche/`, les équipes y sont lettrées, une trace
+//! **Privé** : les sorties vont sous `~/.cache/osm-route-details/graph/retouche-bench/`, les équipes y sont lettrées, une trace
 //! y est désignée par `(lettre, rang)`, aucune position ni aucun id n'y est écrit. Seuls les agrégats du `.md` se recopient.
 
 use std::collections::BTreeMap;
@@ -24,11 +24,19 @@ use super::draw::{self, MoveEndDraw};
 use super::move_end::{self, MeLine};
 use super::posed::{self, Posed, SeamOpts, ViewInfo, ViewLookup};
 use super::resize::{self, RsLine};
-use super::{open, out_play, Cursor, Env, PathOpts};
+use super::{engine, open, out_play, Cursor, Env, PathOpts};
 use crate::likeness::export::{self, RetainParams};
 use crate::likeness::holdout;
 use crate::likeness::play::SharedWindows;
 use crate::likeness::{build_team, read_letters, Phases};
+
+/// Qui joue la retouche : l'API publique du moteur (lot 7a) ou les prototypes du lot 0 (sous `probe`), pour rejouer les mêmes
+/// tirages et comparer à tirage égal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Impl {
+    Engine,
+    Lot0,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Op {
@@ -42,6 +50,35 @@ pub enum Op {
 pub struct RetouchePlayArgs {
     #[command(flatten)]
     pub paths: PathOpts,
+    /// `engine` (défaut) : l'API publique du moteur ; `lot0` : les prototypes du lot 0, pour la comparaison à tirage égal.
+    #[arg(long = "impl", value_enum, default_value = "engine")]
+    pub implementation: Impl,
+    /// Allonger en masquant la partie remplacée (le défaut du moteur la laisse libre, comme le lot 0 ; `--impl engine`).
+    #[arg(long)]
+    pub masked_section: bool,
+    /// Raccourcir en masquant la partie remplacée dans l'arbre (le défaut du moteur la laisse libre ; `--impl engine`).
+    #[arg(long)]
+    pub masked_shorten: bool,
+    /// Raccourcir : écart prévu maximal d'une couture `j` lue dans l'arbre (`--impl engine`).
+    #[arg(long, default_value_t = 0.03)]
+    pub read_tol: f64,
+    /// Raccourcir : nombre d'arbres (cases de `i`) au plus (`--impl engine`).
+    #[arg(long, default_value_t = 6)]
+    pub shorten_trees: usize,
+    /// Accroche de `E′` : distance maximale à une voie du type, m (`--impl engine`).
+    #[arg(long, default_value_t = 500.0)]
+    pub end_snap_m: f64,
+    /// Changement relatif maximal du moteur : 0,40 au banc (le service garde 0,30), pour voir au-delà de D3.
+    #[arg(long, default_value_t = 0.40)]
+    pub max_change: f64,
+    /// Échéances du moteur pour `resize`, ms (`--impl engine`).
+    #[arg(long, default_value_t = 1_000)]
+    pub soft_ms: u32,
+    #[arg(long, default_value_t = 1_800)]
+    pub budget_ms: u32,
+    /// Écart relatif maximal de la polyligne aux jambes à la pose (`--impl engine`).
+    #[arg(long, default_value_t = 0.02)]
+    pub max_drift: f64,
     /// Préfixe des fichiers de sortie : `<label>-move-end.jsonl`, `<label>-resize.jsonl`, `<label>-play.{json,md}`.
     #[arg(long, default_value = "play")]
     pub label: String,
@@ -89,8 +126,8 @@ pub struct RetouchePlayArgs {
     pub limit: Option<usize>,
     #[arg(long)]
     pub threads: Option<usize>,
-    /// Marge continue exigée de chaque côté d'une couture, m.
-    #[arg(long, default_value_t = 200.0)]
+    /// Marge continue exigée de chaque côté d'une couture, m (100 : celle du moteur ; le lot 0 jouait 200).
+    #[arg(long, default_value_t = 100.0)]
     pub seam_margin_m: f64,
     #[arg(long, default_value_t = 15.0)]
     pub proj_tol_m: f64,
@@ -117,7 +154,11 @@ fn type_ok(t: u8) -> bool {
 }
 
 pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
-    let paths = a.paths.resolve()?;
+    let mut paths = a.paths.resolve()?;
+    if a.paths.out.is_none() {
+        paths.out = paths.out.with_file_name("retouche-bench");
+    }
+    let engine_impl = a.implementation == Impl::Engine;
     let cursors: Vec<Cursor> = a.cursors.iter().map(|&c| Cursor::new(c)).collect::<Result<_>>()?;
     let letters = read_letters(&paths.letters)?;
     let wanted: Vec<u64> = letters
@@ -191,6 +232,45 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
                 .collect()
         })
     };
+    // `--impl engine` : la pose du moteur, depuis la même marche et la même polyligne. Une trace refusée à l'entrée sort des
+    // populations (et de tous les dénominateurs) ; la part refusée est donnée à côté de chaque critère.
+    let mut posed_all = posed_all;
+    let mut epose: std::collections::HashMap<(usize, u32), ord_loops::PosedRoute> = Default::default();
+    let mut pose_refused: BTreeMap<String, usize> = BTreeMap::new();
+    let mut posed_before = 0usize;
+    if engine_impl {
+        let tune = ord_loops::PoseTune {
+            seam_margin_m: a.seam_margin_m,
+            proj_tol_m: a.proj_tol_m,
+            touch_continues: false,
+            max_drift: a.max_drift,
+        };
+        posed_before = posed_all.iter().flatten().count();
+        let results: Vec<Option<Result<ord_loops::PosedRoute, ord_loops::PoseError>>> = pool.install(|| {
+            posed_all.par_iter().map(|p| p.as_ref().map(|p| engine::pose_of(&engine, p, &tune))).collect()
+        });
+        for (slot, res) in posed_all.iter_mut().zip(results) {
+            let Some(res) = res else { continue };
+            let p = slot.as_ref().expect("posée");
+            match res {
+                Ok(pr) => {
+                    epose.insert((p.team, p.rank), pr);
+                }
+                Err(err) => {
+                    let key = match err {
+                        ord_loops::PoseError::OrderAnomaly { .. } => "OrderAnomaly",
+                        ord_loops::PoseError::Drift => "Drift",
+                        ord_loops::PoseError::Empty => "Empty",
+                        ord_loops::PoseError::NotOnGraph => "NotOnGraph",
+                        ord_loops::PoseError::WrongType => "WrongType",
+                    };
+                    *pose_refused.entry(key.to_string()).or_default() += 1;
+                    *slot = None;
+                }
+            }
+        }
+        ph.end("pose du moteur");
+    }
     let export_xxh3 = ing.export_xxh3;
     let team_ids = ing.teams.clone();
     let rows_read = todo.len();
@@ -301,6 +381,17 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
             max_windows: a.windows,
             max_controls: a.max_controls,
             no_keep_out: a.no_keep_out,
+            tune: ord_loops::RetouchTune {
+                end_snap_m: a.end_snap_m,
+                max_change: a.max_change,
+                free_section: !a.masked_section,
+                free_shorten: !a.masked_shorten,
+                shorten_read_tol: a.read_tol,
+                shorten_trees: a.shorten_trees,
+                soft_ms: a.soft_ms,
+                budget_ms: a.budget_ms,
+                ..ord_loops::RetouchTune::default()
+            },
         };
         // Les plus longues d'abord : une trace de 400 km occupe un fil des minutes, et seule la fin de la file la ferait
         // attendre. L'ordre des sorties reste celui des rangs.
@@ -329,14 +420,24 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
                             draw::move_end_trials(p, &ends, &draw_cfg, a.seed, p.shape == Shape::OneWay);
                         for cur in &cursors {
                             for tr in &trials {
-                                out.me.push(move_end::play_trial(&env, p, cur, tr, ws, &cache));
+                                out.me.push(match epose.get(&(p.team, p.rank)) {
+                                    Some(pr) if engine_impl => {
+                                        engine::play_trial(&env, p, pr, cur, tr, ws, &cache)
+                                    }
+                                    _ => move_end::play_trial(&env, p, cur, tr, ws, &cache),
+                                });
                             }
                         }
                     }
                     if let (true, Some(w)) = (do_rs, weight) {
                         for cur in &cursors {
                             for &d in &a.deltas {
-                                out.rs.push(resize::play_request(&env, p, cur, d / 100.0, w, ws, &cache));
+                                out.rs.push(match epose.get(&(p.team, p.rank)) {
+                                    Some(pr) if engine_impl => {
+                                        engine::play_request(&env, p, pr, cur, d / 100.0, w, ws, &cache)
+                                    }
+                                    _ => resize::play_request(&env, p, cur, d / 100.0, w, ws, &cache),
+                                });
                             }
                         }
                     }
@@ -392,7 +493,26 @@ pub fn run_play(a: &RetouchePlayArgs) -> Result<()> {
         ("demandes resize".to_string(), all_rs.len().to_string()),
         ("curseurs".to_string(), format!("{:?}", a.cursors)),
         ("δ (%)".to_string(), format!("{:?}", a.deltas)),
+        (
+            "mise en œuvre".to_string(),
+            if engine_impl { "moteur (API publique, lot 7a)" } else { "prototypes du lot 0 (probe)" }
+                .to_string(),
+        ),
+        (
+            "traces posées par le banc / posées par le moteur / refusées à l'entrée".to_string(),
+            if engine_impl {
+                format!("{posed_before} / {} / {pose_refused:?}", epose.len())
+            } else {
+                "sans objet".to_string()
+            },
+        ),
         ("masque des arêtes gardées".to_string(), (!a.no_keep_out).to_string()),
+        ("allonger : partie remplacée libre".to_string(), (!a.masked_section).to_string()),
+        ("raccourcir : partie remplacée libre".to_string(), (!a.masked_shorten).to_string()),
+        (
+            "raccourcir : lecture jusqu'à / arbres".to_string(),
+            format!("{} / {}", a.read_tol, a.shorten_trees),
+        ),
         ("marge de couture".to_string(), format!("{} m", a.seam_margin_m)),
         ("fenêtre de C2".to_string(), format!("{} m", a.c2_window_m)),
         ("fils".to_string(), threads.to_string()),

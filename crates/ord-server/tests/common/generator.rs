@@ -332,3 +332,73 @@ pub fn write_service_index(files: &Files, out: &Path) {
     };
     write_index(out, &base, [&road, &gravel], &data, b"{}", 0).expect("index de service");
 }
+
+/// Les positions d'un chemin de carrefours `(r, c)` de la grille.
+pub fn path_points(path: &[(usize, usize)]) -> Vec<[f64; 2]> {
+    path.iter().map(|&(r, c)| node(r, c)).collect()
+}
+
+/// Le document `network_edges` d'un chemin de carrefours : une arête par suite droite de 3 rues au plus, avec `fm` et `tm`
+/// cumulés le long du chemin et `len` (la longueur de l'axe), comme le garde Pédalons.
+pub fn path_document(path: &[(usize, usize)]) -> Value {
+    let pts = path_points(path);
+    let dir = |i: usize| (path[i + 1].0 as i64 - path[i].0 as i64, path[i + 1].1 as i64 - path[i].1 as i64);
+    // Les suites droites de 3 rues au plus, en indices de carrefours.
+    let mut runs: Vec<Vec<usize>> = Vec::new();
+    for i in 0..path.len() - 1 {
+        match runs.last_mut() {
+            Some(r) if r.len() < 4 && dir(r[r.len() - 2]) == dir(i) => r.push(i + 1),
+            _ => runs.push(vec![i, i + 1]),
+        }
+    }
+    let mut edges = Vec::new();
+    let mut at = 0.0f64;
+    for run in &runs {
+        let line: Vec<[f64; 2]> = run.iter().map(|&i| pts[i]).collect();
+        let trv: f64 = line.windows(2).map(|w| haversine(w[0], w[1])).sum();
+        edges.push(json!({"g": encode_polyline6(&line), "trv": trv, "fm": at, "tm": at + trv,
+            "wk": "minor_road", "inconnue": {"a": 1}}));
+        at += trv;
+    }
+    json!({"v": 1, "api": "1.8", "len": at, "edges": edges})
+}
+
+/// Le corps d'une retouche du chemin `path` : sa polyligne, son document, `operation` (`{"resize": …}` ou
+/// `{"move_end": …}`), le curseur s'il est donné.
+pub fn edit_body(path: &[(usize, usize)], operation: Value, cursor: Option<f64>) -> Value {
+    let mut b = json!({"polyline": encode_polyline6(&path_points(path)), "network_edges": path_document(path),
+        "ride_type": "road", "operation": operation});
+    if let Some(c) = cursor {
+        b["cursor"] = json!(c);
+    }
+    b
+}
+
+/// La requête de retouche.
+pub fn edit(key: Option<&str>, team: Option<&str>, body: &Value) -> Request<Body> {
+    let mut b = Request::builder()
+        .method(Method::POST)
+        .uri("/v1/generator/routes/edit")
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(k) = key {
+        b = b.header("ord-namespace-key", k);
+    }
+    if let Some(t) = team {
+        b = b.header("ord-team", t);
+    }
+    b.body(Body::from(body.to_string())).unwrap()
+}
+
+/// Le tour d'un carré de `n` rues de côté dont le coin nord-ouest est `(r0, c0)` : `4 n` rues, `1 200 n` m.
+pub fn square(r0: usize, c0: usize, n: usize) -> Vec<(usize, usize)> {
+    let mut p: Vec<(usize, usize)> = (c0..=c0 + n).map(|c| (r0, c)).collect();
+    p.extend((r0 + 1..=r0 + n).map(|r| (r, c0 + n)));
+    p.extend((c0..c0 + n).rev().map(|c| (r0 + n, c)));
+    p.extend((r0..r0 + n).rev().map(|r| (r, c0)));
+    p
+}
+
+/// Une ligne de la grille, de la colonne `c0` à la colonne `c1`.
+pub fn row(r: usize, c0: usize, c1: usize) -> Vec<(usize, usize)> {
+    (c0..=c1).map(|c| (r, c)).collect()
+}

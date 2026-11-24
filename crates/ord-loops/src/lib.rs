@@ -19,9 +19,13 @@ mod engine;
 mod figures;
 mod generate;
 mod geo;
+mod graft;
+mod graft_move_end;
+mod graft_resize;
 mod index;
 mod offroad;
 mod offroad_prior;
+mod posed;
 #[cfg(feature = "probe")]
 pub mod probe;
 #[cfg(feature = "probe")]
@@ -52,7 +56,11 @@ mod tests_mu;
 #[cfg(test)]
 mod tests_organic;
 #[cfg(test)]
+mod tests_posed;
+#[cfg(test)]
 mod tests_reference;
+#[cfg(test)]
+mod tests_retouche;
 #[cfg(test)]
 mod tests_rideability;
 #[cfg(test)]
@@ -79,8 +87,15 @@ pub use generate::{
     generate_with_figures_in, route_geometry,
 };
 pub use geo::LatLon;
+pub use graft::{
+    KeepOut, MoveEndVariant, Refused, Retouch, RetouchDiagnostics, RetouchFailure, RetouchKind,
+    RetouchRequest, RetouchTune, Retouched,
+};
+pub use graft_move_end::{move_end, move_end_in};
+pub use graft_resize::{resize, resize_in, ResizePlan};
 pub use index::{cap_dm_of, foreign_index, short_components};
 pub use offroad::{OffroadOutcome, OffroadTarget, Steer, SteeredGeneration};
+pub use posed::{PoseError, PoseStats, PoseTune, PosedInput, PosedJoin, PosedLeg, PosedRoute, PosedSeam};
 pub use route::{
     avoid_main_roads, route, route_geometry_spans, route_in, way_factors, RouteFailure, RouteRequest,
     RouteTune, Routed, WAY_NEUTRAL,
@@ -89,7 +104,8 @@ pub use search::Workspace;
 pub use selfcheck::SelfCheck;
 pub use team::{BuildPlan, TeamCtx, TeamData, TeamStats, WindowTeam};
 pub use verify::{
-    check_route, check_route_aligned, check_route_aligned_in, check_route_in, Check, Violation,
+    check_route, check_route_aligned, check_route_aligned_in, check_route_in, check_spliced_in, Check,
+    SplicedCheck, Violation,
 };
 pub use window::{tiles_cover, tiles_union, Window, WindowPlan};
 

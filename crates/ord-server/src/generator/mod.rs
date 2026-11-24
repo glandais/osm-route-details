@@ -26,6 +26,7 @@ use crate::config::GeneratorConfig;
 pub mod crypto;
 pub mod cursor;
 mod deposit;
+pub mod edit;
 mod generate;
 mod profile;
 pub mod router;
@@ -39,6 +40,9 @@ pub use store::{GenEngine, TestHooks};
 
 /// Corps d'une demande de génération : petit, borné à part de celui de `/v1/route-details`.
 pub const GENERATE_BODY_MAX: usize = 64 * 1024;
+/// Corps d'une demande de retouche (api 1.17) : la polyligne et le document `network_edges` de la trace, de l'ordre du
+/// mégaoctet pour 300 km.
+pub const EDIT_BODY_MAX: usize = 4 * 1024 * 1024;
 /// Cohérence du polygone avec le graphe (écart à la note : la règle « boîte à 5 km de celle des nœuds » refusait la
 /// vraie région, dont le polygone Geofabrik couvre la mer jusqu'à 9 km au-delà des nœuds) :
 /// le polygone peut dépasser la boîte des nœuds de 15 km (mer) **ou de 20 % de sa largeur** (le polygone Geofabrik de la
@@ -98,6 +102,10 @@ pub struct GeneratorCapabilities {
     /// Steering of the share ridden off pavement (`offroad_target`, api 1.14).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offroad: Option<OffroadInfo>,
+    /// Route edit (`POST /v1/generator/routes/edit`, api 1.17): the operations and their bounds. Absent when the service
+    /// cannot edit (no per-cell spatial index) and on a service older than 1.18.0: do not call the route then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edit: Option<edit::EditCapabilities>,
 }
 
 /// What `offroad_target` accepts and how the generator steers.
@@ -708,6 +716,8 @@ impl Generator {
                 },
                 values: vec!["classic", "organic"],
             }),
+            // Sans index par cellule (trop d'arêtes larges), la retouche refuserait chaque requête : elle ne s'annonce pas.
+            edit: cell_index_ok.then(edit::EditCapabilities::new),
         };
         tracing::info!(
             graph = %gid,
@@ -777,6 +787,7 @@ impl Generator {
                 figures: None,
                 attractors: None,
                 offroad: None,
+                edit: None,
             },
         }
     }

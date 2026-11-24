@@ -231,7 +231,7 @@ async fn invalid_fields_are_listed_by_pointer() {
 async fn capabilities_publish_the_router_next_to_the_generator() {
     let w = World::new();
     let c = w.send(get("/v1/capabilities")).await.json();
-    assert_eq!(c["api_version"], "1.16");
+    assert_eq!(c["api_version"], "1.17");
     assert_eq!(
         c["router"],
         json!({"enabled": true, "ride_types": ["road", "gravel", "mtb"], "crow_m_max": 100000.0, "snap_m": 500.0,

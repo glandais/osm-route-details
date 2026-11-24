@@ -75,6 +75,10 @@ pub struct Check {
     pub presumed_surface_m: f64,
     /// Indices `i` des nœuds (entre le morceau `i` et le suivant) où un virage trop serré a été relevé.
     pub sharp_at: Vec<usize>,
+    /// Indices `i` des nœuds (entre le morceau `i` et le suivant) où un demi-tour sur la même arête a été relevé.
+    pub uturn_at: Vec<usize>,
+    /// Part du cœur parcourue en couloir doublé (0 sans cœur) : le recollé en juge par comparaison avec ses contextes.
+    pub corridor: f64,
 }
 
 pub(crate) const CLUSTER_M: f64 = 100.0;
@@ -445,6 +449,7 @@ fn check_route_with<B: AsRef<[u8]>>(
         let node = a.to;
         if a.edge == b.edge && a.rev != b.rev {
             viol.insert(Violation::UTurn);
+            out.uturn_at.push(i);
         } else if admitted_degree(e, win, node) >= 3 {
             let hin = route_heading(&pieces, i, false, &frame(last_of(a)));
             let hout = route_heading(&pieces, i + 1, true, &frame(b.pts[0]));
@@ -588,8 +593,11 @@ fn check_route_with<B: AsRef<[u8]>>(
         viol.insert(Violation::TooManyCrossings);
     }
     // 7. Couloir.
-    if has_core && corridor_share(&pieces[core_from..=core_to], &loc) > CORRIDOR_MAX {
-        viol.insert(Violation::CorridorDoubled);
+    if has_core {
+        out.corridor = corridor_share(&pieces[core_from..=core_to], &loc);
+        if out.corridor > CORRIDOR_MAX {
+            viol.insert(Violation::CorridorDoubled);
+        }
     }
     // 8. Distance.
     if (total - d_target).abs() > e.params.tolerance * d_target {
@@ -695,4 +703,154 @@ pub(crate) fn aligned_pair_angle<B: AsRef<[u8]>>(e: &Engine<B>, route: &Route, i
     let hin = route_heading(&pieces, ia, false, &Local::new(last_of(&pieces[ia])));
     let hout = route_heading(&pieces, ib + 1, true, &Local::new(pieces[ib + 1].pts[0]));
     turn_angle_deg(hin, hout)
+}
+
+// --- Le recollé de la retouche (lot 7a, §8 de `ord-retouche-lot1.md`) -------------------------------------------------
+
+/// Ce que le contrôle du recollé relève : les violations que le tronçon neuf apporte, et où.
+#[derive(Clone, Debug, Default)]
+pub struct SplicedCheck {
+    /// Celles du recollé absentes des deux contextes contrôlés seuls (sans les codes qui dépendent de la longueur totale :
+    /// `WrongStart`, `WrongEnd`, `DistanceOutOfTolerance`, `ReuseOutsideTail`, `TailTooLong`, artefacts de la découpe).
+    pub violations: Vec<Violation>,
+    /// Virages refusés **dans** le tronçon neuf : indices d'étapes de `new` (le virage entre l'étape `i` et la suivante).
+    pub sharp_at_new: Vec<usize>,
+    /// Un virage refusé touche la couture d'entrée (le virage de la jambe gardée au tronçon, ou une grappe qui la chevauche), ou
+    /// la couture de sortie.
+    pub sharp_entry: bool,
+    pub sharp_exit: bool,
+    /// Un demi-tour sur la même arête à une couture.
+    pub seam_u_turn: bool,
+}
+
+/// Position d'une arête entière parcourue dans son sens, au début ou à la fin.
+fn whole_pos<B: AsRef<[u8]>>(e: &Engine<B>, s: crate::Step, at_end: bool) -> crate::Position {
+    let g = e.geom_len_m(s.base_edge);
+    crate::Position { edge: s.base_edge, offset_m: if at_end != s.reverse { g } else { 0.0 } }
+}
+
+/// Le contrôle interne d'un tronçon neuf `new` posé entre deux contextes gardés, **par différence** avec les contextes
+/// contrôlés seuls (une trace réelle viole déjà des règles : on ne reproche au tronçon que ce qu'il apporte). `before` et
+/// `after` sont les étapes entières des jambes gardées de part et d'autre (400 m d'ordinaire), coupées au premier trou ou
+/// contact ; `after` est vide pour `move_end`, où la levée de fin de la règle des grappes joue à l'arrivée, qui est la
+/// vraie. Les caps sont pris comme le contrôleur indépendant (repère centré au nœud).
+pub fn check_spliced_in<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    win: &Window,
+    team: Option<&TeamData>,
+    req: &Request,
+    before: &[crate::Step],
+    new: &Route,
+    after: &[crate::Step],
+) -> SplicedCheck {
+    let mk = |bf: &[crate::Step], mid: Option<&Route>, af: &[crate::Step]| -> Option<Route> {
+        let mut steps: Vec<crate::Step> = bf.to_vec();
+        if let Some(m) = mid {
+            steps.extend_from_slice(&m.steps);
+        }
+        steps.extend_from_slice(af);
+        let first = *steps.first()?;
+        let last = *steps.last()?;
+        let start = if bf.is_empty() { mid?.start } else { whole_pos(e, first, false) };
+        let end = if af.is_empty() {
+            mid.map_or_else(|| whole_pos(e, last, true), |m| m.end)
+        } else {
+            whole_pos(e, last, true)
+        };
+        Some(Route { start, end, steps, ..new.clone() })
+    };
+    let run = |route: &Route| -> Check {
+        let node = |s: crate::Step, at_end: bool| {
+            let (a, b) = e.ends(s.base_edge);
+            crate::LatLon::from_e7(e.pos(if at_end != s.reverse { b } else { a }))
+        };
+        let (first, last) = (route.steps[0], route.steps[route.steps.len() - 1]);
+        let len_m: f64 = route.steps.iter().map(|s| f64::from(e.len_dm(s.base_edge)) / 10.0).sum();
+        let rq = Request {
+            start: node(first, false),
+            end: Some(node(last, true)),
+            distance_m: len_m.max(1.0),
+            ..req.clone()
+        };
+        check_route_aligned_in(e, win, team, &rq, route)
+    };
+    let (nb, nn) = (before.len(), new.steps.len());
+    let Some(whole) = mk(before, Some(new), after) else { return SplicedCheck::default() };
+    let chk = run(&whole);
+    let b_only = mk(before, None, &[]).filter(|_| nb > 0).map(|r| run(&r));
+    let a_only = mk(&[], None, after).filter(|_| !after.is_empty()).map(|r| run(&r));
+    // Les codes jugés par position (virage, demi-tour) ou par différence de comptes (croisements, couloir) ne sont pas
+    // effacés par présence : un défaut du même code que le contexte, apporté en plus par le tronçon neuf, reste vu. Les
+    // autres codes sont ceux d'une propriété du parcours entier : présents dans un contexte seul, ils ne sont pas reprochés.
+    const BY_POSITION: [Violation; 4] =
+        [Violation::SharpTurn, Violation::UTurn, Violation::TooManyCrossings, Violation::CorridorDoubled];
+    let known: BTreeSet<Violation> = b_only
+        .iter()
+        .chain(a_only.iter())
+        .flat_map(|c| c.violations.iter().copied())
+        .filter(|v| !BY_POSITION.contains(v))
+        .collect();
+    const ARTEFACTS: [Violation; 5] = [
+        Violation::WrongStart,
+        Violation::WrongEnd,
+        Violation::DistanceOutOfTolerance,
+        Violation::ReuseOutsideTail,
+        Violation::TailTooLong,
+    ];
+    let mut violations: Vec<Violation> = chk
+        .violations
+        .iter()
+        .copied()
+        .filter(|v| !BY_POSITION.contains(v) && !known.contains(v) && !ARTEFACTS.contains(v))
+        .collect();
+    // Croisements : les comptes des contextes seuls s'additionnent ; le recollé n'en doit pas avoir davantage.
+    let ctx_cross: u32 = b_only.iter().chain(a_only.iter()).map(|c| c.crossings).sum();
+    if chk.violations.contains(&Violation::TooManyCrossings) && chk.crossings > ctx_cross {
+        violations.push(Violation::TooManyCrossings);
+    }
+    // Couloir : le recollé doit doubler plus que chacun des contextes seuls.
+    let ctx_corr = b_only.iter().chain(a_only.iter()).map(|c| c.corridor).fold(0.0, f64::max);
+    if chk.violations.contains(&Violation::CorridorDoubled) && chk.corridor > ctx_corr + 1e-9 {
+        violations.push(Violation::CorridorDoubled);
+    }
+    let mut out = SplicedCheck { violations, ..Default::default() };
+    // Demi-tours, lus par indices comme les virages : seuls ceux que les contextes seuls n'ont pas sont reprochés ; celui qui
+    // touche une couture (le dernier morceau gardé et le premier du tronçon, ou le dernier du tronçon et le premier d'après)
+    // est `seam_u_turn`.
+    let known_ub: BTreeSet<usize> = b_only.iter().flat_map(|c| c.uturn_at.iter().copied()).collect();
+    let known_ua: BTreeSet<usize> =
+        a_only.iter().flat_map(|c| c.uturn_at.iter().map(|i| i + nb + nn)).collect();
+    for &i in &chk.uturn_at {
+        if known_ub.contains(&i) || known_ua.contains(&i) {
+            continue;
+        }
+        if !out.violations.contains(&Violation::UTurn) {
+            out.violations.push(Violation::UTurn);
+        }
+        if (nb > 0 && i + 1 == nb) || (!after.is_empty() && i + 1 == nb + nn) {
+            out.seam_u_turn = true;
+        }
+    }
+    let known_b: BTreeSet<usize> = b_only.iter().flat_map(|c| c.sharp_at.iter().copied()).collect();
+    let known_a: BTreeSet<usize> =
+        a_only.iter().flat_map(|c| c.sharp_at.iter().map(|i| i + nb + nn)).collect();
+    for &i in &chk.sharp_at {
+        if known_b.contains(&i) || known_a.contains(&i) {
+            continue;
+        }
+        if nb > 0 && i < nb {
+            out.sharp_entry = true;
+        } else if i + 1 >= nb + nn {
+            out.sharp_exit = !after.is_empty();
+        } else {
+            out.sharp_at_new.push(i - nb);
+        }
+    }
+    // Un virage refusé n'est reproché au tronçon que s'il est absent des contextes seuls : c'est lu par indices, pas par code.
+    if out.sharp_entry || out.sharp_exit || !out.sharp_at_new.is_empty() {
+        out.violations.push(Violation::SharpTurn);
+    }
+    out.violations.sort();
+    out.violations.dedup();
+    out
 }

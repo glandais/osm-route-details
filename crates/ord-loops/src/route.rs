@@ -421,7 +421,12 @@ fn direct(s: &Anchor, e: &Anchor) -> Option<(u32, u32)> {
 }
 
 /// Mesure un itinéraire : longueurs totale, d'équipe, comblée, non revêtue.
-fn measure<B: AsRef<[u8]>>(e: &Engine<B>, team: Option<&TeamData>, ride: RideType, route: &mut Route) {
+pub(crate) fn measure<B: AsRef<[u8]>>(
+    e: &Engine<B>,
+    team: Option<&TeamData>,
+    ride: RideType,
+    route: &mut Route,
+) {
     let (mut len, mut team_m, mut bridged, mut unpaved, mut offroad, mut presumed) =
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     for i in 0..route.steps.len() {

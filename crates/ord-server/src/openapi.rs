@@ -4,6 +4,7 @@ use utoipa::openapi::{LicenseBuilder, OpenApi as OpenApiDoc};
 use utoipa::OpenApi;
 
 use crate::app::paths::*;
+use crate::generator::edit::paths::*;
 use crate::generator::router::paths::*;
 use crate::generator::routes::paths::*;
 use crate::API_VERSION;
@@ -21,6 +22,7 @@ use crate::API_VERSION;
         delete_overlay,
         delete_overlays,
         post_routes,
+        post_edit,
         post_route
     ),
     tags(

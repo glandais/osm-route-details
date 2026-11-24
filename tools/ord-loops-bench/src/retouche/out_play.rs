@@ -217,6 +217,11 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     // Le verdict de K3 porte sur la part pondérée par strate (effectif de Kish) ; la part brute est la seconde ligne.
     let k3s = Share::weighted(k3.iter().map(|l| (l.weight, l.outcome == "ok")));
     let k3_unw = Share::new(k3_ok, k3.len());
+    // Le raccourcissement seul : la moitié que le moteur du lot 7a a refaite (arbre d'itinéraire au lieu de la lentille).
+    let k3_short: Vec<&&RsLine> = k3.iter().filter(|l| l.delta < 0.0).collect();
+    let k3_short_s = Share::new(k3_short.iter().filter(|l| l.outcome == "ok").count(), k3_short.len());
+    let k3_long: Vec<&&RsLine> = k3.iter().filter(|l| l.delta > 0.0).collect();
+    let k3_long_s = Share::new(k3_long.iter().filter(|l| l.outcome == "ok").count(), k3_long.len());
     let k4_rs: Vec<f64> = rs.iter().filter(|l| l.outcome != "no_window").map(|l| l.total_ms).collect();
     let k4_me: Vec<f64> = me.iter().filter(|l| me_played(l)).map(|l| l.call_ms + l.ctl_ms).collect();
     let (q4r, q4m) = (Q::of(&k4_rs), Q::of(&k4_me));
@@ -227,7 +232,7 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
     };
     let criteria = json!({
         "k2": {"share": k2s, "verdict": k2s.verdict(0.95), "seuil": 0.95},
-        "k3": {"share": k3s, "unweighted": k3_unw, "before_controls": Share::new(k3_raw, k3.len()), "weighted_p": if k3_w > 0.0 { Value::from(k3_wok / k3_w) } else { Value::Null },
+        "k3": {"share": k3s, "unweighted": k3_unw, "shortening_only": k3_short_s, "lengthening_only": k3_long_s, "before_controls": Share::new(k3_raw, k3.len()), "weighted_p": if k3_w > 0.0 { Value::from(k3_wok / k3_w) } else { Value::Null },
                "verdict": k3s.verdict(0.90), "seuil": 0.90},
         "k4_resize_p90_ms": q4r.map(|x| x.p90), "k4_resize_verdict": k4_verdict(&q4r),
         "k4_move_end_p90_ms": q4m.map(|x| x.p90), "k4_move_end_verdict": k4_verdict(&q4m),
@@ -249,7 +254,7 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
         "resize": rs_json,
     });
 
-    let mut md = String::from("# Retouche, lot 0 B : prototypes `move_end` et `resize` (agrégats)\n\n");
+    let mut md = String::from("# Retouche : `move_end` et `resize` (agrégats ; lot 0 B ou moteur du lot 7a, voir « mise en œuvre »)\n\n");
     for (k, v) in &meta {
         let _ = writeln!(md, "- {k} : {v}");
     }
@@ -319,6 +324,12 @@ pub fn summarise(meta: Vec<(String, String)>, me: &[MeLine], rs: &[RsLine], cut:
         "- K3 (|δ| ≤ 25 %), pondéré : {} ; non pondéré : {}",
         sh_md(&criteria["k3"]["share"]),
         sh_md(&criteria["k3"]["unweighted"])
+    );
+    let _ = writeln!(
+        md,
+        "- K3, raccourcissement seul : {} ; allongement seul : {}",
+        sh_md(&criteria["k3"]["shortening_only"]),
+        sh_md(&criteria["k3"]["lengthening_only"])
     );
     let _ = writeln!(
         md,

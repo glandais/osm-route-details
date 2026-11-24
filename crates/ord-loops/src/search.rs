@@ -133,7 +133,7 @@ pub struct Workspace {
     pub(crate) views: [ViewWs; 2],
     /// Retouche, lot 0 : chaînes interdites pour le prochain appel de `generate_inner`, qui le prend (`take`).
     #[cfg(feature = "probe")]
-    pub(crate) keep_out: Option<crate::probe_graft::KeepOut>,
+    pub(crate) keep_out: Option<crate::graft::KeepOut>,
     /// Sonde μ (lot 5, §3.4) : multiplicateur du non-revêtu des prochaines générations (en 256es), conservé d'un appel à
     /// l'autre : le banc le pose avant chaque jeu, `None` pour le neutre.
     #[cfg(feature = "probe")]
@@ -148,7 +148,7 @@ impl Workspace {
     /// Retouche, lot 0 (sonde) : interdit ces chaînes à **toute** la prochaine génération, arbres, A* et accroche compris.
     /// L'appel de `generate_inner` prend le masque : il faut le poser avant chaque appel.
     #[cfg(feature = "probe")]
-    pub fn set_keep_out(&mut self, ko: Option<crate::probe_graft::KeepOut>) {
+    pub fn set_keep_out(&mut self, ko: Option<crate::graft::KeepOut>) {
         self.keep_out = ko;
     }
 
@@ -210,8 +210,7 @@ pub(crate) struct Weighter<'a> {
     freed: &'a [u32],
     exempt: Option<&'a TypeTeam>,
     ride_ok: bool,
-    /// Retouche, lot 0 (sonde) : bitset des chaînes interdites à toute la requête.
-    #[cfg(feature = "probe")]
+    /// Retouche : bitset des chaînes interdites à toute la requête (`None` pour une génération ou un itinéraire ordinaires).
     keep_out: Option<&'a [u64]>,
     /// Consigne de part (lot 5, §4.2) : le multiplicateur μ du non-revêtu, en 256es (256 : neutre), et la part `offroad` de
     /// chaque chaîne de la vue (`ViewData::off_q8`). `None` : 1.14.
@@ -251,7 +250,6 @@ impl<'a> Weighter<'a> {
             // L'exemption suit la surcouche, quel que soit le mode (découverte comprise) ; sans surcouche, aucune.
             exempt: team.map(|t| t.data.of(ride)),
             ride_ok: mode != Mode::Strict && !v.unrideable.is_empty(),
-            #[cfg(feature = "probe")]
             keep_out: None,
             mu_q8: None,
             off_q8: &v.off_q8,
@@ -276,8 +274,7 @@ impl<'a> Weighter<'a> {
         ((u64::from(w) * t as u64 + 65_535) >> 16).min(u64::from(u32::MAX / 2)) as u32
     }
 
-    /// Pose le masque des chaînes interdites (sonde). Une chaîne masquée pèse `INF` : absente du graphe de la requête.
-    #[cfg(feature = "probe")]
+    /// Pose le masque des chaînes interdites (retouche). Une chaîne masquée pèse `INF` : absente du graphe de la requête.
     pub fn with_keep_out(mut self, ko: Option<&'a [u64]>) -> Self {
         self.keep_out = ko;
         self
@@ -311,7 +308,6 @@ impl<'a> Weighter<'a> {
                 return INF;
             }
         }
-        #[cfg(feature = "probe")]
         if let Some(k) = self.keep_out {
             if k[(c >> 6) as usize] >> (c & 63) & 1 != 0 {
                 return INF;

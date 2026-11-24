@@ -1,9 +1,9 @@
 //! Retouche d'un parcours, lot 0 (note `ord-retouche-lot0.md` §4 et §5) : **code de mesure**, compilé seulement avec la
 //! fonctionnalité `probe` (le banc). Rien de ce module n'est appelé par la génération.
 //!
-//! - [`KeepOut`] : des chaînes de la fenêtre interdites à **toute** une génération. Le banc le pose par
-//!   [`crate::Workspace::set_keep_out`] avant l'appel ; `Weighter::chain` le lit, donc les deux arbres, les A* et
-//!   l'accroche (`Ban` n'est lu que par les A*).
+//! - [`KeepOut`] : des chaînes de la fenêtre interdites à **toute** une génération (défini dans `graft.rs` depuis le lot 7a,
+//!   réexporté ici). Le banc le pose par [`crate::Workspace::set_keep_out`] avant l'appel ; `Weighter::chain` le lit, donc
+//!   les deux arbres, les A* et l'accroche (`Ban` n'est lu que par les A*).
 //! - [`move_end_in`] : déplacer l'arrivée. Un arbre retour depuis la nouvelle arrivée `E′` sur le parcours masqué, et pour
 //!   chaque couture la sortie qui minimise « longueur abandonnée + raccord ».
 
@@ -26,83 +26,7 @@ use crate::{Family, LatLon, Mode, Position, Request, Route};
 /// Passes : la première, puis des reprises après avoir interdit les virages que le contrôle interne a refusés.
 const PASSES: usize = 4;
 
-/// Empreinte de la liste des tuiles d'une fenêtre (FNV-1a).
-fn tiles_hash(tiles: &[u32]) -> u64 {
-    let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for &t in tiles {
-        h = (h ^ u64::from(t)).wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
-}
-
-/// Chaînes locales d'une fenêtre interdites pour toute une requête (bitset de `n_chains` bits).
-#[derive(Clone, Debug)]
-pub struct KeepOut {
-    bits: Vec<u64>,
-    n_chains: usize,
-    tiles_hash: u64,
-    masked: usize,
-}
-
-impl KeepOut {
-    /// Masque les chaînes de `win` qui portent au moins une arête de `mask_edges` et aucune arête de `free_edges`. Les
-    /// `free_edges` sont la zone des coutures : une chaîne qui en porte une reste libre, pour que la recherche puisse
-    /// partir ou arriver exactement à la couture.
-    pub fn build(
-        win: &Window,
-        mask_edges: impl IntoIterator<Item = u32>,
-        free_edges: impl IntoIterator<Item = u32>,
-    ) -> Self {
-        let mask: FxHashSet<u32> = mask_edges.into_iter().collect();
-        let free: FxHashSet<u32> = free_edges.into_iter().collect();
-        let n = win.v.n_chains;
-        let mut bits = vec![0u64; n.div_ceil(64).max(1)];
-        let mut masked = 0;
-        if !mask.is_empty() {
-            for c in 0..n {
-                let (mut m, mut f) = (false, false);
-                for &l in win.v.links(c as u32) {
-                    let e = l & !DIR_BIT;
-                    m |= mask.contains(&e);
-                    f |= free.contains(&e);
-                }
-                if m && !f {
-                    bits[c >> 6] |= 1 << (c & 63);
-                    masked += 1;
-                }
-            }
-        }
-        Self { bits, n_chains: n, tiles_hash: tiles_hash(win.tiles()), masked }
-    }
-
-    pub fn masked_chains(&self) -> usize {
-        self.masked
-    }
-
-    /// Mètres de vue masqués : à rapporter, pour voir ce que la chaîne entière ajoute à l'arête gardée.
-    pub fn masked_m(&self, win: &Window) -> f64 {
-        self.assert_window(win);
-        let v = &win.v;
-        (0..v.n_chains).filter(|&c| self.is_masked(c as u32)).map(|c| f64::from(v.len_dm[c])).sum::<f64>()
-            / 10.0
-    }
-
-    pub fn is_masked(&self, c: u32) -> bool {
-        self.bits[(c >> 6) as usize] >> (c & 63) & 1 != 0
-    }
-
-    pub(crate) fn bits(&self) -> &[u64] {
-        &self.bits
-    }
-
-    /// Refuse un masque bâti pour une autre fenêtre : ses numéros de chaînes ne diraient rien ici.
-    pub(crate) fn assert_window(&self, win: &Window) {
-        assert!(
-            self.n_chains == win.v.n_chains && self.tiles_hash == tiles_hash(win.tiles()),
-            "le masque de chaînes interdites a été bâti pour une autre fenêtre"
-        );
-    }
-}
+pub use crate::graft::KeepOut;
 
 /// Une couture vue de la sonde : le nœud de base, l'arête (et son sens) qui y arrive le long du parcours, et les mètres
 /// qu'on abandonne si on quitte le parcours ici.

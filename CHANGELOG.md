@@ -3,6 +3,65 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.18.0 (API 1.17)
+
+Retouche d'un parcours enregistré par le service, lot 7b du plan Pédalons `2026-11-22-retouche-parcours.md` (§6.3 ; moteur :
+`docs/design/technique/ord-retouche-lot1.md` §1 à §14, service : §15). Un ajout pur au contrat : **les générations, les
+itinéraires de A à B et les autres routes sont inchangés** (ni leurs réglages, ni leur file, ni leurs réponses ne bougent).
+
+### Ajouté
+
+- **`POST /v1/generator/routes/edit`** : `{ polyline, network_edges, ride_type, cursor?, seed?, operation }` où `operation`
+  est `{ "resize": { "distance_m" } }` (la **distance totale visée**, pas l'écart) ou `{ "move_end": { "point" } }`. La
+  polyligne est celle du parcours enregistré (précision 6) et `network_edges` le document de sa trace, tel que le dépôt de la
+  surcouche le lit (arêtes `g`, `trv`, `fm`, `tm`, `len` à la racine) : le service l'apparie au graphe **comme un dépôt** et
+  pose le parcours sur la polyligne reçue. Réponse : `graph_id`, `mode`, `overlay`, `taste`, `operation`, `original_m`,
+  `target_m`, `dropped` et de une à trois `routes` : `kind` (`shorten`, `lengthen`, `move_end`, `truncate`), `variant`
+  (`best`, `keep_all`, `nearest`), la **polyligne complète recollée**, `distance_m`, `error_share`, `kept_m`, `kept_share`,
+  `abandoned_m`, `end_snap_m`, `unmatched_m` et `changed` (`from_m`, `to_m` sur l'origine, `new_m`, `points` : indices du
+  tronçon neuf dans la polyligne rendue, et les mesures du seul tronçon neuf : `team_m`, `bridged_m`, `team_share`,
+  `offroad_m`, `offroad_share`, `unpaved`, `crossings`). Chaque tronçon neuf passe le contrôleur indépendant ; les refusés
+  sont comptés dans `dropped`.
+- **Un refus est une réponse.** 422 `generation_failed` avec une raison que le client lit : onze valeurs nouvelles de
+  `details.reason` (`change_too_small`, `change_too_large`, `route_off_coverage`, `route_not_matched`, `order_anomaly`,
+  `route_mismatch`, `no_seam`, `junction_cut`, `no_economy`, `no_window`, `off_target`), et les anciennes reprises
+  (`end_too_far` : l'arrivée est à plus de 500 m d'une voie ; `end_unreachable`, `no_candidate`, `checker_rejected`,
+  `budget`). Une arrivée hors du polygone : 422 `out_of_coverage`. Table complète : note `ord-retouche-lot1.md` §15.5.
+- **Mêmes en-têtes d'équipe, même file, même budget que la génération.** `Ord-Namespace-Key` et `Ord-Team` facultatifs
+  (validés dès que l'un est là) ; sans eux, ou sans surcouche servable, la découverte au goût commun (`overlay: null`) ; le
+  curseur suit celui des itinéraires (jamais le mode strict). La retouche prend une place des générations (`max_concurrent`,
+  `max_queued`, `budget_ms`) et leurs fenêtres ; les bornes qui ne demandent aucun calcul (changement trop petit ou trop grand,
+  parcours hors couverture, arrivée hors couverture) sont jugées **avant** la file, de même qu'un document dont une arête
+  ou le total des arêtes (`trv` ou géométrie décodée) dépasse 1,5 fois la polyligne plus 2 km : 422 `route_mismatch` sans
+  appariement (l'appariement d'une seule arête ne s'interrompt pas). Un `len` racine qui n'est pas un nombre est ignoré, il
+  ne rend pas le document illisible. P90 de `resize` : 1,1 s hors appariement du document.
+- **Limites** : corps de 4 Mio (`capabilities.generator.edit.request_body_bytes`), 50 000 points, longueur au plus
+  `limits.distance_m_max` (413 `route_too_large`, `details.limit` = `body_bytes`, `points` ou `length_m`). Les clés inconnues
+  sont refusées (400, `unknown_keys`), sauf dans `network_edges`, qui tolère celles du document.
+- **Capacités : `generator.edit`** : `operations`, `ride_types`, `change_share_max` (0,30), `change_m_min` (1 000), `tolerance`
+  (0,03), `end_snap_m` (500), `proposals_max` (3), `points_max`, `request_body_bytes`. Absente quand le service ne peut pas
+  retoucher (pas d'index par cellule : la route répond alors 503 `data_unavailable`) et sur un service antérieur : ne pas
+  appeler la route.
+- **Réglage** : `ORD_GENERATOR__EDIT_INDEX_CACHE_MB` (64, strictement positif), la mémoire de l'index spatial par cellule
+  bâti à chaque retouche pour apparier le document, comme celui d'un dépôt.
+- **Métriques** : `ord_generator_edit_requests_total` (`operation`, `outcome`, `reason`), `ord_generator_edit_duration_seconds`
+  (`operation`, `ride_type`), `ord_generator_edit_stage_seconds` (`stage` : `match`, `pose`, `engine`, `check`),
+  `ord_generator_edit_routes_total` (`kind`), `ord_generator_edit_routes_rejected_total` (`violation`),
+  `ord_generator_edit_spliced_refused_total` (`violation`), `ord_generator_edit_window_escapes_total`. Une ligne `route edit`
+  par requête (opération, type, mode, bandes de longueur et de changement, issue, raison, comptes, durées des étapes, `ns8`) :
+  ni coordonnée, ni polyligne, ni document, ni distance exacte, ni clé, ni équipe. Les tableaux des générations ne bougent pas.
+
+### À savoir
+
+- **Raccourcir réussit 57,2 % du temps (38,9 % sur un aller simple)** ; allonger 96,1 % ; déplacer l'arrivée 98,4 % ; 5 % des
+  traces sont refusées pour anomalie d'ordre (mesures du banc, `ord-retouche-lot1-mesures.md`). `no_economy` est une réponse
+  normale, pas une panne : le client la présente comme telle. P90 de `resize` du moteur : 1,1 s, appariement du document en sus.
+- **La pose sur la polyligne reçue n'est pas mesurée** (le banc posait sur la ligne du document, recalée sur la rue) : les 5,0 %
+  d'anomalies d'ordre et les 0,5 % de dérive sont une borne basse. À lire à la recette dans `ord_generator_edit_requests_total`
+  (`reason` = `order_anomaly`, `route_mismatch`). Le temps d'appariement n'est pas mesuré non plus (`stage="match"`).
+- Le moteur (`ord-loops`) n'est pas modifié par ce lot ; `ord-graph-match` gagne `posed` (`doc_walk`, `posed_parts`) et
+  `Document::len_m`.
+
 ## 1.17.1 (API 1.16)
 
 ### Corrigé

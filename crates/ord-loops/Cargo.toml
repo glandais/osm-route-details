@@ -12,8 +12,10 @@ license.workspace = true
 # toujours.
 reference = []
 # La sonde du coût d'une recherche point à point (lot 4, 4c, `ord-loops-lot4c-sonde.md`) : code de mesure, pour le
-# banc seulement. Elle porte aussi le crochet de la retouche d'un parcours (lot 0, `ord-retouche-lot0.md`) : un masque de
-# chaînes interdites à toute une génération et `probe_graft`, jamais appelés par la génération ordinaire.
+# banc seulement. Elle porte aussi le prototype de la retouche d'un parcours du lot 0 (`probe_graft::move_end_in`,
+# `Workspace::set_keep_out`, `ord-retouche-lot0.md`), jamais appelé par la génération ordinaire. Le masque de chaînes
+# interdites (`KeepOut`) n'en dépend plus depuis le lot 7a (`ord-retouche-lot1.md`) : la retouche publique du moteur
+# (`move_end`, `resize`) est toujours compilée.
 probe = []
 
 [dependencies]
