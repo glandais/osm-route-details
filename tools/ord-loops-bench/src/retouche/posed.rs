@@ -218,6 +218,8 @@ pub struct Posed {
     /// Longueur graphe cumulée à la fin de chaque jambe, m.
     pub cum_end: Vec<f64>,
     pub edge_set: rustc_hash::FxHashSet<u32>,
+    /// Coutures projetées hors de l'ordre de la marche (§2.4 du relevé) ; le banc d'itinéraire écarte ces traces.
+    pub order_anomalies: usize,
 }
 
 impl Posed {
@@ -296,6 +298,7 @@ pub fn pose(ctx: &continuity::Ctx<'_>, idx: usize, rank: u32, letter: &str) -> O
         .collect();
     let proj = project::project(&line, &points, ctx.proj_tol_m);
     let seams = cands.iter().zip(&proj.s).map(|(c, &s)| PSeam { seam: *c, s_m: s }).collect();
+    let order_anomalies = proj.anomalies;
     let mut acc = 0.0;
     let cum_end = walk
         .legs
@@ -320,6 +323,7 @@ pub fn pose(ctx: &continuity::Ctx<'_>, idx: usize, rank: u32, letter: &str) -> O
         seams,
         cum_end,
         edge_set,
+        order_anomalies,
     })
 }
 

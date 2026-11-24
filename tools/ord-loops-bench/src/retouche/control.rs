@@ -404,6 +404,7 @@ mod tests {
             seams: vec![],
             cum_end: (1..=n).map(|k| k as f64 * 300.0).collect(),
             edge_set: Default::default(),
+            order_anomalies: 0,
         }
     }
 

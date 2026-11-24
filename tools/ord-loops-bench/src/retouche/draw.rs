@@ -233,6 +233,7 @@ mod tests {
             seams,
             cum_end: vec![],
             edge_set: Default::default(),
+            order_anomalies: 0,
         }
     }
 
