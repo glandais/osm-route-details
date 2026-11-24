@@ -5,7 +5,7 @@
 
 # --- construction ---------------------------------------------------------------------------
 # Rust et Debian épinglés : construction reproductible.
-FROM rust:1.99.1-slim-bookworm AS build
+FROM rust:1.100.0-slim-bookworm AS build
 WORKDIR /src
 
 # Dépendances d'abord, dans une couche à part : manifestes du workspace et sources vides.
