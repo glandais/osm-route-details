@@ -139,6 +139,30 @@ fn an_arrival_behind_the_start_on_a_one_way_street_goes_around_the_block() {
 }
 
 #[test]
+fn a_sharp_turn_is_preferred_to_a_long_way_around() {
+    // Le même carrefour, mais la rue d'en face fait le tour du pâté (J — D — E — C — J) : sans le virage serré,
+    // l'itinéraire ferait 1,9 km pour rejoindre un point à 350 m du carrefour.
+    let mut s = MemSource::default();
+    pt(&mut s, 1, 0.0, 0.0);
+    pt(&mut s, 2, 0.0, 1000.0);
+    pt(&mut s, 3, 0.0, 1300.0);
+    pt(&mut s, 4, -171.0, 530.0);
+    pt(&mut s, 5, -171.0, 1300.0);
+    pt(&mut s, 6, -400.0, 1300.0);
+    s.way(101, &[1, 2], &tags("residential", &[]));
+    s.way(102, &[2, 3, 5], &tags("residential", &[]));
+    s.way(103, &[2, 4], &tags("residential", &[]));
+    s.way(104, &[5, 4], &tags("residential", &[]));
+    s.way(105, &[5, 6], &tags("residential", &[]));
+    let e = engine_of(&mut s);
+    let r = req(ll(0.0, 500.0), ll(-120.0, 670.0));
+    let out = run(&e, None, &r).expect("un itinéraire, par le virage serré");
+    assert!(out.sharp_relaxed);
+    assert_joins(&e, &r, &out, 5.0);
+    assert!(out.route.length_m > 800.0 && out.route.length_m < 900.0, "{}", out.route.length_m);
+}
+
+#[test]
 fn a_sharp_turn_is_taken_only_when_there_is_no_other_way() {
     // A — J vers l'est, J — D qui continue (impasse), J — C qui repart à 160° du sens d'arrivée.
     let mut s = MemSource::default();

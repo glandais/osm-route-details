@@ -9,9 +9,11 @@
 //! - **Heuristique** : vol d'oiseau jusqu'à l'arrivée × plus petit coût par décimètre des chaînes de la fenêtre. Elle
 //!   minore le coût restant (les virages coûtent ≥ 0) ; seul le morceau partiel d'arrivée, pesé arête par arête, peut
 //!   passer sous le minimum des chaînes quand sa chaîne mêle des arêtes de poids différents : écart borné par ce morceau.
-//! - **Virages** : la règle du générateur d'abord ([`turn_cost`] : refus à 150° et plus aux carrefours). Sans chemin,
-//!   une seconde passe où le virage serré coûte le maximum au lieu d'être refusé, et où le demi-tour n'est permis
-//!   qu'au bout d'une impasse ; [`Routed::sharp_relaxed`] le dit.
+//! - **Virages** : le coût du générateur ([`turn_cost`]) sans son refus. Un virage de 150° et plus à un carrefour
+//!   coûte le maximum (200 à 250 m équivalents) au lieu d'être interdit : la génération peut toujours dessiner une
+//!   autre boucle, l'itinéraire doit relier deux points donnés, et un refus lui faisait faire un détour de plusieurs
+//!   fois la distance pour éviter un virage qu'on prend à vélo en ralentissant. Le demi-tour sur la même voie n'est
+//!   permis qu'au bout d'une impasse. [`Routed::sharp_relaxed`] dit si l'itinéraire rendu en contient un.
 
 use std::cell::Cell;
 use std::cmp::Reverse;
@@ -231,7 +233,7 @@ pub struct Routed {
     pub cost: u32,
     /// États fixés par les recherches.
     pub settled: u64,
-    /// Le chemin vient de la seconde passe : un virage serré y coûte au lieu d'être refusé.
+    /// L'itinéraire contient un virage de 150° et plus à un carrefour, ou un demi-tour au bout d'une impasse.
     pub sharp_relaxed: bool,
     pub start_snap_m: f64,
     pub end_snap_m: f64,
@@ -245,7 +247,7 @@ impl<B: AsRef<[u8]>> Engine<B> {
     }
 }
 
-/// Coût de virage de la seconde passe : jamais de refus pour l'angle (le maximum à la place) ; le demi-tour sur la même
+/// Coût de virage de l'itinéraire : jamais de refus pour l'angle (le maximum à la place) ; le demi-tour sur la même
 /// chaîne seulement au bout d'une impasse.
 fn turn_relaxed(
     v: &ViewData,
@@ -303,7 +305,6 @@ fn search<B: AsRef<[u8]>>(
     ta: &mut Tree,
     end_xy: (f64, f64),
     f_min: f64,
-    relaxed: bool,
     settled: &mut u64,
     stop: &mut dyn FnMut() -> bool,
 ) -> Result<Option<Found>, Stopped> {
@@ -355,14 +356,7 @@ fn search<B: AsRef<[u8]>>(
         let hin_over = (pred == NONE).then(|| cx.s.out_head[(f & 1) as usize]);
         for &fo in v.out(node) {
             let c = fo >> 1;
-            let turn = |hout_over: Option<u16>| {
-                if relaxed {
-                    turn_relaxed(v, f, pred, fo, hin_over, hout_over)
-                } else {
-                    turn_cost(v, cx.forb, f, pred, fo, hin_over, hout_over)
-                        .filter(|_| retro_ok(v, pred, f, fo))
-                }
-            };
+            let turn = |hout_over: Option<u16>| turn_relaxed(v, f, pred, fo, hin_over, hout_over);
             if c == end_chain {
                 let dir = (fo & 1) as usize;
                 let w = cx.e.in_cost[dir];
@@ -394,6 +388,19 @@ fn search<B: AsRef<[u8]>>(
         }
     }
     Ok(None)
+}
+
+/// L'itinéraire contient-il un virage que la règle du générateur aurait refusé (150° et plus à un carrefour, demi-tour
+/// au bout d'une impasse) ?
+fn has_sharp(cx: &Ctx<'_>, fields: &[u32]) -> bool {
+    let v = cx.v;
+    (1..fields.len()).any(|i| {
+        let (fe, fo) = (fields[i - 1], fields[i]);
+        let pred = if i >= 2 { fields[i - 2] } else { NONE };
+        let hin_over = (i == 1).then(|| cx.s.out_head[(fe & 1) as usize]);
+        let hout_over = (i == fields.len() - 1).then(|| cx.e.in_head[(fo & 1) as usize]);
+        turn_cost(v, cx.forb, fe, pred, fo, hin_over, hout_over).is_none() || !retro_ok(v, pred, fe, fo)
+    })
 }
 
 /// Le morceau direct quand départ et arrivée sont sur la même chaîne et que l'arrivée est devant le départ dans un sens
@@ -518,16 +525,14 @@ pub fn route_in<B: AsRef<[u8]>>(
         let end_pt = slice(&e.edge_polyline(e_snap.edge), 0.0, e_snap.offset_m).last().copied();
         let end_xy = disc.xy_of(end_pt.unwrap_or_else(|| r.end.to_e7()));
         let ta = &mut ws.views[vi].ta;
-        for relaxed in [false, true] {
-            match search(&cx, scale, ta, end_xy, f_min, relaxed, &mut settled, stop) {
-                Ok(Some(f)) => {
-                    found = Some((f, relaxed));
-                    break;
-                }
-                Ok(None) => {}
-                Err(Stopped) => {
-                    return Err(if esc.get() { RouteFailure::WindowEscape } else { RouteFailure::Stopped });
-                }
+        match search(&cx, scale, ta, end_xy, f_min, &mut settled, stop) {
+            Ok(Some(f)) => {
+                let sharp = has_sharp(&cx, &f.fields);
+                found = Some((f, sharp));
+            }
+            Ok(None) => {}
+            Err(Stopped) => {
+                return Err(if esc.get() { RouteFailure::WindowEscape } else { RouteFailure::Stopped });
             }
         }
     }

@@ -43,9 +43,12 @@ Aucun poids n'est changé. Ce que le plan prend à Valhalla (aménagement cyclab
 - **Zone** : ellipse de foyers départ et arrivée, de somme `max(1,5 d ; d + 4 km)`, puis `max(2,5 d ; d + 15 km)` si
   rien n'est trouvé (`RouteTune::reach`) **[proposé]**. La fenêtre est celle d'un aller simple de cette distance
   (`plan_with`) : le cache de fenêtres du service la partage avec les générations.
-- **Seconde passe des virages** : sans chemin sous la règle du générateur, le virage serré coûte le maximum
-  (`TURN_COST_MAX + 500`) au lieu d'être refusé, et le demi-tour sur la même chaîne n'est permis qu'au bout d'une
-  impasse. `Routed::sharp_relaxed` le dit.
+- **Virages** : le coût du générateur sans son refus. Le virage serré (150° et plus à un carrefour) coûte le maximum
+  (`TURN_COST_MAX` à `TURN_COST_MAX + 500`, 200 à 250 m équivalents) au lieu d'être refusé, et le demi-tour sur la
+  même chaîne n'est permis qu'au bout d'une impasse. `Routed::sharp_relaxed` dit si l'itinéraire en contient un.
+  Jusqu'à 1.17.0 le refus du générateur s'appliquait d'abord, et le coût seulement sans autre chemin : un itinéraire
+  faisait alors plusieurs fois la distance pour éviter un seul virage (2,9 km au lieu de 1,4 km sur un cas réel de
+  900 m à vol d'oiseau). Une génération peut dessiner une autre boucle, un itinéraire doit relier deux points donnés.
 - **Même chaîne** : arrivée devant le départ dans un sens ouvert → le morceau direct, sans recherche.
 - **Accroche** : la voie roulable la plus proche, à 500 m au plus **[proposé]** (2 km pour une génération), dans une
   composante d'au moins `min(0,9 d ; 5 km)`.
@@ -61,7 +64,7 @@ Aucun poids n'est changé. Ce que le plan prend à Valhalla (aménagement cyclab
    pas vers l'arrivée) ; longueur au plus court sur une grille.
 2. Deux points d'une même rue, dans les deux ordres : morceau direct, aucune recherche.
 3. Sens unique, arrivée derrière le départ : le tour du pâté de maisons ; dans l'ordre : le morceau direct.
-4. Un virage de 160° sans autre chemin : pris en seconde passe seulement (`sharp_relaxed`).
+4. Un virage de 160° sans autre chemin, puis face à un tour de pâté de 1,9 km : pris dans les deux cas (`sharp_relaxed`).
 5. Équipe d'abord suit la rue de l'équipe (plus longue), la découverte le plus court ; mode d'équipe sans surcouche refusé.
 6. Point à plus de 500 m, tronçon trop long, coupure par l'appelant.
 7. Deux réseaux disjoints : `NoRoute` après les deux zones.

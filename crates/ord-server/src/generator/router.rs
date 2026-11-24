@@ -134,8 +134,8 @@ pub struct RouterResponseV1 {
     /// Distance from the asked start and end to the graph, in metres.
     pub start_snap_m: f64,
     pub end_snap_m: f64,
-    /// No path keeps to the generator's turn rule: the route takes at least one sharp turn (150 degrees or more at a
-    /// junction), or a U-turn at a dead end.
+    /// The route takes at least one sharp turn (150 degrees or more at a junction), or a U-turn at a dead end: the
+    /// generator refuses them, a route pays for them (200 to 250 m) rather than go a long way around.
     pub sharp_relaxed: bool,
     /// The team overlay the route was weighted and measured with; null without one.
     pub overlay: Option<OverlayInfoV1>,

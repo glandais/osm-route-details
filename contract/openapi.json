@@ -3884,7 +3884,7 @@
           },
           "sharp_relaxed": {
             "type": "boolean",
-            "description": "No path keeps to the generator's turn rule: the route takes at least one sharp turn (150 degrees or more at a\njunction), or a U-turn at a dead end."
+            "description": "The route takes at least one sharp turn (150 degrees or more at a junction), or a U-turn at a dead end: the\ngenerator refuses them, a route pays for them (200 to 250 m) rather than go a long way around."
           },
           "start_snap_m": {
             "type": "number",

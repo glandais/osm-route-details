@@ -3,6 +3,16 @@
 Ce fichier commence à la version 1.10.0 (lot 4, 3b). Pour les versions antérieures, voir les notes de conception sous
 `docs/design/technique/` (`ord-loops-lot2.md` à `ord-loops-lot6*.md`) et l'historique git.
 
+## 1.17.1 (API 1.16)
+
+### Corrigé
+
+- **Itinéraire de A à B : plus de grand détour pour éviter un virage serré.** Le refus du générateur (150° et plus à un
+  carrefour) s'appliquait d'abord, et le virage n'était pris que sans aucun autre chemin : l'itinéraire pouvait faire
+  plusieurs fois la distance, aller-retour compris, pour l'éviter. Le virage serré coûte maintenant 200 à 250 m
+  équivalents dès la première recherche, et le demi-tour reste réservé au bout d'une impasse. `sharp_relaxed` dit que
+  l'itinéraire rendu en contient un, et non plus qu'il était inévitable. Les générations sont inchangées.
+
 ## 1.17.0 (API 1.16)
 
 Préférence de voie pour l'itinéraire de A à B (curseur « routes ou pistes », `docs/design/technique/ord-route-lot1.md`
